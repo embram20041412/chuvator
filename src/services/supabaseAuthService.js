@@ -1,10 +1,10 @@
 import { supabase } from '../config/supabase';
 
-export const SUPER_ADMIN_EMAIL = 'embram1989@gmail.com';
+export const SUPER_ADMIN_EMAIL = 'erizamaulana.bramantya@gmail.com';
 
 /**
  * Validates Supabase user email & ID against authorization rules (Strict Invite-Only Enforcement):
- * 1. Super Admin -> 'superadmin' (embram1989@gmail.com)
+ * 1. Super Admin -> 'superadmin' (erizamaulana.bramantya@gmail.com)
  * 2. Check Supabase `users_staff` -> 'admin' / 'pelatih' / 'kasir'
  * 3. Check Supabase `tenants` -> Existing Tenant Owner (direct to Dashboard)
  * 4. Check Supabase `invitations` -> Invited user (allowed to access Onboarding)

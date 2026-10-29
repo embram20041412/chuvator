@@ -252,7 +252,7 @@ async function verifyCallerToken(req: express.Request) {
 
   // If claims missing, perform database verification
   if (!role || !tenantId) {
-    if (userEmail === 'embram1989@gmail.com') {
+    if (userEmail === 'erizamaulana.bramantya@gmail.com') {
       role = 'superadmin';
       tenantId = 'global';
     } else {
@@ -373,7 +373,7 @@ async function startServer() {
         });
       }
 
-      const isSuperAdmin = caller.email === 'embram1989@gmail.com' || caller.role === 'superadmin';
+      const isSuperAdmin = caller.email === 'erizamaulana.bramantya@gmail.com' || caller.role === 'superadmin';
       const isOwner = caller.role === 'owner' && (caller.tenantId === tenantId || caller.uid === tenantId);
       const isAuthorized = isSuperAdmin || isOwner;
 
