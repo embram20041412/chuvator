@@ -391,8 +391,7 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
     setTenantErrorMsg(null);
 
     try {
-      // Update Tenant Document in Firestore directly with Base64 QRIS image string
-      const tenantRef = doc(db, 'tenants', tenant.id);
+      // Update Tenant Document in Supabase
       const cleanedBankAccounts = bankAccounts.map((b) => ({
         bankName: (b.bankName || '').trim(),
         accountNumber: (b.accountNumber || '').trim(),
@@ -418,7 +417,7 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
         sppBillingStartDay: Math.min(28, Math.max(1, Number(sppBillingStartDay) || 1)),
         sppDueDay: Math.min(28, Math.max(1, Number(sppDueDay) || 10)),
         academyPricing: academyPricing || {},
-        updatedAt: serverTimestamp()
+        updatedAt: new Date().toISOString()
       };
 
       await updateTenantProfile(tenant.id, updatedData);

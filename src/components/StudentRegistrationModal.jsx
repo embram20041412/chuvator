@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { createStudent, updateStudent } from '../services/supabaseAcademyService';
+import { createStudent, updateStudent, getClasses } from '../services/supabaseAcademyService';
 import { 
   X, 
   User, 
@@ -144,16 +144,11 @@ export default function StudentRegistrationModal({
     } else if (tenantId && isOpen) {
       const fetchClasses = async () => {
         try {
-          const targetAcademyId = activeAcademyId || activeAcademy?.id || '';
-          let q = query(collection(db, 'academy_classes'), where('tenantId', '==', tenantId));
-          if (targetAcademyId) {
-            q = query(q, where('academyId', '==', targetAcademyId));
-          }
-          const snap = await getDocs(q);
-          setClassesList(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+          const targetAcademyId = activeAcademyId || activeAcademy?.id || null;
+          const classesData = await getClasses(tenantId, targetAcademyId);
+          setClassesList(classesData);
         } catch (err) {
           console.error('Error fetching academy_classes fallback:', err);
-          handleFirestoreError(err, 'list', 'academy_classes');
         }
       };
       fetchClasses();

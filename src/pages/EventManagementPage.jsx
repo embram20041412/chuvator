@@ -531,7 +531,7 @@ export default function EventManagementPage({ userProfile }) {
         description: eventForm.description.trim(),
         bannerUrl: finalBannerUrl,
         posterUrl: finalBannerUrl,
-        updatedAt: serverTimestamp(),
+        updatedAt: new Date().toISOString(),
       };
 
       // Helper function to calculate all date strings between start and end (inclusive) without timezone offset issues

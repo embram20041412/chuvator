@@ -255,8 +255,8 @@ export default function ClassModal({
         coachName: selectedCoachObj?.name || 'Pelatih Utama',
         schedules: schedules, // Array of structured objects
         schedule: scheduleSummary,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp()
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
       };
 
       const createdClass = await supabaseAcademyService.createClass({
