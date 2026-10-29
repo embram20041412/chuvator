@@ -200,18 +200,34 @@ export async function updateTenantProfile(tenantId, payload) {
 }
 
 export async function createTenant(payload) {
+  let ownerUid = payload.ownerUid || payload.owner_uid || null;
+  let ownerEmail = payload.ownerEmail || payload.owner_email || '';
+
+  if (!ownerUid) {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        ownerUid = user.id;
+        if (!ownerEmail) ownerEmail = user.email || '';
+      }
+    } catch (authErr) {
+      console.warn('Could not retrieve current user in createTenant:', authErr);
+    }
+  }
+
   const dbPayload = {
     name: payload.name,
     phone: payload.phone,
-    owner_name: payload.ownerName || '',
-    owner_email: payload.ownerEmail || '',
+    owner_name: payload.ownerName || payload.owner_name || '',
+    owner_email: ownerEmail,
+    owner_uid: ownerUid,
     address: payload.address || '',
     province: payload.province || '',
     regency: payload.regency || '',
     district: payload.district || '',
     village: payload.village || '',
-    sports_type: payload.sportsType || '',
-    courts_count: payload.courtsCount || 0,
+    sports_type: payload.sportsType || payload.sports_type || '',
+    courts_count: payload.courtsCount || payload.courts_count || 0,
     created_at: new Date().toISOString()
   };
 

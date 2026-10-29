@@ -333,6 +333,13 @@ export default function OnboardingPage({ userProfile, onTenantCreated }) {
     setSubmitting(true);
 
     try {
+      // Ambil data sesi pengguna yang sedang login
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+      if (authError || !user) {
+        throw new Error('Sesi tidak valid. Pengguna harus login sebelum mengaktifkan GOR.');
+      }
+
       // Calculate total courts count
       const totalCourtsCount = selectedSports.reduce((sum, item) => sum + item.count, 0);
       const sportsSummaryList = selectedSports.map((item) => item.sport).join(', ');
@@ -342,7 +349,7 @@ export default function OnboardingPage({ userProfile, onTenantCreated }) {
       const tenantPayload = {
         name: arenaName.trim(),
         phone: phone.trim(),
-        ownerName: ownerName,
+        ownerName: ownerName || user.user_metadata?.full_name || user.email?.split('@')[0] || 'Owner',
         address: fullAddressString,
         province: selectedProvince.name,
         regency: selectedRegency.name,
@@ -350,8 +357,8 @@ export default function OnboardingPage({ userProfile, onTenantCreated }) {
         village: selectedVillage.name,
         sportsType: sportsSummaryList,
         courtsCount: totalCourtsCount,
-        ownerEmail: userProfile?.email ? userProfile.email.toLowerCase().trim() : '',
-        ownerUid: userProfile?.uid || null,
+        ownerEmail: user.email,
+        ownerUid: user.id, // Injeksi UID otentikasi agar tidak null
         status: 'active'
       };
 
