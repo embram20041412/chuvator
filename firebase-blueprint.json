@@ -1,0 +1,155 @@
+{
+  "entities": {
+    "Invitation": {
+      "title": "Invitation",
+      "description": "Tenant owner invitation record created by Super Admin",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "ownerName": { "type": "string" },
+        "phone": { "type": "string" },
+        "role": { "type": "string", "enum": ["owner", "manager"] },
+        "createdBy": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["email", "role"]
+    },
+    "Tenant": {
+      "title": "Tenant",
+      "description": "Sports arena or academy tenant profile",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 2, "maxLength": 100 },
+        "address": { "type": "string", "maxLength": 255 },
+        "phone": { "type": "string", "maxLength": 30 },
+        "province": { "type": "string" },
+        "regency": { "type": "string" },
+        "district": { "type": "string" },
+        "village": { "type": "string" },
+        "sportsType": { "type": "string" },
+        "courtsCount": { "type": "number" },
+        "ownerEmail": { "type": "string", "format": "email" },
+        "ownerUid": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["name", "ownerEmail", "ownerUid"]
+    },
+    "Court": {
+      "title": "Court",
+      "description": "Individual court or arena field record",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "name": { "type": "string" },
+        "sport": { "type": "string" },
+        "price": { "type": "number" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["tenantId", "name", "sport"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Retail, F&B, or Equipment item for POS cashier",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "price": { "type": "number" },
+        "stock": { "type": "number" }
+      },
+      "required": ["tenantId", "name", "price"]
+    },
+    "Booking": {
+      "title": "Booking",
+      "description": "Court reservation booking record",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "customerName": { "type": "string", "maxLength": 100 },
+        "customerPhone": { "type": "string", "maxLength": 30 },
+        "courtNumber": { "type": "number" },
+        "bookingDate": { "type": "string" },
+        "startTime": { "type": "string" },
+        "endTime": { "type": "string" },
+        "price": { "type": "number" },
+        "status": { "type": "string" }
+      },
+      "required": ["tenantId", "customerName", "courtNumber", "bookingDate"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Kasir POS transaction record",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "itemCategory": { "type": "string" },
+        "itemName": { "type": "string", "maxLength": 100 },
+        "amount": { "type": "number" },
+        "paymentMethod": { "type": "string" }
+      },
+      "required": ["tenantId", "itemName", "amount"]
+    },
+    "Student": {
+      "title": "Student",
+      "description": "Sports academy student membership",
+      "type": "object",
+      "properties": {
+        "tenantId": { "type": "string" },
+        "studentName": { "type": "string", "maxLength": 100 },
+        "ageGroup": { "type": "string" },
+        "parentPhone": { "type": "string" },
+        "packageName": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["tenantId", "studentName"]
+    },
+    "StaffUser": {
+      "title": "Staff User",
+      "description": "Staff profile record with client-side RBAC role (admin or pelatih)",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["admin", "pelatih"] },
+        "tenantId": { "type": "string" }
+      },
+      "required": ["uid", "name", "email", "role", "tenantId"]
+    }
+  },
+  "firestore": {
+    "/users_staff/{uid}": {
+      "schema": { "$ref": "#/entities/StaffUser" },
+      "description": "Staff user profile documents containing RBAC role"
+    },
+    "/invitations/{invitationId}": {
+      "schema": { "$ref": "#/entities/Invitation" },
+      "description": "Access invitation records"
+    },
+    "/tenants/{tenantId}": {
+      "schema": { "$ref": "#/entities/Tenant" },
+      "description": "Registered arena tenants"
+    },
+    "/courts/{courtId}": {
+      "schema": { "$ref": "#/entities/Court" },
+      "description": "Individual arena courts"
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Retail F&B products"
+    },
+    "/bookings/{bookingId}": {
+      "schema": { "$ref": "#/entities/Booking" },
+      "description": "Court bookings"
+    },
+    "/transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/Transaction" },
+      "description": "Kasir transactions"
+    },
+    "/students/{studentId}": {
+      "schema": { "$ref": "#/entities/Student" },
+      "description": "Academy students"
+    }
+  }
+}

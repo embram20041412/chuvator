@@ -1,0 +1,14 @@
+{
+  "name": "chua-sport-core-worker",
+  "version": "2.0.0",
+  "description": "Cloudflare Worker untuk Manajemen Staff & Penyematan Firebase Auth Custom Claims (RBAC Multi-Tenant)",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^3.114.0"
+  }
+}

@@ -1,0 +1,539 @@
+@import "tailwindcss";
+
+@theme {
+  --color-chua-blue: #C89D32;
+  --color-chua-blue-hover: #B38A28;
+  --color-chua-blue-light: #FDF9EE;
+  --color-chua-dark: #354944;
+  --color-chua-dark-hover: #2B3D38;
+  --color-chua-bg: #EBF0EE;
+  --color-chua-border: #E2E8E6;
+}
+
+/* ========================================================================= */
+/* SOFT MODERN EXECUTIVE (EARTHY TEAL, WARM MUSTARD & SAGE GREY) SYSTEM      */
+/* ========================================================================= */
+
+html {
+  scrollbar-gutter: stable;
+}
+
+body {
+  scrollbar-gutter: stable;
+  background-color: #EBF0EE;
+  color: #2B3D38;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Page Content Transition (Pure Opacity Transition - NO transform to protect position: fixed modals) */
+@keyframes pageEnter {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-page-enter {
+  animation: pageEnter 200ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: opacity;
+}
+
+/* Category Modal Smooth Fade Transition (150ms) */
+@keyframes fadeCategory {
+  from {
+    opacity: 0;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-category {
+  animation: fadeCategory 150ms ease-out forwards;
+}
+
+/* Canvas & Main Container Backgrounds in Light Mode */
+.min-h-screen,
+main {
+  background-color: #EBF0EE;
+}
+
+/* Fluid Sidebar Inverted Corner Cutouts */
+.fluid-tab-active {
+  position: relative;
+  background-color: #EBF0EE !important;
+  color: #2B3D38 !important;
+  font-weight: 700 !important;
+  border-top-left-radius: 9999px;
+  border-bottom-left-radius: 9999px;
+  border-top-right-radius: 0 !important;
+  border-bottom-right-radius: 0 !important;
+  margin-right: -2px !important;
+  padding-right: 18px !important;
+  width: calc(100% + 2px) !important;
+  z-index: 20;
+  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.05);
+}
+
+html.dark .fluid-tab-active {
+  background-color: #0C1412 !important;
+  color: #F1F5F9 !important;
+}
+
+/* Inverted curve at top right of active item */
+.fluid-tab-active::before {
+  content: '';
+  position: absolute;
+  top: -20px;
+  right: 0;
+  width: 20px;
+  height: 20px;
+  border-bottom-right-radius: 20px;
+  box-shadow: 10px 10px 0 10px #EBF0EE;
+  pointer-events: none;
+  z-index: 20;
+  border: none !important;
+}
+
+html.dark .fluid-tab-active::before {
+  box-shadow: 10px 10px 0 10px #0C1412;
+}
+
+/* Inverted curve at bottom right of active item */
+.fluid-tab-active::after {
+  content: '';
+  position: absolute;
+  bottom: -20px;
+  right: 0;
+  width: 20px;
+  height: 20px;
+  border-top-right-radius: 20px;
+  box-shadow: 10px -10px 0 10px #EBF0EE;
+  pointer-events: none;
+  z-index: 20;
+  border: none !important;
+}
+
+html.dark .fluid-tab-active::after {
+  box-shadow: 10px -10px 0 10px #0C1412;
+}
+
+/* RTL-LTR Scrollbar Trick for Left Sidebar */
+.rtl,
+[dir="rtl"] {
+  direction: rtl;
+}
+
+.ltr,
+[dir="ltr"] {
+  direction: ltr;
+}
+
+/* Slim Custom Scrollbar for Left-Side Sidebar Scrollbar */
+.rtl::-webkit-scrollbar,
+nav.rtl::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.rtl::-webkit-scrollbar-track,
+nav.rtl::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.rtl::-webkit-scrollbar-thumb,
+nav.rtl::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 9999px;
+}
+
+.rtl::-webkit-scrollbar-thumb:hover,
+nav.rtl::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.rtl {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+/* Decorative Topography Pattern for KPI Cards */
+.bg-topography-waves {
+  background-image: url("data:image/svg+xml,%3Csvg width='120' height='120' viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 20 Q 30 5, 60 20 T 120 20 M0 50 Q 30 35, 60 50 T 120 50 M0 80 Q 30 65, 60 80 T 120 80' fill='none' stroke='%23ffffff' stroke-width='1.2' stroke-opacity='0.18'/%3E%3C/svg%3E");
+}
+
+/* Ticket Perforation Notch Effects */
+.ticket-notch-container {
+  position: relative;
+  overflow: hidden;
+}
+
+.ticket-notch-left {
+  position: absolute;
+  left: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background-color: #EBF0EE;
+  box-shadow: inset -2px 0 4px rgba(0, 0, 0, 0.05);
+  z-index: 10;
+}
+
+html.dark .ticket-notch-left {
+  background-color: #0C1412;
+}
+
+.ticket-notch-right {
+  position: absolute;
+  right: -12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background-color: #EBF0EE;
+  box-shadow: inset 2px 0 4px rgba(0, 0, 0, 0.05);
+  z-index: 10;
+}
+
+html.dark .ticket-notch-right {
+  background-color: #0C1412;
+}
+
+/* ========================================================================= */
+/* DARK MODE SYSTEM (DEEP FOREST NIGHT #0C1412 & TEAL #162320)               */
+/* ========================================================================= */
+
+html.dark {
+  color-scheme: dark;
+}
+
+html.dark body {
+  background-color: #0C1412 !important;
+  color: #F1F5F9 !important;
+}
+
+/* Page canvas backgrounds */
+html.dark .min-h-screen,
+html.dark main {
+  background-color: #0C1412 !important;
+}
+
+/* Card, Header, Modal Surfaces */
+html.dark .bg-white {
+  background-color: #162320 !important;
+  color: #F1F5F9;
+}
+
+/* Aside / Sidebar */
+html.dark aside {
+  background-color: #14211E !important;
+  border-color: #283D38 !important;
+}
+
+/* Header */
+html.dark header {
+  background-color: #162320 !important;
+  border-color: #283D38 !important;
+}
+
+/* Secondary Surfaces, Sub-cards, Filter bars, Summary Boxes */
+.dark .bg-slate-50,
+.dark .bg-slate-100,
+.dark .bg-slate-200,
+.dark .bg-gray-50,
+.dark .bg-gray-100,
+.dark .bg-gray-200,
+html.dark .bg-slate-50,
+html.dark .bg-slate-100,
+html.dark .bg-slate-200,
+html.dark .bg-gray-50,
+html.dark .bg-gray-100,
+html.dark .bg-gray-200 {
+  background-color: #1E2E2A !important;
+  color: #F1F5F9 !important;
+  border-color: #283D38 !important;
+}
+
+html.dark .bg-slate-200\/50,
+html.dark .bg-slate-50\/50,
+html.dark .bg-gray-50\/50,
+html.dark .bg-slate-50\/80 {
+  background-color: #1E2E2A !important;
+}
+
+/* Explicit Dark Background Priority */
+html.dark .dark\:bg-slate-900,
+.dark .dark\:bg-slate-900 {
+  background-color: #162320 !important;
+}
+
+html.dark .dark\:bg-slate-800,
+.dark .dark\:bg-slate-800 {
+  background-color: #1E2E2A !important;
+}
+
+html.dark .dark\:bg-slate-950,
+.dark .dark\:bg-slate-950 {
+  background-color: #0C1412 !important;
+}
+
+/* Sidebar CHUVATOR Logo Badge in Dark Mode */
+.chuvator-logo-badge,
+html.dark .chuvator-logo-badge,
+.dark .chuvator-logo-badge {
+  background-color: #ffffff !important;
+  border-color: rgba(255, 255, 255, 0.2) !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Table Headers & Rows */
+html.dark table thead th {
+  background-color: #1E2E2A !important;
+  color: #94A3B8 !important;
+  border-color: #283D38 !important;
+}
+
+html.dark table tbody tr {
+  border-color: #283D38 !important;
+}
+
+html.dark table tbody tr:hover {
+  background-color: rgba(30, 46, 42, 0.6) !important;
+}
+
+/* Borders & Dividers */
+html.dark .border-slate-200,
+html.dark .border-slate-200\/80,
+html.dark .border-slate-100,
+html.dark .border-gray-200,
+html.dark .border-gray-100,
+html.dark .border-gray-300,
+html.dark .border-slate-300 {
+  border-color: #283D38 !important;
+}
+
+html.dark .divide-slate-200 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]) {
+  border-color: #283D38 !important;
+}
+
+/* Text Hierarchy */
+html.dark .text-slate-800,
+html.dark .text-slate-900,
+html.dark .text-gray-900,
+html.dark .text-gray-800,
+html.dark .text-\[\#333333\],
+html.dark .text-slate-700 {
+  color: #F8FAFC !important;
+}
+
+html.dark .text-slate-600,
+html.dark .text-gray-600,
+html.dark .text-slate-500,
+html.dark .text-gray-500 {
+  color: #94A3B8 !important;
+}
+
+html.dark .text-slate-400,
+html.dark .text-gray-400 {
+  color: #64748B !important;
+}
+
+/* Retain pure white on colored badges/buttons */
+html.dark .text-white {
+  color: #ffffff !important;
+}
+
+/* Form Inputs, Dropdowns, and Textareas */
+html.dark input:not([type="checkbox"]):not([type="radio"]):not([type="color"]):not([type="range"]):not([type="file"]),
+html.dark select,
+html.dark textarea {
+  background-color: #1E2E2A !important;
+  border-color: #283D38 !important;
+  color: #F8FAFC !important;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #64748B !important;
+}
+
+html.dark select option {
+  background-color: #162320 !important;
+  color: #F8FAFC !important;
+}
+
+/* Soft Badges & Highlights */
+html.dark .bg-blue-50 {
+  background-color: rgba(212, 167, 58, 0.16) !important;
+  color: #D4A73A !important;
+}
+html.dark .border-blue-200,
+html.dark .border-blue-200\/80 {
+  border-color: rgba(212, 167, 58, 0.3) !important;
+}
+
+html.dark .bg-emerald-50,
+html.dark .bg-green-50 {
+  background-color: rgba(42, 161, 152, 0.16) !important;
+  color: #2AA198 !important;
+}
+html.dark .border-green-200,
+html.dark .border-green-200\/80 {
+  border-color: rgba(42, 161, 152, 0.3) !important;
+}
+
+html.dark .bg-rose-50,
+html.dark .bg-red-50 {
+  background-color: rgba(244, 63, 94, 0.16) !important;
+  color: #FDA4AF !important;
+}
+html.dark .border-rose-200,
+html.dark .border-rose-200\/80 {
+  border-color: rgba(244, 63, 94, 0.3) !important;
+}
+
+html.dark .bg-amber-50,
+html.dark .bg-yellow-50 {
+  background-color: rgba(212, 167, 58, 0.16) !important;
+  color: #D4A73A !important;
+}
+html.dark .border-amber-200,
+html.dark .border-amber-200\/80 {
+  border-color: rgba(212, 167, 58, 0.3) !important;
+}
+
+html.dark .bg-purple-50 {
+  background-color: rgba(168, 85, 247, 0.16) !important;
+  color: #D8B4FE !important;
+}
+
+/* Disabled States in Dark Mode */
+html.dark button:disabled,
+.dark button:disabled,
+html.dark input:disabled,
+.dark input:disabled {
+  background-color: #1E2E2A !important;
+  color: #64748B !important;
+  border-color: #283D38 !important;
+}
+
+/* Interactive Hover States */
+html.dark .hover\:bg-slate-50:hover,
+html.dark .hover\:bg-gray-50:hover,
+html.dark .hover\:bg-slate-100:hover,
+html.dark .hover\:bg-gray-100:hover {
+  background-color: #1E2E2A !important;
+}
+
+html.dark .hover\:text-blue-600:hover,
+html.dark .hover\:text-blue-700:hover {
+  color: #D4A73A !important;
+}
+
+/* Modals & Dialogs */
+html.dark .fixed.inset-0.bg-black\/50,
+html.dark .fixed.inset-0.bg-black\/40 {
+  background-color: rgba(0, 0, 0, 0.82) !important;
+}
+
+/* Recharts & SVG Charts */
+html.dark .recharts-cartesian-grid line,
+html.dark .recharts-cartesian-grid-horizontal line,
+html.dark .recharts-cartesian-grid-vertical line {
+  stroke: #283D38 !important;
+}
+
+html.dark .recharts-text,
+html.dark .recharts-cartesian-axis-tick text {
+  fill: #94A3B8 !important;
+}
+
+html.dark .recharts-default-tooltip {
+  background-color: #162320 !important;
+  border-color: #283D38 !important;
+  color: #F8FAFC !important;
+  box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.5) !important;
+}
+
+html.dark .recharts-tooltip-item {
+  color: #E2E8E0 !important;
+}
+
+html.dark .recharts-polar-grid-concentric-polygon,
+html.dark .recharts-polar-grid-concentric-circle,
+html.dark .recharts-polar-angle-axis-line {
+  stroke: #4A635D !important;
+}
+
+html.dark .recharts-polar-angle-axis-tick text {
+  fill: #CBD5E1 !important;
+}
+
+/* Custom Scrollbar */
+html.dark ::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+html.dark ::-webkit-scrollbar-track {
+  background: #0C1412;
+}
+
+html.dark ::-webkit-scrollbar-thumb {
+  background: #283D38;
+  border-radius: 6px;
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #354944;
+}
+
+/* ========================================================================= */
+/* UNIVERSAL THERMAL RECEIPT PRINT STYLES (58mm / 80mm PRINTER)             */
+/* ========================================================================= */
+@media print {
+  body * {
+    visibility: hidden !important;
+  }
+
+  #thermal-receipt-printable,
+  #thermal-receipt-printable * {
+    visibility: visible !important;
+  }
+
+  #thermal-receipt-printable {
+    position: fixed !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 80mm !important;
+    max-width: 80mm !important;
+    margin: 0 !important;
+    padding: 6px 10px !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    box-shadow: none !important;
+    border: none !important;
+    border-radius: 0 !important;
+    font-family: 'Courier New', Courier, monospace, monospace !important;
+    font-size: 11px !important;
+    line-height: 1.35 !important;
+  }
+
+  @page {
+    margin: 0mm !important;
+    size: auto !important;
+  }
+}

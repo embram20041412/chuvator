@@ -1,0 +1,6 @@
+{
+  "name": "CHUA SPORT CORE - Sports Arena & Academy ERP",
+  "description": "SaaS Multi-Tenant Sports Arena & Academy ERP System",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
