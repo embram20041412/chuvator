@@ -243,7 +243,9 @@ export async function updateStudent(studentId, updateFields) {
   if (updateFields.playerRole !== undefined) mapped.player_role = updateFields.playerRole;
   if (updateFields.sportCategory !== undefined) mapped.sport_category = updateFields.sportCategory;
   if (updateFields.sppStatus !== undefined) mapped.spp_status = updateFields.sppStatus;
-  if (updateFields.classId !== undefined) mapped.class_id = updateFields.classId;
+  if (updateFields.classId !== undefined) {
+    mapped.class_id = updateFields.classId && String(updateFields.classId).trim() !== "" ? updateFields.classId : null;
+  }
   if (updateFields.paymentStatus !== undefined) mapped.payment_status = updateFields.paymentStatus;
   if (updateFields.lastPaidMonth !== undefined) mapped.last_paid_month = updateFields.lastPaidMonth;
   if (updateFields.height !== undefined) mapped.height = Number(updateFields.height);
