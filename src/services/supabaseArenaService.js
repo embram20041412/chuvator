@@ -289,6 +289,17 @@ export async function updateCourt(courtId, payload) {
   return mapCourtFromSupabase(data || { id: courtId, ...payload });
 }
 
+export async function updateCourtsBatch(updatesArray) {
+  if (!Array.isArray(updatesArray) || updatesArray.length === 0) return [];
+
+  const updatePromises = updatesArray.map(async (courtItem) => {
+    const { id, ...payload } = courtItem;
+    return await updateCourt(id, payload);
+  });
+
+  return await Promise.all(updatePromises);
+}
+
 export async function createCourt(payload) {
   const dbPayload = {
     tenant_id: payload.tenantId,

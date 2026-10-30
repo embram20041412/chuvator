@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import useArenaData from '../hooks/useArenaData';
-import { updateTenantProfile, updateCourt } from '../services/supabaseArenaService';
+import { updateTenantProfile, updateCourt, updateCourtsBatch } from '../services/supabaseArenaService';
 import { logoutUser } from '../services/authService';
 import { 
   registerStaffByOwner, 
@@ -27,6 +27,7 @@ import {
   Trash2,
   Plus,
   GraduationCap,
+  Sparkles,
   Lock,
   UserPlus,
   Users,
@@ -54,6 +55,19 @@ const SUPPORTED_SPORTS = [
   'Bola Voli pasir', 
   'Sepak Takraw'
 ];
+
+export function formatNumberWithDots(val) {
+  if (val === null || val === undefined || val === '') return '';
+  const numStr = String(val).replace(/\D/g, '');
+  if (!numStr) return '';
+  return Number(numStr).toLocaleString('id-ID');
+}
+
+export function parseNumberFromDots(val) {
+  if (val === null || val === undefined || val === '') return 0;
+  const numStr = String(val).replace(/\D/g, '');
+  return Number(numStr) || 0;
+}
 
 export default function PengaturanPage({ userProfile, onTenantUpdated }) {
   const navigate = useNavigate();
@@ -303,7 +317,7 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
     if (courts && courts.length > 0) {
       const priceMap = {};
       courts.forEach((c) => {
-        priceMap[c.id] = c.price ? String(c.price) : '0';
+        priceMap[c.id] = c.price ? formatNumberWithDots(c.price) : '0';
       });
       setCourtPrices(priceMap);
     }
@@ -437,32 +451,94 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
   };
 
   const handlePriceInputChange = (courtId, value) => {
+    const formatted = formatNumberWithDots(value);
     setCourtPrices((prev) => ({
       ...prev,
-      [courtId]: value
+      [courtId]: formatted
     }));
   };
 
-  const handleSaveSingleCourtPrice = async (courtId) => {
-    const newPriceVal = courtPrices[courtId];
-    if (newPriceVal === undefined) return;
+  const [bulkPrices, setBulkPrices] = useState({});
+  const [savingAllPrices, setSavingAllPrices] = useState(false);
 
-    setSavingCourtId(courtId);
+  const handleBulkPriceInputChange = (sportKey, value) => {
+    const formatted = formatNumberWithDots(value);
+    setBulkPrices((prev) => ({
+      ...prev,
+      [sportKey]: formatted
+    }));
+  };
+
+  const handleApplyBulkPrice = (sportKey) => {
+    const formattedPrice = bulkPrices[sportKey];
+    if (!formattedPrice) return;
+
+    setCourtPrices((prev) => {
+      const updated = { ...prev };
+      (courts || []).forEach((c) => {
+        const cSport = c.sport || 'Umum';
+        if (cSport.toLowerCase() === sportKey.toLowerCase()) {
+          updated[c.id] = formattedPrice;
+        }
+      });
+      return updated;
+    });
+
+    setCourtSuccessMsg(`Tarif Rp ${formattedPrice}/jam diterapkan ke semua lapangan ${sportKey}. Klik "Simpan Semua Tarif" untuk memperbarui.`);
+    setTimeout(() => setCourtSuccessMsg(null), 4000);
+  };
+
+  const courtsBySport = useMemo(() => {
+    const map = {};
+    if (!courts) return map;
+    courts.forEach((c) => {
+      const sportKey = c.sport || 'Umum';
+      if (!map[sportKey]) map[sportKey] = [];
+      map[sportKey].push(c);
+    });
+    return map;
+  }, [courts]);
+
+  const unsavedCourts = useMemo(() => {
+    if (!courts || courts.length === 0) return [];
+    return courts.filter((c) => {
+      const currentInputFormatted = courtPrices[c.id];
+      if (currentInputFormatted === undefined) return false;
+      const currentVal = parseNumberFromDots(currentInputFormatted);
+      const originalVal = Number(c.price || 0);
+      return currentVal !== originalVal;
+    });
+  }, [courts, courtPrices]);
+
+  const handleSaveAllCourtPrices = async () => {
+    if (unsavedCourts.length === 0) {
+      setCourtSuccessMsg('Semua tarif lapangan sudah sesuai dengan data terbaru.');
+      setTimeout(() => setCourtSuccessMsg(null), 3000);
+      return;
+    }
+
+    setSavingAllPrices(true);
     setCourtSuccessMsg(null);
 
     try {
-      await updateCourt(courtId, {
-        price: parseFloat(newPriceVal) || 0
-      });
+      const updatesArray = unsavedCourts.map((c) => ({
+        id: c.id,
+        name: c.name,
+        sport: c.sport,
+        price: parseNumberFromDots(courtPrices[c.id] ?? c.price),
+        isActive: c.isActive !== false
+      }));
 
-      setCourtSuccessMsg(`Tarif lapangan berhasil diperbarui!`);
+      await updateCourtsBatch(updatesArray);
+
+      setCourtSuccessMsg(`Berhasil menyimpan tarif untuk ${updatesArray.length} lapangan!`);
       window.dispatchEvent(new CustomEvent('simak_refresh_arena_data'));
-      setTimeout(() => setCourtSuccessMsg(null), 3000);
+      setTimeout(() => setCourtSuccessMsg(null), 4000);
     } catch (err) {
-      console.error('Error updating court price in Supabase:', err);
-      alert('Gagal mengupdate tarif lapangan: ' + (err.message || 'Terjadi kesalahan'));
+      console.error('Error batch updating court prices in Supabase:', err);
+      alert('Gagal menyimpan tarif lapangan: ' + (err.message || 'Silakan coba lagi'));
     } finally {
-      setSavingCourtId(null);
+      setSavingAllPrices(false);
     }
   };
 
@@ -1055,17 +1131,50 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
 
       {/* TAB 4: TARIF LAPANGAN */}
       {activeTab === 'tarif' && (
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 space-y-5 text-left animate-fadeIn mt-4">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <h2 className="font-bold text-base text-[#333333] flex items-center space-x-2">
-              <DollarSign className="w-4 h-4 text-green-600" />
-              <span>Tab 4: Pengaturan Tarif Lapangan (Rp / Jam)</span>
-            </h2>
-            <span className="text-xs font-bold text-gray-400">Total: {courts.length} Lapangan</span>
+        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 space-y-6 text-left animate-fadeIn mt-4">
+          
+          {/* HEADER & MAIN SAVE ACTION */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-4">
+            <div>
+              <h2 className="font-bold text-base text-[#333333] flex items-center space-x-2">
+                <DollarSign className="w-5 h-5 text-green-600" />
+                <span>Pengaturan Tarif Lapangan (Rp / Jam)</span>
+              </h2>
+              <p className="text-xs text-gray-500 mt-0.5">
+                Atur tarif sewa reguler per jam untuk masing-masing lapangan secara individual atau massal per cabang olahraga.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-3 shrink-0">
+              {unsavedCourts.length > 0 && (
+                <span className="px-3 py-1.5 bg-amber-50 text-amber-800 text-xs font-extrabold rounded-xl border border-amber-200/80 animate-pulse">
+                  {unsavedCourts.length} Belum Disimpan
+                </span>
+              )}
+
+              <button
+                type="button"
+                onClick={handleSaveAllCourtPrices}
+                disabled={savingAllPrices || isLoading}
+                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center space-x-2 disabled:opacity-50"
+              >
+                {savingAllPrices ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <span>Menyimpan Semua Tarif...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4 text-cyan-200" />
+                    <span>Simpan Semua Tarif {unsavedCourts.length > 0 ? `(${unsavedCourts.length})` : ''}</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
 
           {courtSuccessMsg && (
-            <div className="p-3 bg-green-50 border border-green-200 text-green-800 text-xs rounded-xl font-semibold flex items-center space-x-2">
+            <div className="p-3.5 bg-green-50 border border-green-200 text-green-800 text-xs rounded-xl font-bold flex items-center space-x-2">
               <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
               <span>{courtSuccessMsg}</span>
             </div>
@@ -1079,51 +1188,142 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
               <p className="text-xs font-bold text-gray-600">Belum ada lapangan terdaftar. Lengkapi fasilitas di onboarding.</p>
             </div>
           ) : (
-            <div className="divide-y divide-gray-100 border border-gray-200 rounded-xl overflow-hidden">
-              {courts.map((court) => {
-                const currentPriceInput = courtPrices[court.id] || '0';
-                const isSavingThis = savingCourtId === court.id;
-
-                return (
-                  <div key={court.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-50/50 transition-colors">
-                    <div>
-                      <div className="flex items-center space-x-2">
-                        <span className="font-bold text-sm text-[#333333]">{court.name}</span>
-                        <span className="px-2 py-0.5 bg-gray-100 text-gray-700 font-bold text-[10px] rounded-md uppercase">
-                          {court.sport || 'Sports'}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-gray-400 mt-0.5">
-                        Tarif Aktif Saat Ini: Rp {Number(court.price || 0).toLocaleString('id-ID')}/jam
-                      </p>
-                    </div>
-
-                    <div className="flex items-center space-x-2">
-                      <div className="relative">
-                        <span className="text-xs font-bold text-gray-400 absolute left-3 top-2.5">Rp</span>
-                        <input
-                          type="number"
-                          min="0"
-                          step="any"
-                          value={currentPriceInput}
-                          onChange={(e) => handlePriceInputChange(court.id, e.target.value)}
-                          className="w-36 pl-8 pr-3 py-2 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-bold text-[#333333]"
-                        />
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => handleSaveSingleCourtPrice(court.id)}
-                        disabled={isSavingThis}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-xs transition-colors cursor-pointer flex items-center space-x-1.5 disabled:opacity-50"
-                      >
-                        <Save className="w-3.5 h-3.5" />
-                        <span>{isSavingThis ? 'Menyimpan...' : 'Simpan Tarif'}</span>
-                      </button>
-                    </div>
+            <div className="space-y-6">
+              
+              {/* BULK APPLY SECTION PER CABANG OLAHRAGA */}
+              <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <div className="flex items-center space-x-2">
+                    <Sparkles className="w-4 h-4 text-blue-600" />
+                    <span className="font-extrabold text-xs text-slate-800 uppercase tracking-wide">
+                      Atur Cepat per Cabang Olahraga (Bulk Apply)
+                    </span>
                   </div>
-                );
-              })}
+                  <span className="text-[11px] text-slate-500 font-medium">
+                    Ketik nominal lalu terapkan ke seluruh lapangan pada cabor pilihan
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-1">
+                  {Object.entries(courtsBySport).map(([sportKey, sportCourts]) => {
+                    const currentBulkInput = bulkPrices[sportKey] || '';
+                    return (
+                      <div key={sportKey} className="p-3 bg-white border border-slate-200 rounded-xl space-y-2 shadow-2xs">
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-xs text-slate-800 uppercase flex items-center space-x-1">
+                            <Dumbbell className="w-3.5 h-3.5 text-blue-600" />
+                            <span>{sportKey}</span>
+                          </span>
+                          <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-bold rounded-md border border-blue-100">
+                            {sportCourts.length} Lapangan
+                          </span>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <div className="relative">
+                            <span className="text-xs font-bold text-gray-400 absolute left-3 top-2.5">Rp</span>
+                            <input
+                              type="text"
+                              placeholder="e.g. 150.000"
+                              value={currentBulkInput}
+                              onChange={(e) => handleBulkPriceInputChange(sportKey, e.target.value)}
+                              className="w-full pl-8 pr-3 py-2 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:border-blue-500 font-bold text-[#333333]"
+                            />
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleApplyBulkPrice(sportKey)}
+                            disabled={!currentBulkInput}
+                            className="w-full py-1.5 bg-slate-800 hover:bg-black text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer disabled:opacity-40"
+                          >
+                            Terapkan ke Semua {sportKey}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* DAFTAR LAPANGAN INDIVIDUAL */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-xs font-extrabold text-gray-500 uppercase tracking-wider">
+                    Daftar Lapangan &amp; Input Tarif Individual
+                  </span>
+                  <span className="text-xs text-gray-400 font-medium">Total: {courts.length} Lapangan</span>
+                </div>
+
+                <div className="divide-y divide-gray-100 border border-gray-200 rounded-2xl overflow-hidden bg-white shadow-2xs">
+                  {courts.map((court) => {
+                    const currentPriceInput = courtPrices[court.id] !== undefined ? courtPrices[court.id] : formatNumberWithDots(court.price || 0);
+                    const parsedInputVal = parseNumberFromDots(currentPriceInput);
+                    const isChanged = parsedInputVal !== Number(court.price || 0);
+
+                    return (
+                      <div key={court.id} className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${isChanged ? 'bg-amber-50/40' : 'hover:bg-gray-50/50'}`}>
+                        <div>
+                          <div className="flex items-center space-x-2">
+                            <span className="font-bold text-sm text-[#333333]">{court.name}</span>
+                            <span className="px-2 py-0.5 bg-gray-100 text-gray-700 font-bold text-[10px] rounded-md uppercase">
+                              {court.sport || 'Sports'}
+                            </span>
+                            {isChanged && (
+                              <span className="px-2 py-0.5 bg-amber-100 text-amber-800 font-extrabold text-[10px] rounded-md uppercase border border-amber-200">
+                                Ada Perubahan
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-[11px] text-gray-400 mt-0.5">
+                            Tarif Tersimpan: <span className="font-semibold text-gray-600">Rp {Number(court.price || 0).toLocaleString('id-ID')}/jam</span>
+                          </p>
+                        </div>
+
+                        <div className="flex items-center space-x-3">
+                          <div className="flex flex-col items-start sm:items-end">
+                            <div className="relative">
+                              <span className="text-xs font-bold text-gray-400 absolute left-3 top-2.5">Rp</span>
+                              <input
+                                type="text"
+                                value={currentPriceInput}
+                                onChange={(e) => handlePriceInputChange(court.id, e.target.value)}
+                                className={`w-40 pl-8 pr-3 py-2 text-xs border rounded-xl focus:bg-white focus:outline-none font-extrabold text-[#333333] ${isChanged ? 'bg-white border-amber-300 ring-2 ring-amber-100' : 'bg-gray-50 border-gray-200 focus:border-blue-500'}`}
+                              />
+                            </div>
+                            <span className="text-[10px] font-semibold text-blue-600 mt-1">
+                              Pratinjau: Rp {parsedInputVal.toLocaleString('id-ID')} / jam
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* BOTTOM MAIN SAVE BUTTON */}
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleSaveAllCourtPrices}
+                  disabled={savingAllPrices || isLoading}
+                  className="w-full sm:w-auto px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-200 transition-all cursor-pointer flex items-center justify-center space-x-2 disabled:opacity-50"
+                >
+                  {savingAllPrices ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      <span>Menyimpan Semua Tarif...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 text-cyan-200" />
+                      <span>Simpan Semua Tarif {unsavedCourts.length > 0 ? `(${unsavedCourts.length} Perubahan)` : ''}</span>
+                    </>
+                  )}
+                </button>
+              </div>
+
             </div>
           )}
         </div>
