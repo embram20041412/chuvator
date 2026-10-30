@@ -238,18 +238,25 @@ export async function createStudent({
 
 export async function updateStudent(studentId, updateFields) {
   const mapped = {};
+  
   if (updateFields.studentName !== undefined) mapped.student_name = updateFields.studentName;
-  if (updateFields.birthDate !== undefined) mapped.birth_date = updateFields.birthDate;
+  if (updateFields.birthDate !== undefined) mapped.birth_date = updateFields.birthDate || null;
   if (updateFields.playerRole !== undefined) mapped.player_role = updateFields.playerRole;
   if (updateFields.sportCategory !== undefined) mapped.sport_category = updateFields.sportCategory;
   if (updateFields.sppStatus !== undefined) mapped.spp_status = updateFields.sppStatus;
+  
+  // Normalisasi ketat kolom UUID (ubah string kosong "" atau undefined menjadi null)
   if (updateFields.classId !== undefined) {
     mapped.class_id = updateFields.classId && String(updateFields.classId).trim() !== "" ? updateFields.classId : null;
   }
+  if (updateFields.academyId !== undefined) {
+    mapped.academy_id = updateFields.academyId && String(updateFields.academyId).trim() !== "" ? updateFields.academyId : null;
+  }
+
   if (updateFields.paymentStatus !== undefined) mapped.payment_status = updateFields.paymentStatus;
   if (updateFields.lastPaidMonth !== undefined) mapped.last_paid_month = updateFields.lastPaidMonth;
-  if (updateFields.height !== undefined) mapped.height = Number(updateFields.height);
-  if (updateFields.weight !== undefined) mapped.weight = Number(updateFields.weight);
+  if (updateFields.height !== undefined) mapped.height = updateFields.height ? Number(updateFields.height) : null;
+  if (updateFields.weight !== undefined) mapped.weight = updateFields.weight ? Number(updateFields.weight) : null;
   if (updateFields.growthHistory !== undefined) mapped.growth_history = updateFields.growthHistory;
   if (updateFields.photoUrl !== undefined) mapped.photo_url = updateFields.photoUrl;
 
@@ -262,7 +269,7 @@ export async function updateStudent(studentId, updateFields) {
 
   if (error) {
     console.error('[Supabase updateStudent Error]:', error);
-    return { id: studentId, ...updateFields };
+    throw error;
   }
   return mapStudentFromSupabase(data);
 }
