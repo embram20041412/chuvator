@@ -580,17 +580,17 @@ export default function POSPage({ userProfile }) {
   };
 
   return (
-    <div className="space-y-6 text-[#333333]">
+    <div className="space-y-3.5 text-[#333333]">
       
       {/* HEADER UTAMA KASIR */}
-      <div className="bg-white rounded-xl px-5 py-3.5 shadow-xs border border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="flex items-center gap-3.5">
-          <Kasir3DIcon className="w-10 h-10 shrink-0 drop-shadow-2xs" />
+      <div className="bg-white dark:bg-[#14211E] rounded-xl px-4 py-3 shadow-xs border border-slate-200/80 dark:border-white/10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+        <div className="flex items-center gap-3">
+          <Kasir3DIcon className="w-8 h-8 shrink-0 drop-shadow-2xs" />
           <div>
-            <h1 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+            <h1 className="text-base font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
               <span>Kasir (POS Global)</span>
             </h1>
-            <p className="text-xs text-slate-500 mt-0.5">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
               Penjualan retail F&amp;B, sewa peralatan, serta pembayaran tagihan SPP Akademi dalam satu struk
             </p>
           </div>
@@ -598,36 +598,36 @@ export default function POSPage({ userProfile }) {
 
         <button
           onClick={handleOpenAddProductModal}
-          className="px-3.5 py-2 bg-[#354944] hover:bg-[#2B3D38] text-white border-b-2 border-[#C89D32] font-semibold text-xs rounded-lg shadow-sm transition-colors cursor-pointer flex items-center space-x-1.5 shrink-0"
+          className="px-3 py-1.5 bg-[#354944] hover:bg-[#2B3D38] text-white border-b-2 border-[#C89D32] font-semibold text-xs rounded-lg shadow-xs transition-colors cursor-pointer flex items-center space-x-1.5 shrink-0"
         >
-          <Plus className="w-4 h-4" />
+          <Plus className="w-3.5 h-3.5" />
           <span>Tambah / Kelola Inventaris</span>
         </button>
       </div>
 
       {checkoutSuccessMsg && (
-        <div className="p-3.5 bg-green-50 border border-green-200 text-green-800 text-xs rounded-xl font-bold flex items-center space-x-2 animate-fadeIn shadow-2xs">
+        <div className="p-3 bg-green-50 border border-green-200 text-green-800 text-xs rounded-xl font-semibold flex items-center space-x-2 animate-fadeIn shadow-2xs">
           <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
           <span>{checkoutSuccessMsg}</span>
         </div>
       )}
 
       {/* BARCODE SCANNER INTEGRATION BANNER & MANUAL INPUT */}
-      <div className="bg-slate-50 border border-slate-200/80 rounded-xl px-4 py-3 text-slate-800 shadow-2xs space-y-3">
+      <div className="bg-slate-50 dark:bg-white/5 border border-slate-200/80 dark:border-white/10 rounded-xl px-3.5 py-2.5 text-slate-800 dark:text-slate-200 shadow-2xs space-y-2.5">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 bg-[#354944]/10 text-[#354944] rounded-lg shrink-0">
-              <ScanBarcode className="w-5 h-5 animate-pulse" />
+          <div className="flex items-center space-x-2.5">
+            <div className="p-1.5 bg-[#354944]/10 dark:bg-white/10 text-[#354944] dark:text-[#C89D32] rounded-lg shrink-0">
+              <ScanBarcode className="w-4 h-4 animate-pulse" />
             </div>
             <div>
-              <h3 className="font-bold text-xs sm:text-sm text-slate-800 flex items-center gap-2">
+              <h3 className="font-semibold text-xs text-slate-800 dark:text-slate-100 flex items-center gap-2">
                 <span>Auto Barcode Scanner POS</span>
-                <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  HID Scanner Ready
+                <span className="px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                  Ready
                 </span>
               </h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Pindai barcode fisik barang dengan scanner, atau ketik manual kode lalu tekan <kbd className="bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 px-2 py-0.5 rounded text-xs font-mono">Enter</kbd>
+                Pindai barcode scanner atau ketik manual lalu tekan <kbd className="bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-300 dark:border-slate-700 px-1.5 py-0.2 rounded text-[10px] font-mono">Enter</kbd>
               </p>
             </div>
           </div>
@@ -679,13 +679,13 @@ export default function POSPage({ userProfile }) {
       </div>
 
       {/* RESPONSIVE GRID & LAYOUT UTAMA */}
-      <div className="flex flex-col lg:grid lg:grid-cols-3 gap-6 relative">
+      <div className="flex flex-col lg:grid lg:grid-cols-3 gap-3.5 relative">
         
         {/* AREA KATALOG & TAB (KOLOM KIRI - 2 COLS) */}
-        <div className={`lg:col-span-2 flex flex-col bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200 space-y-4 ${cart.length > 0 ? 'pb-72 lg:pb-6' : 'pb-6 lg:pb-6'}`}>
+        <div className={`lg:col-span-2 flex flex-col bg-white dark:bg-[#14211E] rounded-xl p-3.5 sm:p-4 shadow-xs border border-slate-200/80 dark:border-white/10 space-y-3 ${cart.length > 0 ? 'pb-72 lg:pb-4' : 'pb-4 lg:pb-4'}`}>
           
           {/* BAR PENCARIAN & TAB KATEGORI */}
-          <div className="space-y-3 border-b border-slate-100 pb-4">
+          <div className="space-y-2.5 border-b border-slate-100 dark:border-white/10 pb-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <h2 className="font-bold text-sm sm:text-base text-slate-800 flex items-center space-x-2">
                 <ShoppingBag className="w-4 h-4 text-[#354944]" />
@@ -1002,70 +1002,70 @@ export default function POSPage({ userProfile }) {
         </div>
 
         {/* AREA KERANJANG */}
-        <div className={`${cart.length === 0 ? 'hidden lg:flex lg:flex-col lg:sticky lg:top-24 lg:col-span-1' : 'fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-slate-200 shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.15)] p-4 max-h-[65vh] overflow-y-auto rounded-t-2xl lg:relative lg:bottom-auto lg:left-auto lg:right-auto lg:col-span-1 lg:sticky lg:top-24 lg:border-none lg:shadow-none lg:p-0 lg:max-h-[calc(100vh-120px)] lg:rounded-none'}`}>
-          <div className="bg-white lg:rounded-2xl lg:p-5 sm:lg:p-6 lg:shadow-sm lg:border lg:border-slate-200 flex flex-col justify-between space-y-4">
+        <div className={`${cart.length === 0 ? 'hidden lg:flex lg:flex-col lg:sticky lg:top-24 lg:col-span-1' : 'fixed bottom-0 left-0 right-0 z-50 bg-white dark:bg-[#14211E] border-t border-slate-200 dark:border-white/10 shadow-[0_-10px_20px_-5px_rgba(0,0,0,0.15)] p-3.5 max-h-[65vh] overflow-y-auto rounded-t-xl lg:relative lg:bottom-auto lg:left-auto lg:right-auto lg:col-span-1 lg:sticky lg:top-24 lg:border-none lg:shadow-none lg:p-0 lg:max-h-[calc(100vh-120px)] lg:rounded-none'}`}>
+          <div className="bg-white dark:bg-[#14211E] lg:rounded-xl lg:p-3.5 sm:lg:p-4 lg:shadow-xs lg:border lg:border-slate-200/80 dark:border-white/10 flex flex-col justify-between space-y-3">
             
-            <div className="space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
-                <h2 className="font-bold text-sm sm:text-base text-slate-800 flex items-center space-x-2">
-                  <Receipt className="w-4 h-4 text-[#354944]" />
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 pb-2">
+                <h2 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-1.5">
+                  <Receipt className="w-4 h-4 text-[#354944] dark:text-[#C89D32]" />
                   <span>Keranjang Belanja</span>
                 </h2>
-                <span className="text-xs font-bold text-slate-400">
+                <span className="text-[11px] font-semibold text-slate-400">
                   {cart.reduce((a, b) => a + b.qty, 0)} Item
                 </span>
               </div>
 
               {/* CART ITEMS OR EMPTY STATE */}
               {cart.length === 0 ? (
-                <div className="py-4 lg:py-10 text-center text-slate-400 border-2 border-dashed border-slate-200 rounded-xl p-3">
-                  <Inbox className="w-6 h-6 lg:w-8 lg:h-8 text-slate-300 mx-auto mb-1 lg:mb-2" />
-                  <p className="text-xs font-bold text-slate-500">Keranjang kosong</p>
+                <div className="py-4 lg:py-8 text-center text-slate-400 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl p-3">
+                  <Inbox className="w-6 h-6 text-slate-300 mx-auto mb-1" />
+                  <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">Keranjang kosong</p>
                   <p className="text-[10px] text-slate-400 mt-0.5 hidden sm:block">Pilih produk retail atau tagihan SPP di katalog.</p>
                 </div>
               ) : (
-                <div className="divide-y divide-slate-100 max-h-48 lg:max-h-64 overflow-y-auto pr-1 space-y-1">
+                <div className="divide-y divide-slate-100 dark:divide-white/5 max-h-48 lg:max-h-60 overflow-y-auto pr-1 space-y-0.5">
                   {cart.map((item) => (
-                    <div key={item.id} className="py-2.5 flex items-center justify-between">
+                    <div key={item.id} className="py-2 flex items-center justify-between">
                       <div className="overflow-hidden pr-2">
                         <div className="flex items-center space-x-1.5">
-                          <span className="font-bold text-xs text-slate-800 truncate">{item.name}</span>
+                          <span className="font-semibold text-xs text-slate-800 dark:text-slate-100 truncate">{item.name}</span>
                           
                           {item.type === 'spp' ? (
-                            <span className="text-[8px] bg-purple-100 text-purple-800 px-1.5 py-0.5 rounded-md font-extrabold flex items-center gap-0.5 shrink-0">
+                            <span className="text-[8px] bg-purple-100 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 px-1.5 py-0.2 rounded font-extrabold flex items-center gap-0.5 shrink-0">
                               <GraduationCap className="w-2.5 h-2.5 text-purple-700" />
                               <span>SPP</span>
                             </span>
                           ) : item.type === 'sewa' ? (
-                            <span className="text-[8px] bg-[#354944]/10 text-[#354944] px-1 py-0.2 rounded font-extrabold shrink-0">
+                            <span className="text-[8px] bg-[#354944]/10 dark:bg-white/10 text-[#354944] dark:text-[#C89D32] px-1 py-0.2 rounded font-extrabold shrink-0">
                               SEWA
                             </span>
                           ) : null}
                         </div>
-                        <p className="text-[10px] text-slate-400 mt-0.5">
+                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">
                           @ Rp {Number(item.price).toLocaleString('id-ID')}
                         </p>
                       </div>
 
-                      <div className="flex items-center space-x-2 shrink-0">
+                      <div className="flex items-center space-x-1.5 shrink-0">
                         {item.type === 'spp' ? (
-                          <div className="px-2 py-0.5 bg-purple-50 text-purple-700 border border-purple-200 rounded-lg text-[10px] font-extrabold">
+                          <div className="px-2 py-0.5 bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-md text-[10px] font-semibold">
                             1 Bln
                           </div>
                         ) : (
-                          <div className="flex items-center bg-slate-100 rounded-lg p-0.5 border border-slate-200">
+                          <div className="flex items-center bg-slate-100 dark:bg-white/10 rounded-md p-0.5 border border-slate-200 dark:border-white/10">
                             <button
                               type="button"
                               onClick={() => handleUpdateQty(item.id, -1)}
-                              className="px-1.5 text-xs font-bold text-slate-600 hover:bg-white rounded cursor-pointer"
+                              className="px-1.5 text-xs font-bold text-slate-600 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800 rounded cursor-pointer"
                             >
                               -
                             </button>
-                            <span className="px-2 font-bold text-xs text-slate-800">{item.qty}</span>
+                            <span className="px-1.5 font-bold text-xs font-mono text-slate-800 dark:text-slate-100">{item.qty}</span>
                             <button
                               type="button"
                               onClick={() => handleUpdateQty(item.id, 1)}
-                              className="px-1.5 text-xs font-bold text-slate-600 hover:bg-white rounded cursor-pointer"
+                              className="px-1.5 text-xs font-bold text-slate-600 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-800 rounded cursor-pointer"
                             >
                               +
                             </button>
@@ -1088,13 +1088,13 @@ export default function POSPage({ userProfile }) {
             </div>
 
             {/* TOTAL & CHECKOUT BUTTON */}
-            <div className="pt-3 border-t border-slate-100 space-y-2.5">
+            <div className="pt-2.5 border-t border-slate-100 dark:border-white/10 space-y-2">
               <div className="flex items-center justify-between gap-2">
-                <label className="text-[10px] font-bold text-slate-400 uppercase shrink-0">Metode Pembayaran</label>
+                <label className="text-[10px] font-semibold text-slate-400 uppercase shrink-0">Metode Bayar</label>
                 <select
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#354944] focus:ring-1 focus:ring-[#354944] font-bold text-slate-800 shrink-0 cursor-pointer"
+                  className="px-2 py-1 text-xs bg-slate-50 dark:bg-white/10 border border-slate-200 dark:border-white/10 rounded-lg focus:bg-white focus:outline-none focus:border-[#354944] font-semibold text-slate-800 dark:text-slate-200 shrink-0 cursor-pointer"
                 >
                   <option value="QRIS / Transfer">QRIS / Transfer Bank</option>
                   <option value="Tunai (Cash)">Tunai (Cash)</option>
@@ -1103,8 +1103,8 @@ export default function POSPage({ userProfile }) {
               </div>
 
               <div className="flex items-center justify-between pt-0.5">
-                <span className="text-xs font-bold text-slate-600 uppercase">Total Bayar:</span>
-                <span className="text-lg lg:text-xl font-black text-[#354944]">
+                <span className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase">Total Bayar:</span>
+                <span className="text-base lg:text-lg font-bold font-mono text-[#354944] dark:text-[#C89D32] tabular-nums">
                   Rp {cartTotal.toLocaleString('id-ID')}
                 </span>
               </div>
@@ -1113,9 +1113,9 @@ export default function POSPage({ userProfile }) {
                 type="button"
                 onClick={handleCheckout}
                 disabled={cart.length === 0 || submittingCheckout}
-                className="w-full py-2.5 sm:py-3 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 disabled:border dark:disabled:border-slate-700/80 disabled:cursor-not-allowed text-white font-semibold text-xs rounded-xl shadow-sm disabled:shadow-none transition-all cursor-pointer flex items-center justify-center space-x-2"
+                className="w-full py-2 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 disabled:border dark:disabled:border-slate-700/80 disabled:cursor-not-allowed text-white font-semibold text-xs rounded-lg shadow-xs disabled:shadow-none transition-all cursor-pointer flex items-center justify-center space-x-1.5"
               >
-                <CreditCard className="w-4 h-4" />
+                <CreditCard className="w-3.5 h-3.5" />
                 <span>{submittingCheckout ? 'Memproses Transaksi...' : 'Bayar & Cetak Struk'}</span>
               </button>
             </div>

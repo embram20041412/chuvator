@@ -81,27 +81,27 @@ export default function BookingPage({ userProfile }) {
   }
 
   return (
-    <div className="space-y-6 text-[#333333]">
+    <div className="space-y-3.5 text-[#333333]">
       
       {/* PAGE HEADER & DATE FILTER */}
-      <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-100 flex flex-row flex-wrap sm:flex-nowrap justify-between items-center gap-3">
-        <div className="flex items-center gap-4 min-w-0">
-          <Booking3DIcon className="w-12 h-12 shrink-0 drop-shadow-2xs" />
+      <div className="bg-white dark:bg-[#14211E] rounded-xl p-3 sm:p-3.5 shadow-xs border border-slate-200/80 dark:border-white/10 flex flex-row flex-wrap sm:flex-nowrap justify-between items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <Booking3DIcon className="w-9 h-9 shrink-0 drop-shadow-2xs" />
           <div className="min-w-0">
-            <h1 className="text-lg sm:text-xl font-bold text-slate-800 tracking-tight">Booking Lapangan</h1>
-            <p className="text-xs text-slate-500 truncate hidden sm:block">Kelola reservasi &amp; slot operasional arena</p>
+            <h1 className="text-sm sm:text-base font-bold text-slate-800 dark:text-slate-100 tracking-tight">Booking Lapangan</h1>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate hidden sm:block">Kelola reservasi &amp; slot operasional arena</p>
           </div>
         </div>
 
-        <div className="flex items-center space-x-2.5 shrink-0">
+        <div className="flex items-center space-x-2 shrink-0">
           {/* Date Selector */}
-          <div className="flex items-center space-x-2 bg-slate-50 border border-slate-200/80 px-3 py-1.5 rounded-xl text-xs">
-            <Calendar className="w-4 h-4 text-[#C89D32] shrink-0" />
+          <div className="flex items-center space-x-2 bg-slate-50 dark:bg-white/5 border border-slate-200/80 dark:border-white/10 px-2.5 py-1.5 rounded-lg text-xs">
+            <Calendar className="w-3.5 h-3.5 text-[#C89D32] shrink-0" />
             <input
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}
-              className="bg-transparent font-bold text-slate-800 focus:outline-none cursor-pointer"
+              className="bg-transparent font-semibold text-xs text-slate-800 dark:text-slate-100 focus:outline-none cursor-pointer"
             />
           </div>
 
@@ -122,9 +122,9 @@ export default function BookingPage({ userProfile }) {
               setShowModal(true);
             }}
             disabled={courts.length === 0}
-            className="px-4 py-2 bg-[#354944] hover:bg-[#2B3D38] text-white font-bold text-xs rounded-xl border-b-2 border-[#C89D32] shadow-sm transition-all cursor-pointer flex items-center space-x-1.5 shrink-0 disabled:opacity-50"
+            className="px-3 py-1.5 bg-[#354944] hover:bg-[#2B3D38] text-white font-semibold text-xs rounded-lg border-b-2 border-[#C89D32] shadow-xs transition-all cursor-pointer flex items-center space-x-1.5 shrink-0 disabled:opacity-50"
           >
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5 text-[#C89D32]" />
             <span>+ Booking Baru</span>
           </button>
         </div>
@@ -141,7 +141,7 @@ export default function BookingPage({ userProfile }) {
         </div>
       ) : (
         /* CARD GRID FOR COURTS (2 COLUMNS DESKTOP) */
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
           {courts.map((court) => {
             const courtPriceFormatted = court.price
               ? `Rp ${Number(court.price).toLocaleString('id-ID')}/jam`
@@ -150,34 +150,34 @@ export default function BookingPage({ userProfile }) {
             return (
               <div
                 key={court.id}
-                className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-slate-100 flex flex-col justify-between space-y-4"
+                className="bg-white dark:bg-[#14211E] rounded-xl p-3 sm:p-3.5 shadow-xs border border-slate-200/80 dark:border-white/10 flex flex-col justify-between space-y-2.5"
               >
                 {/* Court Card Header */}
-                <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-10 h-10 bg-[#354944]/10 text-[#354944] rounded-xl flex items-center justify-center font-bold text-sm shrink-0 border border-[#354944]/20">
+                <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 pb-2">
+                  <div className="flex items-center space-x-2.5">
+                    <div className="w-8 h-8 bg-[#354944]/10 dark:bg-white/10 text-[#354944] dark:text-[#C89D32] rounded-lg flex items-center justify-center font-bold text-xs shrink-0 border border-[#354944]/20">
                       {court.name.charAt(0)}
                     </div>
                     <div>
-                      <div className="flex items-center space-x-2">
-                        <h2 className="font-bold text-sm sm:text-base text-slate-800">{court.name}</h2>
-                        <span className="px-2 py-0.5 bg-[#354944]/10 text-[#354944] font-bold text-[10px] rounded-md uppercase border border-[#354944]/20">
+                      <div className="flex items-center space-x-1.5">
+                        <h2 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100">{court.name}</h2>
+                        <span className="px-1.5 py-0.5 bg-[#354944]/10 dark:bg-white/10 text-[#354944] dark:text-[#C89D32] font-semibold text-[9px] rounded uppercase border border-[#354944]/20">
                           {court.sport || 'Sports'}
                         </span>
                       </div>
-                      <p className="text-xs text-[#354944] font-bold mt-0.5">{courtPriceFormatted}</p>
+                      <p className="text-[11px] font-mono text-[#354944] dark:text-[#C89D32] font-semibold mt-0.5">{courtPriceFormatted}</p>
                     </div>
                   </div>
                 </div>
 
                 {/* Slots Grid */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-slate-400">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px] font-semibold text-slate-400">
                     <span>Slot Operasional ({selectedDate}):</span>
                     <span className="text-[10px] text-[#C89D32] font-bold">Gold = Tersedia</span>
                   </div>
 
-                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
+                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-1.5">
                     {OPERATIONAL_HOURS.map((slot) => {
                       const activeBooking = bookings.find((b) => {
                         const matchCourt = b.courtId === court.id || b.courtName === court.name;
@@ -203,17 +203,17 @@ export default function BookingPage({ userProfile }) {
                         return (
                           <div
                             key={slot.start}
-                            className={`p-2 rounded-xl text-white border flex flex-col justify-between space-y-1 shadow-2xs select-none ${
+                            className={`p-1.5 rounded-lg text-white border flex flex-col justify-between space-y-0.5 shadow-2xs select-none ${
                               isPast ? 'bg-slate-700 border-slate-600 opacity-80' : 'bg-[#354944] border-[#2B3D38]'
                             }`}
                           >
                             <div className="flex items-center justify-between">
-                              <span className="font-extrabold text-[11px] tracking-tight">
+                              <span className="font-bold text-[10px] tracking-tight font-mono">
                                 {slot.start}
                               </span>
                               <span className={`w-1.5 h-1.5 rounded-full ${isPast ? 'bg-slate-400' : 'bg-[#C89D32] animate-pulse'}`} />
                             </div>
-                            <p className="text-[10px] font-bold text-[#E5B640] truncate leading-tight">
+                            <p className="text-[9px] font-medium text-[#E5B640] truncate leading-tight">
                               {activeBooking.customerName}
                             </p>
                           </div>
@@ -224,15 +224,15 @@ export default function BookingPage({ userProfile }) {
                         return (
                           <div
                             key={slot.start}
-                            className="p-2 rounded-xl bg-slate-50 border border-slate-200/60 text-slate-400 flex flex-col justify-between space-y-1 select-none cursor-not-allowed opacity-60"
+                            className="p-1.5 rounded-lg bg-slate-50 dark:bg-white/5 border border-slate-200/60 dark:border-white/5 text-slate-400 flex flex-col justify-between space-y-0.5 select-none cursor-not-allowed opacity-60"
                             title="Waktu telah terlewat"
                           >
                             <div className="flex items-center justify-between">
-                              <span className="font-bold text-[11px] text-slate-400 tracking-tight">
+                              <span className="font-semibold text-[10px] text-slate-400 tracking-tight font-mono">
                                 {slot.start}
                               </span>
                             </div>
-                            <span className="text-[10px] font-medium text-slate-400">
+                            <span className="text-[9px] font-medium text-slate-400">
                               Lewat
                             </span>
                           </div>
@@ -243,15 +243,15 @@ export default function BookingPage({ userProfile }) {
                         <button
                           key={slot.start}
                           onClick={() => handleOpenBookingForSlot(court, slot)}
-                          className="p-2 rounded-xl bg-[#FFF8E1] hover:bg-[#FFE082]/60 border border-[#FFE082] text-[#C89D32] flex flex-col justify-between space-y-1 transition-all shadow-2xs cursor-pointer text-left font-medium"
+                          className="p-1.5 rounded-lg bg-[#FFF8E1] dark:bg-[#C89D32]/10 hover:bg-[#FFE082]/60 dark:hover:bg-[#C89D32]/20 border border-[#FFE082] dark:border-[#C89D32]/30 text-[#C89D32] flex flex-col justify-between space-y-0.5 transition-all shadow-2xs cursor-pointer text-left font-medium"
                         >
                           <div className="flex items-center justify-between">
-                            <span className="font-extrabold text-[11px] text-[#A67F22] tracking-tight">
+                            <span className="font-bold text-[10px] text-[#A67F22] dark:text-[#E5B640] tracking-tight font-mono">
                               {slot.start}
                             </span>
-                            <Plus className="w-3 h-3 text-[#C89D32]" />
+                            <Plus className="w-2.5 h-2.5 text-[#C89D32]" />
                           </div>
-                          <span className="text-[10px] font-bold text-[#C89D32]">
+                          <span className="text-[9px] font-bold text-[#C89D32]">
                             Buka
                           </span>
                         </button>

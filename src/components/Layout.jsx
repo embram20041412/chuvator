@@ -424,7 +424,7 @@ export default function Layout({ userProfile }) {
                   onClick={() => setExpandedMenu(null)}
                   title={isSidebarCollapsed ? item.label : undefined}
                   className={({ isActive }) =>
-                    `flex items-center ${isSidebarCollapsed ? 'justify-center px-2 py-2.5 rounded-2xl mr-3' : 'space-x-3 pl-4 pr-3 py-2.5 rounded-l-full'} text-xs uppercase tracking-wider font-semibold transition-all duration-150 ${
+                    `flex items-center ${isSidebarCollapsed ? 'justify-center px-2 py-2 rounded-xl mr-2.5' : 'space-x-3 pl-3.5 pr-3 py-2 rounded-l-full'} text-xs uppercase tracking-wider font-semibold transition-all duration-150 ${
                       isActive
                         ? 'fluid-tab-active shadow-xs'
                         : 'text-slate-300 hover:bg-white/10 hover:text-white'
@@ -878,8 +878,8 @@ export default function Layout({ userProfile }) {
       </AnimatePresence>
 
       {/* MAIN CONTENT AREA */}
-      <main className={`flex-1 h-full overflow-y-auto relative ${isSidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'} transition-[margin] duration-300 min-w-0 max-w-full pb-32 lg:pb-6 pt-4 lg:pt-6 px-3 sm:px-6 lg:px-8`}>
-        <div key={location.pathname + location.search} className="max-w-7xl mx-auto w-full min-w-0 animate-page-enter">
+      <main className={`flex-1 h-full overflow-y-auto relative ${isSidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'} transition-[margin] duration-300 min-w-0 max-w-full pb-20 lg:pb-5 pt-3 lg:pt-3.5 px-3 sm:px-4 lg:px-6`}>
+        <div key={location.pathname + location.search} className="max-w-[1536px] mx-auto w-full min-w-0 animate-page-enter">
           <Outlet />
         </div>
       </main>

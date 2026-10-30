@@ -743,7 +743,7 @@ export default function AcademyPage({ userProfile }) {
   };
 
   return (
-    <div className="space-y-6 text-slate-800">
+    <div className="space-y-3.5 text-slate-800">
       
       {/* ==================================================== */}
       {/* 1. UI WORKSPACE SELECTOR & HEADER (DESKTOP & MOBILE HUB/SUBPAGE) */}
@@ -751,32 +751,32 @@ export default function AcademyPage({ userProfile }) {
       {academies.length > 0 && (
         <>
           {/* DESKTOP HEADER (HIDDEN ON MOBILE) */}
-          <div className="hidden lg:block bg-white rounded-2xl p-6 shadow-sm border border-slate-200/80 mb-6 space-y-3">
+          <div className="hidden lg:block bg-white dark:bg-[#14211E] rounded-xl p-3 sm:p-3.5 shadow-xs border border-slate-200/80 dark:border-white/10 mb-3.5 space-y-2.5">
             <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="w-12 h-12 rounded-2xl bg-[#354944] text-white flex items-center justify-center font-black text-lg shadow-md shrink-0 border border-[#C89D32]/40">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-9 h-9 rounded-xl bg-[#354944] text-white flex items-center justify-center font-bold text-sm shadow-xs shrink-0 border border-[#C89D32]/40">
                   {activeAcademy?.name ? activeAcademy.name.charAt(0).toUpperCase() : 'A'}
                 </div>
                 <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="px-2 py-0.5 bg-[#354944]/10 text-[#354944] font-extrabold text-[10px] rounded-md border border-[#354944]/20 uppercase tracking-wider">
-                      Workspace Aktif
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="px-1.5 py-0.2 bg-[#354944]/10 dark:bg-white/10 text-[#354944] dark:text-[#C89D32] font-semibold text-[9px] rounded border border-[#354944]/20 uppercase tracking-wider">
+                      Workspace
                     </span>
-                    <span className="px-2 py-0.5 bg-slate-100 text-slate-700 font-bold text-[10px] rounded-md">
+                    <span className="px-1.5 py-0.2 bg-slate-100 dark:bg-white/5 text-slate-600 dark:text-slate-300 font-medium text-[9px] rounded">
                       {activeAcademy?.sport || 'General Sports'}
                     </span>
                   </div>
-                  <h1 className="text-xl font-bold text-slate-900 tracking-tight mt-0.5 truncate">
+                  <h1 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 tracking-tight mt-0.5 truncate">
                     {activeAcademy?.name || 'Akademi Olahraga'}
                   </h1>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
-                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2 shadow-2xs">
-                  <Building2 className="w-4 h-4 text-[#354944]" />
+                <div className="flex items-center gap-2 bg-slate-50 dark:bg-white/5 border border-slate-200/80 dark:border-white/10 rounded-lg px-2.5 py-1.5 shadow-2xs">
+                  <Building2 className="w-3.5 h-3.5 text-[#354944] dark:text-[#C89D32]" />
                   <div className="flex flex-col min-w-0">
-                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider leading-none mb-0.5">Akademi Aktif</span>
+                    <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider leading-none mb-0.5">Akademi Aktif</span>
                     <select
                       value={activeAcademyId}
                       onChange={(e) => {
@@ -784,10 +784,10 @@ export default function AcademyPage({ userProfile }) {
                         setActiveAcademyId(id);
                         localStorage.setItem('activeAcademyId', id);
                       }}
-                      className="bg-transparent text-slate-900 text-xs font-semibold focus:outline-none cursor-pointer truncate pr-2"
+                      className="bg-transparent text-slate-900 dark:text-slate-100 text-xs font-semibold focus:outline-none cursor-pointer truncate pr-2"
                     >
                       {academies.map((ac) => (
-                        <option key={ac.id} value={ac.id}>
+                        <option key={ac.id} value={ac.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
                           {ac.name} ({ac.sport || 'Umum'})
                         </option>
                       ))}
@@ -798,9 +798,9 @@ export default function AcademyPage({ userProfile }) {
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(true)}
-                  className="px-4 py-2.5 bg-[#354944] hover:bg-[#2B3D38] text-white font-bold text-xs rounded-xl border-b-2 border-[#C89D32] shadow-sm transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                  className="px-3 py-1.5 bg-[#354944] hover:bg-[#2B3D38] text-white font-semibold text-xs rounded-lg border-b-2 border-[#C89D32] shadow-xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
                 >
-                  <Plus className="w-3.5 h-3.5 text-[#C89D32]" />
+                  <Plus className="w-3 h-3 text-[#C89D32]" />
                   <span>+ Akademi Baru</span>
                 </button>
               </div>
@@ -1108,10 +1108,10 @@ export default function AcademyPage({ userProfile }) {
 
       {/* TAB 2: SISWA & SPP */}
       {activeAcademyTab === 'siswa' && (
-        <div className="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <h2 className="font-bold text-sm sm:text-base text-slate-800 flex items-center space-x-2" style={{ fontSize: '15px' }}>
-              <GraduationCap className="w-4 h-4 text-[#354944]" />
+        <div className="bg-white dark:bg-[#14211E] rounded-xl p-3.5 sm:p-4 shadow-xs border border-slate-200/80 dark:border-white/10 space-y-3">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 pb-2.5">
+            <h2 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+              <GraduationCap className="w-4 h-4 text-[#354944] dark:text-[#C89D32]" />
               <span>Daftar Siswa ({filteredStudents.length})</span>
             </h2>
 
@@ -1121,9 +1121,9 @@ export default function AcademyPage({ userProfile }) {
                 setEditingStudent(null);
                 setShowAddModal(true);
               }}
-              className="px-4 py-2 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white font-semibold text-xs rounded-xl shadow-sm transition-colors cursor-pointer flex items-center space-x-1.5 shrink-0"
+              className="px-3 py-1.5 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white font-semibold text-xs rounded-lg shadow-xs transition-colors cursor-pointer flex items-center space-x-1.5 shrink-0"
             >
-              <UserPlus className="w-4 h-4" />
+              <UserPlus className="w-3.5 h-3.5" />
               <span>+ Siswa Baru</span>
             </button>
           </div>
@@ -1152,7 +1152,7 @@ export default function AcademyPage({ userProfile }) {
             </div>
           ) : (
             /* DAFTAR SISWA (LIST VIEW / ROW HORIZONTAL MODERN) */
-            <div className="space-y-3">
+            <div className="space-y-2">
               {filteredStudents.map((st) => {
                 const sppInfo = calculateSppStatus(st, sppBillingStartDay, sppDueDay);
                 const waUrl = formatWhatsAppUrl(st.parentPhone, st.studentName, arenaName);
@@ -1161,19 +1161,19 @@ export default function AcademyPage({ userProfile }) {
                 return (
                   <div
                     key={st.id}
-                    className="flex flex-col lg:flex-row gap-4 lg:items-center justify-between p-4 border border-gray-200 rounded-xl bg-white mb-3 hover:border-[#354944]/40 hover:shadow-xs transition-all"
+                    className="flex flex-col lg:flex-row gap-3 lg:items-center justify-between p-3 border border-slate-200/80 dark:border-white/10 rounded-xl bg-white dark:bg-[#162320] mb-2 hover:border-[#354944]/40 hover:shadow-xs transition-all"
                   >
                     {/* Area 1: Profil Siswa (Kiri) */}
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
                       {/* Avatar Foto atau Inisial */}
                       {st.photoUrl ? (
                         <img
                           src={st.photoUrl}
                           alt={st.studentName}
-                          className="w-10 h-10 rounded-full object-cover flex-shrink-0 border border-[#354944]/30 shadow-2xs"
+                          className="w-8 h-8 rounded-full object-cover flex-shrink-0 border border-[#354944]/30 shadow-2xs"
                         />
                       ) : (
-                        <div className="w-10 h-10 rounded-full bg-[#354944] text-white font-bold flex items-center justify-center text-sm flex-shrink-0 border border-[#C89D32]/40 shadow-2xs">
+                        <div className="w-8 h-8 rounded-full bg-[#354944] text-white font-bold flex items-center justify-center text-xs flex-shrink-0 border border-[#C89D32]/40 shadow-2xs">
                           {getStudentInitials(st.studentName)}
                         </div>
                       )}

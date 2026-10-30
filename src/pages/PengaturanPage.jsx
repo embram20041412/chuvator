@@ -543,73 +543,75 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
   };
 
   return (
-    <div className="space-y-4 max-w-4xl mx-auto text-[#333333]">
+    <div className="space-y-3.5 max-w-5xl mx-auto text-slate-800 dark:text-slate-200">
       
       {/* HEADER */}
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 flex items-center gap-4">
-        <Pengaturan3DIcon className="w-14 h-14 shrink-0 drop-shadow-2xs" />
-        <div>
-          <h1 className="text-xl font-bold text-[#333333]">Pengaturan</h1>
-          <p className="text-xs text-gray-500 mt-0.5">Kelola profil arena, gambar Kode QRIS, rekening bank, dan tarif per jam lapangan</p>
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 rounded-xl p-3 sm:p-3.5 shadow-2xs flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <Pengaturan3DIcon className="w-8 h-8 sm:w-9 sm:h-9 shrink-0 drop-shadow-2xs" />
+          <div>
+            <h1 className="text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100">Pengaturan</h1>
+            <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400">Kelola profil arena, QRIS, rekening bank, struk thermal kasir, dan tarif lapangan</p>
+          </div>
         </div>
       </div>
 
       {/* KARTU INFORMASI AKUN & LOGOUT */}
-      <div className="bg-white border border-slate-200/80 rounded-xl p-4 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5 min-w-0">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-white/10 rounded-xl p-3 sm:p-3.5 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           {userProfile?.photoURL ? (
             <img 
               src={userProfile.photoURL} 
               alt="Avatar" 
-              className="w-11 h-11 rounded-full border border-slate-200 object-cover shrink-0" 
+              className="w-9 h-9 rounded-full border border-slate-200 dark:border-slate-700 object-cover shrink-0" 
             />
           ) : (
-            <div className="w-11 h-11 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center font-bold text-base shrink-0 shadow-2xs">
+            <div className="w-9 h-9 bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 rounded-full flex items-center justify-center font-bold text-sm shrink-0 shadow-2xs">
               {(userProfile?.displayName || 'Najwa Sheinara').charAt(0).toUpperCase()}
             </div>
           )}
           <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-bold text-sm sm:text-base text-slate-800 truncate">
+              <h3 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200 truncate">
                 {userProfile?.displayName || 'Najwa Sheinara'}
               </h3>
-              <span className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200/80 rounded-md text-[10px] font-bold uppercase tracking-wider shrink-0">
+              <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/60 rounded-md text-[9px] font-bold uppercase tracking-wider shrink-0">
                 {roleDisplay}
               </span>
             </div>
-            <p className="text-xs text-slate-500 truncate mt-0.5">
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5 font-mono">
               {userProfile?.email || 'sheinaranajwa0@gmail.com'}
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 flex-wrap self-start sm:self-auto">
+        <div className="flex items-center gap-2.5 flex-wrap self-start sm:self-auto">
           {/* THEME SELECTOR PILL (Terang / Light vs Gelap / Dark) */}
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200/80 text-xs">
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200/80 dark:border-slate-700 text-xs">
             <button
               type="button"
               onClick={() => setTheme('light')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md font-semibold text-[11px] transition-all cursor-pointer ${
                 !isDark 
                   ? 'bg-white text-blue-600 shadow-2xs' 
-                  : 'text-slate-500 hover:text-slate-800'
+                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
               }`}
               title="Aktifkan Mode Terang (Light Mode)"
             >
-              <Sun className={`w-3.5 h-3.5 ${!isDark ? 'text-amber-500' : 'text-slate-400'}`} />
+              <Sun className={`w-3 h-3 ${!isDark ? 'text-amber-500' : 'text-slate-400'}`} />
               <span>Terang</span>
             </button>
             <button
               type="button"
               onClick={() => setTheme('dark')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md font-semibold text-[11px] transition-all cursor-pointer ${
                 isDark 
                   ? 'bg-slate-900 text-amber-400 shadow-2xs' 
-                  : 'text-slate-500 hover:text-slate-800'
+                  : 'text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200'
               }`}
               title="Aktifkan Mode Gelap (Dark Mode)"
             >
-              <Moon className={`w-3.5 h-3.5 ${isDark ? 'text-blue-400' : 'text-slate-400'}`} />
+              <Moon className={`w-3 h-3 ${isDark ? 'text-blue-400' : 'text-slate-400'}`} />
               <span>Gelap</span>
             </button>
           </div>
@@ -617,23 +619,23 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
           <button
             type="button"
             onClick={handleLogout}
-            className="bg-rose-50 hover:bg-rose-100 text-rose-600 border border-rose-200/80 rounded-lg px-4 py-2 text-xs font-semibold flex items-center gap-2 transition-colors cursor-pointer shrink-0"
+            className="bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200/80 dark:border-rose-900/60 rounded-lg px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="w-3.5 h-3.5" />
             <span>Keluar Sistem</span>
           </button>
         </div>
       </div>
 
       {tenantSuccessMsg && (
-        <div className="p-3 bg-green-50 border border-green-200 text-green-800 text-xs rounded-xl font-semibold flex items-center space-x-2">
-          <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+        <div className="p-2.5 bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800/60 text-green-800 dark:text-green-300 text-xs rounded-xl font-semibold flex items-center space-x-2">
+          <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
           <span>{tenantSuccessMsg}</span>
         </div>
       )}
 
       {tenantErrorMsg && (
-        <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl font-semibold">
+        <div className="p-2.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 text-red-700 dark:text-red-300 text-xs rounded-xl font-semibold">
           {tenantErrorMsg}
         </div>
       )}
@@ -643,21 +645,21 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
         
         {/* TAB 1: PROFIL IDENTITAS GOR */}
         {activeTab === 'profil' && (
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 space-y-5 text-left animate-fadeIn">
-            <h2 className="font-bold text-base text-[#333333] border-b border-gray-100 pb-3 flex items-center space-x-2">
-              <Building2 className="w-4 h-4 text-blue-600" />
+          <div className="bg-white dark:bg-slate-900 rounded-xl p-3.5 sm:p-4 shadow-2xs border border-slate-200/80 dark:border-white/10 space-y-3.5 text-left animate-fadeIn">
+            <h2 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200 border-b border-slate-100 dark:border-white/10 pb-2.5 flex items-center space-x-2">
+              <Building2 className="w-4 h-4 text-blue-600 dark:text-blue-400" />
               <span>Tab 1: Profil Identitas GOR</span>
             </h2>
 
             {/* UNGGAH LOGO GOR */}
-            <div className="p-4 bg-gray-50 border border-gray-200 rounded-2xl space-y-3">
-              <label className="block text-xs font-bold text-gray-700 uppercase">
+            <div className="p-3 bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 rounded-xl space-y-2.5">
+              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase">
                 Logo GOR / Identitas Visual Arena
               </label>
 
               {/* Pratinjau Logo */}
-              <div className="flex items-center space-x-4">
-                <div className="w-16 h-16 rounded-xl border border-gray-200 shadow-2xs flex items-center justify-center overflow-hidden shrink-0">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs flex items-center justify-center overflow-hidden shrink-0 bg-white dark:bg-slate-800">
                   {logoUrl ? (
                     <img
                       src={logoUrl}
@@ -665,18 +667,18 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                       className="w-full h-full object-cover"
                     />
                   ) : (
-                    <div className="w-full h-full bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center font-black text-xl">
+                    <div className="w-full h-full bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 rounded-lg flex items-center justify-center font-black text-lg">
                       {name?.trim() ? name.trim().charAt(0).toUpperCase() : 'G'}
                     </div>
                   )}
                 </div>
 
-                <div className="flex-1 min-w-0 space-y-1">
-                  <p className="text-xs font-bold text-gray-800">
+                <div className="flex-1 min-w-0 space-y-0.5">
+                  <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
                     {logoUrl ? 'Logo GOR Aktif' : 'Belum Ada Logo Khusus (Menggunakan Inisial)'}
                   </p>
-                  <p className="text-[11px] text-gray-500">
-                    Format: JPG, PNG, WebP, SVG. Logo otomatis diunggah ke Cloudinary dan ditampilkan pada Header &amp; Dashboard menggantikan logo CSC.
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                    Format: JPG, PNG, WebP, SVG. Logo otomatis diunggah ke Cloudinary dan disinkronkan ke header &amp; dashboard.
                   </p>
                 </div>
               </div>
@@ -688,76 +690,76 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                   accept="image/*"
                   onChange={handleLogoFileSelect}
                   disabled={isUploadingLogo || savingTenant}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer bg-white"
+                  className="w-full px-2.5 py-1.5 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium focus:ring-1 focus:ring-blue-500 focus:outline-none file:mr-2.5 file:py-1 file:px-2.5 file:rounded-md file:border-0 file:text-[11px] file:font-bold file:bg-blue-50 dark:file:bg-blue-950/60 file:text-blue-700 dark:file:text-blue-300 hover:file:bg-blue-100 cursor-pointer bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300"
                 />
                 {isUploadingLogo && (
-                  <p className="mt-1.5 text-xs text-blue-600 font-semibold flex items-center gap-1.5">
+                  <p className="mt-1 text-[11px] text-blue-600 dark:text-blue-400 font-semibold flex items-center gap-1.5">
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Sedang mengunggah logo ke Cloudinary &amp; menyimpan ke Firestore...</span>
+                    <span>Sedang mengunggah logo ke Cloudinary...</span>
                   </p>
                 )}
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Nama GOR / Sports Arena</label>
+              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Nama GOR / Sports Arena</label>
               <input
                 type="text"
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-bold"
+                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-bold"
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Kategori Olahraga Utama</label>
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Kategori Olahraga Utama</label>
                 <input
                   type="text"
                   value={sportsType}
                   onChange={(e) => setSportsType(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Kontak WhatsApp</label>
+                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Kontak WhatsApp</label>
                 <input
                   type="tel"
                   required
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-medium"
+                  className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-medium font-mono"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Alamat Lengkap GOR</label>
+              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Alamat Lengkap GOR</label>
               <textarea
-                rows={3}
+                rows={2}
                 required
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                className="w-full px-3 py-1.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
               />
             </div>
 
-            <div className="pt-2 flex justify-end">
+            <div className="pt-1.5 flex justify-end">
               <button
                 type="submit"
                 disabled={savingTenant}
-                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center space-x-2 disabled:opacity-60"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg shadow-2xs transition-all cursor-pointer flex items-center space-x-1.5 disabled:opacity-60"
               >
                 {savingTenant ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
                     <span>Menyimpan...</span>
                   </>
                 ) : (
                   <>
-                    <Save className="w-4 h-4" />
+                    <Save className="w-3.5 h-3.5" />
                     <span>Simpan Perubahan Profil</span>
                   </>
                 )}
@@ -768,66 +770,66 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
 
         {/* TAB 2: REKENING & QRIS */}
         {activeTab === 'pembayaran' && (
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 space-y-6 text-left animate-fadeIn">
-            <h2 className="font-bold text-base text-[#333333] border-b border-gray-100 pb-3 flex items-center space-x-2">
-              <CreditCard className="w-4 h-4 text-blue-600" />
+          <div className="bg-white dark:bg-slate-900 rounded-xl p-3.5 sm:p-4 shadow-2xs border border-slate-200/80 dark:border-white/10 space-y-3.5 text-left animate-fadeIn">
+            <h2 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200 border-b border-slate-100 dark:border-white/10 pb-2.5 flex items-center space-x-2">
+              <CreditCard className="w-4 h-4 text-blue-600 dark:text-blue-400" />
               <span>Tab 2: Informasi Rekening Bank &amp; QRIS Statis</span>
             </h2>
 
             {/* INFORMASI REKENING BANK (MULTI-REKENING) */}
-            <div className="space-y-4">
-              <h3 className="text-xs font-bold text-blue-600 uppercase tracking-wider flex items-center space-x-1.5">
-                <CreditCard className="w-4 h-4" />
+            <div className="space-y-3">
+              <h3 className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider flex items-center space-x-1.5">
+                <CreditCard className="w-3.5 h-3.5" />
                 <span>Informasi Rekening Bank Transfer</span>
               </h3>
 
               {bankAccounts.map((acc, index) => (
-                <div key={index} className="bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/80 rounded-xl p-4 relative space-y-3">
+                <div key={index} className="bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 rounded-xl p-3 relative space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                    <span className="text-[10px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                       Rekening #{index + 1}
                     </span>
                     {bankAccounts.length > 1 && (
                       <button
                         type="button"
                         onClick={() => handleRemoveBankAccount(index)}
-                        className="p-1.5 bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                        className="p-1 bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/60 hover:bg-rose-100 dark:hover:bg-rose-900/60 rounded-md text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1"
                         title="Hapus Rekening"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-3 h-3" />
                         <span>Hapus</span>
                       </button>
                     )}
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase mb-1">Nama Bank</label>
+                      <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase mb-1">Nama Bank</label>
                       <input
                         type="text"
                         value={acc.bankName || ''}
                         onChange={(e) => handleBankAccountChange(index, 'bankName', e.target.value)}
                         placeholder="BCA, Mandiri, BRI, dll"
-                        className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-bold"
+                        className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-bold"
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase mb-1">Nomor Rekening</label>
+                      <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase mb-1">Nomor Rekening</label>
                       <input
                         type="text"
                         value={acc.accountNumber || ''}
                         onChange={(e) => handleBankAccountChange(index, 'accountNumber', e.target.value)}
                         placeholder="8830123456"
-                        className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono font-bold"
+                        className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-mono font-bold"
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase mb-1">Atas Nama (Pemilik)</label>
+                      <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase mb-1">Atas Nama (Pemilik)</label>
                       <input
                         type="text"
                         value={acc.accountName || ''}
                         onChange={(e) => handleBankAccountChange(index, 'accountName', e.target.value)}
                         placeholder="a.n. PT Chua Sport"
-                        className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-xl focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                        className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 font-medium"
                       />
                     </div>
                   </div>
@@ -838,71 +840,71 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                 <button
                   type="button"
                   onClick={handleAddBankAccount}
-                  className="px-4 py-2.5 bg-white border-2 border-dashed border-blue-300 hover:border-blue-500 text-blue-700 font-bold text-xs rounded-xl shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1.5 w-full"
+                  className="px-3 py-2 bg-white dark:bg-slate-900 border-2 border-dashed border-blue-300 hover:border-blue-500 dark:border-blue-800 text-blue-700 dark:text-blue-400 font-bold text-xs rounded-xl shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1.5 w-full"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-3.5 h-3.5" />
                   <span>+ Tambah Rekening Lain</span>
                 </button>
               </div>
             </div>
 
             {/* UPLOAD FILE GAMBAR QRIS STATIS (BASE64) */}
-            <div className="pt-4 border-t border-gray-100 space-y-3">
-              <h3 className="text-xs font-bold text-blue-600 uppercase tracking-wider flex items-center space-x-1.5">
-                <QrCode className="w-4 h-4" />
+            <div className="pt-3 border-t border-slate-100 dark:border-white/10 space-y-2.5">
+              <h3 className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider flex items-center space-x-1.5">
+                <QrCode className="w-3.5 h-3.5" />
                 <span>Gambar Kode QRIS Statis</span>
               </h3>
 
-              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 p-4 bg-gray-50 border border-gray-200 rounded-xl">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 p-3 bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 rounded-xl">
                 {qrisImageBase64 ? (
                   <div className="relative shrink-0">
                     <img
                       src={qrisImageBase64}
                       alt="Preview QRIS"
-                      className="w-28 h-28 object-contain rounded-xl border border-gray-200 shadow-xs p-1 bg-white"
+                      className="w-20 h-20 object-contain rounded-lg border border-slate-200 dark:border-slate-700 shadow-2xs p-1 bg-white"
                     />
-                    <span className="absolute -top-2 -right-2 px-2 py-0.5 bg-green-600 text-white font-extrabold text-[9px] rounded-full shadow-2xs">
+                    <span className="absolute -top-1.5 -right-1.5 px-1.5 py-0.5 bg-green-600 text-white font-extrabold text-[8px] rounded-full shadow-2xs">
                       Aktif
                     </span>
                   </div>
                 ) : (
-                  <div className="w-28 h-28 rounded-xl border-2 border-dashed border-gray-300 bg-white flex flex-col items-center justify-center p-2 text-center text-gray-400 shrink-0">
-                    <ImageIcon className="w-6 h-6 mb-1 text-gray-300" />
-                    <span className="text-[10px] font-semibold">Belum Ada QRIS</span>
+                  <div className="w-20 h-20 rounded-lg border-2 border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 flex flex-col items-center justify-center p-2 text-center text-slate-400 shrink-0">
+                    <ImageIcon className="w-5 h-5 mb-0.5 text-slate-300" />
+                    <span className="text-[9px] font-semibold">Belum Ada QRIS</span>
                   </div>
                 )}
 
-                <div className="space-y-2 flex-1">
-                  <p className="text-xs font-bold text-[#333333]">
+                <div className="space-y-1.5 flex-1 min-w-0">
+                  <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
                     {qrisImageBase64 ? 'Ganti Gambar QRIS Statis' : 'Upload File QRIS Statis'}
                   </p>
-                  <p className="text-[11px] text-gray-500 leading-snug">
-                    Pilih file gambar QRIS (PNG/JPG) max 800 KB dari perangkat Anda. Tersimpan aman di Firestore.
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-snug">
+                    Pilih file gambar QRIS (PNG/JPG) max 800 KB dari perangkat Anda. Tersimpan aman di database.
                   </p>
 
-                  <label className="inline-flex items-center space-x-2 px-4 py-2 bg-white border border-gray-300 hover:border-blue-500 hover:text-blue-600 text-gray-700 text-xs font-semibold rounded-xl cursor-pointer shadow-2xs transition-colors">
-                    <Upload className="w-3.5 h-3.5 text-blue-600" />
-                    <span>{qrisFileName ? `File: ${qrisFileName}` : 'Pilih File Gambar QRIS...'}</span>
+                  <label className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-blue-500 hover:text-blue-600 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-lg cursor-pointer shadow-2xs transition-colors">
+                    <Upload className="w-3 h-3 text-blue-600 dark:text-blue-400" />
+                    <span className="truncate max-w-[200px]">{qrisFileName ? `File: ${qrisFileName}` : 'Pilih File Gambar QRIS...'}</span>
                     <input type="file" accept="image/*" onChange={handleQrisFileSelect} className="hidden" />
                   </label>
                 </div>
               </div>
             </div>
 
-            <div className="pt-2 flex justify-end">
+            <div className="pt-1.5 flex justify-end">
               <button
                 type="submit"
                 disabled={savingTenant}
-                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center space-x-2 disabled:opacity-60"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg shadow-2xs transition-all cursor-pointer flex items-center space-x-1.5 disabled:opacity-60"
               >
                 {savingTenant ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
                     <span>Menyimpan...</span>
                   </>
                 ) : (
                   <>
-                    <Save className="w-4 h-4" />
+                    <Save className="w-3.5 h-3.5" />
                     <span>Simpan Rekening &amp; QRIS</span>
                   </>
                 )}
@@ -913,25 +915,25 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
 
         {/* TAB 3: TAGIHAN SPP & STRUK KASIR */}
         {activeTab === 'spp_struk' && (
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 space-y-6 text-left animate-fadeIn">
-            <h2 className="font-bold text-base text-[#333333] border-b border-gray-100 pb-3 flex items-center space-x-2">
-              <Printer className="w-4 h-4 text-blue-600" />
+          <div className="bg-white dark:bg-slate-900 rounded-xl p-3.5 sm:p-4 shadow-2xs border border-slate-200/80 dark:border-white/10 space-y-3.5 text-left animate-fadeIn">
+            <h2 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200 border-b border-slate-100 dark:border-white/10 pb-2.5 flex items-center space-x-2">
+              <Printer className="w-4 h-4 text-blue-600 dark:text-blue-400" />
               <span>Tab 3: Tagihan SPP Akademi &amp; Struk Kasir Thermal</span>
             </h2>
 
             {/* PENGATURAN TAGIHAN SPP AKADEMI */}
-            <div className="space-y-3">
-              <h3 className="text-xs font-bold text-blue-600 uppercase tracking-wider flex items-center space-x-1.5">
-                <Calendar className="w-4 h-4" />
+            <div className="space-y-2.5">
+              <h3 className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider flex items-center space-x-1.5">
+                <Calendar className="w-3.5 h-3.5" />
                 <span>Pengaturan Tagihan SPP Akademi</span>
               </h3>
-              <p className="text-[11px] text-gray-500">
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">
                 Konfigurasi siklus penagihan iuran SPP bulanan siswa akademi dan tanggal jatuh tempo.
               </p>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-600 uppercase mb-1">
+                  <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase mb-1">
                     Tanggal Mulai Tagihan (Tiap Bulan)
                   </label>
                   <div className="relative">
@@ -942,14 +944,14 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                       required
                       value={sppBillingStartDay}
                       onChange={(e) => setSppBillingStartDay(e.target.value)}
-                      className="w-full px-3 py-2 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:border-blue-500 font-bold text-[#333333]"
+                      className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-blue-500 font-bold"
                     />
-                    <span className="text-[10px] text-gray-400 absolute right-3 top-2.5">Tgl 1 - 28</span>
+                    <span className="text-[9px] text-slate-400 absolute right-2.5 top-2">Tgl 1 - 28</span>
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-600 uppercase mb-1">
+                  <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase mb-1">
                     Tanggal Jatuh Tempo (Tiap Bulan)
                   </label>
                   <div className="relative">
@@ -960,27 +962,27 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                       required
                       value={sppDueDay}
                       onChange={(e) => setSppDueDay(e.target.value)}
-                      className="w-full px-3 py-2 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:border-blue-500 font-bold text-[#333333]"
+                      className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-blue-500 font-bold"
                     />
-                    <span className="text-[10px] text-gray-400 absolute right-3 top-2.5">Tgl 1 - 28</span>
+                    <span className="text-[9px] text-slate-400 absolute right-2.5 top-2">Tgl 1 - 28</span>
                   </div>
                 </div>
               </div>
             </div>
 
             {/* PENGATURAN STRUK KASIR THERMAL & LIVE PREVIEW */}
-            <div className="pt-4 border-t border-gray-100 space-y-4">
-              <h3 className="text-xs font-bold text-blue-600 uppercase tracking-wider flex items-center space-x-1.5">
-                <Printer className="w-4 h-4" />
+            <div className="pt-3 border-t border-slate-100 dark:border-white/10 space-y-3">
+              <h3 className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider flex items-center space-x-1.5">
+                <Printer className="w-3.5 h-3.5" />
                 <span>Pengaturan Struk Kasir Thermal &amp; Live Preview</span>
               </h3>
 
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
                 
                 {/* LEFT: FORM EDITOR (7 COLS) */}
-                <div className="lg:col-span-7 space-y-3 bg-gray-50/70 p-4 rounded-2xl border border-gray-200/80">
+                <div className="lg:col-span-7 space-y-2.5 bg-slate-50/70 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
+                    <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
                       Nama Usaha / Header Struk
                     </label>
                     <input
@@ -988,12 +990,12 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                       value={receiptHeaderName}
                       onChange={(e) => setReceiptHeaderName(e.target.value)}
                       placeholder="e.g. GOR CHUA SPORT CORE"
-                      className="w-full px-3 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 font-bold text-[#333333]"
+                      className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:outline-none focus:border-blue-500 font-bold"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
+                    <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
                       Alamat Lengkap Usaha / Lapangan
                     </label>
                     <input
@@ -1001,12 +1003,12 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                       value={receiptAddress}
                       onChange={(e) => setReceiptAddress(e.target.value)}
                       placeholder="e.g. Jl. Raya Olahraga No. 88, Jakarta"
-                      className="w-full px-3 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 font-medium text-[#333333]"
+                      className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:outline-none focus:border-blue-500 font-medium"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
+                    <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
                       Kontak / No. Telepon / WhatsApp
                     </label>
                     <input
@@ -1014,12 +1016,12 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                       value={receiptContact}
                       onChange={(e) => setReceiptContact(e.target.value)}
                       placeholder="e.g. Telp / WA: 0812-3456-7890"
-                      className="w-full px-3 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 font-medium text-[#333333]"
+                      className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:outline-none focus:border-blue-500 font-medium font-mono"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">
+                    <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
                       Pesan Catatan Kaki (Footer Note Struk)
                     </label>
                     <textarea
@@ -1027,35 +1029,35 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                       value={receiptFooterNote}
                       onChange={(e) => setReceiptFooterNote(e.target.value)}
                       placeholder="e.g. Terima kasih atas kunjungan Anda. Selamat berolahraga!"
-                      className="w-full px-3 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 font-medium text-[#333333]"
+                      className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:outline-none focus:border-blue-500 font-medium"
                     />
                   </div>
                 </div>
 
                 {/* RIGHT: LIVE PREVIEW CARD (5 COLS) */}
-                <div className="lg:col-span-5 space-y-2">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-gray-500">
+                <div className="lg:col-span-5 space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 dark:text-slate-400">
                     <span className="flex items-center gap-1">
-                      <Printer className="w-3.5 h-3.5 text-blue-600" />
-                      <span>Live Preview Struk Thermal</span>
+                      <Printer className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                      <span>Live Preview Struk</span>
                     </span>
-                    <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-md">80mm Paper</span>
+                    <span className="text-[9px] bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded font-mono">80mm Paper</span>
                   </div>
 
-                  <div className="bg-white border-2 border-dashed border-gray-300 rounded-2xl p-4 shadow-sm font-mono text-[11px] text-slate-800 space-y-2 relative overflow-hidden select-none">
-                    <div className="text-center space-y-0.5 border-b border-dashed border-slate-300 pb-2">
-                      <p className="font-extrabold text-xs uppercase tracking-tight text-slate-900 leading-tight">
+                  <div className="bg-white dark:bg-slate-950 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-3 shadow-2xs font-mono text-[10px] text-slate-800 dark:text-slate-300 space-y-1.5 relative overflow-hidden select-none">
+                    <div className="text-center space-y-0.5 border-b border-dashed border-slate-300 dark:border-slate-700 pb-1.5">
+                      <p className="font-extrabold text-[11px] uppercase tracking-tight text-slate-900 dark:text-slate-100 leading-tight">
                         {receiptHeaderName || 'NAMA GOR / TENANT'}
                       </p>
-                      <p className="text-[10px] text-slate-500 leading-tight">
+                      <p className="text-[9px] text-slate-500 dark:text-slate-400 leading-tight">
                         {receiptAddress || 'Alamat Belum Diatur'}
                       </p>
-                      <p className="text-[10px] text-slate-500 leading-tight">
+                      <p className="text-[9px] text-slate-500 dark:text-slate-400 leading-tight">
                         {receiptContact || 'Telp: 08xx-xxxx-xxxx'}
                       </p>
                     </div>
 
-                    <div className="text-[10px] text-slate-600 space-y-0.5 py-1">
+                    <div className="text-[9px] text-slate-600 dark:text-slate-400 space-y-0.5 py-0.5">
                       <div className="flex justify-between">
                         <span>No. Nota:</span>
                         <span className="font-bold">#INV-2026-001</span>
@@ -1070,9 +1072,9 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                       </div>
                     </div>
 
-                    <div className="border-b border-dashed border-slate-300 my-1" />
+                    <div className="border-b border-dashed border-slate-300 dark:border-slate-700 my-0.5" />
 
-                    <div className="space-y-1 text-[10px] py-1">
+                    <div className="space-y-0.5 text-[9px] py-0.5">
                       <div className="flex justify-between">
                         <span>Sewa Lapangan 1 (2 Jam)</span>
                         <span>Rp 100.000</span>
@@ -1083,20 +1085,20 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                       </div>
                     </div>
 
-                    <div className="border-b border-dashed border-slate-300 my-1" />
+                    <div className="border-b border-dashed border-slate-300 dark:border-slate-700 my-0.5" />
 
-                    <div className="flex justify-between text-xs font-black text-slate-900 py-0.5">
+                    <div className="flex justify-between text-[11px] font-black text-slate-900 dark:text-slate-100 py-0.5">
                       <span>TOTAL:</span>
                       <span>Rp 110.000</span>
                     </div>
-                    <div className="flex justify-between text-[10px] text-slate-500">
+                    <div className="flex justify-between text-[9px] text-slate-500">
                       <span>Metode:</span>
-                      <span className="font-bold text-slate-700">QRIS Statis</span>
+                      <span className="font-bold text-slate-700 dark:text-slate-300">QRIS Statis</span>
                     </div>
 
-                    <div className="border-b border-dashed border-slate-300 my-1" />
+                    <div className="border-b border-dashed border-slate-300 dark:border-slate-700 my-0.5" />
 
-                    <div className="text-center text-[10px] text-slate-500 italic pt-1 leading-tight">
+                    <div className="text-center text-[9px] text-slate-500 dark:text-slate-400 italic pt-0.5 leading-tight">
                       {receiptFooterNote || 'Terima kasih atas kunjungan Anda!'}
                     </div>
                   </div>
@@ -1105,20 +1107,20 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
               </div>
             </div>
 
-            <div className="pt-2 flex justify-end">
+            <div className="pt-1.5 flex justify-end">
               <button
                 type="submit"
                 disabled={savingTenant}
-                className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center space-x-2 disabled:opacity-60"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg shadow-2xs transition-all cursor-pointer flex items-center space-x-1.5 disabled:opacity-60"
               >
                 {savingTenant ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
                     <span>Menyimpan...</span>
                   </>
                 ) : (
                   <>
-                    <Save className="w-4 h-4" />
+                    <Save className="w-3.5 h-3.5" />
                     <span>Simpan Tagihan SPP &amp; Struk</span>
                   </>
                 )}
@@ -1131,23 +1133,23 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
 
       {/* TAB 4: TARIF LAPANGAN */}
       {activeTab === 'tarif' && (
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 space-y-6 text-left animate-fadeIn mt-4">
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-3.5 sm:p-4 shadow-2xs border border-slate-200/80 dark:border-white/10 space-y-3.5 text-left animate-fadeIn mt-3.5">
           
           {/* HEADER & MAIN SAVE ACTION */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-white/10 pb-3">
             <div>
-              <h2 className="font-bold text-base text-[#333333] flex items-center space-x-2">
-                <DollarSign className="w-5 h-5 text-green-600" />
+              <h2 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200 flex items-center space-x-1.5">
+                <DollarSign className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 <span>Pengaturan Tarif Lapangan (Rp / Jam)</span>
               </h2>
-              <p className="text-xs text-gray-500 mt-0.5">
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                 Atur tarif sewa reguler per jam untuk masing-masing lapangan secara individual atau massal per cabang olahraga.
               </p>
             </div>
 
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-2.5 shrink-0">
               {unsavedCourts.length > 0 && (
-                <span className="px-3 py-1.5 bg-amber-50 text-amber-800 text-xs font-extrabold rounded-xl border border-amber-200/80 animate-pulse">
+                <span className="px-2 py-0.5 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-400 text-[10px] font-bold rounded-md border border-amber-200/80 dark:border-amber-800/60 animate-pulse">
                   {unsavedCourts.length} Belum Disimpan
                 </span>
               )}
@@ -1156,16 +1158,16 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                 type="button"
                 onClick={handleSaveAllCourtPrices}
                 disabled={savingAllPrices || isLoading}
-                className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center space-x-2 disabled:opacity-50"
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg shadow-2xs transition-all cursor-pointer flex items-center space-x-1.5 disabled:opacity-50"
               >
                 {savingAllPrices ? (
                   <>
-                    <Loader2 className="w-4 h-4 animate-spin text-white" />
-                    <span>Menyimpan Semua Tarif...</span>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                    <span>Menyimpan...</span>
                   </>
                 ) : (
                   <>
-                    <Save className="w-4 h-4 text-cyan-200" />
+                    <Save className="w-3.5 h-3.5" />
                     <span>Simpan Semua Tarif {unsavedCourts.length > 0 ? `(${unsavedCourts.length})` : ''}</span>
                   </>
                 )}
@@ -1174,60 +1176,60 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
           </div>
 
           {courtSuccessMsg && (
-            <div className="p-3.5 bg-green-50 border border-green-200 text-green-800 text-xs rounded-xl font-bold flex items-center space-x-2">
-              <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+            <div className="p-2.5 bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800/60 text-green-800 dark:text-green-300 text-xs rounded-xl font-bold flex items-center space-x-2">
+              <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
               <span>{courtSuccessMsg}</span>
             </div>
           )}
 
           {isLoading ? (
-            <p className="text-xs text-gray-500 py-4">Memuat daftar lapangan...</p>
+            <p className="text-xs text-slate-500 py-3">Memuat daftar lapangan...</p>
           ) : courts.length === 0 ? (
-            <div className="py-8 border-2 border-dashed border-gray-200 rounded-xl text-center p-6 flex flex-col items-center">
-              <Inbox className="w-10 h-10 text-gray-300 mb-2" />
-              <p className="text-xs font-bold text-gray-600">Belum ada lapangan terdaftar. Lengkapi fasilitas di onboarding.</p>
+            <div className="py-6 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-center p-4 flex flex-col items-center">
+              <Inbox className="w-8 h-8 text-slate-300 dark:text-slate-700 mb-1.5" />
+              <p className="text-xs font-bold text-slate-600 dark:text-slate-400">Belum ada lapangan terdaftar. Lengkapi fasilitas di onboarding.</p>
             </div>
           ) : (
-            <div className="space-y-6">
+            <div className="space-y-4">
               
               {/* BULK APPLY SECTION PER CABANG OLAHRAGA */}
-              <div className="p-4 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-3">
+              <div className="p-3 bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 rounded-xl space-y-2">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                  <div className="flex items-center space-x-2">
-                    <Sparkles className="w-4 h-4 text-blue-600" />
-                    <span className="font-extrabold text-xs text-slate-800 uppercase tracking-wide">
+                  <div className="flex items-center space-x-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
+                    <span className="font-extrabold text-[11px] text-slate-800 dark:text-slate-200 uppercase tracking-wide">
                       Atur Cepat per Cabang Olahraga (Bulk Apply)
                     </span>
                   </div>
-                  <span className="text-[11px] text-slate-500 font-medium">
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400">
                     Ketik nominal lalu terapkan ke seluruh lapangan pada cabor pilihan
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-1">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 pt-0.5">
                   {Object.entries(courtsBySport).map(([sportKey, sportCourts]) => {
                     const currentBulkInput = bulkPrices[sportKey] || '';
                     return (
-                      <div key={sportKey} className="p-3 bg-white border border-slate-200 rounded-xl space-y-2 shadow-2xs">
+                      <div key={sportKey} className="p-2.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg space-y-1.5 shadow-2xs">
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-xs text-slate-800 uppercase flex items-center space-x-1">
-                            <Dumbbell className="w-3.5 h-3.5 text-blue-600" />
+                          <span className="font-bold text-xs text-slate-800 dark:text-slate-200 uppercase flex items-center space-x-1">
+                            <Dumbbell className="w-3 h-3 text-blue-600 dark:text-blue-400" />
                             <span>{sportKey}</span>
                           </span>
-                          <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-bold rounded-md border border-blue-100">
+                          <span className="px-1.5 py-0.5 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-[9px] font-bold rounded border border-blue-100 dark:border-blue-900/40">
                             {sportCourts.length} Lapangan
                           </span>
                         </div>
 
-                        <div className="space-y-1.5">
+                        <div className="space-y-1">
                           <div className="relative">
-                            <span className="text-xs font-bold text-gray-400 absolute left-3 top-2.5">Rp</span>
+                            <span className="text-[11px] font-bold text-slate-400 absolute left-2.5 top-1.5">Rp</span>
                             <input
                               type="text"
                               placeholder="e.g. 150.000"
                               value={currentBulkInput}
                               onChange={(e) => handleBulkPriceInputChange(sportKey, e.target.value)}
-                              className="w-full pl-8 pr-3 py-2 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:border-blue-500 font-bold text-[#333333]"
+                              className="w-full pl-7 pr-2.5 py-1 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-md focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-blue-500 font-bold font-mono"
                             />
                           </div>
 
@@ -1235,7 +1237,7 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                             type="button"
                             onClick={() => handleApplyBulkPrice(sportKey)}
                             disabled={!currentBulkInput}
-                            className="w-full py-1.5 bg-slate-800 hover:bg-black text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer disabled:opacity-40"
+                            className="w-full py-1 bg-slate-800 hover:bg-slate-900 dark:bg-slate-700 dark:hover:bg-slate-600 text-white text-[10px] font-bold rounded-md transition-colors cursor-pointer disabled:opacity-40"
                           >
                             Terapkan ke Semua {sportKey}
                           </button>
@@ -1247,51 +1249,51 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
               </div>
 
               {/* DAFTAR LAPANGAN INDIVIDUAL */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between px-1">
-                  <span className="text-xs font-extrabold text-gray-500 uppercase tracking-wider">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between px-0.5">
+                  <span className="text-[11px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     Daftar Lapangan &amp; Input Tarif Individual
                   </span>
-                  <span className="text-xs text-gray-400 font-medium">Total: {courts.length} Lapangan</span>
+                  <span className="text-[11px] text-slate-400 font-mono">Total: {courts.length} Lapangan</span>
                 </div>
 
-                <div className="divide-y divide-gray-100 border border-gray-200 rounded-2xl overflow-hidden bg-white shadow-2xs">
+                <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-700/80 rounded-xl overflow-hidden bg-white dark:bg-slate-900 shadow-2xs">
                   {courts.map((court) => {
                     const currentPriceInput = courtPrices[court.id] !== undefined ? courtPrices[court.id] : formatNumberWithDots(court.price || 0);
                     const parsedInputVal = parseNumberFromDots(currentPriceInput);
                     const isChanged = parsedInputVal !== Number(court.price || 0);
 
                     return (
-                      <div key={court.id} className={`p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${isChanged ? 'bg-amber-50/40' : 'hover:bg-gray-50/50'}`}>
+                      <div key={court.id} className={`p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 transition-colors ${isChanged ? 'bg-amber-50/50 dark:bg-amber-950/20' : 'hover:bg-slate-50/60 dark:hover:bg-slate-800/40'}`}>
                         <div>
                           <div className="flex items-center space-x-2">
-                            <span className="font-bold text-sm text-[#333333]">{court.name}</span>
-                            <span className="px-2 py-0.5 bg-gray-100 text-gray-700 font-bold text-[10px] rounded-md uppercase">
+                            <span className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100">{court.name}</span>
+                            <span className="px-2 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-[9px] rounded uppercase">
                               {court.sport || 'Sports'}
                             </span>
                             {isChanged && (
-                              <span className="px-2 py-0.5 bg-amber-100 text-amber-800 font-extrabold text-[10px] rounded-md uppercase border border-amber-200">
+                              <span className="px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300 font-extrabold text-[9px] rounded uppercase border border-amber-200 dark:border-amber-800">
                                 Ada Perubahan
                               </span>
                             )}
                           </div>
-                          <p className="text-[11px] text-gray-400 mt-0.5">
-                            Tarif Tersimpan: <span className="font-semibold text-gray-600">Rp {Number(court.price || 0).toLocaleString('id-ID')}/jam</span>
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            Tarif Tersimpan: <span className="font-semibold text-slate-600 dark:text-slate-300 font-mono">Rp {Number(court.price || 0).toLocaleString('id-ID')}/jam</span>
                           </p>
                         </div>
 
-                        <div className="flex items-center space-x-3">
+                        <div className="flex items-center space-x-2.5">
                           <div className="flex flex-col items-start sm:items-end">
                             <div className="relative">
-                              <span className="text-xs font-bold text-gray-400 absolute left-3 top-2.5">Rp</span>
+                              <span className="text-[11px] font-bold text-slate-400 absolute left-2.5 top-1.5">Rp</span>
                               <input
                                 type="text"
                                 value={currentPriceInput}
                                 onChange={(e) => handlePriceInputChange(court.id, e.target.value)}
-                                className={`w-40 pl-8 pr-3 py-2 text-xs border rounded-xl focus:bg-white focus:outline-none font-extrabold text-[#333333] ${isChanged ? 'bg-white border-amber-300 ring-2 ring-amber-100' : 'bg-gray-50 border-gray-200 focus:border-blue-500'}`}
+                                className={`w-36 pl-7 pr-2.5 py-1 text-xs border rounded-lg focus:bg-white dark:focus:bg-slate-800 focus:outline-none font-extrabold font-mono text-slate-900 dark:text-slate-100 ${isChanged ? 'bg-white dark:bg-slate-900 border-amber-300 ring-1 ring-amber-200' : 'bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 focus:border-blue-500'}`}
                               />
                             </div>
-                            <span className="text-[10px] font-semibold text-blue-600 mt-1">
+                            <span className="text-[9px] font-semibold text-blue-600 dark:text-blue-400 mt-0.5 font-mono">
                               Pratinjau: Rp {parsedInputVal.toLocaleString('id-ID')} / jam
                             </span>
                           </div>
@@ -1303,21 +1305,21 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
               </div>
 
               {/* BOTTOM MAIN SAVE BUTTON */}
-              <div className="pt-2 flex justify-end">
+              <div className="pt-1 flex justify-end">
                 <button
                   type="button"
                   onClick={handleSaveAllCourtPrices}
                   disabled={savingAllPrices || isLoading}
-                  className="w-full sm:w-auto px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-lg shadow-blue-200 transition-all cursor-pointer flex items-center justify-center space-x-2 disabled:opacity-50"
+                  className="w-full sm:w-auto px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg shadow-2xs transition-all cursor-pointer flex items-center justify-center space-x-1.5 disabled:opacity-50"
                 >
                   {savingAllPrices ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
                       <span>Menyimpan Semua Tarif...</span>
                     </>
                   ) : (
                     <>
-                      <CheckCircle2 className="w-4 h-4 text-cyan-200" />
+                      <CheckCircle2 className="w-3.5 h-3.5" />
                       <span>Simpan Semua Tarif {unsavedCourts.length > 0 ? `(${unsavedCourts.length} Perubahan)` : ''}</span>
                     </>
                   )}
@@ -1331,73 +1333,73 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
 
       {/* TAB 5: MASTER DATA TARIF AKADEMI */}
       {activeTab === 'master_pricing' && (
-        <form onSubmit={handleUpdateTenant} className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 space-y-6 text-left animate-fadeIn mt-4">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+        <form onSubmit={handleUpdateTenant} className="bg-white dark:bg-slate-900 rounded-xl p-3.5 sm:p-4 shadow-2xs border border-slate-200/80 dark:border-white/10 space-y-3.5 text-left animate-fadeIn mt-3.5">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 pb-2.5">
             <div>
-              <h2 className="font-bold text-base text-[#333333] flex items-center space-x-2">
-                <GraduationCap className="w-5 h-5 text-blue-600" />
+              <h2 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200 flex items-center space-x-1.5">
+                <GraduationCap className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                 <span>Master Data: Tarif Akademi per Cabang Olahraga</span>
               </h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                Atur tarif SPP bulanan dan biaya pendaftaran (uang pangkal). Data ini ditarik otomatis dan dikunci pada form pendaftaran siswa baru.
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                Atur tarif SPP bulanan dan biaya pendaftaran (uang pangkal). Data ini ditarik otomatis pada form siswa baru.
               </p>
             </div>
-            <span className="px-3 py-1 bg-blue-50 text-blue-700 text-xs font-bold rounded-lg border border-blue-100 shrink-0">
+            <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-[10px] font-bold rounded border border-blue-100 dark:border-blue-900/40 shrink-0 font-mono">
               Total: {Object.keys(academyPricing || {}).length} Cabang
             </span>
           </div>
 
           {/* LIST PRICING PER CABANG OLAHRAGA */}
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="space-y-2.5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
               {Object.entries(academyPricing || {}).map(([sport, pricing]) => (
-                <div key={sport} className="p-4 bg-gray-50 border border-gray-200 rounded-xl space-y-3 relative group hover:border-blue-300 transition-colors">
+                <div key={sport} className="p-3 bg-slate-50/70 dark:bg-slate-800/50 border border-slate-200/80 dark:border-slate-700/80 rounded-xl space-y-2 relative group hover:border-blue-300 dark:hover:border-blue-700 transition-colors">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-xs text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
-                      <Dumbbell className="w-4 h-4 text-blue-600" />
+                    <span className="font-bold text-xs text-slate-800 dark:text-slate-200 uppercase tracking-wide flex items-center gap-1.5">
+                      <Dumbbell className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
                       <span>{sport}</span>
                     </span>
                     <button
                       type="button"
                       onClick={() => handleDeleteSportPricing(sport)}
-                      className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                      className="p-1 text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/40 rounded-md transition-colors cursor-pointer"
                       title="Hapus Cabang"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
 
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+                      <label className="block text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">
                         SPP Bulanan (Rp)
                       </label>
                       <div className="relative">
-                        <span className="text-xs font-bold text-gray-400 absolute left-2.5 top-2">Rp</span>
+                        <span className="text-[11px] font-bold text-slate-400 absolute left-2 top-1.5">Rp</span>
                         <input
                           type="number"
                           min="0"
                           step="any"
                           value={pricing.spp ?? 0}
                           onChange={(e) => handleAcademyPricingChange(sport, 'spp', e.target.value)}
-                          className="w-full pl-8 pr-2 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 font-bold text-blue-700"
+                          className="w-full pl-7 pr-2 py-1 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md focus:outline-none focus:border-blue-500 font-bold font-mono text-blue-700 dark:text-blue-400"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+                      <label className="block text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">
                         Pendaftaran / Pangkal (Rp)
                       </label>
                       <div className="relative">
-                        <span className="text-xs font-bold text-gray-400 absolute left-2.5 top-2">Rp</span>
+                        <span className="text-[11px] font-bold text-slate-400 absolute left-2 top-1.5">Rp</span>
                         <input
                           type="number"
                           min="0"
                           step="any"
                           value={pricing.registration ?? 0}
                           onChange={(e) => handleAcademyPricingChange(sport, 'registration', e.target.value)}
-                          className="w-full pl-8 pr-2 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 font-bold text-slate-800"
+                          className="w-full pl-7 pr-2 py-1 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-md focus:outline-none focus:border-blue-500 font-bold font-mono text-slate-800 dark:text-slate-200"
                         />
                       </div>
                     </div>
@@ -1408,21 +1410,21 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
           </div>
 
           {/* TAMBAH CABANG OLAHRAGA BARU */}
-          <div className="pt-4 border-t border-gray-100 space-y-3">
-            <h3 className="text-xs font-bold text-blue-600 uppercase tracking-wider flex items-center gap-1.5">
-              <Plus className="w-4 h-4" />
+          <div className="pt-3 border-t border-slate-100 dark:border-white/10 space-y-2">
+            <h3 className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Plus className="w-3.5 h-3.5" />
               <span>Tambah Master Tarif Cabang Baru</span>
             </h3>
 
-            <div className="p-4 bg-blue-50/50 border border-blue-200 rounded-2xl grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+            <div className="p-3 bg-blue-50/40 dark:bg-blue-950/20 border border-blue-200/80 dark:border-blue-900/40 rounded-xl grid grid-cols-1 sm:grid-cols-4 gap-2.5 items-end">
               <div>
-                <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">Nama Cabang</label>
+                <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Nama Cabang</label>
                 <select
                   value={newSportName}
                   onChange={(e) => setNewSportName(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 font-bold text-slate-800 cursor-pointer"
+                  className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-blue-500 font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
                 >
-                  <option value="" disabled>-- Pilih Cabang Olahraga --</option>
+                  <option value="" disabled>-- Pilih Cabang --</option>
                   {SUPPORTED_SPORTS.map((sport) => (
                     <option key={sport} value={sport}>
                       {sport}
@@ -1431,7 +1433,7 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                 </select>
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">SPP Bulanan (Rp)</label>
+                <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">SPP Bulanan (Rp)</label>
                 <input
                   type="number"
                   min="0"
@@ -1439,11 +1441,11 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                   placeholder="e.g. 300000"
                   value={newSportSpp}
                   onChange={(e) => setNewSportSpp(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 font-bold text-blue-600"
+                  className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-blue-500 font-bold font-mono text-blue-600 dark:text-blue-400"
                 />
               </div>
               <div>
-                <label className="block text-[11px] font-bold text-gray-700 uppercase mb-1">Pendaftaran (Rp)</label>
+                <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Pendaftaran (Rp)</label>
                 <input
                   type="number"
                   min="0"
@@ -1451,16 +1453,16 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                   placeholder="e.g. 150000"
                   value={newSportReg}
                   onChange={(e) => setNewSportReg(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-white border border-gray-200 rounded-xl focus:outline-none focus:border-blue-500 font-bold text-slate-800"
+                  className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-blue-500 font-bold font-mono text-slate-800 dark:text-slate-200"
                 />
               </div>
               <div>
                 <button
                   type="button"
                   onClick={handleAddSportPricing}
-                  className="w-full py-2 px-4 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer flex items-center justify-center gap-1.5"
+                  className="w-full py-1.5 px-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg shadow-2xs transition-all cursor-pointer flex items-center justify-center gap-1.5"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-3.5 h-3.5" />
                   <span>Tambah</span>
                 </button>
               </div>
@@ -1468,20 +1470,20 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
           </div>
 
           {/* SUBMIT BUTTON */}
-          <div className="pt-2 flex justify-end">
+          <div className="pt-1.5 flex justify-end">
             <button
               type="submit"
               disabled={savingTenant}
-              className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center space-x-2 disabled:opacity-60"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg shadow-2xs transition-all cursor-pointer flex items-center space-x-1.5 disabled:opacity-60"
             >
               {savingTenant ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
                   <span>Menyimpan...</span>
                 </>
               ) : (
                 <>
-                  <Save className="w-4 h-4" />
+                  <Save className="w-3.5 h-3.5" />
                   <span>Simpan Master Data Tarif</span>
                 </>
               )}
@@ -1492,41 +1494,41 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
 
       {/* TAB 6: KELOLA STAF & PELATIH (CLIENT-SIDE RBAC) */}
       {activeTab === 'staf' && (
-        <div className="space-y-6 text-left animate-fadeIn mt-4">
+        <div className="space-y-3.5 text-left animate-fadeIn mt-3.5">
           {/* CARD 1: FORM PENDAFTARAN STAF (SECONDARY FIREBASE APP) */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 space-y-5">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+          <div className="bg-white dark:bg-slate-900 rounded-xl p-3.5 sm:p-4 shadow-2xs border border-slate-200/80 dark:border-white/10 space-y-3.5">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 pb-2.5">
               <div>
-                <h2 className="font-bold text-base text-[#333333] flex items-center space-x-2">
-                  <UserPlus className="w-5 h-5 text-blue-600" />
+                <h2 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200 flex items-center space-x-1.5">
+                  <UserPlus className="w-4 h-4 text-blue-600 dark:text-blue-400" />
                   <span>Daftarkan Staf Baru (Owner Portal)</span>
                 </h2>
-                <p className="text-xs text-gray-500 mt-0.5">
-                  Registrasi staf/pelatih menggunakan metode Secondary Firebase App. Sesuai arsitektur, akun Owner Anda tidak akan ter-logout.
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Registrasi staf/pelatih. Akun Owner Anda tidak akan ter-logout saat proses ini berlangsung.
                 </p>
               </div>
-              <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 text-[10px] font-bold rounded-lg border border-indigo-100 shrink-0">
-                Secondary Firebase App
+              <span className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 text-[9px] font-bold rounded border border-indigo-100 dark:border-indigo-900/40 shrink-0">
+                Secondary Auth
               </span>
             </div>
 
             {staffSuccessMsg && (
-              <div className="p-3 bg-green-50 border border-green-200 text-green-800 text-xs rounded-xl font-semibold flex items-center space-x-2">
-                <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+              <div className="p-2.5 bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800/60 text-green-800 dark:text-green-300 text-xs rounded-xl font-semibold flex items-center space-x-2">
+                <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-400 shrink-0" />
                 <span>{staffSuccessMsg}</span>
               </div>
             )}
 
             {staffErrorMsg && (
-              <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl font-semibold">
+              <div className="p-2.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 text-red-700 dark:text-red-300 text-xs rounded-xl font-semibold">
                 {staffErrorMsg}
               </div>
             )}
 
-            <form onSubmit={handleRegisterStaff} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <form onSubmit={handleRegisterStaff} className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
                     Nama Lengkap Staf / Pelatih
                   </label>
                   <input
@@ -1535,12 +1537,12 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                     placeholder="e.g. Coach Agus or Budi Admin"
                     value={newStaffName}
                     onChange={(e) => setNewStaffName(e.target.value)}
-                    className="w-full px-3.5 py-2.5 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:border-blue-500 font-bold text-[#333333]"
+                    className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-blue-500 font-bold"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
                     Email Akun Staf
                   </label>
                   <input
@@ -1549,14 +1551,14 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                     placeholder="staf@chuasport.com"
                     value={newStaffEmail}
                     onChange={(e) => setNewStaffEmail(e.target.value)}
-                    className="w-full px-3.5 py-2.5 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:border-blue-500 font-medium text-[#333333]"
+                    className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-blue-500 font-medium font-mono"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
                     Kata Sandi (Password)
                   </label>
                   <input
@@ -1566,18 +1568,18 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                     placeholder="Minimal 6 Karakter"
                     value={newStaffPassword}
                     onChange={(e) => setNewStaffPassword(e.target.value)}
-                    className="w-full px-3.5 py-2.5 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:border-blue-500 font-medium text-[#333333]"
+                    className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-blue-500 font-medium"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
                     Role / Hak Akses RBAC
                   </label>
                   <select
                     value={newStaffRole}
                     onChange={(e) => setNewStaffRole(e.target.value)}
-                    className="w-full px-3.5 py-2.5 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:border-blue-500 font-bold text-slate-800 cursor-pointer"
+                    className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-blue-500 font-bold cursor-pointer"
                   >
                     <option value="admin">1. admin (Booking, Akademi, Event &amp; Keuangan)</option>
                     <option value="pelatih">2. pelatih (HANYA Modul Akademi)</option>
@@ -1585,28 +1587,28 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                 </div>
               </div>
 
-              <div className="p-3 bg-blue-50/70 border border-blue-100 rounded-xl text-[11px] text-blue-800 leading-relaxed">
+              <div className="p-2.5 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 rounded-lg text-[10px] text-blue-800 dark:text-blue-300 leading-relaxed">
                 <strong>Ketentuan Hak Akses Role RBAC:</strong>
-                <ul className="list-disc list-inside mt-1 space-y-0.5">
-                  <li><strong>Admin Staf ("admin"):</strong> Memiliki akses ke modul Booking, Akademi, Event &amp; Turnamen, dan Keuangan.</li>
-                  <li><strong>Pelatih ("pelatih"):</strong> HANYA memiliki akses ke modul Akademi. Menu lainnya otomatis disembunyikan.</li>
+                <ul className="list-disc list-inside mt-0.5 space-y-0.5">
+                  <li><strong>Admin Staf ("admin"):</strong> Memiliki akses ke Booking, Akademi, Event, dan Keuangan.</li>
+                  <li><strong>Pelatih ("pelatih"):</strong> HANYA memiliki akses ke modul Akademi.</li>
                 </ul>
               </div>
 
-              <div className="pt-2 flex justify-end">
+              <div className="pt-1 flex justify-end">
                 <button
                   type="submit"
                   disabled={registeringStaff}
-                  className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-md transition-all cursor-pointer flex items-center space-x-2 disabled:opacity-60"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg shadow-2xs transition-all cursor-pointer flex items-center space-x-1.5 disabled:opacity-60"
                 >
                   {registeringStaff ? (
                     <>
-                      <Loader2 className="w-4 h-4 animate-spin text-white" />
+                      <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
                       <span>Mendaftarkan Staf...</span>
                     </>
                   ) : (
                     <>
-                      <UserPlus className="w-4 h-4" />
+                      <UserPlus className="w-3.5 h-3.5" />
                       <span>Daftarkan Staf Baru</span>
                     </>
                   )}
@@ -1616,51 +1618,51 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
           </div>
 
           {/* CARD 2: DAFTAR STAF TERDAFTAR IN USERS_STAFF */}
-          <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 space-y-4">
-            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-              <h3 className="font-bold text-sm text-slate-800 flex items-center gap-2">
-                <Users className="w-4 h-4 text-blue-600" />
-                <span>Daftar Staf &amp; Pelatih Terdaftar (Koleksi users_staff)</span>
+          <div className="bg-white dark:bg-slate-900 rounded-xl p-3.5 sm:p-4 shadow-2xs border border-slate-200/80 dark:border-white/10 space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 pb-2.5">
+              <h3 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <Users className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                <span>Daftar Staf &amp; Pelatih Terdaftar</span>
               </h3>
-              <span className="text-xs font-bold text-gray-400">
+              <span className="text-[11px] font-bold text-slate-400 font-mono">
                 Total: {staffList.length} Akun
               </span>
             </div>
 
             {loadingStaff ? (
-              <p className="text-xs text-gray-500 py-4">Memuat daftar staf...</p>
+              <p className="text-xs text-slate-500 py-3">Memuat daftar staf...</p>
             ) : staffList.length === 0 ? (
-              <div className="py-8 border-2 border-dashed border-gray-200 rounded-xl text-center p-6 flex flex-col items-center">
-                <Users className="w-8 h-8 text-gray-300 mb-2" />
-                <p className="text-xs font-bold text-gray-600">Belum ada staf atau pelatih terdaftar.</p>
-                <p className="text-[11px] text-gray-400 mt-1">Gunakan formulir di atas untuk mendaftarkan staf baru.</p>
+              <div className="py-6 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-center p-4 flex flex-col items-center">
+                <Users className="w-7 h-7 text-slate-300 dark:text-slate-700 mb-1.5" />
+                <p className="text-xs font-bold text-slate-600 dark:text-slate-400">Belum ada staf atau pelatih terdaftar.</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">Gunakan formulir di atas untuk mendaftarkan staf baru.</p>
               </div>
             ) : (
-              <div className="divide-y divide-gray-100 border border-gray-200 rounded-xl overflow-hidden">
+              <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-700/80 rounded-xl overflow-hidden">
                 {staffList.map((staf) => (
-                  <div key={staf.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-gray-50/60 transition-colors">
+                  <div key={staf.id} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                     <div>
                       <div className="flex items-center space-x-2">
-                        <span className="font-bold text-sm text-slate-800">{staf.name}</span>
-                        <span className={`px-2 py-0.5 font-bold text-[10px] rounded-md uppercase ${
+                        <span className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200">{staf.name}</span>
+                        <span className={`px-2 py-0.5 font-bold text-[9px] rounded uppercase ${
                           staf.role === 'admin' 
-                            ? 'bg-blue-100 text-blue-700 border border-blue-200' 
-                            : 'bg-indigo-100 text-indigo-700 border border-indigo-200'
+                            ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-900/40' 
+                            : 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-900/40'
                         }`}>
                           {staf.role === 'admin' ? 'Admin Staf' : 'Pelatih Akademi'}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-500 mt-0.5 font-mono">{staf.email}</p>
-                      <p className="text-[10px] text-gray-400 mt-0.5">UID: {staf.uid || staf.id}</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 font-mono">{staf.email}</p>
+                      <p className="text-[9px] text-slate-400 mt-0.5 font-mono">UID: {staf.uid || staf.id}</p>
                     </div>
 
                     <div>
                       <button
                         type="button"
                         onClick={() => handleDeleteStaff(staf.id, staf.email)}
-                        className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg text-xs font-bold transition-colors cursor-pointer flex items-center gap-1"
+                        className="px-2.5 py-1 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 rounded-md text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-3 h-3" />
                         <span>Hapus Akses</span>
                       </button>
                     </div>
