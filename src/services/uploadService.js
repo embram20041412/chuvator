@@ -8,32 +8,57 @@ const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 
 /**
  * Mengunggah file (gambar atau dokumen) ke Cloudinary menggunakan Unsigned Upload Preset.
- * @param {File|Blob} file - File yang akan diunggah.
- * @param {Object} [options] - Opsi tambahan (misal: folder atau tags).
- * @returns {Promise<{ secure_url: string, public_id: string, format: string, width?: number, height?: number, rawResponse: any }>}
+ * @param {File|Blob|string} file - File yang akan diunggah (File, Blob, atau Base64 string).
+ * @param {Object} [options] - Opsi tambahan (misal: folder, resourceType, tags, publicId).
+ * @returns {Promise<{ secure_url: string, public_id: string, format: string, width?: number, height?: number, resource_type: string, original_filename: string, rawResponse: any }>}
  */
 export async function uploadToCloudinary(file, options = {}) {
   if (!file) {
     throw new Error('Tidak ada file yang dipilih untuk diunggah.');
   }
 
-  if (!CLOUD_NAME || !UPLOAD_PRESET) {
-    console.error('Konfigurasi Cloudinary belum lengkap:', { CLOUD_NAME, UPLOAD_PRESET });
-    throw new Error('Konfigurasi Cloudinary (VITE_CLOUDINARY_CLOUD_NAME atau VITE_CLOUDINARY_UPLOAD_PRESET) belum tersedia di .env.');
+  // 1 & 2. Validasi Pengecekan Environment Variables
+  if (!CLOUD_NAME) {
+    throw new Error('Konfigurasi Cloudinary gagal: Variabel VITE_CLOUDINARY_CLOUD_NAME belum dikonfigurasi di file .env.');
+  }
+  if (!UPLOAD_PRESET) {
+    throw new Error('Konfigurasi Cloudinary gagal: Variabel VITE_CLOUDINARY_UPLOAD_PRESET belum dikonfigurasi di file .env.');
   }
 
-  const resourceType = options.resourceType || 'auto';
+  // 3. Deteksi otomatis resource_type jika tidak dispesifikasikan secara eksplisit
+  let resourceType = options.resourceType || options.resource_type;
+  if (!resourceType) {
+    if (typeof file === 'string' && file.startsWith('data:image/')) {
+      resourceType = 'image';
+    } else if (file?.type) {
+      if (file.type.startsWith('image/')) {
+        resourceType = 'image';
+      } else if (file.type.startsWith('video/')) {
+        resourceType = 'video';
+      } else if (file.type.includes('pdf') || file.type.includes('word') || file.type.includes('document')) {
+        resourceType = 'raw';
+      } else {
+        resourceType = 'auto';
+      }
+    } else {
+      resourceType = 'auto';
+    }
+  }
+
   const endpoint = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${resourceType}/upload`;
   const formData = new FormData();
+
   formData.append('file', file);
   formData.append('upload_preset', UPLOAD_PRESET);
-  formData.append('resource_type', 'auto');
 
   if (options.folder) {
     formData.append('folder', options.folder);
   }
   if (options.tags) {
-    formData.append('tags', options.tags);
+    formData.append('tags', Array.isArray(options.tags) ? options.tags.join(',') : options.tags);
+  }
+  if (options.publicId || options.public_id) {
+    formData.append('public_id', options.publicId || options.public_id);
   }
 
   try {
@@ -44,9 +69,11 @@ export async function uploadToCloudinary(file, options = {}) {
 
     const data = await response.json();
 
+    // 4. Tangkap respons error dari Cloudinary secara detail jika gagal
     if (!response.ok) {
-      const errorMessage = data?.error?.message || `Gagal mengunggah file ke Cloudinary (${response.status})`;
-      throw new Error(errorMessage);
+      const cloudinaryErrDetail = data?.error?.message || `HTTP Status ${response.status} (${response.statusText})`;
+      console.error('[Cloudinary Server Error]:', { status: response.status, error: data?.error });
+      throw new Error(`Gagal mengunggah file ke Cloudinary: ${cloudinaryErrDetail}`);
     }
 
     return {
@@ -60,7 +87,7 @@ export async function uploadToCloudinary(file, options = {}) {
       rawResponse: data,
     };
   } catch (error) {
-    console.error('Error saat upload ke Cloudinary:', error);
+    console.error('Error pada uploadToCloudinary:', error);
     throw error;
   }
 }
