@@ -5,13 +5,12 @@ import { supabase } from '../config/supabase';
  * SUPABASE ARENA & COMMERCE SERVICE (POSTGRESQL MULTI-TENANT ARCHITECTURE)
  * =========================================================================
  * Layanan komunikasi data berbasis relational database Supabase untuk:
- * - Profil Tenant / GOR
- * - Lapangan (Courts)
- * - Booking Lapangan (Bookings)
- * - Transaksi & Keuangan (Transactions, POS, Global Ledger)
- * - Master Produk Retail & Kasir (Products)
- * - Sponsor & Event
- * - Staf & Undangan SaaS
+ * - Profil Tenant / GOR (tenants)
+ * - Lapangan (courts)
+ * - Booking Lapangan (bookings)
+ * - Transaksi & Keuangan (transactions, pos_transactions, global_ledger, spp_payments)
+ * - Master Produk Retail & Kasir (products)
+ * - Staf & Undangan SaaS (users_staff, invitations)
  */
 
 // -------------------------------------------------------------------------
@@ -35,11 +34,19 @@ export function mapTenantFromSupabase(row) {
     sportsType: row.sports_type || row.sportsType || '',
     courtsCount: row.courts_count || row.courtsCount || 0,
     logoUrl: row.logo_url || row.logoUrl || null,
+    bankName: row.bank_name || row.bankName || '',
+    bankAccountNumber: row.bank_account_number || row.bankAccountNumber || '',
+    bankAccountName: row.bank_account_name || row.bankAccountName || '',
     bankAccounts: row.bank_accounts || row.bankAccounts || [],
     qrisUrl: row.qris_url || row.qrisUrl || null,
+    qrisImageBase64: row.qris_image_base64 || row.qrisImageBase64 || row.qris_url || row.qrisUrl || null,
     sppBillingStartDay: row.spp_billing_start_day || row.sppBillingStartDay || 1,
     sppDueDay: row.spp_due_day || row.sppDueDay || 10,
-    receiptFooterText: row.receipt_footer_text || row.receiptFooterText || '',
+    receiptHeaderName: row.receipt_header_name || row.receiptHeaderName || row.name || '',
+    receiptAddress: row.receipt_address || row.receiptAddress || row.address || '',
+    receiptContact: row.receipt_contact || row.receiptContact || row.phone || '',
+    receiptFooterText: row.receipt_footer_text || row.receipt_footer_note || row.receiptFooterText || row.receiptFooterNote || '',
+    receiptFooterNote: row.receipt_footer_note || row.receipt_footer_text || row.receiptFooterNote || row.receiptFooterText || '',
     academyPricing: row.academy_pricing || row.academyPricing || {},
     createdAt: row.created_at,
     updatedAt: row.updated_at
@@ -140,6 +147,24 @@ export function mapProductFromSupabase(row) {
   };
 }
 
+export function mapSppPaymentFromSupabase(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    id: row.id,
+    tenantId: row.tenant_id,
+    studentId: row.student_id,
+    studentName: row.student_name || '',
+    paidMonth: row.paid_month || '',
+    amount: Number(row.amount || 0),
+    paymentMethod: row.payment_method || 'QRIS',
+    status: row.status || 'COMPLETED',
+    receiptNo: row.receipt_no || '',
+    notes: row.notes || '',
+    createdAt: row.created_at
+  };
+}
+
 // -------------------------------------------------------------------------
 // 1. TENANT / GOR PROFILE
 // -------------------------------------------------------------------------
@@ -163,22 +188,36 @@ export async function updateTenantProfile(tenantId, payload) {
   if (!tenantId) throw new Error('Tenant ID wajib disertakan.');
 
   const dbPayload = {
-    name: payload.name,
-    phone: payload.phone,
-    address: payload.address,
+    name: payload.name !== undefined ? payload.name.trim() : undefined,
+    owner_name: payload.ownerName !== undefined ? payload.ownerName : payload.owner_name,
+    owner_email: payload.ownerEmail !== undefined ? payload.ownerEmail : payload.owner_email,
+    phone: payload.phone !== undefined ? payload.phone.trim() : undefined,
+    address: payload.address !== undefined ? payload.address.trim() : undefined,
     province: payload.province,
     regency: payload.regency,
     district: payload.district,
     village: payload.village,
-    sports_type: payload.sportsType || payload.sports_type,
-    courts_count: payload.courtsCount || payload.courts_count,
+    sports_type: payload.sportsType !== undefined ? payload.sportsType : payload.sports_type,
+    courts_count: payload.courtsCount !== undefined ? payload.courtsCount : payload.courts_count,
     logo_url: payload.logoUrl !== undefined ? payload.logoUrl : payload.logo_url,
-    bank_accounts: payload.bankAccounts || payload.bank_accounts,
+    bank_name: payload.bankName !== undefined ? payload.bankName : payload.bank_name,
+    bank_account_number: payload.bankAccountNumber !== undefined ? payload.bankAccountNumber : payload.bank_account_number,
+    bank_account_name: payload.bankAccountName !== undefined ? payload.bankAccountName : payload.bank_account_name,
+    bank_accounts: payload.bankAccounts !== undefined ? payload.bankAccounts : payload.bank_accounts,
     qris_url: payload.qrisUrl !== undefined ? payload.qrisUrl : payload.qris_url,
-    spp_billing_start_day: payload.sppBillingStartDay || payload.spp_billing_start_day,
-    spp_due_day: payload.sppDueDay || payload.spp_due_day,
-    receipt_footer_text: payload.receiptFooterText || payload.receipt_footer_text,
-    academy_pricing: payload.academyPricing || payload.academy_pricing,
+    qris_image_base64: payload.qrisImageBase64 !== undefined ? payload.qrisImageBase64 : payload.qris_image_base64,
+    spp_billing_start_day: payload.sppBillingStartDay !== undefined ? payload.sppBillingStartDay : payload.spp_billing_start_day,
+    spp_due_day: payload.sppDueDay !== undefined ? payload.sppDueDay : payload.spp_due_day,
+    receipt_header_name: payload.receiptHeaderName !== undefined ? payload.receiptHeaderName : payload.receipt_header_name,
+    receipt_address: payload.receiptAddress !== undefined ? payload.receiptAddress : payload.receipt_address,
+    receipt_contact: payload.receiptContact !== undefined ? payload.receiptContact : payload.receipt_contact,
+    receipt_footer_text: payload.receiptFooterText !== undefined
+      ? payload.receiptFooterText
+      : (payload.receiptFooterNote !== undefined ? payload.receiptFooterNote : payload.receipt_footer_text),
+    receipt_footer_note: payload.receiptFooterNote !== undefined
+      ? payload.receiptFooterNote
+      : (payload.receiptFooterText !== undefined ? payload.receiptFooterText : payload.receipt_footer_note),
+    academy_pricing: payload.academyPricing !== undefined ? payload.academyPricing : payload.academy_pricing,
     updated_at: new Date().toISOString()
   };
 
@@ -216,8 +255,8 @@ export async function createTenant(payload) {
   }
 
   const dbPayload = {
-    name: payload.name,
-    phone: payload.phone,
+    name: (payload.name || '').trim(),
+    phone: (payload.phone || '').trim(),
     owner_name: payload.ownerName || payload.owner_name || '',
     owner_email: ownerEmail,
     owner_uid: ownerUid,
@@ -228,6 +267,21 @@ export async function createTenant(payload) {
     village: payload.village || '',
     sports_type: payload.sportsType || payload.sports_type || '',
     courts_count: payload.courtsCount || payload.courts_count || 0,
+    logo_url: payload.logoUrl || payload.logo_url || null,
+    bank_name: payload.bankName || payload.bank_name || '',
+    bank_account_number: payload.bankAccountNumber || payload.bank_account_number || '',
+    bank_account_name: payload.bankAccountName || payload.bank_account_name || '',
+    bank_accounts: payload.bankAccounts || payload.bank_accounts || [],
+    qris_url: payload.qrisUrl || payload.qris_url || null,
+    qris_image_base64: payload.qrisImageBase64 || payload.qris_image_base64 || payload.qrisUrl || null,
+    spp_billing_start_day: payload.sppBillingStartDay || payload.spp_billing_start_day || 1,
+    spp_due_day: payload.sppDueDay || payload.spp_due_day || 10,
+    receipt_header_name: payload.receiptHeaderName || payload.receipt_header_name || payload.name || '',
+    receipt_address: payload.receiptAddress || payload.receipt_address || payload.address || '',
+    receipt_contact: payload.receiptContact || payload.receipt_contact || payload.phone || '',
+    receipt_footer_text: payload.receiptFooterText || payload.receipt_footer_text || payload.receiptFooterNote || '',
+    receipt_footer_note: payload.receiptFooterNote || payload.receipt_footer_note || payload.receiptFooterText || '',
+    academy_pricing: payload.academyPricing || payload.academy_pricing || {},
     created_at: new Date().toISOString()
   };
 
@@ -271,6 +325,7 @@ export async function updateCourt(courtId, payload) {
     court_number: payload.courtNumber || payload.court_number,
     price: payload.price !== undefined ? Number(payload.price) : undefined,
     is_active: payload.isActive !== undefined ? payload.isActive : payload.is_active,
+    operational_hours: payload.operationalHours || payload.operational_hours,
     updated_at: new Date().toISOString()
   };
   Object.keys(dbPayload).forEach(key => dbPayload[key] === undefined && delete dbPayload[key]);
@@ -308,6 +363,7 @@ export async function createCourt(payload) {
     court_number: payload.courtNumber || payload.court_number || '',
     price: Number(payload.price || 0),
     is_active: payload.isActive !== false,
+    operational_hours: payload.operationalHours || payload.operational_hours || null,
     created_at: new Date().toISOString()
   };
 
@@ -333,6 +389,7 @@ export async function createCourtsBatch(courtsArray) {
     court_number: c.courtNumber || c.court_number || '',
     price: Number(c.price || 0),
     is_active: c.isActive !== false,
+    operational_hours: c.operationalHours || c.operational_hours || null,
     created_at: new Date().toISOString()
   }));
 
@@ -455,7 +512,7 @@ export async function voidBooking(bookingId, voidData = {}) {
 }
 
 // -------------------------------------------------------------------------
-// 4. TRANSAKSI & GENERAL LEDGER
+// 4. TRANSAKSI, POS, SPP & GENERAL LEDGER
 // -------------------------------------------------------------------------
 
 export async function getTransactions(tenantId, limitCount = 150) {
@@ -535,8 +592,8 @@ export async function createLedgerEntry(payload) {
     source: payload.source || 'KASIR_POS',
     description: payload.description || '',
     amount: Number(payload.amount || 0),
-    payment_method: payload.paymentMethod || 'Cash',
-    reference_id: payload.referenceId || null,
+    payment_method: payload.paymentMethod || payload.payment_method || 'Cash',
+    reference_id: payload.referenceId || payload.reference_id || null,
     status: payload.status || 'COMPLETED',
     created_at: new Date().toISOString()
   };
@@ -553,16 +610,36 @@ export async function createLedgerEntry(payload) {
   return data;
 }
 
+export async function getLedgerEntries(tenantId, limitCount = 200) {
+  if (!tenantId) return [];
+  const { data, error } = await supabase
+    .from('global_ledger')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(limitCount);
+
+  if (error) {
+    console.warn('Supabase getLedgerEntries error:', error);
+    return [];
+  }
+  return data || [];
+}
+
 export async function createPosReceipt(payload) {
   const dbPayload = {
     tenant_id: payload.tenantId,
+    student_id: payload.studentId || payload.student_id || null,
+    parent_name: payload.parentName || payload.parent_name || '',
+    customer_name: payload.customerName || payload.customer_name || 'Pelanggan',
+    type: payload.type || 'RETAIL',
+    notes: payload.notes || '',
+    receipt_no: payload.receiptNo || payload.receipt_no || `POS-${Date.now().toString().slice(-6)}`,
     amount: Number(payload.amount || payload.total || 0),
     total: Number(payload.total || payload.amount || 0),
-    payment_method: payload.paymentMethod || 'Cash',
+    payment_method: payload.paymentMethod || payload.payment_method || 'Cash',
     items: payload.items || [],
-    transaction_id: payload.transactionId || null,
-    receipt_no: payload.receiptNo || `POS-${Date.now().toString().slice(-6)}`,
-    customer_name: payload.customerName || 'Pelanggan',
+    transaction_id: payload.transactionId || payload.transaction_id || null,
     status: payload.status || 'LUNAS',
     created_at: new Date().toISOString()
   };
@@ -577,6 +654,73 @@ export async function createPosReceipt(payload) {
     console.warn('Supabase createPosReceipt non-critical warning:', error);
   }
   return data;
+}
+
+export async function getPosReceipts(tenantId, limitCount = 150) {
+  if (!tenantId) return [];
+  const { data, error } = await supabase
+    .from('pos_transactions')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false })
+    .limit(limitCount);
+
+  if (error) {
+    console.warn('Supabase getPosReceipts error:', error);
+    return [];
+  }
+  return data || [];
+}
+
+export async function recordSppPayment(payload) {
+  const safeStudentId = payload.studentId && String(payload.studentId).trim() !== ''
+    ? payload.studentId
+    : (payload.student_id && String(payload.student_id).trim() !== '' ? payload.student_id : null);
+
+  const dbPayload = {
+    tenant_id: payload.tenantId,
+    student_id: safeStudentId,
+    student_name: payload.studentName || payload.student_name || '',
+    paid_month: payload.paidMonth || payload.paid_month || '',
+    amount: Number(payload.amount || 0),
+    payment_method: payload.paymentMethod || payload.payment_method || 'QRIS',
+    status: payload.status || 'COMPLETED',
+    receipt_no: payload.receiptNo || payload.receipt_no || null,
+    notes: payload.notes || '',
+    created_at: new Date().toISOString()
+  };
+
+  const { data, error } = await supabase
+    .from('spp_payments')
+    .insert([dbPayload])
+    .select()
+    .maybeSingle();
+
+  if (error) {
+    console.error('Supabase recordSppPayment error:', error);
+    throw error;
+  }
+  return mapSppPaymentFromSupabase(data || dbPayload);
+}
+
+export async function getSppPayments(tenantId, studentId = null) {
+  if (!tenantId) return [];
+  let query = supabase
+    .from('spp_payments')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .order('created_at', { ascending: false });
+
+  if (studentId) {
+    query = query.eq('student_id', studentId);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    console.warn('Supabase getSppPayments error:', error);
+    return [];
+  }
+  return (data || []).map(mapSppPaymentFromSupabase);
 }
 
 // -------------------------------------------------------------------------
@@ -790,7 +934,7 @@ export async function deleteInvitation(invId) {
 }
 
 // -------------------------------------------------------------------------
-// 8. TRANSAKSI SISWA (SPP & Keuangan Mahasiswa/Siswa)
+// 8. TRANSAKSI SISWA (SPP & Keuangan Siswa)
 // -------------------------------------------------------------------------
 
 export async function getStudentTransactions(tenantId, studentId) {
@@ -808,3 +952,46 @@ export async function getStudentTransactions(tenantId, studentId) {
   }
   return (data || []).map(mapTransactionFromSupabase);
 }
+
+const supabaseArenaService = {
+  getTenantProfile,
+  updateTenantProfile,
+  createTenant,
+  mapTenantFromSupabase,
+  getCourts,
+  createCourt,
+  updateCourt,
+  updateCourtsBatch,
+  createCourtsBatch,
+  mapCourtFromSupabase,
+  getBookings,
+  checkCourtBookingConflict,
+  createBooking,
+  voidBooking,
+  mapBookingFromSupabase,
+  getTransactions,
+  createTransaction,
+  voidTransaction,
+  mapTransactionFromSupabase,
+  createLedgerEntry,
+  getLedgerEntries,
+  createPosReceipt,
+  getPosReceipts,
+  recordSppPayment,
+  getSppPayments,
+  mapSppPaymentFromSupabase,
+  getProducts,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+  mapProductFromSupabase,
+  getStaff,
+  createStaff,
+  deleteStaff,
+  getInvitations,
+  createInvitation,
+  deleteInvitation,
+  getStudentTransactions
+};
+
+export default supabaseArenaService;

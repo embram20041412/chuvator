@@ -5,12 +5,32 @@ import { supabase } from '../config/supabase';
  * SUPABASE ACADEMY SERVICE (POSTGRESQL MULTI-TENANT ARCHITECTURE)
  * =========================================================================
  * Layanan komunikasi data berbasis relational database Supabase.
- * Mengelola academy_classes, students, academy_evaluations, dan academy_attendance.
+ * Mengelola academies, academy_classes, coaches, students, academy_evaluations,
+ * dan academy_attendance dengan mapping data 100% konsisten (camelCase <-> snake_case).
  */
 
 // -------------------------------------------------------------------------
 // DATA MAPPING HELPERS (SNAKE_CASE <-> CAMEL_CASE)
 // -------------------------------------------------------------------------
+
+export function mapAcademyFromSupabase(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    id: row.id,
+    tenantId: row.tenant_id,
+    name: row.name || row.academy_name || '',
+    academyName: row.name || row.academy_name || '',
+    category: row.category || 'racket',
+    categoryLabel: row.category_label || row.categoryLabel || '',
+    sportCategory: row.sport_category || row.sportCategory || '',
+    sport: row.sport || '',
+    description: row.description || '',
+    logoUrl: row.logo_url || row.logoUrl || '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
 
 export function mapClassFromSupabase(row) {
   if (!row) return null;
@@ -18,15 +38,55 @@ export function mapClassFromSupabase(row) {
     ...row,
     id: row.id,
     tenantId: row.tenant_id,
-    academyId: row.academy_id,
-    className: row.class_name,
-    sport: row.sport,
-    coachName: row.coach_name,
-    createdAt: row.created_at,
-    schedule: row.schedule || '',
-    maxQuota: row.max_quota || 20,
+    academyId: row.academy_id || null,
+    academyName: row.academy_name || '',
+    className: row.class_name || row.name || '',
+    name: row.class_name || row.name || '',
+    sport: row.sport || 'General',
+    coachId: row.coach_id || null,
+    coachName: row.coach_name || '',
+    minAge: row.min_age !== null && row.min_age !== undefined ? Number(row.min_age) : null,
+    maxAge: row.max_age !== null && row.max_age !== undefined ? Number(row.max_age) : null,
+    maxQuota: row.max_quota ? Number(row.max_quota) : 20,
     tierCode: row.tier_code || 'ALL_AGE',
-    tierLabel: row.tier_label || 'Umum / Lintas Usia'
+    tierLabel: row.tier_label || 'Umum / Lintas Usia',
+    schedule: typeof row.schedule === 'string' ? row.schedule : (Array.isArray(row.schedules) ? row.schedules.join(', ') : ''),
+    schedules: Array.isArray(row.schedules) ? row.schedules : (Array.isArray(row.schedule) ? row.schedule : []),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+export function mapCoachFromSupabase(row) {
+  if (!row) return null;
+  return {
+    ...row,
+    id: row.id,
+    tenantId: row.tenant_id,
+    academyId: row.academy_id || null,
+    academyName: row.academy_name || '',
+    name: row.name || '',
+    nickname: row.nickname || '',
+    nik: row.nik || '',
+    phone: row.phone || '',
+    email: row.email || '',
+    sportSpecialty: row.sport_specialty || row.sport || '',
+    sport: row.sport || row.sport_specialty || '',
+    sportCategory: row.sport_category || row.sportCategory || '',
+    license: row.license || '',
+    photoUrl: row.photo_url || row.photoUrl || '',
+    address: typeof row.address === 'object' && row.address !== null
+      ? row.address
+      : {
+          province: row.province || '',
+          city: row.city || row.regency || '',
+          district: row.district || '',
+          village: row.village || '',
+          detail: row.address_detail || row.address || ''
+        },
+    status: row.status || 'Aktif',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
   };
 }
 
@@ -36,23 +96,46 @@ export function mapStudentFromSupabase(row) {
     ...row,
     id: row.id,
     tenantId: row.tenant_id,
-    academyId: row.academy_id,
-    classId: row.class_id,
-    studentName: row.student_name,
-    name: row.student_name,
-    birthDate: row.birth_date,
-    playerRole: row.player_role,
-    position: row.player_role,
-    sportCategory: row.sport_category,
-    sppStatus: row.spp_status,
-    createdAt: row.created_at,
-    className: row.academy_classes?.class_name || row.class_name || '',
-    coachName: row.academy_classes?.coach_name || row.coach_name || '',
-    phone: row.phone || row.parent_phone || '',
-    parentPhone: row.parent_phone || row.phone || '',
+    studentName: row.student_name || row.name || '',
+    name: row.student_name || row.name || '',
+    birthDate: row.birth_date || null,
+    nikKk: row.nik_kk || '',
+    schoolOrigin: row.school_origin || '',
+    academyId: row.academy_id || null,
+    academyName: row.academy_name || '',
+    classId: row.class_id || null,
+    className: row.class_name || (row.academy_classes?.class_name) || '',
+    coachName: row.coach_name || (row.academy_classes?.coach_name) || '',
+    sportCategory: row.sport_category || '',
+    playerRole: row.player_role || 'All-Rounder',
+    position: row.player_role || 'All-Rounder',
     parentName: row.parent_name || '',
-    monthlyFee: row.monthly_fee || 350000,
-    lastPaidMonth: row.last_paid_month || null
+    parentPhone: row.parent_phone || row.phone || '',
+    phone: row.phone || row.parent_phone || row.contact_phone || '',
+    contactPhone: row.contact_phone || row.parent_phone || row.phone || '',
+    province: row.province || '',
+    regency: row.regency || '',
+    district: row.district || '',
+    village: row.village || '',
+    addressDetail: row.address_detail || '',
+    joinDate: row.join_date || null,
+    registrationFee: Number(row.registration_fee || 0),
+    registrationFeePaid: Boolean(row.registration_fee_paid ?? row.is_registration_fee_paid),
+    isRegistrationFeePaid: Boolean(row.is_registration_fee_paid ?? row.registration_fee_paid),
+    registrationFeePaidAt: row.registration_fee_paid_at || null,
+    monthlyFee: Number(row.monthly_fee || 350000),
+    paymentStatus: row.payment_status || (row.spp_status === 'Lunas' ? 'lunas' : 'belum lunas'),
+    sppStatus: row.spp_status || 'Belum Lunas',
+    lastPaidMonth: row.last_paid_month || null,
+    lastPaidDate: row.last_paid_date || null,
+    lastSppPaidAt: row.last_spp_paid_at || row.last_paid_date || null,
+    height: row.height !== null && row.height !== undefined ? Number(row.height) : null,
+    weight: row.weight !== null && row.weight !== undefined ? Number(row.weight) : null,
+    photoUrl: row.photo_url || null,
+    tournaments: Array.isArray(row.tournaments) ? row.tournaments : [],
+    growthHistory: Array.isArray(row.growth_history) ? row.growth_history : [],
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
   };
 }
 
@@ -86,7 +169,120 @@ export function mapEvaluationFromSupabase(row, extra = {}) {
 }
 
 // -------------------------------------------------------------------------
-// 1. KELAS AKADEMI (academy_classes)
+// 1. WORKSPACE AKADEMI (academies)
+// -------------------------------------------------------------------------
+
+export async function getAcademies(tenantId) {
+  if (!tenantId) return [];
+  try {
+    const { data, error } = await supabase
+      .from('academies')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .order('name', { ascending: true });
+
+    if (error) {
+      console.warn('[Supabase getAcademies Error]:', error);
+      return [];
+    }
+    return (data || []).map(mapAcademyFromSupabase);
+  } catch (err) {
+    console.warn('[Supabase getAcademies Catch]:', err);
+    return [];
+  }
+}
+
+export async function createAcademy({
+  tenantId,
+  name,
+  academyName,
+  category,
+  categoryLabel,
+  sportCategory,
+  sport,
+  description,
+  logoUrl
+}) {
+  const finalName = (name || academyName || '').trim();
+  const payload = {
+    tenant_id: tenantId,
+    name: finalName,
+    academy_name: finalName,
+    category: category || 'racket',
+    category_label: categoryLabel || '',
+    sport_category: sportCategory || '',
+    sport: sport || '',
+    description: description || '',
+    logo_url: logoUrl || '',
+    created_at: new Date().toISOString()
+  };
+
+  try {
+    const { data, error } = await supabase
+      .from('academies')
+      .insert([payload])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return mapAcademyFromSupabase(data);
+  } catch (err) {
+    console.warn('[Supabase createAcademy]: fallback object used', err);
+    return mapAcademyFromSupabase({
+      id: `acad_${Date.now()}`,
+      ...payload
+    });
+  }
+}
+
+export async function updateAcademy(academyId, payload) {
+  if (!academyId) throw new Error('Academy ID wajib disertakan.');
+  const mapped = {};
+  if (payload.name !== undefined) {
+    mapped.name = payload.name.trim();
+    mapped.academy_name = payload.name.trim();
+  } else if (payload.academyName !== undefined) {
+    mapped.name = payload.academyName.trim();
+    mapped.academy_name = payload.academyName.trim();
+  }
+  if (payload.category !== undefined) mapped.category = payload.category;
+  if (payload.categoryLabel !== undefined) mapped.category_label = payload.categoryLabel;
+  if (payload.sportCategory !== undefined) mapped.sport_category = payload.sportCategory;
+  if (payload.sport !== undefined) mapped.sport = payload.sport;
+  if (payload.description !== undefined) mapped.description = payload.description;
+  if (payload.logoUrl !== undefined) mapped.logo_url = payload.logoUrl;
+  mapped.updated_at = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from('academies')
+    .update(mapped)
+    .eq('id', academyId)
+    .select()
+    .maybeSingle();
+
+  if (error) {
+    console.error('[Supabase updateAcademy Error]:', error);
+    throw error;
+  }
+  return mapAcademyFromSupabase(data || { id: academyId, ...payload });
+}
+
+export async function deleteAcademy(academyId) {
+  if (!academyId) return true;
+  const { error } = await supabase
+    .from('academies')
+    .delete()
+    .eq('id', academyId);
+
+  if (error) {
+    console.error('[Supabase deleteAcademy Error]:', error);
+    throw error;
+  }
+  return true;
+}
+
+// -------------------------------------------------------------------------
+// 2. KELAS AKADEMI (academy_classes)
 // -------------------------------------------------------------------------
 
 export async function getClasses(tenantId, academyId = null) {
@@ -113,18 +309,46 @@ export async function getClasses(tenantId, academyId = null) {
 export async function createClass({
   tenantId,
   academyId,
+  academyName,
   className,
+  name,
   sport,
+  coachId,
   coachName,
+  minAge,
+  maxAge,
+  maxQuota,
   tierCode,
-  tierLabel
+  tierLabel,
+  schedule,
+  schedules
 }) {
+  const finalClassName = (className || name || '').trim();
+  const safeAcademyId = academyId && String(academyId).trim() !== '' ? academyId : null;
+  const safeCoachId = coachId && String(coachId).trim() !== '' ? coachId : null;
+  const safeScheduleStr = typeof schedule === 'string'
+    ? schedule
+    : (Array.isArray(schedules) ? schedules.join(', ') : '');
+  const safeSchedulesArr = Array.isArray(schedules)
+    ? schedules
+    : (Array.isArray(schedule) ? schedule : []);
+
   const payload = {
     tenant_id: tenantId,
-    academy_id: academyId || null,
-    class_name: className,
+    academy_id: safeAcademyId,
+    academy_name: academyName || '',
+    class_name: finalClassName,
     sport: sport || 'General',
-    coach_name: coachName || 'Pelatih Utama'
+    coach_id: safeCoachId,
+    coach_name: coachName || 'Pelatih Utama',
+    min_age: minAge !== undefined && minAge !== '' && minAge !== null ? Number(minAge) : null,
+    max_age: maxAge !== undefined && maxAge !== '' && maxAge !== null ? Number(maxAge) : null,
+    max_quota: maxQuota ? Number(maxQuota) : 20,
+    tier_code: tierCode || 'ALL_AGE',
+    tier_label: tierLabel || 'Umum / Lintas Usia',
+    schedule: safeScheduleStr,
+    schedules: safeSchedulesArr,
+    created_at: new Date().toISOString()
   };
 
   const { data, error } = await supabase
@@ -137,15 +361,42 @@ export async function createClass({
     console.error('[Supabase createClass Error]:', error);
     throw error;
   }
-  return mapClassFromSupabase({ ...data, tierCode, tierLabel });
+  return mapClassFromSupabase(data);
 }
 
 export async function updateClass(classId, updatePayload) {
+  if (!classId) throw new Error('Class ID wajib disertakan.');
   const mapped = {};
-  if (updatePayload.className !== undefined) mapped.class_name = updatePayload.className;
+  if (updatePayload.className !== undefined || updatePayload.name !== undefined) {
+    mapped.class_name = (updatePayload.className || updatePayload.name || '').trim();
+  }
   if (updatePayload.sport !== undefined) mapped.sport = updatePayload.sport;
+  if (updatePayload.coachId !== undefined) {
+    mapped.coach_id = updatePayload.coachId && String(updatePayload.coachId).trim() !== '' ? updatePayload.coachId : null;
+  }
   if (updatePayload.coachName !== undefined) mapped.coach_name = updatePayload.coachName;
-  if (updatePayload.academyId !== undefined) mapped.academy_id = updatePayload.academyId;
+  if (updatePayload.academyId !== undefined) {
+    mapped.academy_id = updatePayload.academyId && String(updatePayload.academyId).trim() !== '' ? updatePayload.academyId : null;
+  }
+  if (updatePayload.academyName !== undefined) mapped.academy_name = updatePayload.academyName;
+  if (updatePayload.minAge !== undefined) {
+    mapped.min_age = updatePayload.minAge !== '' && updatePayload.minAge !== null ? Number(updatePayload.minAge) : null;
+  }
+  if (updatePayload.maxAge !== undefined) {
+    mapped.max_age = updatePayload.maxAge !== '' && updatePayload.maxAge !== null ? Number(updatePayload.maxAge) : null;
+  }
+  if (updatePayload.maxQuota !== undefined) mapped.max_quota = Number(updatePayload.maxQuota) || 20;
+  if (updatePayload.tierCode !== undefined) mapped.tier_code = updatePayload.tierCode;
+  if (updatePayload.tierLabel !== undefined) mapped.tier_label = updatePayload.tierLabel;
+  if (updatePayload.schedule !== undefined) {
+    mapped.schedule = typeof updatePayload.schedule === 'string'
+      ? updatePayload.schedule
+      : (Array.isArray(updatePayload.schedule) ? updatePayload.schedule.join(', ') : '');
+  }
+  if (updatePayload.schedules !== undefined) {
+    mapped.schedules = Array.isArray(updatePayload.schedules) ? updatePayload.schedules : [];
+  }
+  mapped.updated_at = new Date().toISOString();
 
   const { data, error } = await supabase
     .from('academy_classes')
@@ -162,6 +413,7 @@ export async function updateClass(classId, updatePayload) {
 }
 
 export async function deleteClass(classId) {
+  if (!classId) return true;
   const { error } = await supabase
     .from('academy_classes')
     .delete()
@@ -175,15 +427,151 @@ export async function deleteClass(classId) {
 }
 
 // -------------------------------------------------------------------------
-// 2. SISWA AKADEMI (students)
+// 3. PELATIH (COACHES)
+// -------------------------------------------------------------------------
+
+export async function getCoaches(tenantId, academyId = null) {
+  if (!tenantId) return [];
+  try {
+    let query = supabase
+      .from('coaches')
+      .select('*')
+      .eq('tenant_id', tenantId);
+
+    if (academyId) query = query.eq('academy_id', academyId);
+
+    const { data, error } = await query;
+    if (error) {
+      console.warn('[Supabase getCoaches Error]:', error);
+      return [];
+    }
+    return (data || []).map(mapCoachFromSupabase);
+  } catch (err) {
+    console.warn('[Supabase getCoaches Catch]:', err);
+    return [];
+  }
+}
+
+export async function createCoach({
+  tenantId,
+  academyId,
+  academyName,
+  name,
+  nickname,
+  nik,
+  phone,
+  email,
+  sport,
+  sportSpecialty,
+  sportCategory,
+  license,
+  photoUrl,
+  address,
+  status
+}) {
+  const safeAcademyId = academyId && String(academyId).trim() !== '' ? academyId : null;
+  const payload = {
+    tenant_id: tenantId,
+    academy_id: safeAcademyId,
+    academy_name: academyName || '',
+    name: (name || '').trim(),
+    nickname: (nickname || '').trim(),
+    nik: (nik || '').trim(),
+    phone: (phone || '').trim(),
+    email: (email || '').trim(),
+    sport: sport || sportSpecialty || '',
+    sport_specialty: sportSpecialty || sport || '',
+    sport_category: sportCategory || '',
+    license: license || '',
+    photo_url: photoUrl || '',
+    address: address || {},
+    status: status || 'Aktif',
+    created_at: new Date().toISOString()
+  };
+
+  try {
+    const { data, error } = await supabase
+      .from('coaches')
+      .insert([payload])
+      .select()
+      .single();
+
+    if (error) throw error;
+    return mapCoachFromSupabase(data);
+  } catch (err) {
+    console.warn('[Supabase createCoach fallback]:', err);
+    return mapCoachFromSupabase({
+      id: `coach_${Date.now()}`,
+      ...payload
+    });
+  }
+}
+
+export async function updateCoach(coachId, payload) {
+  if (!coachId) throw new Error('Coach ID wajib disertakan.');
+  const mapped = {};
+  if (payload.academyId !== undefined) {
+    mapped.academy_id = payload.academyId && String(payload.academyId).trim() !== '' ? payload.academyId : null;
+  }
+  if (payload.academyName !== undefined) mapped.academy_name = payload.academyName;
+  if (payload.name !== undefined) mapped.name = payload.name.trim();
+  if (payload.nickname !== undefined) mapped.nickname = payload.nickname.trim();
+  if (payload.nik !== undefined) mapped.nik = payload.nik.trim();
+  if (payload.phone !== undefined) mapped.phone = payload.phone.trim();
+  if (payload.email !== undefined) mapped.email = payload.email.trim();
+  if (payload.sport !== undefined || payload.sportSpecialty !== undefined) {
+    mapped.sport = payload.sport || payload.sportSpecialty || '';
+    mapped.sport_specialty = payload.sportSpecialty || payload.sport || '';
+  }
+  if (payload.sportCategory !== undefined) mapped.sport_category = payload.sportCategory;
+  if (payload.license !== undefined) mapped.license = payload.license;
+  if (payload.photoUrl !== undefined) mapped.photo_url = payload.photoUrl;
+  if (payload.address !== undefined) mapped.address = payload.address;
+  if (payload.status !== undefined) mapped.status = payload.status;
+  mapped.updated_at = new Date().toISOString();
+
+  try {
+    const { data, error } = await supabase
+      .from('coaches')
+      .update(mapped)
+      .eq('id', coachId)
+      .select()
+      .maybeSingle();
+
+    if (error) throw error;
+    return mapCoachFromSupabase(data || { id: coachId, ...payload });
+  } catch (err) {
+    console.warn('[Supabase updateCoach warning]:', err);
+    return mapCoachFromSupabase({ id: coachId, ...payload });
+  }
+}
+
+export async function deleteCoach(coachId) {
+  if (!coachId) return true;
+  const { error } = await supabase
+    .from('coaches')
+    .delete()
+    .eq('id', coachId);
+
+  if (error) {
+    console.error('[Supabase deleteCoach Error]:', error);
+    throw error;
+  }
+  return true;
+}
+
+// -------------------------------------------------------------------------
+// 4. SISWA AKADEMI (students)
 // -------------------------------------------------------------------------
 
 export async function getStudents(tenantId, academyId = null, classId = null) {
   if (!tenantId) return [];
 
+  // PENTING: Gunakan select('*') tanpa FK join academy_classes(...)
+  // agar query tidak error jika class_id bertipe TEXT tanpa FK constraint
   let query = supabase
     .from('students')
-    .select('*, academy_classes(class_name, sport, coach_name)')
+    .select('*')
     .eq('tenant_id', tenantId)
     .order('student_name', { ascending: true });
 
@@ -202,31 +590,56 @@ export async function getStudents(tenantId, academyId = null, classId = null) {
   return (data || []).map(mapStudentFromSupabase);
 }
 
-export async function createStudent({
-  tenantId,
-  academyId,
-  classId,
-  studentName,
-  birthDate,
-  playerRole,
-  sportCategory,
-  sppStatus = 'BELUM LUNAS'
-}) {
-  const payload = {
-    tenant_id: tenantId,
-    academy_id: academyId || null,
-    class_id: classId || null,
-    student_name: studentName,
-    birth_date: birthDate || null,
-    player_role: playerRole || 'All-Rounder',
-    sport_category: sportCategory || 'General',
-    spp_status: sppStatus
+export async function createStudent(payload) {
+  const safeAcademyId = payload.academyId && String(payload.academyId).trim() !== '' ? payload.academyId : null;
+  const safeClassId = payload.classId && String(payload.classId).trim() !== '' ? payload.classId : null;
+  const safeBirthDate = payload.birthDate && String(payload.birthDate).trim() !== '' ? payload.birthDate : null;
+
+  const dbPayload = {
+    tenant_id: payload.tenantId,
+    student_name: (payload.studentName || payload.name || '').trim(),
+    birth_date: safeBirthDate,
+    nik_kk: (payload.nikKk || '').trim(),
+    school_origin: (payload.schoolOrigin || '').trim(),
+    academy_id: safeAcademyId,
+    academy_name: payload.academyName || '',
+    class_id: safeClassId,
+    class_name: payload.className || '',
+    coach_name: payload.coachName || '',
+    sport_category: payload.sportCategory || 'General',
+    player_role: payload.playerRole || payload.position || 'All-Rounder',
+    parent_name: (payload.parentName || '').trim(),
+    parent_phone: (payload.parentPhone || payload.phone || '').trim(),
+    phone: (payload.phone || payload.parentPhone || payload.contactPhone || '').trim(),
+    contact_phone: (payload.contactPhone || payload.parentPhone || payload.phone || '').trim(),
+    province: payload.province || '',
+    regency: payload.regency || '',
+    district: payload.district || '',
+    village: payload.village || '',
+    address_detail: payload.addressDetail || '',
+    join_date: payload.joinDate || new Date().toISOString().split('T')[0],
+    registration_fee: payload.registrationFee !== undefined ? Number(payload.registrationFee) : 0,
+    registration_fee_paid: Boolean(payload.registrationFeePaid ?? payload.isRegistrationFeePaid),
+    is_registration_fee_paid: Boolean(payload.isRegistrationFeePaid ?? payload.registrationFeePaid),
+    registration_fee_paid_at: payload.registrationFeePaidAt || null,
+    monthly_fee: payload.monthlyFee !== undefined ? Number(payload.monthlyFee) : 350000,
+    payment_status: payload.paymentStatus || 'belum lunas',
+    spp_status: payload.sppStatus || 'Belum Lunas',
+    last_paid_month: payload.lastPaidMonth || null,
+    last_paid_date: payload.lastPaidDate || null,
+    last_spp_paid_at: payload.lastSppPaidAt || payload.lastPaidDate || null,
+    height: payload.height ? Number(payload.height) : null,
+    weight: payload.weight ? Number(payload.weight) : null,
+    photo_url: payload.photoUrl || null,
+    tournaments: Array.isArray(payload.tournaments) ? payload.tournaments : [],
+    growth_history: Array.isArray(payload.growthHistory) ? payload.growthHistory : [],
+    created_at: new Date().toISOString()
   };
 
   const { data, error } = await supabase
     .from('students')
-    .insert([payload])
-    .select('*, academy_classes(class_name, sport, coach_name)')
+    .insert([dbPayload])
+    .select()
     .single();
 
   if (error) {
@@ -237,34 +650,66 @@ export async function createStudent({
 }
 
 export async function updateStudent(studentId, updateFields) {
+  if (!studentId) throw new Error('Student ID wajib disertakan.');
   const mapped = {};
-  
-  if (updateFields.studentName !== undefined) mapped.student_name = updateFields.studentName;
-  if (updateFields.birthDate !== undefined) mapped.birth_date = updateFields.birthDate || null;
-  if (updateFields.playerRole !== undefined) mapped.player_role = updateFields.playerRole;
-  if (updateFields.sportCategory !== undefined) mapped.sport_category = updateFields.sportCategory;
-  if (updateFields.sppStatus !== undefined) mapped.spp_status = updateFields.sppStatus;
-  
-  // Normalisasi ketat kolom UUID (ubah string kosong "" atau undefined menjadi null)
-  if (updateFields.classId !== undefined) {
-    mapped.class_id = updateFields.classId && String(updateFields.classId).trim() !== "" ? updateFields.classId : null;
-  }
-  if (updateFields.academyId !== undefined) {
-    mapped.academy_id = updateFields.academyId && String(updateFields.academyId).trim() !== "" ? updateFields.academyId : null;
-  }
 
+  if (updateFields.studentName !== undefined) mapped.student_name = (updateFields.studentName || '').trim();
+  if (updateFields.name !== undefined && updateFields.studentName === undefined) mapped.student_name = (updateFields.name || '').trim();
+  if (updateFields.birthDate !== undefined) {
+    mapped.birth_date = updateFields.birthDate && String(updateFields.birthDate).trim() !== '' ? updateFields.birthDate : null;
+  }
+  if (updateFields.nikKk !== undefined) mapped.nik_kk = (updateFields.nikKk || '').trim();
+  if (updateFields.schoolOrigin !== undefined) mapped.school_origin = (updateFields.schoolOrigin || '').trim();
+  if (updateFields.academyId !== undefined) {
+    mapped.academy_id = updateFields.academyId && String(updateFields.academyId).trim() !== '' ? updateFields.academyId : null;
+  }
+  if (updateFields.academyName !== undefined) mapped.academy_name = updateFields.academyName;
+  if (updateFields.classId !== undefined) {
+    mapped.class_id = updateFields.classId && String(updateFields.classId).trim() !== '' ? updateFields.classId : null;
+  }
+  if (updateFields.className !== undefined) mapped.class_name = updateFields.className;
+  if (updateFields.coachName !== undefined) mapped.coach_name = updateFields.coachName;
+  if (updateFields.sportCategory !== undefined) mapped.sport_category = updateFields.sportCategory;
+  if (updateFields.playerRole !== undefined) mapped.player_role = updateFields.playerRole;
+  if (updateFields.position !== undefined && updateFields.playerRole === undefined) mapped.player_role = updateFields.position;
+  if (updateFields.parentName !== undefined) mapped.parent_name = (updateFields.parentName || '').trim();
+  if (updateFields.parentPhone !== undefined) mapped.parent_phone = (updateFields.parentPhone || '').trim();
+  if (updateFields.phone !== undefined) mapped.phone = (updateFields.phone || '').trim();
+  if (updateFields.contactPhone !== undefined) mapped.contact_phone = (updateFields.contactPhone || '').trim();
+  if (updateFields.province !== undefined) mapped.province = updateFields.province;
+  if (updateFields.regency !== undefined) mapped.regency = updateFields.regency;
+  if (updateFields.district !== undefined) mapped.district = updateFields.district;
+  if (updateFields.village !== undefined) mapped.village = updateFields.village;
+  if (updateFields.addressDetail !== undefined) mapped.address_detail = updateFields.addressDetail;
+  if (updateFields.joinDate !== undefined) mapped.join_date = updateFields.joinDate;
+  if (updateFields.registrationFee !== undefined) mapped.registration_fee = Number(updateFields.registrationFee);
+  if (updateFields.registrationFeePaid !== undefined) {
+    mapped.registration_fee_paid = Boolean(updateFields.registrationFeePaid);
+    mapped.is_registration_fee_paid = Boolean(updateFields.registrationFeePaid);
+  }
+  if (updateFields.isRegistrationFeePaid !== undefined) {
+    mapped.is_registration_fee_paid = Boolean(updateFields.isRegistrationFeePaid);
+    mapped.registration_fee_paid = Boolean(updateFields.isRegistrationFeePaid);
+  }
+  if (updateFields.registrationFeePaidAt !== undefined) mapped.registration_fee_paid_at = updateFields.registrationFeePaidAt;
+  if (updateFields.monthlyFee !== undefined) mapped.monthly_fee = Number(updateFields.monthlyFee);
   if (updateFields.paymentStatus !== undefined) mapped.payment_status = updateFields.paymentStatus;
+  if (updateFields.sppStatus !== undefined) mapped.spp_status = updateFields.sppStatus;
   if (updateFields.lastPaidMonth !== undefined) mapped.last_paid_month = updateFields.lastPaidMonth;
+  if (updateFields.lastPaidDate !== undefined) mapped.last_paid_date = updateFields.lastPaidDate;
+  if (updateFields.lastSppPaidAt !== undefined) mapped.last_spp_paid_at = updateFields.lastSppPaidAt;
   if (updateFields.height !== undefined) mapped.height = updateFields.height ? Number(updateFields.height) : null;
   if (updateFields.weight !== undefined) mapped.weight = updateFields.weight ? Number(updateFields.weight) : null;
-  if (updateFields.growthHistory !== undefined) mapped.growth_history = updateFields.growthHistory;
   if (updateFields.photoUrl !== undefined) mapped.photo_url = updateFields.photoUrl;
+  if (updateFields.tournaments !== undefined) mapped.tournaments = updateFields.tournaments;
+  if (updateFields.growthHistory !== undefined) mapped.growth_history = updateFields.growthHistory;
+  mapped.updated_at = new Date().toISOString();
 
   const { data, error } = await supabase
     .from('students')
     .update(mapped)
     .eq('id', studentId)
-    .select('*, academy_classes(class_name, sport, coach_name)')
+    .select()
     .single();
 
   if (error) {
@@ -288,9 +733,10 @@ export async function updateStudentGrowth(studentId, { height, weight, growthEnt
   const { data, error } = await supabase
     .from('students')
     .update({
-      height: Number(height),
-      weight: Number(weight),
-      growth_history: updatedHistory
+      height: height ? Number(height) : null,
+      weight: weight ? Number(weight) : null,
+      growth_history: updatedHistory,
+      updated_at: new Date().toISOString()
     })
     .eq('id', studentId)
     .select()
@@ -303,6 +749,7 @@ export async function updateStudentGrowth(studentId, { height, weight, growthEnt
 }
 
 export async function deleteStudent(studentId) {
+  if (!studentId) return true;
   const { error } = await supabase
     .from('students')
     .delete()
@@ -316,7 +763,7 @@ export async function deleteStudent(studentId) {
 }
 
 // -------------------------------------------------------------------------
-// 3. EVALUASI ATLET (academy_evaluations)
+// 5. EVALUASI ATLET (academy_evaluations)
 // -------------------------------------------------------------------------
 
 export async function getEvaluationsByClass(tenantId, classId, limitCount = 100) {
@@ -324,7 +771,7 @@ export async function getEvaluationsByClass(tenantId, classId, limitCount = 100)
 
   const { data, error } = await supabase
     .from('academy_evaluations')
-    .select('*, students(student_name, player_role, birth_date), academy_classes(class_name, sport)')
+    .select('*')
     .eq('tenant_id', tenantId)
     .eq('class_id', classId)
     .order('created_at', { ascending: false })
@@ -357,13 +804,14 @@ export async function createEvaluation(payload) {
     pillar_scores: pillarScores,
     scores: scores,
     coach_note: coachNote,
-    evaluator: evaluator
+    evaluator: evaluator,
+    created_at: new Date().toISOString()
   };
 
   const { data, error } = await supabase
     .from('academy_evaluations')
     .insert([insertPayload])
-    .select('*, students(student_name, player_role, birth_date), academy_classes(class_name, sport)')
+    .select()
     .single();
 
   if (error) {
@@ -376,7 +824,7 @@ export async function createEvaluation(payload) {
     try {
       await supabase
         .from('students')
-        .update({ player_role: payload.playerRole || payload.position })
+        .update({ player_role: payload.playerRole || payload.position, updated_at: new Date().toISOString() })
         .eq('id', studentId);
     } catch (e) {
       console.warn('Update student role warning:', e);
@@ -387,6 +835,7 @@ export async function createEvaluation(payload) {
 }
 
 export async function deleteEvaluation(evaluationId) {
+  if (!evaluationId) return true;
   const { error } = await supabase
     .from('academy_evaluations')
     .delete()
@@ -400,7 +849,7 @@ export async function deleteEvaluation(evaluationId) {
 }
 
 // -------------------------------------------------------------------------
-// 4. PRESENSI ATLET (academy_attendance)
+// 6. PRESENSI ATLET (academy_attendance)
 // -------------------------------------------------------------------------
 
 export async function getAttendance(tenantId, classId, date = null) {
@@ -408,7 +857,7 @@ export async function getAttendance(tenantId, classId, date = null) {
 
   let query = supabase
     .from('academy_attendance')
-    .select('*, students(student_name)')
+    .select('*')
     .eq('tenant_id', tenantId);
 
   if (classId) query = query.eq('class_id', classId);
@@ -437,7 +886,8 @@ export async function recordAttendanceBatch({
     class_id: classId,
     student_id: r.studentId,
     date: date || new Date().toISOString().split('T')[0],
-    status: r.status || 'Hadir'
+    status: r.status || 'Hadir',
+    created_at: new Date().toISOString()
   }));
 
   const { data, error } = await supabase
@@ -467,7 +917,7 @@ export async function recordAttendanceSession({
 }) {
   const sessionRow = {
     tenant_id: tenantId,
-    academy_id: academyId || null,
+    academy_id: academyId && String(academyId).trim() !== '' ? academyId : null,
     class_id: classId,
     date: date || new Date().toISOString().split('T')[0],
     coach_attended: coachAttended,
@@ -513,173 +963,7 @@ export async function deleteAttendanceSession(id) {
   }
 }
 
-// -------------------------------------------------------------------------
-// 5. PELATIH (COACHES) & WORKSPACE AKADEMI (ACADEMIES)
-// -------------------------------------------------------------------------
-
-export async function getCoaches(tenantId, academyId = null) {
-  if (!tenantId) return [];
-  try {
-    let query = supabase
-      .from('coaches')
-      .select('*')
-      .eq('tenant_id', tenantId);
-
-    if (academyId) query = query.eq('academy_id', academyId);
-
-    const { data, error } = await query;
-    if (error) {
-      return [];
-    }
-    return (data || []).map((c) => ({
-      ...c,
-      id: c.id,
-      tenantId: c.tenant_id,
-      academyId: c.academy_id,
-      name: c.name,
-      nickname: c.nickname || '',
-      nik: c.nik || '',
-      phone: c.phone || '',
-      photoUrl: c.photo_url || '',
-      sport: c.sport || c.sport_specialty || '',
-      sportSpecialty: c.sport_specialty || c.sport || '',
-      license: c.license || '',
-      address: c.address || {}
-    }));
-  } catch {
-    return [];
-  }
-}
-
-export async function createCoach({ tenantId, academyId, name, phone, sport, photoUrl, nickname, nik, license, address }) {
-  try {
-    const { data, error } = await supabase
-      .from('coaches')
-      .insert([{
-        tenant_id: tenantId,
-        academy_id: academyId || null,
-        name,
-        nickname: nickname || '',
-        nik: nik || '',
-        phone: phone || '',
-        photo_url: photoUrl || '',
-        sport: sport || '',
-        sport_specialty: sport || '',
-        license: license || '',
-        address: address || {}
-      }])
-      .select()
-      .single();
-
-    if (error) throw error;
-    return { ...data, id: data.id, name: data.name, phone: data.phone, sport: data.sport };
-  } catch (err) {
-    console.warn('[Supabase createCoach]: table may not exist yet, using local object', err);
-    return {
-      id: `coach_${Date.now()}`,
-      tenantId,
-      academyId,
-      name,
-      phone: phone || '',
-      sport: sport || ''
-    };
-  }
-}
-
-export async function updateCoach(coachId, payload) {
-  try {
-    const dbPayload = {
-      name: payload.name,
-      nickname: payload.nickname,
-      nik: payload.nik,
-      phone: payload.phone,
-      photo_url: payload.photoUrl,
-      sport: payload.sport || payload.sportSpecialty,
-      sport_specialty: payload.sportSpecialty || payload.sport,
-      license: payload.license,
-      address: payload.address,
-      updated_at: new Date().toISOString()
-    };
-    Object.keys(dbPayload).forEach(k => dbPayload[k] === undefined && delete dbPayload[k]);
-
-    const { data, error } = await supabase
-      .from('coaches')
-      .update(dbPayload)
-      .eq('id', coachId)
-      .select()
-      .maybeSingle();
-
-    if (error) throw error;
-    return data || { id: coachId, ...payload };
-  } catch (err) {
-    console.warn('[Supabase updateCoach warning]:', err);
-    return { id: coachId, ...payload };
-  }
-}
-
-export async function getAcademies(tenantId) {
-  if (!tenantId) return [];
-  try {
-    const { data, error } = await supabase
-      .from('academies')
-      .select('*')
-      .eq('tenant_id', tenantId)
-      .order('name', { ascending: true });
-
-    if (error) {
-      return [];
-    }
-    return (data || []).map((a) => ({
-      ...a,
-      id: a.id,
-      tenantId: a.tenant_id,
-      name: a.name,
-      category: a.category || 'racket',
-      sport: a.sport || '',
-      description: a.description || ''
-    }));
-  } catch {
-    return [];
-  }
-}
-
-export async function createAcademy({ tenantId, name, category, sport, description }) {
-  try {
-    const { data, error } = await supabase
-      .from('academies')
-      .insert([{
-        tenant_id: tenantId,
-        name,
-        category: category || 'racket',
-        sport: sport || '',
-        description: description || ''
-      }])
-      .select()
-      .single();
-
-    if (error) throw error;
-    return {
-      ...data,
-      id: data.id,
-      name: data.name,
-      category: data.category,
-      sport: data.sport,
-      description: data.description
-    };
-  } catch (err) {
-    console.warn('[Supabase createAcademy]: table may not exist yet, using local object', err);
-    return {
-      id: `acad_${Date.now()}`,
-      tenantId,
-      name,
-      category: category || 'racket',
-      sport: sport || '',
-      description: description || ''
-    };
-  }
-}
-
-// Aliases for compatibility
+// Aliases for backwards compatibility
 export const getSupabaseClasses = getClasses;
 export const createSupabaseClass = createClass;
 export const updateSupabaseClass = updateClass;
@@ -693,25 +977,45 @@ export const createSupabaseEvaluation = createEvaluation;
 export const deleteSupabaseEvaluation = deleteEvaluation;
 export const getSupabaseAttendance = getAttendance;
 export const recordSupabaseAttendanceBatch = recordAttendanceBatch;
+export const getSupabaseCoaches = getCoaches;
+export const createSupabaseCoach = createCoach;
+export const updateSupabaseCoach = updateCoach;
+export const deleteSupabaseCoach = deleteCoach;
+export const getSupabaseAcademies = getAcademies;
+export const createSupabaseAcademy = createAcademy;
+export const updateSupabaseAcademy = updateAcademy;
+export const deleteSupabaseAcademy = deleteAcademy;
 
 const supabaseAcademyService = {
+  getAcademies,
+  createAcademy,
+  updateAcademy,
+  deleteAcademy,
+  mapAcademyFromSupabase,
   getClasses,
   createClass,
   updateClass,
   deleteClass,
+  mapClassFromSupabase,
+  getCoaches,
+  createCoach,
+  updateCoach,
+  deleteCoach,
+  mapCoachFromSupabase,
   getStudents,
   createStudent,
   updateStudent,
+  updateStudentGrowth,
   deleteStudent,
+  mapStudentFromSupabase,
   getEvaluationsByClass,
   createEvaluation,
   deleteEvaluation,
+  mapEvaluationFromSupabase,
   getAttendance,
   recordAttendanceBatch,
-  getCoaches,
-  createCoach,
-  getAcademies,
-  createAcademy
+  recordAttendanceSession,
+  deleteAttendanceSession
 };
 
 export default supabaseAcademyService;
