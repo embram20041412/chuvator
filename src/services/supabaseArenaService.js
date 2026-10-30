@@ -14,6 +14,19 @@ import { supabase } from '../config/supabase';
  */
 
 // -------------------------------------------------------------------------
+// HELPER NORMALISASI UUID & TANGGAL (ANTI ERROR POSTGRESQL 22P02)
+// -------------------------------------------------------------------------
+
+export const toUuidOrNull = (val) => {
+  if (!val || typeof val !== 'string') return null;
+  const trimmed = val.trim();
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(trimmed) ? trimmed : null;
+};
+
+export const toDateOrNull = (val) => (val && String(val).trim() !== '' ? String(val).trim() : null);
+
+// -------------------------------------------------------------------------
 // DATA MAPPING HELPERS (SNAKE_CASE <-> CAMEL_CASE)
 // -------------------------------------------------------------------------
 
@@ -108,8 +121,8 @@ export function mapTransactionFromSupabase(row) {
     ...row,
     id: row.id,
     tenantId: row.tenant_id,
-    bookingId: row.booking_id || row.bookingId || null,
-    studentId: row.student_id || row.studentId || null,
+    bookingId: toUuidOrNull(row.booking_id) || row.booking_id || null,
+    studentId: toUuidOrNull(row.student_id) || row.student_id || null,
     sponsorId: row.sponsor_id || row.sponsorId || null,
     eventId: row.event_id || row.eventId || null,
     itemName: row.item_name || row.itemName || '',
@@ -153,7 +166,7 @@ export function mapSppPaymentFromSupabase(row) {
     ...row,
     id: row.id,
     tenantId: row.tenant_id,
-    studentId: row.student_id,
+    studentId: toUuidOrNull(row.student_id) || row.student_id || null,
     studentName: row.student_name || '',
     paidMonth: row.paid_month || '',
     amount: Number(row.amount || 0),
@@ -532,10 +545,13 @@ export async function getTransactions(tenantId, limitCount = 150) {
 }
 
 export async function createTransaction(payload) {
+  const safeBookingId = toUuidOrNull(payload.bookingId || payload.booking_id);
+  const safeStudentId = toUuidOrNull(payload.studentId || payload.student_id);
+
   const dbPayload = {
     tenant_id: payload.tenantId,
-    booking_id: payload.bookingId || null,
-    student_id: payload.studentId || null,
+    booking_id: safeBookingId,
+    student_id: safeStudentId,
     sponsor_id: payload.sponsorId || null,
     event_id: payload.eventId || null,
     item_name: payload.itemName,
@@ -627,9 +643,11 @@ export async function getLedgerEntries(tenantId, limitCount = 200) {
 }
 
 export async function createPosReceipt(payload) {
+  const safeStudentId = toUuidOrNull(payload.studentId || payload.student_id);
+
   const dbPayload = {
     tenant_id: payload.tenantId,
-    student_id: payload.studentId || payload.student_id || null,
+    student_id: safeStudentId,
     parent_name: payload.parentName || payload.parent_name || '',
     customer_name: payload.customerName || payload.customer_name || 'Pelanggan',
     type: payload.type || 'RETAIL',
@@ -673,9 +691,7 @@ export async function getPosReceipts(tenantId, limitCount = 150) {
 }
 
 export async function recordSppPayment(payload) {
-  const safeStudentId = payload.studentId && String(payload.studentId).trim() !== ''
-    ? payload.studentId
-    : (payload.student_id && String(payload.student_id).trim() !== '' ? payload.student_id : null);
+  const safeStudentId = toUuidOrNull(payload.studentId || payload.student_id);
 
   const dbPayload = {
     tenant_id: payload.tenantId,
@@ -711,8 +727,9 @@ export async function getSppPayments(tenantId, studentId = null) {
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false });
 
-  if (studentId) {
-    query = query.eq('student_id', studentId);
+  const safeStudentId = toUuidOrNull(studentId);
+  if (safeStudentId) {
+    query = query.eq('student_id', safeStudentId);
   }
 
   const { data, error } = await query;
@@ -939,11 +956,13 @@ export async function deleteInvitation(invId) {
 
 export async function getStudentTransactions(tenantId, studentId) {
   if (!tenantId || !studentId) return [];
+  const safeStudentId = toUuidOrNull(studentId) || studentId;
+
   const { data, error } = await supabase
     .from('transactions')
     .select('*')
     .eq('tenant_id', tenantId)
-    .eq('student_id', studentId)
+    .eq('student_id', safeStudentId)
     .order('created_at', { ascending: false });
 
   if (error) {
@@ -991,7 +1010,9 @@ const supabaseArenaService = {
   getInvitations,
   createInvitation,
   deleteInvitation,
-  getStudentTransactions
+  getStudentTransactions,
+  toUuidOrNull,
+  toDateOrNull
 };
 
 export default supabaseArenaService;

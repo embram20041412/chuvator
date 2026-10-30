@@ -10,17 +10,31 @@ import { supabase } from '../config/supabase';
  */
 
 // -------------------------------------------------------------------------
+// HELPER NORMALISASI UUID & TANGGAL (ANTI ERROR POSTGRESQL 22P02)
+// -------------------------------------------------------------------------
+
+export const toUuidOrNull = (val) => {
+  if (!val || typeof val !== 'string') return null;
+  const trimmed = val.trim();
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(trimmed) ? trimmed : null;
+};
+
+export const toDateOrNull = (val) => (val && String(val).trim() !== '' ? String(val).trim() : null);
+
+// -------------------------------------------------------------------------
 // DATA MAPPING HELPERS (SNAKE_CASE <-> CAMEL_CASE)
 // -------------------------------------------------------------------------
 
 export function mapAcademyFromSupabase(row) {
   if (!row) return null;
+  const rawName = row.name || row.academy_name || '';
   return {
     ...row,
     id: row.id,
     tenantId: row.tenant_id,
-    name: row.name || row.academy_name || '',
-    academyName: row.name || row.academy_name || '',
+    name: rawName,
+    academyName: rawName,
     category: row.category || 'racket',
     categoryLabel: row.category_label || row.categoryLabel || '',
     sportCategory: row.sport_category || row.sportCategory || '',
@@ -34,19 +48,20 @@ export function mapAcademyFromSupabase(row) {
 
 export function mapClassFromSupabase(row) {
   if (!row) return null;
+  const rawClassName = row.class_name || row.name || '';
   return {
     ...row,
     id: row.id,
     tenantId: row.tenant_id,
-    academyId: row.academy_id || null,
+    academyId: toUuidOrNull(row.academy_id),
     academyName: row.academy_name || '',
-    className: row.class_name || row.name || '',
-    name: row.class_name || row.name || '',
+    className: rawClassName,
+    name: rawClassName,
     sport: row.sport || 'General',
-    coachId: row.coach_id || null,
+    coachId: toUuidOrNull(row.coach_id),
     coachName: row.coach_name || '',
-    minAge: row.min_age !== null && row.min_age !== undefined ? Number(row.min_age) : null,
-    maxAge: row.max_age !== null && row.max_age !== undefined ? Number(row.max_age) : null,
+    minAge: row.min_age !== null && row.min_age !== undefined ? Number(row.min_age) : 6,
+    maxAge: row.max_age !== null && row.max_age !== undefined ? Number(row.max_age) : 99,
     maxQuota: row.max_quota ? Number(row.max_quota) : 20,
     tierCode: row.tier_code || 'ALL_AGE',
     tierLabel: row.tier_label || 'Umum / Lintas Usia',
@@ -63,7 +78,7 @@ export function mapCoachFromSupabase(row) {
     ...row,
     id: row.id,
     tenantId: row.tenant_id,
-    academyId: row.academy_id || null,
+    academyId: toUuidOrNull(row.academy_id),
     academyName: row.academy_name || '',
     name: row.name || '',
     nickname: row.nickname || '',
@@ -92,18 +107,19 @@ export function mapCoachFromSupabase(row) {
 
 export function mapStudentFromSupabase(row) {
   if (!row) return null;
+  const rawStudentName = row.student_name || row.name || '';
   return {
     ...row,
     id: row.id,
     tenantId: row.tenant_id,
-    studentName: row.student_name || row.name || '',
-    name: row.student_name || row.name || '',
-    birthDate: row.birth_date || null,
+    studentName: rawStudentName,
+    name: rawStudentName,
+    birthDate: toDateOrNull(row.birth_date),
     nikKk: row.nik_kk || '',
     schoolOrigin: row.school_origin || '',
-    academyId: row.academy_id || null,
+    academyId: toUuidOrNull(row.academy_id),
     academyName: row.academy_name || '',
-    classId: row.class_id || null,
+    classId: toUuidOrNull(row.class_id),
     className: row.class_name || (row.academy_classes?.class_name) || '',
     coachName: row.coach_name || (row.academy_classes?.coach_name) || '',
     sportCategory: row.sport_category || '',
@@ -118,7 +134,7 @@ export function mapStudentFromSupabase(row) {
     district: row.district || '',
     village: row.village || '',
     addressDetail: row.address_detail || '',
-    joinDate: row.join_date || null,
+    joinDate: toDateOrNull(row.join_date),
     registrationFee: Number(row.registration_fee || 0),
     registrationFeePaid: Boolean(row.registration_fee_paid ?? row.is_registration_fee_paid),
     isRegistrationFeePaid: Boolean(row.is_registration_fee_paid ?? row.registration_fee_paid),
@@ -127,8 +143,8 @@ export function mapStudentFromSupabase(row) {
     paymentStatus: row.payment_status || (row.spp_status === 'Lunas' ? 'lunas' : 'belum lunas'),
     sppStatus: row.spp_status || 'Belum Lunas',
     lastPaidMonth: row.last_paid_month || null,
-    lastPaidDate: row.last_paid_date || null,
-    lastSppPaidAt: row.last_spp_paid_at || row.last_paid_date || null,
+    lastPaidDate: toDateOrNull(row.last_paid_date),
+    lastSppPaidAt: toDateOrNull(row.last_spp_paid_at) || toDateOrNull(row.last_paid_date) || null,
     height: row.height !== null && row.height !== undefined ? Number(row.height) : null,
     weight: row.weight !== null && row.weight !== undefined ? Number(row.weight) : null,
     photoUrl: row.photo_url || null,
@@ -149,8 +165,8 @@ export function mapEvaluationFromSupabase(row, extra = {}) {
     ...row,
     id: row.id,
     tenantId: row.tenant_id,
-    classId: row.class_id,
-    studentId: row.student_id,
+    classId: toUuidOrNull(row.class_id),
+    studentId: toUuidOrNull(row.student_id),
     activeTier: row.active_tier,
     overallScore: row.overall_score,
     pillarScores: row.pillar_scores || {},
@@ -294,8 +310,9 @@ export async function getClasses(tenantId, academyId = null) {
     .eq('tenant_id', tenantId)
     .order('class_name', { ascending: true });
 
-  if (academyId) {
-    query = query.eq('academy_id', academyId);
+  const safeAcademyId = toUuidOrNull(academyId);
+  if (safeAcademyId) {
+    query = query.eq('academy_id', safeAcademyId);
   }
 
   const { data, error } = await query;
@@ -324,8 +341,8 @@ export async function createClass({
   schedules
 }) {
   const finalClassName = (className || name || '').trim();
-  const safeAcademyId = academyId && String(academyId).trim() !== '' ? academyId : null;
-  const safeCoachId = coachId && String(coachId).trim() !== '' ? coachId : null;
+  const safeAcademyId = toUuidOrNull(academyId);
+  const safeCoachId = toUuidOrNull(coachId);
   const safeScheduleStr = typeof schedule === 'string'
     ? schedule
     : (Array.isArray(schedules) ? schedules.join(', ') : '');
@@ -341,8 +358,8 @@ export async function createClass({
     sport: sport || 'General',
     coach_id: safeCoachId,
     coach_name: coachName || 'Pelatih Utama',
-    min_age: minAge !== undefined && minAge !== '' && minAge !== null ? Number(minAge) : null,
-    max_age: maxAge !== undefined && maxAge !== '' && maxAge !== null ? Number(maxAge) : null,
+    min_age: minAge !== undefined && minAge !== '' && minAge !== null ? Number(minAge) : 6,
+    max_age: maxAge !== undefined && maxAge !== '' && maxAge !== null ? Number(maxAge) : 99,
     max_quota: maxQuota ? Number(maxQuota) : 20,
     tier_code: tierCode || 'ALL_AGE',
     tier_label: tierLabel || 'Umum / Lintas Usia',
@@ -372,18 +389,18 @@ export async function updateClass(classId, updatePayload) {
   }
   if (updatePayload.sport !== undefined) mapped.sport = updatePayload.sport;
   if (updatePayload.coachId !== undefined) {
-    mapped.coach_id = updatePayload.coachId && String(updatePayload.coachId).trim() !== '' ? updatePayload.coachId : null;
+    mapped.coach_id = toUuidOrNull(updatePayload.coachId);
   }
   if (updatePayload.coachName !== undefined) mapped.coach_name = updatePayload.coachName;
   if (updatePayload.academyId !== undefined) {
-    mapped.academy_id = updatePayload.academyId && String(updatePayload.academyId).trim() !== '' ? updatePayload.academyId : null;
+    mapped.academy_id = toUuidOrNull(updatePayload.academyId);
   }
   if (updatePayload.academyName !== undefined) mapped.academy_name = updatePayload.academyName;
   if (updatePayload.minAge !== undefined) {
-    mapped.min_age = updatePayload.minAge !== '' && updatePayload.minAge !== null ? Number(updatePayload.minAge) : null;
+    mapped.min_age = updatePayload.minAge !== '' && updatePayload.minAge !== null ? Number(updatePayload.minAge) : 6;
   }
   if (updatePayload.maxAge !== undefined) {
-    mapped.max_age = updatePayload.maxAge !== '' && updatePayload.maxAge !== null ? Number(updatePayload.maxAge) : null;
+    mapped.max_age = updatePayload.maxAge !== '' && updatePayload.maxAge !== null ? Number(updatePayload.maxAge) : 99;
   }
   if (updatePayload.maxQuota !== undefined) mapped.max_quota = Number(updatePayload.maxQuota) || 20;
   if (updatePayload.tierCode !== undefined) mapped.tier_code = updatePayload.tierCode;
@@ -438,7 +455,8 @@ export async function getCoaches(tenantId, academyId = null) {
       .select('*')
       .eq('tenant_id', tenantId);
 
-    if (academyId) query = query.eq('academy_id', academyId);
+    const safeAcademyId = toUuidOrNull(academyId);
+    if (safeAcademyId) query = query.eq('academy_id', safeAcademyId);
 
     const { data, error } = await query;
     if (error) {
@@ -469,7 +487,7 @@ export async function createCoach({
   address,
   status
 }) {
-  const safeAcademyId = academyId && String(academyId).trim() !== '' ? academyId : null;
+  const safeAcademyId = toUuidOrNull(academyId);
   const payload = {
     tenant_id: tenantId,
     academy_id: safeAcademyId,
@@ -511,7 +529,7 @@ export async function updateCoach(coachId, payload) {
   if (!coachId) throw new Error('Coach ID wajib disertakan.');
   const mapped = {};
   if (payload.academyId !== undefined) {
-    mapped.academy_id = payload.academyId && String(payload.academyId).trim() !== '' ? payload.academyId : null;
+    mapped.academy_id = toUuidOrNull(payload.academyId);
   }
   if (payload.academyName !== undefined) mapped.academy_name = payload.academyName;
   if (payload.name !== undefined) mapped.name = payload.name.trim();
@@ -575,11 +593,13 @@ export async function getStudents(tenantId, academyId = null, classId = null) {
     .eq('tenant_id', tenantId)
     .order('student_name', { ascending: true });
 
-  if (academyId) {
-    query = query.eq('academy_id', academyId);
+  const safeAcademyId = toUuidOrNull(academyId);
+  if (safeAcademyId) {
+    query = query.eq('academy_id', safeAcademyId);
   }
-  if (classId) {
-    query = query.eq('class_id', classId);
+  const safeClassId = toUuidOrNull(classId);
+  if (safeClassId) {
+    query = query.eq('class_id', safeClassId);
   }
 
   const { data, error } = await query;
@@ -591,13 +611,14 @@ export async function getStudents(tenantId, academyId = null, classId = null) {
 }
 
 export async function createStudent(payload) {
-  const safeAcademyId = payload.academyId && String(payload.academyId).trim() !== '' ? payload.academyId : null;
-  const safeClassId = payload.classId && String(payload.classId).trim() !== '' ? payload.classId : null;
-  const safeBirthDate = payload.birthDate && String(payload.birthDate).trim() !== '' ? payload.birthDate : null;
+  const safeAcademyId = toUuidOrNull(payload.academyId);
+  const safeClassId = toUuidOrNull(payload.classId);
+  const safeBirthDate = toDateOrNull(payload.birthDate);
+  const finalStudentName = (payload.studentName || payload.name || '').trim();
 
   const dbPayload = {
     tenant_id: payload.tenantId,
-    student_name: (payload.studentName || payload.name || '').trim(),
+    student_name: finalStudentName,
     birth_date: safeBirthDate,
     nik_kk: (payload.nikKk || '').trim(),
     school_origin: (payload.schoolOrigin || '').trim(),
@@ -617,7 +638,7 @@ export async function createStudent(payload) {
     district: payload.district || '',
     village: payload.village || '',
     address_detail: payload.addressDetail || '',
-    join_date: payload.joinDate || new Date().toISOString().split('T')[0],
+    join_date: toDateOrNull(payload.joinDate) || new Date().toISOString().split('T')[0],
     registration_fee: payload.registrationFee !== undefined ? Number(payload.registrationFee) : 0,
     registration_fee_paid: Boolean(payload.registrationFeePaid ?? payload.isRegistrationFeePaid),
     is_registration_fee_paid: Boolean(payload.isRegistrationFeePaid ?? payload.registrationFeePaid),
@@ -626,8 +647,8 @@ export async function createStudent(payload) {
     payment_status: payload.paymentStatus || 'belum lunas',
     spp_status: payload.sppStatus || 'Belum Lunas',
     last_paid_month: payload.lastPaidMonth || null,
-    last_paid_date: payload.lastPaidDate || null,
-    last_spp_paid_at: payload.lastSppPaidAt || payload.lastPaidDate || null,
+    last_paid_date: toDateOrNull(payload.lastPaidDate),
+    last_spp_paid_at: toDateOrNull(payload.lastSppPaidAt) || toDateOrNull(payload.lastPaidDate) || null,
     height: payload.height ? Number(payload.height) : null,
     weight: payload.weight ? Number(payload.weight) : null,
     photo_url: payload.photoUrl || null,
@@ -656,16 +677,16 @@ export async function updateStudent(studentId, updateFields) {
   if (updateFields.studentName !== undefined) mapped.student_name = (updateFields.studentName || '').trim();
   if (updateFields.name !== undefined && updateFields.studentName === undefined) mapped.student_name = (updateFields.name || '').trim();
   if (updateFields.birthDate !== undefined) {
-    mapped.birth_date = updateFields.birthDate && String(updateFields.birthDate).trim() !== '' ? updateFields.birthDate : null;
+    mapped.birth_date = toDateOrNull(updateFields.birthDate);
   }
   if (updateFields.nikKk !== undefined) mapped.nik_kk = (updateFields.nikKk || '').trim();
   if (updateFields.schoolOrigin !== undefined) mapped.school_origin = (updateFields.schoolOrigin || '').trim();
   if (updateFields.academyId !== undefined) {
-    mapped.academy_id = updateFields.academyId && String(updateFields.academyId).trim() !== '' ? updateFields.academyId : null;
+    mapped.academy_id = toUuidOrNull(updateFields.academyId);
   }
   if (updateFields.academyName !== undefined) mapped.academy_name = updateFields.academyName;
   if (updateFields.classId !== undefined) {
-    mapped.class_id = updateFields.classId && String(updateFields.classId).trim() !== '' ? updateFields.classId : null;
+    mapped.class_id = toUuidOrNull(updateFields.classId);
   }
   if (updateFields.className !== undefined) mapped.class_name = updateFields.className;
   if (updateFields.coachName !== undefined) mapped.coach_name = updateFields.coachName;
@@ -681,7 +702,7 @@ export async function updateStudent(studentId, updateFields) {
   if (updateFields.district !== undefined) mapped.district = updateFields.district;
   if (updateFields.village !== undefined) mapped.village = updateFields.village;
   if (updateFields.addressDetail !== undefined) mapped.address_detail = updateFields.addressDetail;
-  if (updateFields.joinDate !== undefined) mapped.join_date = updateFields.joinDate;
+  if (updateFields.joinDate !== undefined) mapped.join_date = toDateOrNull(updateFields.joinDate);
   if (updateFields.registrationFee !== undefined) mapped.registration_fee = Number(updateFields.registrationFee);
   if (updateFields.registrationFeePaid !== undefined) {
     mapped.registration_fee_paid = Boolean(updateFields.registrationFeePaid);
@@ -696,8 +717,8 @@ export async function updateStudent(studentId, updateFields) {
   if (updateFields.paymentStatus !== undefined) mapped.payment_status = updateFields.paymentStatus;
   if (updateFields.sppStatus !== undefined) mapped.spp_status = updateFields.sppStatus;
   if (updateFields.lastPaidMonth !== undefined) mapped.last_paid_month = updateFields.lastPaidMonth;
-  if (updateFields.lastPaidDate !== undefined) mapped.last_paid_date = updateFields.lastPaidDate;
-  if (updateFields.lastSppPaidAt !== undefined) mapped.last_spp_paid_at = updateFields.lastSppPaidAt;
+  if (updateFields.lastPaidDate !== undefined) mapped.last_paid_date = toDateOrNull(updateFields.lastPaidDate);
+  if (updateFields.lastSppPaidAt !== undefined) mapped.last_spp_paid_at = toDateOrNull(updateFields.lastSppPaidAt);
   if (updateFields.height !== undefined) mapped.height = updateFields.height ? Number(updateFields.height) : null;
   if (updateFields.weight !== undefined) mapped.weight = updateFields.weight ? Number(updateFields.weight) : null;
   if (updateFields.photoUrl !== undefined) mapped.photo_url = updateFields.photoUrl;
@@ -769,11 +790,12 @@ export async function deleteStudent(studentId) {
 export async function getEvaluationsByClass(tenantId, classId, limitCount = 100) {
   if (!tenantId || !classId) return [];
 
+  const safeClassId = toUuidOrNull(classId) || classId;
   const { data, error } = await supabase
     .from('academy_evaluations')
     .select('*')
     .eq('tenant_id', tenantId)
-    .eq('class_id', classId)
+    .eq('class_id', safeClassId)
     .order('created_at', { ascending: false })
     .limit(limitCount);
 
@@ -786,8 +808,8 @@ export async function getEvaluationsByClass(tenantId, classId, limitCount = 100)
 
 export async function createEvaluation(payload) {
   const tenantId = payload.tenantId || payload.tenant_id;
-  const classId = payload.classId || payload.class_id;
-  const studentId = payload.studentId || payload.student_id;
+  const classId = toUuidOrNull(payload.classId || payload.class_id);
+  const studentId = toUuidOrNull(payload.studentId || payload.student_id);
   const activeTier = payload.activeTier ?? payload.active_tier ?? 1;
   const overallScore = payload.overallScore ?? payload.overall_score ?? 0;
   const pillarScores = payload.pillarScores || payload.pillar_scores || payload.categoryScores || {};
@@ -820,7 +842,7 @@ export async function createEvaluation(payload) {
   }
 
   // Update student role/tier if provided
-  if (payload.playerRole || payload.position) {
+  if (studentId && (payload.playerRole || payload.position)) {
     try {
       await supabase
         .from('students')
@@ -860,7 +882,8 @@ export async function getAttendance(tenantId, classId, date = null) {
     .select('*')
     .eq('tenant_id', tenantId);
 
-  if (classId) query = query.eq('class_id', classId);
+  const safeClassId = toUuidOrNull(classId) || classId;
+  if (safeClassId) query = query.eq('class_id', safeClassId);
   if (date) query = query.eq('date', date);
 
   query = query.order('created_at', { ascending: false });
@@ -881,11 +904,12 @@ export async function recordAttendanceBatch({
 }) {
   if (!tenantId || !classId || attendanceRecords.length === 0) return [];
 
+  const safeClassId = toUuidOrNull(classId);
   const rows = attendanceRecords.map((r) => ({
     tenant_id: tenantId,
-    class_id: classId,
-    student_id: r.studentId,
-    date: date || new Date().toISOString().split('T')[0],
+    class_id: safeClassId,
+    student_id: toUuidOrNull(r.studentId),
+    date: toDateOrNull(date) || new Date().toISOString().split('T')[0],
     status: r.status || 'Hadir',
     created_at: new Date().toISOString()
   }));
@@ -917,9 +941,9 @@ export async function recordAttendanceSession({
 }) {
   const sessionRow = {
     tenant_id: tenantId,
-    academy_id: academyId && String(academyId).trim() !== '' ? academyId : null,
-    class_id: classId,
-    date: date || new Date().toISOString().split('T')[0],
+    academy_id: toUuidOrNull(academyId),
+    class_id: toUuidOrNull(classId),
+    date: toDateOrNull(date) || new Date().toISOString().split('T')[0],
     coach_attended: coachAttended,
     notes: notes || '',
     students_data: recordsPayload || [],
@@ -1015,7 +1039,9 @@ const supabaseAcademyService = {
   getAttendance,
   recordAttendanceBatch,
   recordAttendanceSession,
-  deleteAttendanceSession
+  deleteAttendanceSession,
+  toUuidOrNull,
+  toDateOrNull
 };
 
 export default supabaseAcademyService;
