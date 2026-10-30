@@ -456,12 +456,14 @@ export default function OnboardingPage({ userProfile, onTenantCreated }) {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
+              <label htmlFor="arenaName" className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
                 Nama GOR / Sports Arena <span className="text-blue-600">*</span>
               </label>
               <div className="relative">
                 <Building2 className="w-4 h-4 text-gray-400 absolute left-3.5 top-3.5" />
                 <input
+                  id="arenaName"
+                  name="arenaName"
                   type="text"
                   required
                   value={arenaName}
@@ -473,12 +475,14 @@ export default function OnboardingPage({ userProfile, onTenantCreated }) {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
+              <label htmlFor="phone" className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
                 No. WhatsApp Operasional <span className="text-blue-600">*</span>
               </label>
               <div className="relative">
                 <Phone className="w-4 h-4 text-gray-400 absolute left-3.5 top-3.5" />
                 <input
+                  id="phone"
+                  name="phone"
                   type="tel"
                   required
                   value={phone}
@@ -503,10 +507,12 @@ export default function OnboardingPage({ userProfile, onTenantCreated }) {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {/* Provinsi */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                <label htmlFor="province" className="block text-xs font-bold text-gray-700 uppercase mb-1">
                   Provinsi <span className="text-blue-600">*</span>
                 </label>
                 <select
+                  id="province"
+                  name="province"
                   value={selectedProvince?.id || ''}
                   onChange={handleProvinceChange}
                   disabled={loadingProvinces}
@@ -523,10 +529,12 @@ export default function OnboardingPage({ userProfile, onTenantCreated }) {
 
               {/* Kota / Kab */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                <label htmlFor="regency" className="block text-xs font-bold text-gray-700 uppercase mb-1">
                   Kota / Kabupaten <span className="text-blue-600">*</span>
                 </label>
                 <select
+                  id="regency"
+                  name="regency"
                   value={selectedRegency?.id || ''}
                   onChange={handleRegencyChange}
                   disabled={!selectedProvince || loadingRegencies}
@@ -549,10 +557,12 @@ export default function OnboardingPage({ userProfile, onTenantCreated }) {
 
               {/* Kecamatan */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                <label htmlFor="district" className="block text-xs font-bold text-gray-700 uppercase mb-1">
                   Kecamatan <span className="text-blue-600">*</span>
                 </label>
                 <select
+                  id="district"
+                  name="district"
                   value={selectedDistrict?.id || ''}
                   onChange={handleDistrictChange}
                   disabled={!selectedRegency || loadingDistricts}
@@ -575,10 +585,12 @@ export default function OnboardingPage({ userProfile, onTenantCreated }) {
 
               {/* Kelurahan */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                <label htmlFor="village" className="block text-xs font-bold text-gray-700 uppercase mb-1">
                   Kelurahan / Desa <span className="text-blue-600">*</span>
                 </label>
                 <select
+                  id="village"
+                  name="village"
                   value={selectedVillage?.id || ''}
                   onChange={handleVillageChange}
                   disabled={!selectedDistrict || loadingVillages}
@@ -602,10 +614,12 @@ export default function OnboardingPage({ userProfile, onTenantCreated }) {
 
             {/* Alamat Jalan Lengkap */}
             <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+              <label htmlFor="addressDetail" className="block text-xs font-bold text-gray-700 uppercase mb-1">
                 Alamat Jalan &amp; Patokan Lengkap <span className="text-blue-600">*</span>
               </label>
               <textarea
+                id="addressDetail"
+                name="addressDetail"
                 rows={2}
                 required
                 value={addressDetail}
@@ -656,6 +670,8 @@ export default function OnboardingPage({ userProfile, onTenantCreated }) {
             {/* Custom Sport Input */}
             <div className="flex items-center space-x-2">
               <input
+                id="customSportInput"
+                name="customSportInput"
                 type="text"
                 value={customSportInput}
                 onChange={(e) => setCustomSportInput(e.target.value)}

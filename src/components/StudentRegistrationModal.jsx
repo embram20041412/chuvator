@@ -164,7 +164,7 @@ export default function StudentRegistrationModal({
       setSchoolOrigin(studentToEdit.schoolOrigin || '');
       setParentName(studentToEdit.parentName || '');
       setParentPhone(studentToEdit.parentPhone || '');
-      setSportCategory(studentToEdit.sportCategory || uniqueSports[0] || 'Badminton');
+      setSportCategory(studentToEdit.sportCategory || (Array.isArray(uniqueSports) && uniqueSports.length > 0 ? uniqueSports[0] : 'Badminton'));
       setStudentClassId(studentToEdit.classId || '');
       setJoinDate(studentToEdit.joinDate || new Date().toISOString().split('T')[0]);
       setMonthlyFee(studentToEdit.monthlyFee ? String(studentToEdit.monthlyFee) : '');
@@ -177,14 +177,14 @@ export default function StudentRegistrationModal({
       setPhotoPreview(studentToEdit.photoUrl || '');
       setPhotoFile(null);
     } else if (!studentToEdit && isOpen) {
-      // Reset form
+      // Reset form ONLY when opening modal
       setStudentName('');
       setBirthDate('');
       setNikKk('');
       setSchoolOrigin('');
       setParentName('');
       setParentPhone('');
-      setSportCategory(uniqueSports[0] || 'Badminton');
+      setSportCategory(Array.isArray(uniqueSports) && uniqueSports.length > 0 ? uniqueSports[0] : 'Badminton');
       setStudentClassId('');
       setJoinDate(new Date().toISOString().split('T')[0]);
       setAddressDetail('');
@@ -196,7 +196,7 @@ export default function StudentRegistrationModal({
       setPhotoFile(null);
       setErrorMsg(null);
     }
-  }, [studentToEdit, isOpen, uniqueSports]);
+  }, [studentToEdit?.id, isOpen]);
 
   // Fetch Provinces from Emsifa API
   useEffect(() => {
@@ -560,12 +560,14 @@ export default function StudentRegistrationModal({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                  <label htmlFor="studentName" className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
                     Nama Lengkap Siswa <span className="text-[#C89D32]">*</span>
                   </label>
                   <div className="relative">
                     <User className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
                     <input
+                      id="studentName"
+                      name="studentName"
                       type="text"
                       required
                       value={studentName}
@@ -578,7 +580,7 @@ export default function StudentRegistrationModal({
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
-                    <label className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">
+                    <label htmlFor="birthDate" className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">
                       Tanggal Lahir Siswa <span className="text-[#C89D32]">*</span>
                     </label>
                     {studentAge > 0 && (
@@ -595,6 +597,8 @@ export default function StudentRegistrationModal({
                   <div className="relative">
                     <Calendar className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
                     <input
+                      id="birthDate"
+                      name="birthDate"
                       type="date"
                       required
                       value={birthDate}
@@ -605,12 +609,14 @@ export default function StudentRegistrationModal({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                  <label htmlFor="nikKk" className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
                     No. Induk Kependudukan (NIK) / No. KK
                   </label>
                   <div className="relative">
                     <FileText className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
                     <input
+                      id="nikKk"
+                      name="nikKk"
                       type="text"
                       value={nikKk}
                       onChange={(e) => setNikKk(e.target.value)}
@@ -621,12 +627,14 @@ export default function StudentRegistrationModal({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                  <label htmlFor="schoolOrigin" className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
                     Asal Sekolah
                   </label>
                   <div className="relative">
                     <School className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
                     <input
+                      id="schoolOrigin"
+                      name="schoolOrigin"
                       type="text"
                       value={schoolOrigin}
                       onChange={(e) => setSchoolOrigin(e.target.value)}
@@ -662,10 +670,12 @@ export default function StudentRegistrationModal({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                    <label htmlFor="parentName" className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
                       Nama Wali / Ortu
                     </label>
                     <input
+                      id="parentName"
+                      name="parentName"
                       type="text"
                       value={parentName}
                       onChange={(e) => setParentName(e.target.value)}
@@ -675,12 +685,14 @@ export default function StudentRegistrationModal({
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                    <label htmlFor="parentPhone" className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
                       WhatsApp Ortu
                     </label>
                     <div className="relative">
                       <Phone className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
                       <input
+                        id="parentPhone"
+                        name="parentPhone"
                         type="tel"
                         value={parentPhone}
                         onChange={(e) => setParentPhone(e.target.value)}
@@ -694,12 +706,14 @@ export default function StudentRegistrationModal({
                 {/* DROPDOWN RELASI KELAS DENGAN SMART AGE FILTER */}
                 <div>
                   <div className="flex items-center justify-between mb-1 flex-wrap gap-1">
-                    <label className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">
+                    <label htmlFor="studentClassId" className="text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">
                       Pilih Kelas / Kelompok Latihan
                     </label>
                     {studentAge > 0 && (
                       <label className="flex items-center gap-1.5 text-[11px] font-bold text-[#354944] dark:text-[#C89D32] cursor-pointer">
                         <input
+                          id="onlyAgeAppropriate"
+                          name="onlyAgeAppropriate"
                           type="checkbox"
                           checked={onlyAgeAppropriate}
                           onChange={(e) => setOnlyAgeAppropriate(e.target.checked)}
@@ -711,6 +725,8 @@ export default function StudentRegistrationModal({
                   </div>
 
                   <select
+                    id="studentClassId"
+                    name="studentClassId"
                     value={studentClassId}
                     onChange={(e) => handleClassSelectionChange(e.target.value)}
                     className="w-full px-3.5 py-2 text-xs bg-gray-50 dark:bg-[#1a2925] border border-gray-200 dark:border-white/10 rounded-xl focus:bg-white dark:focus:bg-[#162320] focus:outline-none focus:border-[#354944] focus:ring-1 focus:ring-[#354944] font-bold text-slate-800 dark:text-slate-100 cursor-pointer"
@@ -755,10 +771,12 @@ export default function StudentRegistrationModal({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                    <label htmlFor="studentSportCategory" className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
                       Cabang Olahraga <span className="text-[#C89D32]">*</span>
                     </label>
                     <select
+                      id="studentSportCategory"
+                      name="studentSportCategory"
                       value={sportCategory}
                       onChange={(e) => setSportCategory(e.target.value)}
                       className="w-full px-3.5 py-2 text-xs bg-gray-50 dark:bg-[#1a2925] border border-gray-200 dark:border-white/10 rounded-xl focus:bg-white dark:focus:bg-[#162320] focus:outline-none focus:border-[#354944] focus:ring-1 focus:ring-[#354944] font-bold text-slate-800 dark:text-slate-100"
@@ -776,10 +794,12 @@ export default function StudentRegistrationModal({
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                    <label htmlFor="joinDate" className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
                       Tgl Bergabung <span className="text-[#C89D32]">*</span>
                     </label>
                     <input
+                      id="joinDate"
+                      name="joinDate"
                       type="date"
                       required
                       value={joinDate}
@@ -792,7 +812,7 @@ export default function StudentRegistrationModal({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">
+                      <label htmlFor="studentMonthlyFee" className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">
                         Tarif SPP (Rp) <span className="text-[#C89D32]">*</span>
                       </label>
                       <span className="px-1.5 py-0.5 bg-[#354944]/10 text-[#354944] dark:text-[#C89D32] text-[9px] font-extrabold rounded flex items-center gap-1 shrink-0">
@@ -802,6 +822,8 @@ export default function StudentRegistrationModal({
                     <div className="relative">
                       <span className="text-xs font-bold text-gray-400 absolute left-3 top-2">Rp</span>
                       <input
+                        id="studentMonthlyFee"
+                        name="studentMonthlyFee"
                         type="text"
                         readOnly
                         value={Number(monthlyFee || 0).toLocaleString('id-ID')}
@@ -812,7 +834,7 @@ export default function StudentRegistrationModal({
 
                   <div>
                     <div className="flex items-center justify-between mb-1">
-                      <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">
+                      <label htmlFor="studentRegistrationFee" className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase">
                         Biaya Daftar (Rp)
                       </label>
                       <span className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[9px] font-extrabold rounded flex items-center gap-1 shrink-0">
@@ -822,6 +844,8 @@ export default function StudentRegistrationModal({
                     <div className="relative">
                       <span className="text-xs font-bold text-gray-400 absolute left-3 top-2">Rp</span>
                       <input
+                        id="studentRegistrationFee"
+                        name="studentRegistrationFee"
                         type="text"
                         readOnly
                         value={Number(registrationFee || 0).toLocaleString('id-ID')}
@@ -844,10 +868,12 @@ export default function StudentRegistrationModal({
 
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                  <label htmlFor="studentProvince" className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
                     Provinsi
                   </label>
                   <select
+                    id="studentProvince"
+                    name="studentProvince"
                     value={selectedProvince?.id || ''}
                     onChange={handleProvinceChange}
                     disabled={loadingProvinces}
@@ -865,10 +891,12 @@ export default function StudentRegistrationModal({
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                  <label htmlFor="studentRegency" className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
                     Kabupaten / Kota
                   </label>
                   <select
+                    id="studentRegency"
+                    name="studentRegency"
                     value={selectedRegency?.id || ''}
                     onChange={handleRegencyChange}
                     disabled={!selectedProvince?.id || loadingRegencies}
@@ -886,10 +914,12 @@ export default function StudentRegistrationModal({
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                  <label htmlFor="studentDistrict" className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
                     Kecamatan
                   </label>
                   <select
+                    id="studentDistrict"
+                    name="studentDistrict"
                     value={selectedDistrict?.id || ''}
                     onChange={handleDistrictChange}
                     disabled={!selectedRegency?.id || loadingDistricts}
@@ -907,10 +937,12 @@ export default function StudentRegistrationModal({
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                  <label htmlFor="studentVillage" className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
                     Kelurahan / Desa
                   </label>
                   <select
+                    id="studentVillage"
+                    name="studentVillage"
                     value={selectedVillage?.id || ''}
                     onChange={handleVillageChange}
                     disabled={!selectedDistrict?.id || loadingVillages}
@@ -929,10 +961,12 @@ export default function StudentRegistrationModal({
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                <label htmlFor="addressDetail" className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
                   Detail Alamat Rumah
                 </label>
                 <textarea
+                  id="addressDetail"
+                  name="addressDetail"
                   rows={2}
                   value={addressDetail}
                   onChange={(e) => setAddressDetail(e.target.value)}

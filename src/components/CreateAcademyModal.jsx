@@ -62,6 +62,15 @@ export default function CreateAcademyModal({ isOpen, onClose, userProfile, onAca
     setSport(quick.sport);
   };
 
+  // Reset form when modal opens
+  useEffect(() => {
+    if (isOpen) {
+      setName('');
+      setDescription('');
+      setErrorMsg(null);
+    }
+  }, [isOpen]);
+
   // Sync specific sport dropdown when sport category changes
   useEffect(() => {
     const catObj = sportCategoryOptions.find((c) => c.id === category);
@@ -181,10 +190,12 @@ export default function CreateAcademyModal({ isOpen, onClose, userProfile, onAca
 
           {/* Input 1: Nama Akademi */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+            <label htmlFor="academyName" className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
               Nama Akademi <span className="text-rose-500">*</span>
             </label>
             <input
+              id="academyName"
+              name="academyName"
               type="text"
               required
               value={name}
@@ -196,11 +207,13 @@ export default function CreateAcademyModal({ isOpen, onClose, userProfile, onAca
 
           {/* Input 2: Kategori Olahraga */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+            <label htmlFor="academyCategory" className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5 flex items-center justify-between">
               <span>Kategori Olahraga <span className="text-rose-500">*</span></span>
               <span className="text-[10px] text-[#354944] dark:text-[#C89D32] font-extrabold normal-case">Kelompok Format</span>
             </label>
             <select
+              id="academyCategory"
+              name="academyCategory"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
               className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-[#354944] focus:border-[#354944] transition-all cursor-pointer"
@@ -215,13 +228,15 @@ export default function CreateAcademyModal({ isOpen, onClose, userProfile, onAca
 
           {/* Input 3: Cabang Olahraga Spesifik (Dinamis berdasarkan Kategori) */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+            <label htmlFor="academySport" className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5 flex items-center justify-between">
               <span>Cabang Olahraga Spesifik <span className="text-rose-500">*</span></span>
               <span className="text-[10px] text-[#354944] dark:text-[#C89D32] font-extrabold normal-case">
                 Tersinkron ke Profil: <strong>{sport}</strong>
               </span>
             </label>
             <select
+              id="academySport"
+              name="academySport"
               value={sport}
               onChange={(e) => setSport(e.target.value)}
               className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-900 dark:text-slate-100 focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-[#354944] focus:border-[#354944] transition-all cursor-pointer"
@@ -236,10 +251,12 @@ export default function CreateAcademyModal({ isOpen, onClose, userProfile, onAca
 
           {/* Input 4: Deskripsi Singkat */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
+            <label htmlFor="academyDescription" className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider mb-1.5">
               Deskripsi Singkat <span className="text-slate-400 font-normal">(Opsional)</span>
             </label>
             <textarea
+              id="academyDescription"
+              name="academyDescription"
               rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}

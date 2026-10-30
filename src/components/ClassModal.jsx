@@ -44,7 +44,7 @@ export default function ClassModal({
     if (isTennisSport(null, activeAcademy)) return 'Tenis';
     if (Array.isArray(uniqueSports) && uniqueSports.length > 0) return uniqueSports[0];
     return 'Tenis'; // Fallback aman
-  }, [activeAcademy, uniqueSports]);
+  }, [activeAcademy?.sport, uniqueSports?.length, uniqueSports?.[0]]);
 
   // Dual data fetch: Use props if available, fallback to internal useArenaData hook
   const arenaData = useArenaData(userProfile);
@@ -83,7 +83,7 @@ export default function ClassModal({
       if (!list.includes(s)) list.push(s);
     });
     return list;
-  }, [inheritedSport, activeAcademy?.sport, uniqueSports]);
+  }, [inheritedSport, activeAcademy?.sport, uniqueSports?.length]);
 
   // Tiers yang relevan dengan cabang olahraga yang dipilih
   const currentTiers = useMemo(() => getTiersForSport(sport), [sport]);
@@ -114,7 +114,7 @@ export default function ClassModal({
         setClassName(getSuggestedClassName(sport, defaultTier));
       }
     }
-  }, [sport, isOpen, currentTiers]);
+  }, [sport, isOpen]);
 
   // Handler pergantian Tier / Kelompok Umur
   const handleTierChange = (newCode) => {

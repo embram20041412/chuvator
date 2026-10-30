@@ -53,12 +53,12 @@ export default function SppPaymentModal({
 
   // Reset/sync checkbox states when student changes or modal opens
   useEffect(() => {
-    if (student) {
+    if (student && isOpen) {
       setPayRegistrationFee(!isRegistrationFeeAlreadyPaid && regFeeAmount > 0);
       setPaySppFee(true);
       setErrorMsg(null);
     }
-  }, [student, isRegistrationFeeAlreadyPaid, regFeeAmount]);
+  }, [student?.id, isOpen]);
 
   if (!isOpen || !student) return null;
 

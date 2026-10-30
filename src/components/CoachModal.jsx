@@ -95,7 +95,7 @@ export default function CoachModal({
       setAddressDetail('');
       setErrorMsg(null);
     }
-  }, [coachToEdit, isOpen, uniqueSports]);
+  }, [coachToEdit?.id, isOpen]);
 
   // Fetch Provinces from Emsifa API
   useEffect(() => {
@@ -414,12 +414,14 @@ export default function CoachModal({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                  <label htmlFor="coachName" className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
                     Nama Lengkap Pelatih <span className="text-[#C89D32]">*</span>
                   </label>
                   <div className="relative">
                     <User className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
                     <input
+                      id="coachName"
+                      name="coachName"
                       type="text"
                       required
                       value={coachName}
@@ -431,10 +433,12 @@ export default function CoachModal({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                  <label htmlFor="nickname" className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
                     Nama Panggilan
                   </label>
                   <input
+                    id="nickname"
+                    name="nickname"
                     type="text"
                     value={nickname}
                     onChange={(e) => setNickname(e.target.value)}
@@ -444,12 +448,14 @@ export default function CoachModal({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                  <label htmlFor="nik" className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
                     Nomor KTP (NIK)
                   </label>
                   <div className="relative">
                     <FileText className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
                     <input
+                      id="nik"
+                      name="nik"
                       type="text"
                       maxLength={16}
                       value={nik}
@@ -461,12 +467,14 @@ export default function CoachModal({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                  <label htmlFor="coachPhone" className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
                     Nomor WhatsApp <span className="text-[#C89D32]">*</span>
                   </label>
                   <div className="relative">
                     <Phone className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
                     <input
+                      id="coachPhone"
+                      name="coachPhone"
                       type="tel"
                       required
                       value={coachPhone}
@@ -479,10 +487,12 @@ export default function CoachModal({
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                    <label htmlFor="sportSpecialty" className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
                       Cabang Olahraga
                     </label>
                     <select
+                      id="sportSpecialty"
+                      name="sportSpecialty"
                       value={sportSpecialty}
                       onChange={(e) => setSportSpecialty(e.target.value)}
                       className="w-full px-3 py-2 text-xs bg-gray-50 dark:bg-[#1a2925] border border-gray-200 dark:border-white/10 rounded-xl focus:bg-white dark:focus:bg-[#162320] focus:outline-none focus:border-[#354944] focus:ring-1 focus:ring-[#354944] font-bold text-slate-800 dark:text-slate-100"
@@ -498,12 +508,14 @@ export default function CoachModal({
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                    <label htmlFor="license" className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
                       Lisensi / Sertifikasi
                     </label>
                     <div className="relative">
                       <Award className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
                       <input
+                        id="license"
+                        name="license"
                         type="text"
                         value={license}
                         onChange={(e) => setLicense(e.target.value)}
@@ -526,8 +538,10 @@ export default function CoachModal({
 
                 <div className="space-y-2.5">
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Provinsi</label>
+                    <label htmlFor="province" className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Provinsi</label>
                     <select
+                      id="province"
+                      name="province"
                       value={selectedProvince?.id || ''}
                       onChange={handleProvinceChange}
                       disabled={loadingProvinces}
@@ -543,8 +557,10 @@ export default function CoachModal({
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Kabupaten / Kota</label>
+                    <label htmlFor="regency" className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Kabupaten / Kota</label>
                     <select
+                      id="regency"
+                      name="regency"
                       value={selectedRegency?.id || ''}
                       onChange={handleRegencyChange}
                       disabled={!selectedProvince?.id || loadingRegencies}
@@ -560,8 +576,10 @@ export default function CoachModal({
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Kecamatan</label>
+                    <label htmlFor="district" className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Kecamatan</label>
                     <select
+                      id="district"
+                      name="district"
                       value={selectedDistrict?.id || ''}
                       onChange={handleDistrictChange}
                       disabled={!selectedRegency?.id || loadingDistricts}
@@ -577,8 +595,10 @@ export default function CoachModal({
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Kelurahan / Desa</label>
+                    <label htmlFor="village" className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Kelurahan / Desa</label>
                     <select
+                      id="village"
+                      name="village"
                       value={selectedVillage?.id || ''}
                       onChange={handleVillageChange}
                       disabled={!selectedDistrict?.id || loadingVillages}
@@ -594,8 +614,10 @@ export default function CoachModal({
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Detail Alamat Rumah</label>
+                    <label htmlFor="addressDetail" className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">Detail Alamat Rumah</label>
                     <textarea
+                      id="addressDetail"
+                      name="addressDetail"
                       rows={2}
                       value={addressDetail}
                       onChange={(e) => setAddressDetail(e.target.value)}
