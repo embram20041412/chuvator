@@ -626,7 +626,7 @@ export async function getAcademies(tenantId) {
       tenantId: a.tenant_id,
       name: a.name,
       category: a.category || 'racket',
-      sport: a.sport || 'Badminton',
+      sport: a.sport || '',
       description: a.description || ''
     }));
   } catch {
@@ -642,7 +642,7 @@ export async function createAcademy({ tenantId, name, category, sport, descripti
         tenant_id: tenantId,
         name,
         category: category || 'racket',
-        sport: sport || 'Badminton',
+        sport: sport || '',
         description: description || ''
       }])
       .select()
@@ -664,7 +664,7 @@ export async function createAcademy({ tenantId, name, category, sport, descripti
       tenantId,
       name,
       category: category || 'racket',
-      sport: sport || 'Badminton',
+      sport: sport || '',
       description: description || ''
     };
   }

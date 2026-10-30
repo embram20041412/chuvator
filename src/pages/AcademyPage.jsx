@@ -268,7 +268,7 @@ export default function AcademyPage({ userProfile }) {
         }
       });
     }
-  }, [activeAcademy, academyClasses, isCurrentAcademyTennis]);
+  }, [activeAcademyId, isCurrentAcademyTennis, academyClasses.length]);
 
   const filteredStudents = activeStudents;
   const filteredCoaches = activeCoaches;
@@ -315,10 +315,10 @@ export default function AcademyPage({ userProfile }) {
       if (!isValidInCurrentAcademy) {
         setSelectedClassId(activeClasses[0].id);
       }
-    } else {
+    } else if (selectedClassId !== '') {
       setSelectedClassId('');
     }
-  }, [activeAcademyId, activeClasses, selectedClassId]);
+  }, [activeAcademyId, activeClasses.length, selectedClassId]);
 
   const [loadingStudents, setLoadingStudents] = useState(true);
   const [loadingCoaches, setLoadingCoaches] = useState(true);
@@ -379,8 +379,10 @@ export default function AcademyPage({ userProfile }) {
   }, [tenantId]);
 
   // SINGLE ASYNCHRONOUS DATA FETCHER: Promise.all to Supabase
+  const isFetchingRef = React.useRef(false);
+
   const fetchAcademyData = useCallback(async () => {
-    if (!tenantId) {
+    if (!tenantId || isFetchingRef.current) {
       setLoadingStudents(false);
       setLoadingCoaches(false);
       setLoadingClasses(false);
@@ -388,6 +390,7 @@ export default function AcademyPage({ userProfile }) {
       return;
     }
 
+    isFetchingRef.current = true;
     setLoadingStudents(true);
     setLoadingCoaches(true);
     setLoadingClasses(true);
@@ -410,36 +413,32 @@ export default function AcademyPage({ userProfile }) {
         const storedId = localStorage.getItem('activeAcademyId');
         const found = academiesData.find((a) => a.id === storedId);
         if (found) {
-          setActiveAcademyId(found.id);
+          setActiveAcademyId((prevId) => (prevId === found.id ? prevId : found.id));
         } else {
-          setActiveAcademyId(academiesData[0].id);
-          localStorage.setItem('activeAcademyId', academiesData[0].id);
+          const firstId = academiesData[0].id;
+          setActiveAcademyId((prevId) => (prevId === firstId ? prevId : firstId));
+          localStorage.setItem('activeAcademyId', firstId);
         }
       } else {
-        const defaultAcademy = {
-          id: 'default_academy',
-          tenantId,
-          name: arenaName ? `Akademi ${arenaName}` : 'Akademi Utama',
-          sport: uniqueSports[0] || 'Badminton',
-          category: 'racket',
-          description: 'Akademi Olahraga Terintegrasi'
-        };
-        setAcademies([defaultAcademy]);
-        setActiveAcademyId(defaultAcademy.id);
+        setAcademies([]);
+        setActiveAcademyId('');
       }
     } catch (err) {
       console.error('[Supabase fetchAcademyData Error]:', err);
     } finally {
+      isFetchingRef.current = false;
       setLoadingStudents(false);
       setLoadingCoaches(false);
       setLoadingClasses(false);
       setLoadingAcademies(false);
     }
-  }, [tenantId, arenaName, uniqueSports]);
+  }, [tenantId]);
 
   useEffect(() => {
-    fetchAcademyData();
-  }, [fetchAcademyData]);
+    if (tenantId) {
+      fetchAcademyData();
+    }
+  }, [tenantId, fetchAcademyData]);
 
   // Keep newAcademySport synced with newAcademyCategory
   useEffect(() => {
@@ -493,7 +492,7 @@ export default function AcademyPage({ userProfile }) {
     if (uniqueSports.length > 0 && (!sportCategory || !uniqueSports.includes(sportCategory))) {
       setSportCategory(uniqueSports[0]);
     }
-  }, [uniqueSports, sportCategory]);
+  }, [uniqueSports.length, sportCategory]);
 
   // Fetch Provinces from Emsifa API when Student Modal opens
   useEffect(() => {
