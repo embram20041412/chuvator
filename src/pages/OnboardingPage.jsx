@@ -349,17 +349,16 @@ export default function OnboardingPage({ userProfile, onTenantCreated }) {
       const tenantPayload = {
         name: arenaName.trim(),
         phone: phone.trim(),
-        ownerName: ownerName || user.user_metadata?.full_name || user.email?.split('@')[0] || 'Owner',
         address: fullAddressString,
         province: selectedProvince.name,
         regency: selectedRegency.name,
         district: selectedDistrict.name,
         village: selectedVillage.name,
-        sportsType: sportsSummaryList,
-        courtsCount: totalCourtsCount,
-        ownerEmail: user.email,
-        ownerUid: user.id, // Injeksi UID otentikasi agar tidak null
-        status: 'active'
+        sports_type: sportsSummaryList,
+        courts_count: totalCourtsCount,
+        owner_name: ownerName || user.user_metadata?.full_name || user.email?.split('@')[0] || 'Owner',
+        owner_email: user.email,
+        owner_uid: user.id // Injeksi UID otentikasi agar tidak null
       };
 
       // 1. Create Tenant in Supabase

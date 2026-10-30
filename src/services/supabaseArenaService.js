@@ -252,55 +252,40 @@ export async function updateTenantProfile(tenantId, payload) {
 }
 
 export async function createTenant(payload) {
-  let ownerUid = payload.ownerUid || payload.owner_uid || null;
-  let ownerEmail = payload.ownerEmail || payload.owner_email || '';
-
-  if (!ownerUid) {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
-        ownerUid = user.id;
-        if (!ownerEmail) ownerEmail = user.email || '';
-      }
-    } catch (authErr) {
-      console.warn('Could not retrieve current user in createTenant:', authErr);
-    }
+  // 1. Sebelum melakukan .insert('tenants', payload), pastikan fungsi mengambil data user aktif:
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) {
+    payload.owner_uid = user.id; // Pastikan owner_uid terisi ID user yang sedang login
   }
 
-  const dbPayload = {
+  const ownerUid = payload.owner_uid || payload.ownerUid || user?.id || null;
+  const ownerEmail = payload.owner_email || payload.ownerEmail || user?.email || '';
+
+  if (!ownerUid) {
+    throw new Error('Sesi tidak valid. Pengguna harus login sebelum mengaktifkan GOR.');
+  }
+
+  // 2. Bersihkan payload dari kolom tambahan yang belum ada di tabel tenants Supabase
+  // (seperti bank_account_number, bank_account_name, receipt_footer_note, dll).
+  // Hanya sertakan kolom-kolom inti yang valid di tabel tenants:
+  const tenantPayload = {
     name: (payload.name || '').trim(),
     phone: (payload.phone || '').trim(),
-    owner_name: payload.ownerName || payload.owner_name || '',
-    owner_email: ownerEmail,
-    owner_uid: ownerUid,
     address: payload.address || '',
     province: payload.province || '',
     regency: payload.regency || '',
     district: payload.district || '',
     village: payload.village || '',
-    sports_type: payload.sportsType || payload.sports_type || '',
-    courts_count: payload.courtsCount || payload.courts_count || 0,
-    logo_url: payload.logoUrl || payload.logo_url || null,
-    bank_name: payload.bankName || payload.bank_name || '',
-    bank_account_number: payload.bankAccountNumber || payload.bank_account_number || '',
-    bank_account_name: payload.bankAccountName || payload.bank_account_name || '',
-    bank_accounts: payload.bankAccounts || payload.bank_accounts || [],
-    qris_url: payload.qrisUrl || payload.qris_url || null,
-    qris_image_base64: payload.qrisImageBase64 || payload.qris_image_base64 || payload.qrisUrl || null,
-    spp_billing_start_day: payload.sppBillingStartDay || payload.spp_billing_start_day || 1,
-    spp_due_day: payload.sppDueDay || payload.spp_due_day || 10,
-    receipt_header_name: payload.receiptHeaderName || payload.receipt_header_name || payload.name || '',
-    receipt_address: payload.receiptAddress || payload.receipt_address || payload.address || '',
-    receipt_contact: payload.receiptContact || payload.receipt_contact || payload.phone || '',
-    receipt_footer_text: payload.receiptFooterText || payload.receipt_footer_text || payload.receiptFooterNote || '',
-    receipt_footer_note: payload.receiptFooterNote || payload.receipt_footer_note || payload.receiptFooterText || '',
-    academy_pricing: payload.academyPricing || payload.academy_pricing || {},
-    created_at: new Date().toISOString()
+    sports_type: payload.sports_type || payload.sportsType || '',
+    courts_count: Number(payload.courts_count ?? payload.courtsCount ?? 0),
+    owner_name: payload.owner_name || payload.ownerName || (user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Owner'),
+    owner_email: ownerEmail,
+    owner_uid: ownerUid
   };
 
   const { data, error } = await supabase
     .from('tenants')
-    .insert([dbPayload])
+    .insert([tenantPayload])
     .select()
     .single();
 
