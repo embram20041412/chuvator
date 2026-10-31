@@ -101,9 +101,10 @@ export default function App() {
   // Helper untuk menentukan halaman tujuan berdasarkan role
   const getHomeRouteForRole = (profile) => {
     if (!profile) return '/login';
-    if (profile.role === 'superadmin') return '/saas-admin';
-    if (profile.role === 'pelatih') return '/akademi';
-    if (profile.role === 'owner' && !profile.tenant) return '/onboarding';
+    const role = (profile.role || '').toLowerCase();
+    if (role === 'superadmin') return '/saas-admin';
+    if (role === 'pelatih' || role === 'coach') return '/akademi';
+    if (role === 'owner' && !profile.tenant) return '/onboarding';
     return '/dashboard'; // default for owner & admin
   };
 
@@ -153,10 +154,10 @@ export default function App() {
               }
             />
 
-            {/* Protected Main App Layout (Owner, Admin, Pelatih) */}
+            {/* Protected Main App Layout (Owner, Admin, Pelatih, Coach) */}
             <Route
               element={
-                <ProtectedRoute userProfile={userProfile} allowedRoles={['owner', 'superadmin', 'admin', 'pelatih']}>
+                <ProtectedRoute userProfile={userProfile} allowedRoles={['owner', 'superadmin', 'admin', 'pelatih', 'coach']}>
                   <Layout userProfile={userProfile} />
                 </ProtectedRoute>
               }
@@ -164,7 +165,7 @@ export default function App() {
               <Route
                 path="/dashboard"
                 element={
-                  <ProtectedRoute userProfile={userProfile} allowedRoles={['owner', 'superadmin', 'admin']}>
+                  <ProtectedRoute userProfile={userProfile} allowedRoles={['owner', 'superadmin', 'admin', 'pelatih', 'coach']}>
                     <DashboardPage userProfile={userProfile} />
                   </ProtectedRoute>
                 }
@@ -188,7 +189,7 @@ export default function App() {
               <Route
                 path="/akademi"
                 element={
-                  <ProtectedRoute userProfile={userProfile} allowedRoles={['owner', 'superadmin', 'admin', 'pelatih']}>
+                  <ProtectedRoute userProfile={userProfile} allowedRoles={['owner', 'superadmin', 'admin', 'pelatih', 'coach']}>
                     <AkademiPage userProfile={userProfile} />
                   </ProtectedRoute>
                 }

@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import { supabase } from '../config/supabase';
 import useArenaData from '../hooks/useArenaData';
 import { 
@@ -171,6 +171,30 @@ const CustomPieTooltip = ({ active, payload }) => {
 
 export default function DashboardPage({ userProfile }) {
   const { tenantProfile, courts, bookings, transactions, isLoading } = useArenaData(userProfile);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-[70vh] bg-gray-50 dark:bg-slate-900 rounded-3xl p-8">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-teal-600 dark:border-teal-400 mx-auto mb-3"></div>
+          <p className="text-gray-600 dark:text-gray-300 text-sm font-medium">Memuat halaman dasbor...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!userProfile) {
+    return (
+      <div className="flex items-center justify-center min-h-[70vh] bg-gray-50 dark:bg-slate-900 rounded-3xl p-8">
+        <p className="text-red-500 font-medium">Sesi tidak valid atau hak akses tidak ditemukan.</p>
+      </div>
+    );
+  }
+
+  const userRole = (userProfile.role || '').toLowerCase();
+  if (userRole === 'pelatih' || userRole === 'coach') {
+    return <Navigate to="/akademi" replace />;
+  }
 
   // Time Range Filter States
   const [timeFilter, setTimeFilter] = useState('today'); // 'today', 'week', 'month', 'custom'

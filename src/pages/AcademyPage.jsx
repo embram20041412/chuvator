@@ -142,6 +142,14 @@ export function formatWhatsAppUrl(phone, studentName, arenaName) {
 }
 
 export default function AcademyPage({ userProfile }) {
+  if (!userProfile) {
+    return (
+      <div className="flex items-center justify-center min-h-[70vh] bg-gray-50 dark:bg-slate-900 rounded-3xl p-8">
+        <p className="text-red-500 font-medium">Sesi tidak valid atau hak akses tidak ditemukan.</p>
+      </div>
+    );
+  }
+
   const tenantId = userProfile?.tenant?.id || userProfile?.tenantId || userProfile?.uid;
 
   // Real-Time Arena Data
