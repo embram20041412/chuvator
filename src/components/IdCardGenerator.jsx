@@ -87,7 +87,7 @@ export default function IdCardGenerator({
         {/* Modal Header (Sticky) */}
         <div className="px-5 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/80 dark:bg-slate-900/80 shrink-0">
           <div className="flex items-center space-x-2.5">
-            <div className="w-8 h-8 rounded-xl flex items-center justify-center text-[#C89D32] bg-[#354944] border border-[#C89D32]/30 shadow-xs">
+            <div className="w-8 h-8 rounded-xl flex items-center justify-center text-[#D4AF37] bg-[#0a192f] border border-[#D4AF37]/30 shadow-xs">
               <IdCard className="w-4 h-4" />
             </div>
             <div>
@@ -114,125 +114,132 @@ export default function IdCardGenerator({
           {/* THE ID CARD ELEMENT TO BE RENDERED/DOWNLOADED */}
           <div
             ref={cardRef}
-            className="w-[265px] min-h-[440px] bg-white rounded-2xl shadow-xl overflow-hidden flex flex-col relative border border-slate-200/90 select-none text-slate-800"
+            className="w-[280px] min-h-[460px] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col relative border border-slate-200/90 select-none text-slate-800"
             style={{
               fontFamily: "'Inter', sans-serif"
             }}
           >
             {/* Lanyard Clip Slot Simulation */}
-            <div className="w-full pt-2 pb-1 flex justify-center bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-700">
-              <div className="w-11 h-1.5 rounded-full bg-slate-900/30 shadow-inner" />
+            <div className="w-full pt-2 pb-1 flex justify-center bg-[#0a192f]">
+              <div className="w-12 h-1.5 rounded-full bg-slate-950/60 border border-white/10 shadow-inner" />
             </div>
 
-            {/* Card Header (Informasi Tenant - Rata Tengah) */}
-            <div className="px-3 pt-1 pb-2.5 bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-700 text-white flex flex-col items-center text-center relative">
-              {/* Baris 1: Logo Tenant */}
+            {/* 1. Desain Header (Navy & Emas) */}
+            <div className="relative px-3 pt-1 pb-3.5 bg-[#0a192f] text-white flex flex-col items-center text-center border-b-2 border-[#D4AF37] overflow-hidden">
+              {/* Subtle geometric pattern lines */}
+              <div className="absolute inset-0 opacity-15 pointer-events-none">
+                <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
+                  <defs>
+                    <pattern id="card-geo-pattern" width="24" height="24" patternUnits="userSpaceOnUse">
+                      <path d="M 0 12 L 12 0 L 24 12 L 12 24 Z" fill="none" stroke="#D4AF37" strokeWidth="0.75" />
+                      <circle cx="12" cy="12" r="1.5" fill="#D4AF37" />
+                    </pattern>
+                  </defs>
+                  <rect width="100%" height="100%" fill="url(#card-geo-pattern)" />
+                </svg>
+              </div>
+
+              {/* Baris 1: Logo Tenant (jika ada) */}
               {finalTenantLogo ? (
                 <img
                   src={finalTenantLogo}
                   alt={finalTenantName}
                   crossOrigin="anonymous"
-                  className="w-8 h-8 object-cover rounded-md mb-1 mx-auto shadow-xs"
+                  className="w-8 h-8 object-contain rounded-md mb-1 mx-auto relative z-10 filter drop-shadow"
                 />
               ) : (
-                <div className="w-8 h-8 rounded-md bg-white/20 text-white font-black text-xs flex items-center justify-center mb-1 mx-auto border border-white/30">
-                  {finalTenantName ? finalTenantName.charAt(0).toUpperCase() : 'G'}
+                <div className="w-7 h-7 rounded-md bg-[#D4AF37]/20 text-[#D4AF37] font-black text-xs flex items-center justify-center mb-1 mx-auto border border-[#D4AF37]/40 relative z-10 shadow-xs">
+                  {finalTenantName ? finalTenantName.charAt(0).toUpperCase() : 'C'}
                 </div>
               )}
 
-              {/* Baris 2: Nama Tenant */}
-              <h4 className="text-[18px] font-bold whitespace-normal break-words leading-tight text-white">
+              {/* Baris 2: Nama GOR ("Kediri Sport Arena") - Warna Emas & Lebih Besar/Tebal */}
+              <h4 className="text-[17px] sm:text-[18px] font-black tracking-wide leading-tight text-[#D4AF37] uppercase px-1 relative z-10 drop-shadow-sm">
                 {finalTenantName}
               </h4>
 
-              {/* Baris 3: Alamat Tenant */}
+              {/* Baris 3: Alamat Tenant (Putih Murni, Center, text-xs/text-[10px]) */}
               {finalTenantAddress && (
-                <p className="text-[8px] text-white/90 whitespace-normal break-words leading-tight mt-0.5">
+                <p className="text-[10px] text-white whitespace-normal break-words leading-tight mt-1 text-center px-2 relative z-10 opacity-95">
                   {finalTenantAddress}
                 </p>
               )}
 
-              {/* Baris 4: No. Telp/WA */}
+              {/* Baris 4: No. Telp/WA (Putih Murni, Center, text-[10px]) */}
               {finalTenantPhone && (
-                <p className="text-[8px] font-semibold text-white/90">
+                <p className="text-[10px] font-medium text-white mt-0.5 text-center relative z-10 opacity-95">
                   Telp/WA: {finalTenantPhone}
                 </p>
               )}
             </div>
 
-            {/* Decorative Gold Divider / Top Accent */}
-            <div className="h-1.5 bg-gradient-to-r from-amber-400 via-amber-300 to-yellow-400 shadow-xs" />
-
-            {/* Card Middle: Profile Photo & Identification */}
-            <div className="px-3 pt-3 pb-2 flex flex-col items-center text-center bg-gradient-to-b from-blue-50/40 via-white to-white flex-1">
-              {/* Photo or Initials */}
-              <div className="relative mb-2">
+            {/* 2 & 3. Card Body: Foto Profil & Badge Posisi (Overlapping) serta Nama & Tag Identitas */}
+            <div className="px-3 pt-5 pb-3 flex flex-col items-center text-center bg-gradient-to-b from-slate-50 via-white to-white flex-1">
+              {/* Foto Profil & Badge Posisi (Overlapping) */}
+              <div className="relative mb-5">
                 {photoUrl ? (
                   <img
                     src={photoUrl}
                     alt={fullName}
                     crossOrigin="anonymous"
-                    className="w-20 h-20 rounded-full object-cover border-3 border-white shadow-md bg-white"
+                    className="w-24 h-24 rounded-full object-cover border-4 border-[#D4AF37] shadow-lg bg-white"
                   />
                 ) : (
-                  <div className={`w-20 h-20 rounded-full flex items-center justify-center text-xl font-black border-3 border-white shadow-md ${
-                    isStudent 
-                      ? 'bg-gradient-to-br from-blue-500 to-indigo-600 text-white' 
-                      : 'bg-gradient-to-br from-amber-500 to-orange-600 text-white'
-                  }`}>
+                  <div className="w-24 h-24 rounded-full flex items-center justify-center text-2xl font-black border-4 border-[#D4AF37] bg-[#0a192f] text-[#D4AF37] shadow-lg">
                     {getStudentInitials(fullName)}
                   </div>
                 )}
-                {/* Micro Role Badge on avatar bottom */}
-                <span className={`absolute -bottom-1 left-1/2 -translate-x-1/2 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider shadow-xs whitespace-nowrap ${
-                  isStudent
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-amber-500 text-slate-900 font-extrabold'
-                }`}>
-                  {role}
+                {/* Badge Posisi Overlapping Menumpuk Tepat di Bawah Tengah Foto */}
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 bg-[#D4AF37] text-black font-bold text-xs px-4 py-1 rounded-full shadow-md whitespace-nowrap tracking-wider uppercase border border-amber-200/50">
+                  {role === 'PELATIH' ? 'PELATIH' : role}
                 </span>
               </div>
 
-              {/* Nama Lengkap Siswa / Pelatih (Full wrapped, tidak terpotong) */}
-              <h3 className="text-sm font-bold text-gray-900 whitespace-normal break-words text-center px-2 mt-1">
+              {/* 3. Nama & Tag Identitas */}
+              {/* Teks Nama Pelatih (Warna dark navy #0a192f, font-bold, text-xl) */}
+              <h3 className="text-[#0a192f] font-bold text-xl leading-snug whitespace-normal break-words text-center px-2 mt-1">
                 {fullName}
               </h3>
 
-              {/* Sub-info (Cabang Olahraga & Kelas/Lisensi) */}
-              <div className="flex items-center justify-center gap-1.5 mt-1 flex-wrap">
-                <span className="px-2 py-0.5 rounded-md bg-blue-100/80 text-blue-800 text-[10px] font-bold">
+              {/* Tag Kategori: Olahraga (bg-blue-100 text-blue-900) & Lisensi (bg-slate-200 text-slate-600) */}
+              <div className="flex items-center justify-center gap-1.5 mt-2 flex-wrap">
+                <span className="px-3 py-0.5 rounded-full bg-blue-100 text-blue-900 text-xs font-bold shadow-2xs">
                   {sport}
                 </span>
                 {subInfo && (
-                  <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 text-[10px] font-medium break-words max-w-[150px]">
+                  <span className="px-3 py-0.5 rounded-full bg-slate-200 text-slate-600 text-xs font-semibold break-words max-w-[160px] shadow-2xs">
                     {subInfo}
                   </span>
                 )}
               </div>
 
-              {/* QR Code Section */}
-              <div className="mt-auto pt-2 pb-1 flex flex-col items-center">
-                <div className="p-1.5 bg-white rounded-lg border border-slate-200/90 shadow-2xs">
+              {/* 4. QR Code & ID Transaksi */}
+              <div className="mt-auto pt-3 pb-1 flex flex-col items-center">
+                <div className="p-2 bg-white rounded-xl border border-slate-200/90 shadow-sm">
                   <QRCode
                     value={documentId}
-                    size={72}
+                    size={76}
                     level="M"
                   />
                 </div>
-                {/* Document ID Text explicitly beneath the QR Code */}
-                <p className="text-[9px] font-mono font-semibold text-slate-500 mt-1 tracking-wider">
-                  ID: <span className="text-slate-700">{documentId}</span>
+                {/* Teks UID/ID Pelatih berukuran kecil di bawah QR Code persis: ID: ... font-mono text-[10px] text-slate-800 font-semibold */}
+                <p className="font-mono text-[10px] text-slate-800 font-semibold mt-1 tracking-wider text-center">
+                  ID: {documentId}
                 </p>
               </div>
             </div>
 
-            {/* Card Footer Stripe */}
-            <div className="px-3 py-1.5 bg-slate-900 text-[8px] text-slate-300 font-bold uppercase tracking-widest flex items-center justify-between">
-              <span className="flex items-center gap-1">
-                <ShieldCheck className="w-2.5 h-2.5 text-blue-400" />
-                <span>OFFICIAL PASS</span>
+            {/* 5. Desain Footer (Navy & Emas) */}
+            <div className="bg-[#0a192f] rounded-b-xl border-t border-[#D4AF37]/30 flex justify-between items-center px-4 py-3 select-none">
+              <div className="flex items-center gap-1.5 text-[#D4AF37]">
+                <ShieldCheck className="w-4 h-4 text-[#D4AF37]" />
+                <span className="text-[10px] sm:text-[11px] font-bold tracking-wider uppercase">
+                  OFFICIAL PASS
+                </span>
+              </div>
+              <span className="text-[#D4AF37] text-[10px] sm:text-[11px] font-extrabold tracking-widest uppercase">
+                CHUA CORE
               </span>
-              <span className="text-slate-400 font-medium">CHUA CORE</span>
             </div>
           </div>
 
@@ -262,7 +269,7 @@ export default function IdCardGenerator({
             type="button"
             disabled={isDownloading}
             onClick={handleDownload}
-            className="inline-flex items-center space-x-1.5 px-5 py-2.5 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer"
+            className="inline-flex items-center space-x-1.5 px-5 py-2.5 bg-[#0a192f] hover:bg-[#122849] border-b-2 border-[#D4AF37] disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer"
           >
             {isDownloading ? (
               <>
@@ -271,7 +278,7 @@ export default function IdCardGenerator({
               </>
             ) : (
               <>
-                <Download className="w-4 h-4 text-[#C89D32]" />
+                <Download className="w-4 h-4 text-[#D4AF37]" />
                 <span>Download Kartu (PNG)</span>
               </>
             )}
