@@ -1,10 +1,9 @@
 import { useState, useEffect } from 'react';
-import { onIdTokenChanged } from 'firebase/auth';
-import { auth } from '../firebase';
+import { supabase } from '../config/supabase';
 
 /**
- * Custom Hook untuk membaca peran pengguna (Role) dan Tenant ID dari Firebase Auth Custom Claims.
- * Format claims: { role: 'owner' | 'kasir' | 'pelatih', tenantId: string }
+ * Custom Hook untuk membaca peran pengguna (Role) dan Tenant ID dari Supabase Auth & userProfile.
+ * Format role: 'superadmin' | 'owner' | 'admin' | 'kasir' | 'pelatih'
  */
 export default function useAuthRole(userProfile) {
   const [role, setRole] = useState(userProfile?.role || null);
@@ -17,8 +16,8 @@ export default function useAuthRole(userProfile) {
   useEffect(() => {
     let isMounted = true;
 
-    const inspectUserClaims = async (currentUser) => {
-      if (!currentUser) {
+    const inspectSupabaseUser = async (user) => {
+      if (!user) {
         if (isMounted) {
           setRole(userProfile?.role || null);
           setTenantId(userProfile?.tenantId || userProfile?.tenant?.id || null);
@@ -29,29 +28,25 @@ export default function useAuthRole(userProfile) {
       }
 
       try {
-        // Ambil token result terkini dengan forceRefresh false untuk kecepatan, 
-        // fallback refresh jika diperlukan
-        const idTokenResult = await currentUser.getIdTokenResult();
-        const userClaims = idTokenResult?.claims || {};
-
+        const metadata = user.user_metadata || {};
         if (isMounted) {
-          setClaims(userClaims);
-          // Prioritaskan custom claims role jika ada, lalu fallback ke userProfile.role
-          const resolvedRole = userClaims.role || userProfile?.role || 'owner';
+          setClaims(metadata);
+          const resolvedRole = userProfile?.role || metadata.role || 'owner';
           const resolvedTenantId =
-            userClaims.tenantId ||
             userProfile?.tenantId ||
             userProfile?.tenant?.id ||
-            currentUser.uid;
+            metadata.tenant_id ||
+            metadata.tenantId ||
+            user.id;
 
           setRole(resolvedRole);
           setTenantId(resolvedTenantId);
         }
       } catch (err) {
-        console.error('Error in useAuthRole getIdTokenResult:', err);
+        console.error('Error in useAuthRole inspectSupabaseUser:', err);
         if (isMounted) {
           setRole(userProfile?.role || 'owner');
-          setTenantId(userProfile?.tenantId || userProfile?.tenant?.id || currentUser.uid);
+          setTenantId(userProfile?.tenantId || userProfile?.tenant?.id || user.id);
         }
       } finally {
         if (isMounted) {
@@ -60,14 +55,19 @@ export default function useAuthRole(userProfile) {
       }
     };
 
-    // Dengarkan perubahan ID token (misalnya saat custom claims baru diterapkan)
-    const unsubscribe = onIdTokenChanged(auth, (user) => {
-      inspectUserClaims(user);
+    // Ambil user saat inisialisasi
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      inspectSupabaseUser(user);
+    });
+
+    // Dengarkan perubahan sesi autentikasi Supabase
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      inspectSupabaseUser(session?.user || null);
     });
 
     return () => {
       isMounted = false;
-      unsubscribe();
+      subscription?.unsubscribe();
     };
   }, [userProfile]);
 
@@ -82,7 +82,7 @@ export default function useAuthRole(userProfile) {
   const isSuperAdmin =
     normalizedRole === 'superadmin' || userProfile?.role === 'superadmin';
 
-  const isKasir = normalizedRole === 'kasir';
+  const isKasir = normalizedRole === 'kasir' || normalizedRole === 'admin';
   const isCoach = normalizedRole === 'pelatih' || normalizedRole === 'coach';
 
   return {
@@ -95,11 +95,14 @@ export default function useAuthRole(userProfile) {
     isCoach,
     loading,
     refreshClaims: async () => {
-      if (auth.currentUser) {
-        const refreshed = await auth.currentUser.getIdTokenResult(true);
-        setClaims(refreshed.claims || {});
-        if (refreshed.claims?.role) setRole(refreshed.claims.role);
-        if (refreshed.claims?.tenantId) setTenantId(refreshed.claims.tenantId);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        const metadata = user.user_metadata || {};
+        setClaims(metadata);
+        if (metadata.role) setRole(metadata.role);
+        if (metadata.tenant_id || metadata.tenantId) {
+          setTenantId(metadata.tenant_id || metadata.tenantId);
+        }
       }
     },
   };

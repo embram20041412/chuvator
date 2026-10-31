@@ -299,7 +299,7 @@ export default function StaffAndWorkerManagement({ userProfile }) {
         </div>
 
         <p className="text-xs text-slate-300 leading-relaxed">
-          Gunakan perintah berikut di terminal komputer Anda untuk melakukan deploy dan memasukkan kredensial Firebase Service Account Key.
+          Gunakan perintah berikut di terminal komputer Anda untuk melakukan deploy dan memasukkan kredensial Supabase Service Role Key.
         </p>
 
         <div className="space-y-3 font-mono text-xs">
@@ -322,18 +322,18 @@ export default function StaffAndWorkerManagement({ userProfile }) {
           {/* STEP 2: SECRET COMMAND */}
           <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 relative group">
             <div className="flex items-center justify-between text-[11px] text-slate-400 mb-1">
-              <span># 2. Perintah Mengatur Secret FIREBASE_SERVICE_ACCOUNT_KEY</span>
+              <span># 2. Perintah Mengatur Secret SUPABASE_SERVICE_ROLE_KEY</span>
               <button
-                onClick={() => copyToClipboard('npx wrangler secret put FIREBASE_SERVICE_ACCOUNT_KEY', 'secret')}
+                onClick={() => copyToClipboard('npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY', 'secret')}
                 className="text-blue-400 hover:text-blue-300 flex items-center space-x-1 cursor-pointer"
               >
                 <Copy className="w-3.5 h-3.5" />
                 <span>{copiedCmd === 'secret' ? 'Tersalin!' : 'Salin'}</span>
               </button>
             </div>
-            <code className="text-amber-300 font-bold">npx wrangler secret put FIREBASE_SERVICE_ACCOUNT_KEY</code>
+            <code className="text-amber-300 font-bold">npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY</code>
             <p className="text-[10px] text-slate-400 mt-1">
-              (Tempelkan isi JSON file service account Firebase ketika diminta di prompt terminal).
+              (Tempelkan Supabase Service Role Key ketika diminta di prompt terminal).
             </p>
           </div>
 

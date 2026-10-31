@@ -24,7 +24,6 @@ import {
   Code2
 } from 'lucide-react';
 import { supabase } from '../config/supabase';
-import { auth } from '../firebase';
 import useAuthRole from '../hooks/useAuthRole';
 import { 
   resolveWorkerBaseUrl, 
@@ -36,7 +35,7 @@ import {
 
 export default function StaffManagementPage({ userProfile }) {
   const { isOwner, loading: roleLoading } = useAuthRole(userProfile);
-  const tenantId = userProfile?.tenant?.id || userProfile?.tenantId || auth.currentUser?.uid;
+  const tenantId = userProfile?.tenant?.id || userProfile?.tenantId || userProfile?.id || userProfile?.uid;
 
   // Form states
   const [email, setEmail] = useState('');
@@ -169,15 +168,11 @@ export default function StaffManagementPage({ userProfile }) {
     let createdAuthUid = null;
 
     try {
-      // 3. Ambil Token ID Owner saat ini untuk otorisasi
-      const currentUser = auth.currentUser;
-      if (!currentUser) {
-        throw new Error('Sesi autentikasi Anda tidak aktif. Silakan login ulang.');
-      }
-
-      const ownerToken = await currentUser.getIdToken(true);
+      // 3. Ambil Token ID / Access Token Owner saat ini untuk otorisasi
+      const { data: { session } } = await supabase.auth.getSession();
+      const ownerToken = session?.access_token;
       if (!ownerToken) {
-        throw new Error('Gagal memperoleh token otorisasi Owner. Silakan login ulang.');
+        throw new Error('Sesi autentikasi Anda tidak aktif. Silakan login ulang.');
       }
 
       // 4. Kirim Request ke Backend Endpoint POST /api/create-staff
@@ -237,7 +232,7 @@ export default function StaffManagementPage({ userProfile }) {
         }
         if (response.status === 409) {
           throw new Error(
-            result?.message || `Email "${cleanEmail}" sudah terdaftar di Firebase Authentication. Gunakan email lain.`
+            result?.message || `Email "${cleanEmail}" sudah terdaftar di sistem otentikasi. Gunakan email lain.`
           );
         }
 
@@ -245,18 +240,18 @@ export default function StaffManagementPage({ userProfile }) {
         throw new Error(errorMsg);
       }
 
-      // 5. Validasi UID dari Firebase Auth
+      // 5. Validasi ID dari Supabase Auth
       createdAuthUid = result.data?.uid || result.uid;
       if (!createdAuthUid) {
-        throw new Error('Backend berhasil memproses tetapi tidak mengembalikan UID akun Firebase yang valid.');
+        throw new Error('Backend berhasil memproses tetapi tidak mengembalikan UID akun yang valid.');
       }
 
       const finalRole = result.data?.role || staffRole;
       const finalTenantId = result.data?.tenantId || tenantId;
 
-      // 6. Simpan data profil staff ke tabel users_staff Supabase
+      // 6. Simpan data profil staff ke tabel users_staff Supabase (jika belum disimpan otomatis oleh backend)
       try {
-        await supabase.from('users_staff').insert([{
+        await supabase.from('users_staff').upsert([{
           uid: createdAuthUid,
           email: cleanEmail,
           display_name: cleanDisplayName,
@@ -266,19 +261,19 @@ export default function StaffManagementPage({ userProfile }) {
           created_at: new Date().toISOString(),
           status: 'active',
           auth_method: 'express_fullstack_rbac',
-          created_by: userProfile?.email || currentUser?.email || 'owner',
-        }]);
+          created_by: userProfile?.email || session?.user?.email || 'owner',
+        }], { onConflict: 'uid' });
         fetchStaff();
       } catch (supabaseErr) {
         console.error('Kondisi parsial: Auth dibuat, namun penyimpanan Supabase gagal:', supabaseErr);
         throw new Error(
-          `Akun staf berhasil dibuat di Firebase Auth (UID: ${createdAuthUid}), namun gagal menyimpan profil ke database Supabase (${supabaseErr.message}). Silakan hubungi admin untuk sinkronisasi profil.`
+          `Akun staf berhasil dibuat di Supabase Auth (UID: ${createdAuthUid}), namun gagal menyimpan profil ke database Supabase (${supabaseErr.message}). Silakan hubungi admin untuk sinkronisasi profil.`
         );
       }
 
       // 7. Sukses Penuh
       setFormSuccess(
-        `Akun staff "${cleanDisplayName}" (${finalRole.toUpperCase()}) berhasil didaftarkan via Backend Express Server dengan Custom Claims RBAC!`
+        `Akun staff "${cleanDisplayName}" (${finalRole.toUpperCase()}) berhasil didaftarkan via Backend Express Server Supabase!`
       );
 
       setEmail('');
@@ -433,7 +428,7 @@ export default function StaffManagementPage({ userProfile }) {
             </h1>
             <p className="text-slate-300 text-xs sm:text-sm mt-1 max-w-2xl leading-relaxed">
               Daftarkan staf operasional arena (Kasir POS & Pelatih Akademi). Setiap akun secara otomatis disematkan
-              hak akses terisolasi pada tingkat database Firestore sesuai cabang dan tenant Anda.
+              hak akses terisolasi pada tingkat database Supabase sesuai cabang dan tenant Anda.
             </p>
           </div>
 

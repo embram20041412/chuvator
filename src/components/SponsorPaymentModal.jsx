@@ -318,7 +318,6 @@ export default function SponsorPaymentModal({
 
     } catch (err) {
       console.error('Error recording sponsor payment:', err);
-      handleFirestoreError(err, 'create', 'transactions');
       setErrorMsg('Gagal mencatat pembayaran sponsor. Silakan periksa koneksi dan coba lagi.');
       setIsSubmitting(false);
     }

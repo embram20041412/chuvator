@@ -59,17 +59,17 @@ const queryClient = new QueryClient({
 
 export default function App() {
   const [isAuthLoading, setIsAuthLoading] = useState(true);
-  const [firebaseUser, setFirebaseUser] = useState(null);
+  const [authUser, setAuthUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
 
   useEffect(() => {
-    // Subscribe to Firebase Auth and Firestore role verification
-    const unsubscribe = subscribeToAuthChanges((authUser, profile, errorMessage) => {
-      if (authUser && profile) {
-        setFirebaseUser(authUser);
+    // Subscribe to Supabase Auth and role verification
+    const unsubscribe = subscribeToAuthChanges((currentUser, profile, errorMessage) => {
+      if (currentUser && profile) {
+        setAuthUser(currentUser);
         setUserProfile(profile);
       } else {
-        setFirebaseUser(null);
+        setAuthUser(null);
         setUserProfile(null);
       }
       setIsAuthLoading(false);

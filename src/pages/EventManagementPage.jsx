@@ -1236,7 +1236,7 @@ export default function EventManagementPage({ userProfile }) {
           {isLoading ? (
             <div className="bg-white rounded-2xl p-12 text-center border border-gray-200">
               <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-              <p className="text-xs text-gray-500 font-medium">Memuat data turnamen dari Firestore...</p>
+              <p className="text-xs text-gray-500 font-medium">Memuat data turnamen...</p>
             </div>
           ) : filteredEvents.length === 0 ? (
             <div className="bg-white rounded-2xl p-12 text-center border border-gray-200 space-y-3">

@@ -1495,7 +1495,7 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
       {/* TAB 6: KELOLA STAF & PELATIH (CLIENT-SIDE RBAC) */}
       {activeTab === 'staf' && (
         <div className="space-y-3.5 text-left animate-fadeIn mt-3.5">
-          {/* CARD 1: FORM PENDAFTARAN STAF (SECONDARY FIREBASE APP) */}
+          {/* CARD 1: FORM PENDAFTARAN STAF (SUPABASE AUTH) */}
           <div className="bg-white dark:bg-slate-900 rounded-xl p-3.5 sm:p-4 shadow-2xs border border-slate-200/80 dark:border-white/10 space-y-3.5">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 pb-2.5">
               <div>
@@ -1508,7 +1508,7 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                 </p>
               </div>
               <span className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 text-[9px] font-bold rounded border border-indigo-100 dark:border-indigo-900/40 shrink-0">
-                Secondary Auth
+                Supabase Auth
               </span>
             </div>
 
