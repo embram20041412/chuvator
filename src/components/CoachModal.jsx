@@ -343,12 +343,9 @@ export default function CoachModal({
             email: coachEmail.trim(),
             password: coachPassword,
             sportSpecialty: sportSpecialty || 'Pelatih Utama',
-            specialty: sportSpecialty || 'Pelatih Utama',
             photoUrl: finalPhotoUrl,
             nickname: nickname.trim(),
-            nik: nik.trim(),
-            license: license.trim(),
-            address: coachData.address
+            nik: nik.trim()
           });
           if (onCoachAdded) {
             onCoachAdded(res.coach || { id: `coach_${Date.now()}`, ...coachData });

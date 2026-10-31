@@ -130,28 +130,47 @@ export async function createCoachWithAccount({
     tenant_id: tenantId,
     academy_id: cleanAcademyId,
     name: cleanName,
-    coach_name: cleanName,
     phone: phone ? phone.trim() : null,
     email: cleanEmail,
     sport_specialty: chosenSpecialty,
-    sport: chosenSpecialty,
-    auth_uid: authUid,
     status: 'Aktif',
     created_at: new Date().toISOString()
   };
 
   if (nickname) coachPayload.nickname = nickname.trim();
   if (nik) coachPayload.nik = nik.trim();
-  if (license) coachPayload.license = license.trim();
   if (photoUrl) coachPayload.photo_url = photoUrl;
-  if (address) coachPayload.address = address;
 
   let coachData = null;
-  const { data: insertedCoach, error: coachError } = await supabase
+  let { data: insertedCoach, error: coachError } = await supabase
     .from('coaches')
     .insert([coachPayload])
     .select()
     .single();
+
+  // Retry logic jika skema Supabase belum memiliki kolom opsional (seperti nickname/nik/photo_url)
+  if (coachError && coachError.message && coachError.message.includes('Could not find the')) {
+    console.warn('[coachAuthService] Retrying coach insert with core columns due to missing column:', coachError.message);
+    const corePayload = {
+      tenant_id: tenantId,
+      academy_id: cleanAcademyId,
+      name: cleanName,
+      phone: phone ? phone.trim() : null,
+      email: cleanEmail,
+      sport_specialty: chosenSpecialty,
+      status: 'Aktif',
+      created_at: new Date().toISOString()
+    };
+    const retryRes = await supabase
+      .from('coaches')
+      .insert([corePayload])
+      .select()
+      .single();
+    if (!retryRes.error) {
+      insertedCoach = retryRes.data;
+      coachError = null;
+    }
+  }
 
   if (coachError) {
     console.warn('[coachAuthService] Warning inserting coach:', coachError.message);
@@ -166,12 +185,15 @@ export async function createCoachWithAccount({
       if (existingCoach) {
         coachData = existingCoach;
         const updatePayload = {
+          name: cleanName,
           sport_specialty: chosenSpecialty,
-          coach_name: cleanName,
           updated_at: new Date().toISOString()
         };
         if (cleanAcademyId) updatePayload.academy_id = cleanAcademyId;
-        if (authUid) updatePayload.auth_uid = authUid;
+        if (phone) updatePayload.phone = phone.trim();
+        if (photoUrl) updatePayload.photo_url = photoUrl;
+        if (nickname) updatePayload.nickname = nickname.trim();
+        if (nik) updatePayload.nik = nik.trim();
 
         await supabase
           .from('coaches')

@@ -492,29 +492,49 @@ export async function createCoach({
   const payload = {
     tenant_id: tenantId,
     academy_id: safeAcademyId,
-    academy_name: academyName || '',
     name: (name || '').trim(),
-    coach_name: (name || '').trim(),
-    nickname: (nickname || '').trim(),
-    nik: (nik || '').trim(),
-    phone: (phone || '').trim(),
-    email: (email || '').trim(),
-    sport: sport || sportSpecialty || '',
-    sport_specialty: sportSpecialty || sport || '',
-    sport_category: sportCategory || '',
-    license: license || '',
-    photo_url: photoUrl || '',
-    address: address || {},
+    phone: (phone || '').trim() || null,
+    email: (email || '').trim() || null,
+    sport_specialty: sportSpecialty || sport || 'Pelatih Utama',
     status: status || 'Aktif',
     created_at: new Date().toISOString()
   };
 
+  if (nickname) payload.nickname = nickname.trim();
+  if (nik) payload.nik = nik.trim();
+  if (photoUrl) payload.photo_url = photoUrl;
+  if (sportCategory) payload.sport_category = sportCategory;
+
   try {
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from('coaches')
       .insert([payload])
       .select()
       .single();
+
+    // Retry jika skema Supabase belum memiliki kolom opsional
+    if (error && error.message && error.message.includes('Could not find the')) {
+      console.warn('[supabaseAcademyService] Retrying coach insert with core columns:', error.message);
+      const corePayload = {
+        tenant_id: tenantId,
+        academy_id: safeAcademyId,
+        name: (name || '').trim(),
+        phone: (phone || '').trim() || null,
+        email: (email || '').trim() || null,
+        sport_specialty: sportSpecialty || sport || 'Pelatih Utama',
+        status: status || 'Aktif',
+        created_at: new Date().toISOString()
+      };
+      const retryRes = await supabase
+        .from('coaches')
+        .insert([corePayload])
+        .select()
+        .single();
+      if (!retryRes.error) {
+        data = retryRes.data;
+        error = null;
+      }
+    }
 
     if (error) throw error;
     return mapCoachFromSupabase(data);
@@ -531,22 +551,18 @@ export async function updateCoach(coachId, payload) {
   if (!coachId) throw new Error('Coach ID wajib disertakan.');
   const mapped = {};
   if (payload.academyId !== undefined) {
-    mapped.academy_id = toUuidOrNull(payload.academyId);
+    mapped.academy_id = toUuidOrNull(payload.academyId) || (payload.academyId ? String(payload.academyId).trim() : null);
   }
-  if (payload.academyName !== undefined) mapped.academy_name = payload.academyName;
   if (payload.name !== undefined) mapped.name = payload.name.trim();
   if (payload.nickname !== undefined) mapped.nickname = payload.nickname.trim();
   if (payload.nik !== undefined) mapped.nik = payload.nik.trim();
   if (payload.phone !== undefined) mapped.phone = payload.phone.trim();
   if (payload.email !== undefined) mapped.email = payload.email.trim();
-  if (payload.sport !== undefined || payload.sportSpecialty !== undefined) {
-    mapped.sport = payload.sport || payload.sportSpecialty || '';
-    mapped.sport_specialty = payload.sportSpecialty || payload.sport || '';
+  if (payload.sportSpecialty !== undefined || payload.sport !== undefined) {
+    mapped.sport_specialty = payload.sportSpecialty || payload.sport || 'Pelatih Utama';
   }
   if (payload.sportCategory !== undefined) mapped.sport_category = payload.sportCategory;
-  if (payload.license !== undefined) mapped.license = payload.license;
   if (payload.photoUrl !== undefined) mapped.photo_url = payload.photoUrl;
-  if (payload.address !== undefined) mapped.address = payload.address;
   if (payload.status !== undefined) mapped.status = payload.status;
   mapped.updated_at = new Date().toISOString();
 
