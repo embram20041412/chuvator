@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { 
   getTenantProfile, 
   getCourts, 
@@ -7,69 +8,51 @@ import {
 } from '../services/supabaseArenaService';
 
 /**
- * Custom hook for fetching tenant profile, courts, bookings, and transactions from Supabase PostgreSQL.
- * Uses promise-based fetch-on-demand with query limits and provides a refetch callback for optimistic sync.
+ * Custom hook for fetching tenant profile, courts, bookings, and transactions with TanStack Query caching.
+ * Provides instant in-memory rendering (0ms lag when switching tabs) with background SWR revalidation.
  */
 export default function useArenaData(userProfile) {
-  const [tenantProfile, setTenantProfile] = useState(userProfile?.tenant || null);
-  const [courts, setCourts] = useState([]);
-  const [bookings, setBookings] = useState([]);
-  const [transactions, setTransactions] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
-
+  const queryClient = useQueryClient();
   const tenantId = userProfile?.tenant?.id || userProfile?.tenantId || userProfile?.uid;
 
-  const fetchArenaData = useCallback(async () => {
-    if (!tenantId) {
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-
-    try {
+  const { data, isLoading, refetch, isFetching } = useQuery({
+    queryKey: ['arenaData', tenantId],
+    queryFn: async () => {
+      if (!tenantId) return null;
       const [tenantRes, courtsRes, bookingsRes, txRes] = await Promise.all([
         getTenantProfile(tenantId),
         getCourts(tenantId),
         getBookings(tenantId, 150),
         getTransactions(tenantId, 150)
       ]);
-
-      if (tenantRes) {
-        setTenantProfile(tenantRes);
-      } else if (userProfile?.tenant) {
-        setTenantProfile(userProfile.tenant);
-      }
-
-      setCourts(courtsRes || []);
-      setBookings(bookingsRes || []);
-      setTransactions(txRes || []);
-    } catch (err) {
-      console.error('Error fetching arena data from Supabase:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [tenantId, userProfile?.tenant]);
-
-  useEffect(() => {
-    fetchArenaData();
-  }, [fetchArenaData]);
+      return {
+        tenantProfile: tenantRes || userProfile?.tenant || null,
+        courts: courtsRes || [],
+        bookings: bookingsRes || [],
+        transactions: txRes || []
+      };
+    },
+    enabled: Boolean(tenantId),
+    staleTime: 5 * 60 * 1000, // 5 menit: data langsung dari memori saat tab berpindah (instant UI)
+    gcTime: 30 * 60 * 1000,
+  });
 
   // Support custom event dispatched after payment/booking/product changes to trigger instant refetch
   useEffect(() => {
     const handleRefresh = () => {
-      fetchArenaData();
+      queryClient.invalidateQueries({ queryKey: ['arenaData', tenantId] });
     };
     window.addEventListener('simak_refresh_arena_data', handleRefresh);
     return () => window.removeEventListener('simak_refresh_arena_data', handleRefresh);
-  }, [fetchArenaData]);
+  }, [queryClient, tenantId]);
 
   return {
-    tenantProfile: tenantProfile || userProfile?.tenant,
-    courts,
-    bookings,
-    transactions,
-    isLoading,
-    refetch: fetchArenaData
+    tenantProfile: data?.tenantProfile || userProfile?.tenant || null,
+    courts: data?.courts || [],
+    bookings: data?.bookings || [],
+    transactions: data?.transactions || [],
+    isLoading: isLoading && !data, // Hanya true jika data pertama kali dimuat dan belum ada di memori cache
+    isFetching,
+    refetch
   };
 }

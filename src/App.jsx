@@ -51,7 +51,10 @@ function EventDetailWrapper({ userProfile }) {
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
+      staleTime: 5 * 60 * 1000, // 5 menit: data langsung diambil dari memori (instant UI) saat berpindah tab
+      gcTime: 30 * 60 * 1000,    // 30 menit disimpan di memori sebelum dibersihkan
       refetchOnWindowFocus: false,
+      refetchOnReconnect: false,
       retry: 1,
     },
   },

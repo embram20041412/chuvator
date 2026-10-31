@@ -38,20 +38,71 @@ import {
 } from 'lucide-react';
 import { Kasir3DIcon, Akademi3DIcon } from '../components/icons/App3DIcons';
 
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+
 export default function POSPage({ userProfile }) {
+  const queryClient = useQueryClient();
   const tenantId = userProfile?.tenant?.id || userProfile?.tenantId || userProfile?.uid;
 
   // =====================================================================
-  // 1. STATE PRODUK RETAIL & INVENTARIS
+  // 1 & 2. REACT QUERY CACHE: PRODUK & SISWA (INSTANT IN-MEMORY UI)
   // =====================================================================
-  const [products, setProducts] = useState([]);
-  const [loadingProducts, setLoadingProducts] = useState(true);
+  const { data: cachedProducts, isLoading: isProductsLoading } = useQuery({
+    queryKey: ['posProducts', tenantId],
+    queryFn: () => getProducts(tenantId),
+    enabled: Boolean(tenantId),
+    staleTime: 5 * 60 * 1000,
+  });
 
-  // =====================================================================
-  // 2. STATE TAGIHAN SISWA AKADEMI (CROSS-SELLING ENTERPRISE FASE 11 PART 6)
-  // =====================================================================
-  const [students, setStudents] = useState([]);
-  const [loadingStudents, setLoadingStudents] = useState(true);
+  const { data: cachedStudents, isLoading: isStudentsLoading } = useQuery({
+    queryKey: ['posStudents', tenantId],
+    queryFn: () => getStudents(tenantId),
+    enabled: Boolean(tenantId),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const [localProducts, setLocalProducts] = useState(null);
+  const [localStudents, setLocalStudents] = useState(null);
+
+  const products = localProducts || cachedProducts || [];
+  const students = localStudents || cachedStudents || [];
+  const loadingProducts = isProductsLoading && !cachedProducts;
+  const loadingStudents = isStudentsLoading && !cachedStudents;
+
+  // Sinkronisasi data cache ke local state saat ada update latar belakang
+  useEffect(() => {
+    if (cachedProducts) setLocalProducts(cachedProducts);
+  }, [cachedProducts]);
+
+  useEffect(() => {
+    if (cachedStudents) setLocalStudents(cachedStudents);
+  }, [cachedStudents]);
+
+  const setProducts = useCallback((updater) => {
+    setLocalProducts((prev) => {
+      const current = prev || cachedProducts || [];
+      const updated = typeof updater === 'function' ? updater(current) : updater;
+      queryClient.setQueryData(['posProducts', tenantId], updated);
+      return updated;
+    });
+  }, [cachedProducts, queryClient, tenantId]);
+
+  const setStudents = useCallback((updater) => {
+    setLocalStudents((prev) => {
+      const current = prev || cachedStudents || [];
+      const updated = typeof updater === 'function' ? updater(current) : updater;
+      queryClient.setQueryData(['posStudents', tenantId], updated);
+      return updated;
+    });
+  }, [cachedStudents, queryClient, tenantId]);
+
+  const fetchProducts = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['posProducts', tenantId] });
+  }, [queryClient, tenantId]);
+
+  const fetchStudents = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['posStudents', tenantId] });
+  }, [queryClient, tenantId]);
 
   // =====================================================================
   // 3. STATE KERANJANG, SEARCH, BARCODE SCANNER & TAB KATALOG
@@ -82,48 +133,6 @@ export default function POSPage({ userProfile }) {
   const [newProductPrice, setNewProductPrice] = useState(''); // Harga Jual
   const [newProductStock, setNewProductStock] = useState('50'); // Stok
   const [savingProduct, setSavingProduct] = useState(false);
-
-  // =====================================================================
-  // 4. FETCH PRODUK & SISWA DARI SUPABASE
-  // =====================================================================
-  const fetchProducts = useCallback(async () => {
-    if (!tenantId) {
-      setLoadingProducts(false);
-      return;
-    }
-    setLoadingProducts(true);
-    try {
-      const list = await getProducts(tenantId);
-      setProducts(list);
-    } catch (err) {
-      console.error('Error fetching products from Supabase:', err);
-      setProducts([]);
-    } finally {
-      setLoadingProducts(false);
-    }
-  }, [tenantId]);
-
-  const fetchStudents = useCallback(async () => {
-    if (!tenantId) {
-      setLoadingStudents(false);
-      return;
-    }
-    setLoadingStudents(true);
-    try {
-      const list = await getStudents(tenantId);
-      setStudents(list);
-    } catch (err) {
-      console.error('Error fetching students from Supabase:', err);
-      setStudents([]);
-    } finally {
-      setLoadingStudents(false);
-    }
-  }, [tenantId]);
-
-  useEffect(() => {
-    fetchProducts();
-    fetchStudents();
-  }, [fetchProducts, fetchStudents]);
 
   // Saring Siswa dengan Tagihan Belum Lunas / Menunggak
   const currentMonth = useMemo(() => new Date().toISOString().slice(0, 7), []);

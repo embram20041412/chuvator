@@ -304,7 +304,7 @@ export async function getCourts(tenantId) {
   if (!tenantId) return [];
   const { data, error } = await supabase
     .from('courts')
-    .select('*')
+    .select('id, tenant_id, name, sport, court_number, price, is_active, operational_hours, created_at, updated_at')
     .eq('tenant_id', tenantId)
     .order('name', { ascending: true });
 
@@ -411,7 +411,7 @@ export async function getBookings(tenantId, limitCount = 150) {
   if (!tenantId) return [];
   const { data, error } = await supabase
     .from('bookings')
-    .select('*')
+    .select('id, tenant_id, court_id, court_name, court_number, customer_name, customer_phone, booking_date, start_time, end_time, price, payment_status, payment_method, status, is_void, voided_by, voided_at, void_reason, created_at')
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
     .limit(limitCount);
@@ -517,7 +517,7 @@ export async function getTransactions(tenantId, limitCount = 150) {
   if (!tenantId) return [];
   const { data, error } = await supabase
     .from('transactions')
-    .select('*')
+    .select('id, tenant_id, booking_id, student_id, sponsor_id, event_id, item_name, item_category, amount, payment_method, items_count, items, status, is_void, voided_by, voided_at, void_reason, created_at')
     .eq('tenant_id', tenantId)
     .order('created_at', { ascending: false })
     .limit(limitCount);
@@ -733,7 +733,7 @@ export async function getProducts(tenantId) {
   if (!tenantId) return [];
   const { data, error } = await supabase
     .from('products')
-    .select('*')
+    .select('id, tenant_id, name, category, type, barcode, cogs, price, stock, created_at, updated_at')
     .eq('tenant_id', tenantId)
     .order('name', { ascending: true });
 

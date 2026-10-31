@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '../config/supabase';
 import useArenaData from '../hooks/useArenaData';
 import { 
@@ -152,13 +153,129 @@ export default function EventManagementPage({ userProfile }) {
   const [selectedDetailEvent, setSelectedDetailEvent] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
-  // Firestore Real-time Collections State
-  const [events, setEvents] = useState([]);
-  const [sponsors, setSponsors] = useState([]);
-  const [documents, setDocuments] = useState([]);
-  const [eventCategories, setEventCategories] = useState([]);
-  const [eventRegistrations, setEventRegistrations] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
+
+  // TanStack React Query for caching & instant UI across tab navigation
+  const { data: cachedEventData, isLoading: isEventDataLoading, refetch: refetchEventData } = useQuery({
+    queryKey: ['eventManagement', tenantId],
+    queryFn: async () => {
+      if (!tenantId) {
+        return {
+          events: [],
+          sponsors: [],
+          documents: [],
+          eventCategories: [],
+          eventRegistrations: []
+        };
+      }
+
+      const [eventsRes, sponsorsRes, docsRes, catRes, regRes] = await Promise.all([
+        supabase
+          .from('events')
+          .select('id, tenant_id, name, sport, sport_category, tournament_format, start_date, end_date, status, registration_fee, total_slots, prize_pool, description, banner_url, poster_url, courts, created_at')
+          .eq('tenant_id', tenantId)
+          .order('start_date', { ascending: false }),
+        supabase
+          .from('sponsors')
+          .select('id, tenant_id, event_id, event_name, company_name, name, contract_value, total_paid, pending_amount, payment_status, crm_status, status, contact_person, whatsapp_number, payment_history, created_at')
+          .eq('tenant_id', tenantId),
+        supabase
+          .from('event_documents')
+          .select('id, tenant_id, event_id, event_name, document_type, file_url, file_name, content_summary, created_at')
+          .eq('tenant_id', tenantId),
+        supabase
+          .from('event_categories')
+          .select('id, tenant_id, event_id, category_name, max_participants, created_at')
+          .eq('tenant_id', tenantId),
+        supabase
+          .from('event_registrations')
+          .select('id, tenant_id, event_id, category_id, participant_name, team_name, payment_status, created_at')
+          .eq('tenant_id', tenantId),
+      ]);
+
+      const mappedEvents = eventsRes.data ? eventsRes.data.map((e) => ({
+        ...e,
+        id: e.id,
+        tenantId: e.tenant_id,
+        startDate: e.start_date,
+        endDate: e.end_date,
+        sportCategory: e.sport_category,
+        tournamentFormat: e.tournament_format,
+        registrationFee: Number(e.registration_fee || 0),
+        totalSlots: Number(e.total_slots || 0),
+        prizePool: Number(e.prize_pool || 0),
+        bannerUrl: e.banner_url,
+        posterUrl: e.poster_url,
+        courts: Array.isArray(e.courts) ? e.courts : []
+      })) : [];
+
+      const mappedSponsors = sponsorsRes.data ? sponsorsRes.data.map((s) => ({
+        ...s,
+        id: s.id,
+        tenantId: s.tenant_id,
+        eventId: s.event_id,
+        eventName: s.event_name,
+        companyName: s.company_name || s.name || '',
+        contractValue: Number(s.contract_value || 0),
+        totalPaid: Number(s.total_paid || 0),
+        pendingAmount: Number(s.pending_amount || 0),
+        paymentStatus: s.payment_status || 'Unpaid',
+        crmStatus: s.crm_status || s.status,
+        contactPerson: s.contact_person || '',
+        whatsappNumber: s.whatsapp_number || '',
+        paymentHistory: Array.isArray(s.payment_history) ? s.payment_history : []
+      })) : [];
+
+      const mappedDocs = docsRes.data ? docsRes.data.map((d) => ({
+        ...d,
+        id: d.id,
+        tenantId: d.tenant_id,
+        eventId: d.event_id,
+        eventName: d.event_name,
+        documentType: d.document_type,
+        fileUrl: d.file_url,
+        fileName: d.file_name,
+        contentSummary: d.content_summary
+      })) : [];
+
+      const mappedCats = catRes.data ? catRes.data.map((c) => ({
+        ...c,
+        id: c.id,
+        tenantId: c.tenant_id,
+        eventId: c.event_id,
+        categoryName: c.category_name,
+        maxParticipants: c.max_participants
+      })) : [];
+
+      const mappedRegs = regRes.data ? regRes.data.map((r) => ({
+        ...r,
+        id: r.id,
+        tenantId: r.tenant_id,
+        eventId: r.event_id,
+        categoryId: r.category_id,
+        participantName: r.participant_name,
+        teamName: r.team_name,
+        paymentStatus: r.payment_status
+      })) : [];
+
+      return {
+        events: mappedEvents,
+        sponsors: mappedSponsors,
+        documents: mappedDocs,
+        eventCategories: mappedCats,
+        eventRegistrations: mappedRegs
+      };
+    },
+    enabled: !!tenantId,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const events = cachedEventData?.events || [];
+  const sponsors = cachedEventData?.sponsors || [];
+  const documents = cachedEventData?.documents || [];
+  const eventCategories = cachedEventData?.eventCategories || [];
+  const eventRegistrations = cachedEventData?.eventRegistrations || [];
+  const isLoading = isEventDataLoading && !cachedEventData;
 
   // Filters State
   const [eventSearch, setEventSearch] = useState('');
@@ -244,110 +361,12 @@ export default function EventManagementPage({ userProfile }) {
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
   const [isSavingDoc, setIsSavingDoc] = useState(false);
 
-  // 1. Fetch from Supabase Tables
+  // Invalidation & Refetch Trigger for Mutations
   const fetchEventManagementData = useCallback(async () => {
-    if (!tenantId) {
-      setIsLoading(false);
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const [eventsRes, sponsorsRes, docsRes, catRes, regRes] = await Promise.all([
-        supabase.from('events').select('*').eq('tenant_id', tenantId).order('start_date', { ascending: false }),
-        supabase.from('sponsors').select('*').eq('tenant_id', tenantId),
-        supabase.from('event_documents').select('*').eq('tenant_id', tenantId),
-        supabase.from('event_categories').select('*').eq('tenant_id', tenantId),
-        supabase.from('event_registrations').select('*').eq('tenant_id', tenantId),
-      ]);
-
-      if (eventsRes.data) {
-        const mapped = eventsRes.data.map((e) => ({
-          ...e,
-          id: e.id,
-          tenantId: e.tenant_id,
-          startDate: e.start_date,
-          endDate: e.end_date,
-          sportCategory: e.sport_category,
-          tournamentFormat: e.tournament_format,
-          registrationFee: Number(e.registration_fee || 0),
-          totalSlots: Number(e.total_slots || 0),
-          prizePool: Number(e.prize_pool || 0),
-          bannerUrl: e.banner_url,
-          posterUrl: e.poster_url,
-          courts: Array.isArray(e.courts) ? e.courts : []
-        }));
-        setEvents(mapped);
-      }
-
-      if (sponsorsRes.data) {
-        const mapped = sponsorsRes.data.map((s) => ({
-          ...s,
-          id: s.id,
-          tenantId: s.tenant_id,
-          eventId: s.event_id,
-          eventName: s.event_name,
-          companyName: s.company_name || s.name || '',
-          contractValue: Number(s.contract_value || 0),
-          totalPaid: Number(s.total_paid || 0),
-          pendingAmount: Number(s.pending_amount || 0),
-          paymentStatus: s.payment_status || 'Unpaid',
-          crmStatus: s.crm_status || s.status,
-          contactPerson: s.contact_person || '',
-          whatsappNumber: s.whatsapp_number || '',
-          paymentHistory: Array.isArray(s.payment_history) ? s.payment_history : []
-        }));
-        setSponsors(mapped);
-      }
-
-      if (docsRes.data) {
-        const mapped = docsRes.data.map((d) => ({
-          ...d,
-          id: d.id,
-          tenantId: d.tenant_id,
-          eventId: d.event_id,
-          eventName: d.event_name,
-          documentType: d.document_type,
-          fileUrl: d.file_url,
-          fileName: d.file_name,
-          contentSummary: d.content_summary
-        }));
-        setDocuments(mapped);
-      }
-
-      if (catRes.data) {
-        setEventCategories(catRes.data.map((c) => ({
-          ...c,
-          id: c.id,
-          tenantId: c.tenant_id,
-          eventId: c.event_id,
-          categoryName: c.category_name,
-          maxParticipants: c.max_participants
-        })));
-      }
-
-      if (regRes.data) {
-        setEventRegistrations(regRes.data.map((r) => ({
-          ...r,
-          id: r.id,
-          tenantId: r.tenant_id,
-          eventId: r.event_id,
-          categoryId: r.category_id,
-          participantName: r.participant_name,
-          teamName: r.team_name,
-          paymentStatus: r.payment_status
-        })));
-      }
-    } catch (err) {
-      console.error('Error fetching event management data from Supabase:', err);
-    } finally {
-      setIsLoading(false);
-    }
-  }, [tenantId]);
-
-  useEffect(() => {
-    fetchEventManagementData();
-  }, [fetchEventManagementData]);
+    if (!tenantId) return;
+    await queryClient.invalidateQueries({ queryKey: ['eventManagement', tenantId] });
+    return refetchEventData();
+  }, [queryClient, tenantId, refetchEventData]);
 
   // Handle Poster File Selection (Menyimpan File object untuk diunggah ke Cloudinary saat submit)
   const handlePosterFileChange = (e) => {
