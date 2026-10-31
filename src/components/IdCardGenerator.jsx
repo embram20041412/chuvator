@@ -114,18 +114,18 @@ export default function IdCardGenerator({
           {/* THE ID CARD ELEMENT TO BE RENDERED/DOWNLOADED */}
           <div
             ref={cardRef}
-            className="w-[280px] min-h-[460px] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col relative border border-slate-200/90 select-none text-slate-800"
+            className="w-[340px] h-fit min-h-[520px] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col relative border border-slate-200/90 select-none text-slate-800"
             style={{
               fontFamily: "'Inter', sans-serif"
             }}
           >
             {/* Lanyard Clip Slot Simulation */}
-            <div className="w-full pt-2 pb-1 flex justify-center bg-[#0a192f]">
-              <div className="w-12 h-1.5 rounded-full bg-slate-950/60 border border-white/10 shadow-inner" />
+            <div className="w-full pt-3 pb-1 flex justify-center bg-[#0a192f]">
+              <div className="w-14 h-1.5 rounded-full bg-slate-950/60 border border-white/10 shadow-inner" />
             </div>
 
-            {/* 1. Desain Header (Navy & Emas) */}
-            <div className="relative px-3 pt-1 pb-3.5 bg-[#0a192f] text-white flex flex-col items-center text-center border-b-2 border-[#D4AF37] overflow-hidden">
+            {/* 1. Desain Header (Navy & Emas) - Padding Vertikal Lega & Flex Layout */}
+            <div className="relative pt-6 pb-16 px-4 bg-[#0a192f] text-white flex flex-col items-center justify-center text-center gap-2 border-b-2 border-[#D4AF37] overflow-hidden">
               {/* Subtle geometric pattern lines */}
               <div className="absolute inset-0 opacity-15 pointer-events-none">
                 <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
@@ -145,99 +145,98 @@ export default function IdCardGenerator({
                   src={finalTenantLogo}
                   alt={finalTenantName}
                   crossOrigin="anonymous"
-                  className="w-8 h-8 object-contain rounded-md mb-1 mx-auto relative z-10 filter drop-shadow"
+                  className="w-10 h-10 object-contain rounded-md mx-auto relative z-10 filter drop-shadow"
                 />
               ) : (
-                <div className="w-7 h-7 rounded-md bg-[#D4AF37]/20 text-[#D4AF37] font-black text-xs flex items-center justify-center mb-1 mx-auto border border-[#D4AF37]/40 relative z-10 shadow-xs">
+                <div className="w-9 h-9 rounded-md bg-[#D4AF37]/20 text-[#D4AF37] font-black text-sm flex items-center justify-center mx-auto border border-[#D4AF37]/40 relative z-10 shadow-xs">
                   {finalTenantName ? finalTenantName.charAt(0).toUpperCase() : 'C'}
                 </div>
               )}
 
-              {/* Baris 2: Nama GOR ("Kediri Sport Arena") - Warna Emas & Lebih Besar/Tebal */}
-              <h4 className="text-[17px] sm:text-[18px] font-black tracking-wide leading-tight text-[#D4AF37] uppercase px-1 relative z-10 drop-shadow-sm">
+              {/* Baris 2: Nama GOR ("Kediri Sport Arena") - Warna Emas & text-xl font-bold */}
+              <h4 className="text-xl font-bold leading-tight text-[#D4AF37] uppercase tracking-wide px-2 relative z-10 drop-shadow-sm">
                 {finalTenantName}
               </h4>
 
-              {/* Baris 3: Alamat Tenant (Putih Murni, Center, text-xs/text-[10px]) */}
-              {finalTenantAddress && (
-                <p className="text-[10px] text-white whitespace-normal break-words leading-tight mt-1 text-center px-2 relative z-10 opacity-95">
-                  {finalTenantAddress}
-                </p>
-              )}
-
-              {/* Baris 4: No. Telp/WA (Putih Murni, Center, text-[10px]) */}
-              {finalTenantPhone && (
-                <p className="text-[10px] font-medium text-white mt-0.5 text-center relative z-10 opacity-95">
-                  Telp/WA: {finalTenantPhone}
-                </p>
-              )}
+              {/* Baris 3: Alamat & Kontak Tenant (Putih, text-xs, opacity-90) */}
+              <div className="flex flex-col items-center gap-0.5 relative z-10 max-w-[290px]">
+                {finalTenantAddress && (
+                  <p className="text-white text-xs opacity-90 whitespace-normal break-words leading-relaxed text-center px-2">
+                    {finalTenantAddress}
+                  </p>
+                )}
+                {finalTenantPhone && (
+                  <p className="text-white text-[11px] opacity-90 font-medium text-center">
+                    Telp/WA: {finalTenantPhone}
+                  </p>
+                )}
+              </div>
             </div>
 
-            {/* 2 & 3. Card Body: Foto Profil & Badge Posisi (Overlapping) serta Nama & Tag Identitas */}
-            <div className="px-3 pt-5 pb-3 flex flex-col items-center text-center bg-gradient-to-b from-slate-50 via-white to-white flex-1">
-              {/* Foto Profil & Badge Posisi (Overlapping) */}
-              <div className="relative mb-5">
+            {/* 2 & 3. Card Body: Foto Profil Overlap (-mt-14) serta Nama & Tag Identitas */}
+            <div className="px-4 pt-0 pb-6 flex flex-col items-center text-center bg-gradient-to-b from-slate-50 via-white to-white flex-1">
+              {/* Foto Profil & Badge Posisi (Overlapping tepat di garis perbatasan header navy) */}
+              <div className="relative -mt-14 mb-6 z-20">
                 {photoUrl ? (
                   <img
                     src={photoUrl}
                     alt={fullName}
                     crossOrigin="anonymous"
-                    className="w-24 h-24 rounded-full object-cover border-4 border-[#D4AF37] shadow-lg bg-white"
+                    className="w-28 h-28 rounded-full object-cover border-4 border-[#D4AF37] shadow-xl bg-white"
                   />
                 ) : (
-                  <div className="w-24 h-24 rounded-full flex items-center justify-center text-2xl font-black border-4 border-[#D4AF37] bg-[#0a192f] text-[#D4AF37] shadow-lg">
+                  <div className="w-28 h-28 rounded-full flex items-center justify-center text-3xl font-black border-4 border-[#D4AF37] bg-[#0a192f] text-[#D4AF37] shadow-xl">
                     {getStudentInitials(fullName)}
                   </div>
                 )}
                 {/* Badge Posisi Overlapping Menumpuk Tepat di Bawah Tengah Foto */}
-                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 bg-[#D4AF37] text-black font-bold text-xs px-4 py-1 rounded-full shadow-md whitespace-nowrap tracking-wider uppercase border border-amber-200/50">
+                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 bg-[#D4AF37] text-black font-extrabold text-xs px-5 py-1 rounded-full shadow-md whitespace-nowrap tracking-wider uppercase border border-amber-200/50">
                   {role === 'PELATIH' ? 'PELATIH' : role}
                 </span>
               </div>
 
               {/* 3. Nama & Tag Identitas */}
-              {/* Teks Nama Pelatih (Warna dark navy #0a192f, font-bold, text-xl) */}
               <h3 className="text-[#0a192f] font-bold text-xl leading-snug whitespace-normal break-words text-center px-2 mt-1">
                 {fullName}
               </h3>
 
-              {/* Tag Kategori: Olahraga (bg-blue-100 text-blue-900) & Lisensi (bg-slate-200 text-slate-600) */}
-              <div className="flex items-center justify-center gap-1.5 mt-2 flex-wrap">
-                <span className="px-3 py-0.5 rounded-full bg-blue-100 text-blue-900 text-xs font-bold shadow-2xs">
+              {/* Tag Kategori: Olahraga & Lisensi */}
+              <div className="flex items-center justify-center gap-2 mt-2 flex-wrap">
+                <span className="px-3.5 py-0.5 rounded-full bg-blue-100 text-blue-900 text-xs font-bold shadow-2xs">
                   {sport}
                 </span>
                 {subInfo && (
-                  <span className="px-3 py-0.5 rounded-full bg-slate-200 text-slate-600 text-xs font-semibold break-words max-w-[160px] shadow-2xs">
+                  <span className="px-3.5 py-0.5 rounded-full bg-slate-200 text-slate-600 text-xs font-semibold break-words max-w-[200px] shadow-2xs">
                     {subInfo}
                   </span>
                 )}
               </div>
 
-              {/* 4. QR Code & ID Transaksi */}
-              <div className="mt-auto pt-3 pb-1 flex flex-col items-center">
-                <div className="p-2 bg-white rounded-xl border border-slate-200/90 shadow-sm">
+              {/* 4. QR Code & ID Transaksi dengan Spasi Lega */}
+              <div className="mt-6 pt-2 pb-2 flex flex-col items-center">
+                <div className="p-2.5 bg-white rounded-xl border border-slate-200/90 shadow-sm">
                   <QRCode
                     value={documentId}
-                    size={76}
+                    size={84}
                     level="M"
                   />
                 </div>
-                {/* Teks UID/ID Pelatih berukuran kecil di bawah QR Code persis: ID: ... font-mono text-[10px] text-slate-800 font-semibold */}
-                <p className="font-mono text-[10px] text-slate-800 font-semibold mt-1 tracking-wider text-center">
+                {/* Teks UID/ID Pelatih berukuran kecil di bawah QR Code */}
+                <p className="font-mono text-[11px] text-slate-800 font-semibold mt-2 tracking-wider text-center">
                   ID: {documentId}
                 </p>
               </div>
             </div>
 
-            {/* 5. Desain Footer (Navy & Emas) */}
-            <div className="bg-[#0a192f] rounded-b-xl border-t border-[#D4AF37]/30 flex justify-between items-center px-4 py-3 select-none">
+            {/* 5. Desain Footer (Navy & Emas) - Padding Simetris py-3 */}
+            <div className="bg-[#0a192f] rounded-b-2xl border-t border-[#D4AF37]/30 flex justify-between items-center px-5 py-3 select-none">
               <div className="flex items-center gap-1.5 text-[#D4AF37]">
                 <ShieldCheck className="w-4 h-4 text-[#D4AF37]" />
-                <span className="text-[10px] sm:text-[11px] font-bold tracking-wider uppercase">
+                <span className="text-xs font-bold tracking-wider uppercase">
                   OFFICIAL PASS
                 </span>
               </div>
-              <span className="text-[#D4AF37] text-[10px] sm:text-[11px] font-extrabold tracking-widest uppercase">
+              <span className="text-[#D4AF37] text-xs font-extrabold tracking-widest uppercase">
                 CHUA CORE
               </span>
             </div>
