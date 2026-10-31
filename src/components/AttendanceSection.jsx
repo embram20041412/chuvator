@@ -44,7 +44,7 @@ export default function AttendanceSection({ selectedClass, students = [], tenant
     return false;
   });
 
-  const targetStudents = assignedClassStudents.length > 0 ? assignedClassStudents : students;
+  const targetStudents = assignedClassStudents;
 
   const classStudents = targetStudents.filter((student) => {
     const isInactive = 

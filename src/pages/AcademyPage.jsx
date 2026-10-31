@@ -200,6 +200,16 @@ export default function AcademyPage({ userProfile }) {
     }
   }, [isCoachOnly, activeAcademyTab, setSearchParams]);
 
+  // Auto-lock activeAcademyId for Coach role strictly to coach's assigned academy
+  useEffect(() => {
+    if (isCoachOnly && coachProfile?.academy_id) {
+      if (activeAcademyId !== coachProfile.academy_id) {
+        setActiveAcademyId(coachProfile.academy_id);
+        localStorage.setItem('activeAcademyId', coachProfile.academy_id);
+      }
+    }
+  }, [isCoachOnly, coachProfile?.academy_id, activeAcademyId]);
+
   // Sync activeAcademyTab when URL tab parameter changes
   useEffect(() => {
     const currentTab = searchParams.get('tab');
@@ -282,16 +292,17 @@ export default function AcademyPage({ userProfile }) {
         return c;
       });
 
-    if (isCoachOnly && coachProfile) {
+    if (isCoachOnly) {
+      if (!coachProfile) return [];
       const cId = coachProfile.id;
-      const cEmail = coachProfile.email;
+      const cEmail = coachProfile.email ? coachProfile.email.toLowerCase() : '';
       const cName = coachProfile.name ? coachProfile.name.toLowerCase() : '';
 
       rawList = rawList.filter((c) => {
-        if (cId && (c.coachId === cId || c.coach_id === cId)) return true;
-        if (cEmail && (c.coachEmail === cEmail || c.coach_email === cEmail)) return true;
-        if (cName && c.coachName && c.coachName.toLowerCase() === cName) return true;
-        return false;
+        const coachIdMatch = cId && (c.coachId === cId || c.coach_id === cId);
+        const coachEmailMatch = cEmail && (c.coachEmail?.toLowerCase() === cEmail || c.coach_email?.toLowerCase() === cEmail);
+        const coachNameMatch = cName && c.coachName && c.coachName.toLowerCase() === cName;
+        return Boolean(coachIdMatch || coachEmailMatch || coachNameMatch);
       });
     }
 
@@ -546,9 +557,13 @@ export default function AcademyPage({ userProfile }) {
       let currentTargetId = activeAcademyId;
       if (academiesData && academiesData.length > 0) {
         setAcademies(academiesData);
-        const storedId = localStorage.getItem('activeAcademyId');
-        const found = academiesData.find((a) => a.id === storedId);
-        currentTargetId = found ? found.id : academiesData[0].id;
+        if (isCoachOnly && coachProfile?.academy_id) {
+          currentTargetId = coachProfile.academy_id;
+        } else {
+          const storedId = localStorage.getItem('activeAcademyId');
+          const found = academiesData.find((a) => a.id === storedId);
+          currentTargetId = found ? found.id : academiesData[0].id;
+        }
         setActiveAcademyId((prevId) => (prevId === currentTargetId ? prevId : currentTargetId));
         localStorage.setItem('activeAcademyId', currentTargetId);
       } else {
@@ -566,7 +581,7 @@ export default function AcademyPage({ userProfile }) {
       setLoadingClasses(false);
       setLoadingAcademies(false);
     }
-  }, [tenantId, activeAcademyId, fetchCoaches]);
+  }, [tenantId, activeAcademyId, fetchCoaches, isCoachOnly, coachProfile?.academy_id]);
 
   useEffect(() => {
     if (tenantId) {
@@ -919,21 +934,32 @@ export default function AcademyPage({ userProfile }) {
                   <Building2 className="w-3.5 h-3.5 text-[#354944] dark:text-[#C89D32]" />
                   <div className="flex flex-col min-w-0">
                     <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider leading-none mb-0.5">Akademi Aktif</span>
-                    <select
-                      value={activeAcademyId}
-                      onChange={(e) => {
-                        const id = e.target.value;
-                        setActiveAcademyId(id);
-                        localStorage.setItem('activeAcademyId', id);
-                      }}
-                      className="bg-transparent text-slate-900 dark:text-slate-100 text-xs font-semibold focus:outline-none cursor-pointer truncate pr-2"
-                    >
-                      {academies.map((ac) => (
-                        <option key={ac.id} value={ac.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
-                          {ac.name} ({ac.sport || 'Umum'})
-                        </option>
-                      ))}
-                    </select>
+                    {isCoachOnly ? (
+                      <div className="flex items-center gap-1.5 py-0.5">
+                        <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate max-w-[180px]">
+                          {activeAcademy?.name || 'Akademi Anda'}
+                        </span>
+                        <span className="text-[9px] bg-[#354944]/15 dark:bg-[#C89D32]/20 text-[#354944] dark:text-[#C89D32] font-bold px-1.5 py-0.5 rounded border border-[#354944]/20 dark:border-[#C89D32]/40 shrink-0">
+                          Terkunci (Pelatih)
+                        </span>
+                      </div>
+                    ) : (
+                      <select
+                        value={activeAcademyId}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          setActiveAcademyId(id);
+                          localStorage.setItem('activeAcademyId', id);
+                        }}
+                        className="bg-transparent text-slate-900 dark:text-slate-100 text-xs font-semibold focus:outline-none cursor-pointer truncate pr-2"
+                      >
+                        {academies.map((ac) => (
+                          <option key={ac.id} value={ac.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
+                            {ac.name} ({ac.sport || 'Umum'})
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                 </div>
 
@@ -981,30 +1007,56 @@ export default function AcademyPage({ userProfile }) {
                     <Building2 className="w-4 h-4 text-[#354944] dark:text-[#C89D32] shrink-0" />
                     <div className="flex flex-col min-w-0 flex-1">
                       <span className="text-[9px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider leading-none mb-0.5">Akademi Aktif</span>
-                      <select
-                        value={activeAcademyId}
-                        onChange={(e) => {
-                          const id = e.target.value;
-                          setActiveAcademyId(id);
-                          localStorage.setItem('activeAcademyId', id);
-                        }}
-                        className="bg-transparent text-slate-900 dark:text-slate-100 text-xs font-semibold focus:outline-none cursor-pointer truncate pr-2 w-full"
-                      >
-                        {academies.map((ac) => (
-                          <option key={ac.id} value={ac.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
-                            {ac.name} ({ac.sport || 'Umum'})
-                          </option>
-                        ))}
-                      </select>
+                      {isCoachOnly ? (
+                        <div className="flex items-center gap-1.5 py-0.5">
+                          <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
+                            {activeAcademy?.name || 'Akademi Anda'}
+                          </span>
+                          <span className="text-[9px] bg-[#354944]/15 dark:bg-[#C89D32]/20 text-[#354944] dark:text-[#C89D32] font-bold px-1.5 py-0.5 rounded border border-[#354944]/20 dark:border-[#C89D32]/40 shrink-0">
+                            Terkunci (Pelatih)
+                          </span>
+                        </div>
+                      ) : (
+                        <select
+                          value={activeAcademyId}
+                          onChange={(e) => {
+                            const id = e.target.value;
+                            setActiveAcademyId(id);
+                            localStorage.setItem('activeAcademyId', id);
+                          }}
+                          className="bg-transparent text-slate-900 dark:text-slate-100 text-xs font-semibold focus:outline-none cursor-pointer truncate pr-2 w-full"
+                        >
+                          {academies.map((ac) => (
+                            <option key={ac.id} value={ac.id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100">
+                              {ac.name} ({ac.sport || 'Umum'})
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateModal(true)}
-                    className="px-3 py-2 bg-[#354944] text-white font-bold text-xs rounded-xl border-b-2 border-[#C89D32] shrink-0"
-                  >
-                    + Baru
-                  </button>
+                  {isCoachOnly ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPwdErr(null);
+                        setPwdMsg(null);
+                        setShowCoachPasswordModal(true);
+                      }}
+                      className="px-2.5 py-2 bg-[#354944] text-[#C89D32] font-bold text-xs rounded-xl border border-[#C89D32]/40 shrink-0 flex items-center gap-1"
+                    >
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>Password</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowCreateModal(true)}
+                      className="px-3 py-2 bg-[#354944] text-white font-bold text-xs rounded-xl border-b-2 border-[#C89D32] shrink-0"
+                    >
+                      + Baru
+                    </button>
+                  )}
                 </div>
 
                 {/* 3 Mini Metrics */}
@@ -1029,64 +1081,68 @@ export default function AcademyPage({ userProfile }) {
                 <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider px-1">
                   MENU OPERASIONAL AKADEMI
                 </span>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => { setActiveAcademyTab('dasbor'); setMobileAcademyHubMode(false); }}
-                    className="bg-white dark:bg-[#162320] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm text-left space-y-2 active:scale-95 transition-all cursor-pointer flex flex-col justify-between"
-                  >
-                    <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
-                      📊
-                    </div>
-                    <div>
-                      <h4 className="font-extrabold text-xs text-slate-900 dark:text-slate-100">Dasbor &amp; Laporan</h4>
-                      <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">Analitik BI &amp; Arus SPP</p>
-                    </div>
-                  </button>
+                <div className={`grid ${isCoachOnly ? 'grid-cols-1' : 'grid-cols-2'} gap-3`}>
+                  {!isCoachOnly && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => { setActiveAcademyTab('dasbor'); setMobileAcademyHubMode(false); }}
+                        className="bg-white dark:bg-[#162320] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm text-left space-y-2 active:scale-95 transition-all cursor-pointer flex flex-col justify-between"
+                      >
+                        <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                          📊
+                        </div>
+                        <div>
+                          <h4 className="font-extrabold text-xs text-slate-900 dark:text-slate-100">Dasbor &amp; Laporan</h4>
+                          <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">Analitik BI &amp; Arus SPP</p>
+                        </div>
+                      </button>
 
-                  <button
-                    type="button"
-                    onClick={() => { setActiveAcademyTab('siswa'); setMobileAcademyHubMode(false); }}
-                    className="bg-white dark:bg-[#162320] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm text-left space-y-2 active:scale-95 transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden"
-                  >
-                    <div className="absolute right-2 top-2 px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-md font-black text-[9px]">
-                      {filteredStudents.length}
-                    </div>
-                    <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-                      🎓
-                    </div>
-                    <div>
-                      <h4 className="font-extrabold text-xs text-slate-900 dark:text-slate-100">Siswa &amp; SPP</h4>
-                      <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">Data Atlet &amp; Tagihan</p>
-                    </div>
-                  </button>
+                      <button
+                        type="button"
+                        onClick={() => { setActiveAcademyTab('siswa'); setMobileAcademyHubMode(false); }}
+                        className="bg-white dark:bg-[#162320] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm text-left space-y-2 active:scale-95 transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden"
+                      >
+                        <div className="absolute right-2 top-2 px-1.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-md font-black text-[9px]">
+                          {filteredStudents.length}
+                        </div>
+                        <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                          🎓
+                        </div>
+                        <div>
+                          <h4 className="font-extrabold text-xs text-slate-900 dark:text-slate-100">Siswa &amp; SPP</h4>
+                          <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">Data Atlet &amp; Tagihan</p>
+                        </div>
+                      </button>
 
-                  <button
-                    type="button"
-                    onClick={() => { setActiveAcademyTab('pelatih'); setMobileAcademyHubMode(false); }}
-                    className="bg-white dark:bg-[#162320] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm text-left space-y-2 active:scale-95 transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden"
-                  >
-                    <div className="absolute right-2 top-2 px-1.5 py-0.5 bg-indigo-100 text-indigo-800 rounded-md font-black text-[9px]">
-                      {filteredCoaches.length}
-                    </div>
-                    <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
-                      🏅
-                    </div>
-                    <div>
-                      <h4 className="font-extrabold text-xs text-slate-900 dark:text-slate-100">Tim Pelatih</h4>
-                      <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">Data Coach &amp; ID Card</p>
-                    </div>
-                  </button>
+                      <button
+                        type="button"
+                        onClick={() => { setActiveAcademyTab('pelatih'); setMobileAcademyHubMode(false); }}
+                        className="bg-white dark:bg-[#162320] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm text-left space-y-2 active:scale-95 transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden"
+                      >
+                        <div className="absolute right-2 top-2 px-1.5 py-0.5 bg-indigo-100 text-indigo-800 rounded-md font-black text-[9px]">
+                          {filteredCoaches.length}
+                        </div>
+                        <div className="w-9 h-9 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-bold">
+                          🏅
+                        </div>
+                        <div>
+                          <h4 className="font-extrabold text-xs text-slate-900 dark:text-slate-100">Tim Pelatih</h4>
+                          <p className="text-[10px] text-slate-400 mt-0.5 leading-snug">Data Coach &amp; ID Card</p>
+                        </div>
+                      </button>
+                    </>
+                  )}
 
                   <button
                     type="button"
                     onClick={() => { setActiveAcademyTab('kelas'); setMobileAcademyHubMode(false); }}
-                    className="bg-white dark:bg-[#162320] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm text-left space-y-2 active:scale-95 transition-all cursor-pointer flex flex-col justify-between relative overflow-hidden"
+                    className={`bg-white dark:bg-[#162320] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm text-left space-y-2 active:scale-95 transition-all cursor-pointer flex ${isCoachOnly ? 'flex-row items-center gap-3.5' : 'flex-col justify-between'} relative overflow-hidden`}
                   >
                     <div className="absolute right-2 top-2 px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded-md font-black text-[9px]">
                       {filteredClasses.length}
                     </div>
-                    <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                    <div className="w-9 h-9 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold shrink-0">
                       📚
                     </div>
                     <div>
@@ -1098,7 +1154,7 @@ export default function AcademyPage({ userProfile }) {
                   <button
                     type="button"
                     onClick={() => { setActiveAcademyTab('presensi'); setMobileAcademyHubMode(false); }}
-                    className="col-span-2 bg-[#354944] text-white p-4 rounded-2xl border-b-2 border-[#C89D32] shadow-md text-left space-y-2 active:scale-98 transition-all cursor-pointer flex items-center justify-between"
+                    className={`${isCoachOnly ? 'w-full' : 'col-span-2'} bg-[#354944] text-white p-4 rounded-2xl border-b-2 border-[#C89D32] shadow-md text-left space-y-2 active:scale-98 transition-all cursor-pointer flex items-center justify-between`}
                   >
                     <div className="space-y-1">
                       <span className="px-2 py-0.5 bg-[#C89D32]/30 text-[#C89D32] rounded font-black text-[9px] uppercase">
@@ -1112,30 +1168,32 @@ export default function AcademyPage({ userProfile }) {
                 </div>
               </div>
 
-              {/* Pintasan Aksi Cepat */}
-              <div className="space-y-2 pt-2">
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider px-1">
-                  AKSI CEPAT
-                </span>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <button
-                    type="button"
-                    onClick={() => { setEditingStudent(null); setShowAddModal(true); }}
-                    className="py-3 bg-white dark:bg-[#162320] text-[#354944] dark:text-white border border-slate-200 dark:border-slate-800 font-bold text-xs rounded-xl shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <UserPlus className="w-3.5 h-3.5 text-[#354944] dark:text-[#C89D32]" />
-                    <span>+ Daftar Siswa</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowClassModal(true)}
-                    className="py-3 bg-white dark:bg-[#162320] text-[#354944] dark:text-white border border-slate-200 dark:border-slate-800 font-bold text-xs rounded-xl shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
-                  >
-                    <Plus className="w-3.5 h-3.5 text-[#354944] dark:text-[#C89D32]" />
-                    <span>+ Buat Kelas</span>
-                  </button>
+              {/* Pintasan Aksi Cepat (Hanya untuk Owner & Admin) */}
+              {!isCoachOnly && (
+                <div className="space-y-2 pt-2">
+                  <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider px-1">
+                    AKSI CEPAT
+                  </span>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => { setEditingStudent(null); setShowAddModal(true); }}
+                      className="py-3 bg-white dark:bg-[#162320] text-[#354944] dark:text-white border border-slate-200 dark:border-slate-800 font-bold text-xs rounded-xl shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <UserPlus className="w-3.5 h-3.5 text-[#354944] dark:text-[#C89D32]" />
+                      <span>+ Daftar Siswa</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowClassModal(true)}
+                      className="py-3 bg-white dark:bg-[#162320] text-[#354944] dark:text-white border border-slate-200 dark:border-slate-800 font-bold text-xs rounded-xl shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5 text-[#354944] dark:text-[#C89D32]" />
+                      <span>+ Buat Kelas</span>
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
         </>
@@ -1617,13 +1675,15 @@ export default function AcademyPage({ userProfile }) {
               <span>Daftar Kelas ({filteredClasses.length})</span>
             </h2>
 
-            <button
-              onClick={() => setShowClassModal(true)}
-              className="px-3.5 py-2 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white font-semibold text-xs rounded-xl shadow-sm transition-colors cursor-pointer flex items-center space-x-1"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>+ Buat Kelas</span>
-            </button>
+            {!isCoachOnly && (
+              <button
+                onClick={() => setShowClassModal(true)}
+                className="px-3.5 py-2 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white font-semibold text-xs rounded-xl shadow-sm transition-colors cursor-pointer flex items-center space-x-1"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Buat Kelas</span>
+              </button>
+            )}
           </div>
 
           {loadingClasses ? (
@@ -1634,14 +1694,22 @@ export default function AcademyPage({ userProfile }) {
               <BookOpen className="w-12 h-12 text-slate-300 mb-3" />
               <p className="text-sm font-semibold text-slate-700">Belum ada kelas/kelompok latihan.</p>
               <p className="text-xs text-slate-400 max-w-sm mt-1 mb-4">
-                Buat kelas latihan berdasarkan kelompok umur &amp; alokasikan pelatih utama.
+                {isCoachOnly
+                  ? 'Belum ada kelas yang terdaftar atau ditugaskan kepada Anda pada akademi ini.'
+                  : 'Buat kelas latihan berdasarkan kelompok umur & alokasikan pelatih utama.'}
               </p>
-              <button
-                onClick={() => setShowClassModal(true)}
-                className="px-4 py-2 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white text-xs font-semibold rounded-xl transition-colors cursor-pointer shadow-sm"
-              >
-                + Buat Kelas Pertama
-              </button>
+              {!isCoachOnly ? (
+                <button
+                  onClick={() => setShowClassModal(true)}
+                  className="px-4 py-2 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white text-xs font-semibold rounded-xl transition-colors cursor-pointer shadow-sm"
+                >
+                  + Buat Kelas Pertama
+                </button>
+              ) : (
+                <p className="text-xs text-slate-500 font-medium italic">
+                  Hubungi pengelola akademi untuk penugasan kelas Anda.
+                </p>
+              )}
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1738,17 +1806,19 @@ export default function AcademyPage({ userProfile }) {
                       </div>
                     </div>
 
-                    {/* Tombol Kunci Jadwal */}
-                    <div className="pt-2.5 border-t border-slate-200/70 dark:border-slate-800">
-                      <button
-                        type="button"
-                        onClick={() => setGenerateModalClass(cls)}
-                        className="w-full py-2 bg-[#354944]/10 dark:bg-[#354944]/30 text-[#354944] dark:text-[#C89D32] border border-[#354944]/20 hover:bg-[#354944]/20 font-bold text-xs rounded-xl transition-colors cursor-pointer flex items-center justify-center space-x-1.5 shadow-2xs"
-                      >
-                        <Lock className="w-3.5 h-3.5 text-[#354944] dark:text-[#C89D32]" />
-                        <span>Kunci Jadwal Lapangan</span>
-                      </button>
-                    </div>
+                    {/* Tombol Kunci Jadwal (Hanya untuk Owner & Admin) */}
+                    {!isCoachOnly && (
+                      <div className="pt-2.5 border-t border-slate-200/70 dark:border-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => setGenerateModalClass(cls)}
+                          className="w-full py-2 bg-[#354944]/10 dark:bg-[#354944]/30 text-[#354944] dark:text-[#C89D32] border border-[#354944]/20 hover:bg-[#354944]/20 font-bold text-xs rounded-xl transition-colors cursor-pointer flex items-center justify-center space-x-1.5 shadow-2xs"
+                        >
+                          <Lock className="w-3.5 h-3.5 text-[#354944] dark:text-[#C89D32]" />
+                          <span>Kunci Jadwal Lapangan</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -1918,7 +1988,7 @@ export default function AcademyPage({ userProfile }) {
                       <div className={attendanceSubTab === 'presensi' ? 'block' : 'hidden'}>
                         <AttendanceSection
                           selectedClass={currentClass}
-                          students={filteredStudents}
+                          students={filteredStudents.filter((s) => s.classId === currentClass.id || s.className === currentClass.className)}
                           tenantId={tenantId}
                         />
                       </div>
@@ -1926,7 +1996,7 @@ export default function AcademyPage({ userProfile }) {
                       <div className={attendanceSubTab === 'evaluasi' ? 'block' : 'hidden'}>
                         <EvaluationSection
                           selectedClass={currentClass}
-                          students={filteredStudents}
+                          students={filteredStudents.filter((s) => s.classId === currentClass.id || s.className === currentClass.className)}
                           tenantId={tenantId}
                           activeAcademy={activeAcademy}
                         />
@@ -1934,7 +2004,7 @@ export default function AcademyPage({ userProfile }) {
 
                       <div className={attendanceSubTab === 'perkembangan' || (attendanceSubTab !== 'presensi' && attendanceSubTab !== 'evaluasi') ? 'block' : 'hidden'}>
                         <GrowthTrackerSection
-                          students={filteredStudents.filter((s) => s.classId === currentClass.id)}
+                          students={filteredStudents.filter((s) => s.classId === currentClass.id || s.className === currentClass.className)}
                         />
                       </div>
                     </div>

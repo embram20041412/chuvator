@@ -302,7 +302,7 @@ export async function deleteAcademy(academyId) {
 // 2. KELAS AKADEMI (academy_classes)
 // -------------------------------------------------------------------------
 
-export async function getClasses(tenantId, academyId = null) {
+export async function getClasses(tenantId, academyId = null, coachId = null) {
   if (!tenantId) return [];
 
   let query = supabase
@@ -314,6 +314,11 @@ export async function getClasses(tenantId, academyId = null) {
   const safeAcademyId = toUuidOrNull(academyId);
   if (safeAcademyId) {
     query = query.eq('academy_id', safeAcademyId);
+  }
+
+  const safeCoachId = toUuidOrNull(coachId) || coachId;
+  if (safeCoachId) {
+    query = query.eq('coach_id', safeCoachId);
   }
 
   const { data, error } = await query;
