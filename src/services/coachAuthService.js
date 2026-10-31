@@ -23,6 +23,7 @@ export async function createCoachWithAccount({
   const cleanName = name ? name.trim() : '';
   const chosenSpecialty = sportSpecialty || specialty || 'Pelatih Utama';
 
+  // 1. TANGANI SIGN UP SUPABASE AUTH
   if (cleanEmail && password) {
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email: cleanEmail,
@@ -37,15 +38,38 @@ export async function createCoachWithAccount({
     });
 
     if (authError) {
-      console.warn('Catatan Auth SignUp Coach:', authError.message);
+      console.warn('[coachAuthService] Auth SignUp note:', authError.message);
+      const msg = (authError.message || '').toLowerCase();
+      if (
+        msg.includes('already registered') ||
+        msg.includes('already exists') ||
+        authError.status === 422 ||
+        authError.code === 'user_already_exists'
+      ) {
+        // User sudah terdaftar di Supabase Auth -> Jangan gagalkan seluruh proses,
+        // lanjutkan upsert data undangan dan penyambungan pengguna ke tenant.
+        console.info(`[coachAuthService] User email "${cleanEmail}" sudah terdaftar di Auth. Melanjutkan penyambungan tenant & undangan.`);
+        try {
+          const { data: existingStaff } = await supabase
+            .from('users_staff')
+            .select('uid')
+            .eq('email', cleanEmail)
+            .maybeSingle();
+          if (existingStaff?.uid) {
+            authUid = existingStaff.uid;
+          }
+        } catch (e) {
+          console.warn('[coachAuthService] Fetch existing staff UID note:', e);
+        }
+      }
     } else {
       authUid = authData.user?.id || null;
     }
   }
 
-  // SINKRONISASI OTOMATIS: Insert / Upsert ke public.users_staff & public.invitations
+  // 2. SINKRONISASI OTOMATIS: Insert / Upsert ke public.users_staff & public.invitations
   if (cleanEmail) {
-    // 1. Sinkronisasi ke public.users_staff
+    // Sinkronisasi ke public.users_staff
     try {
       const staffRecord = {
         uid: authUid || null,
@@ -74,15 +98,14 @@ export async function createCoachWithAccount({
       console.warn('[coachAuthService] Catch upserting users_staff:', staffCatch);
     }
 
-    // 2. Sinkronisasi ke public.invitations
+    // Sinkronisasi ke public.invitations (HANYA MENGGUNAKAN KOLOM SKEMA STANDAR: tenant_id, email, role, status, created_at)
     try {
       const invRecord = {
         tenant_id: tenantId,
         email: cleanEmail,
         role: 'coach',
         status: 'accepted',
-        created_at: new Date().toISOString(),
-        accepted_at: new Date().toISOString()
+        created_at: new Date().toISOString()
       };
 
       const { error: invErr } = await supabase
@@ -101,7 +124,7 @@ export async function createCoachWithAccount({
     }
   }
 
-  // 3. Insert ke tabel public.coaches (MENGGUNAKAN KOLOM DB sport_specialty, BUKAN specialty)
+  // 3. INSERT / UPSERT KE TABEL public.coaches
   const coachPayload = {
     tenant_id: tenantId,
     academy_id: academyId || null,
@@ -121,14 +144,39 @@ export async function createCoachWithAccount({
   if (photoUrl) coachPayload.photo_url = photoUrl;
   if (address) coachPayload.address = address;
 
-  const { data: coachData, error: coachError } = await supabase
+  let coachData = null;
+  const { data: insertedCoach, error: coachError } = await supabase
     .from('coaches')
     .insert([coachPayload])
     .select()
     .single();
 
   if (coachError) {
-    throw new Error(`Gagal menyimpan data pelatih: ${coachError.message}`);
+    console.warn('[coachAuthService] Warning inserting coach:', coachError.message);
+    if (cleanEmail) {
+      const { data: existingCoach } = await supabase
+        .from('coaches')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .ilike('email', cleanEmail)
+        .maybeSingle();
+
+      if (existingCoach) {
+        coachData = existingCoach;
+        if (authUid && !existingCoach.auth_uid) {
+          await supabase
+            .from('coaches')
+            .update({ auth_uid: authUid, sport_specialty: chosenSpecialty })
+            .eq('id', existingCoach.id);
+        }
+      } else {
+        throw new Error(`Gagal menyimpan data pelatih: ${coachError.message}`);
+      }
+    } else {
+      throw new Error(`Gagal menyimpan data pelatih: ${coachError.message}`);
+    }
+  } else {
+    coachData = insertedCoach;
   }
 
   return { success: true, coach: coachData };

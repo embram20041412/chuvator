@@ -327,8 +327,7 @@ export default function CoachModal({
                 email: cleanEmail,
                 role: 'coach',
                 status: 'accepted',
-                created_at: new Date().toISOString(),
-                accepted_at: new Date().toISOString()
+                created_at: new Date().toISOString()
               }], { onConflict: 'email,tenant_id' });
             } catch (syncErr) {
               console.warn('[CoachModal] Sync users_staff & invitations note:', syncErr);

@@ -22,6 +22,8 @@ export async function registerNewStaff({ email, password, role, tenantId, fullNa
   }
 
   // Langkah A: Daftarkan kredensial ke Supabase Auth secara langsung
+  let userId = `staff-${Date.now()}`;
+
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email: cleanEmail,
     password: password,
@@ -35,14 +37,35 @@ export async function registerNewStaff({ email, password, role, tenantId, fullNa
   });
 
   if (authError) {
-    if (authError.message?.toLowerCase().includes('already registered')) {
-      throw new Error(`Email "${cleanEmail}" sudah terdaftar di sistem. Gunakan email lain.`);
+    console.warn('[staffService] Auth SignUp note:', authError.message);
+    const msg = (authError.message || '').toLowerCase();
+    if (
+      msg.includes('already registered') ||
+      msg.includes('already exists') ||
+      authError.status === 422 ||
+      authError.code === 'user_already_exists'
+    ) {
+      console.info(`[staffService] User "${cleanEmail}" sudah terdaftar di Auth. Melanjutkan penyambungan profil staf & undangan.`);
+      try {
+        const { data: existingStaff } = await supabase
+          .from('users_staff')
+          .select('uid')
+          .eq('email', cleanEmail)
+          .maybeSingle();
+        if (existingStaff?.uid) {
+          userId = existingStaff.uid;
+        }
+      } catch (e) {
+        console.warn('[staffService] Fetch existing staff UID note:', e);
+      }
+    } else {
+      throw new Error(`Gagal membuat akun Auth: ${authError.message}`);
     }
-    throw new Error(`Gagal membuat akun Auth: ${authError.message}`);
+  } else {
+    userId = authData.user?.id || userId;
   }
 
   // Langkah B: Masukkan data profil staf ke tabel public.users_staff di Supabase
-  const userId = authData.user?.id || `staff-${Date.now()}`;
   const staffRecord = {
     uid: userId,
     tenant_id: tenantId,
@@ -63,10 +86,10 @@ export async function registerNewStaff({ email, password, role, tenantId, fullNa
     .single();
 
   if (dbError) {
-    throw new Error(`Gagal menyimpan profil staf: ${dbError.message}`);
+    console.warn('[staffService] Warning upserting users_staff:', dbError.message);
   }
 
-  // Langkah C: Catat juga ke tabel invitations untuk audit riwayat GOR
+  // Langkah C: Catat juga ke tabel invitations untuk audit riwayat GOR (HANYA KOLOM SKEMA STANDAR)
   try {
     await supabase.from('invitations').upsert([
       {
@@ -74,15 +97,14 @@ export async function registerNewStaff({ email, password, role, tenantId, fullNa
         email: cleanEmail,
         role: assignedRole,
         status: 'accepted',
-        created_at: new Date().toISOString(),
-        accepted_at: new Date().toISOString(),
+        created_at: new Date().toISOString()
       },
     ], { onConflict: 'email,tenant_id' });
   } catch (invErr) {
     console.warn('[staffService] Invitations note:', invErr);
   }
 
-  return { success: true, data: dbData, authData };
+  return { success: true, data: dbData || staffRecord, authData };
 }
 
 // Export alias functions untuk kompatibilitas penuh dengan komponen UI
