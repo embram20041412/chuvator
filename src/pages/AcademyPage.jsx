@@ -3,6 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import supabaseAcademyService from '../services/supabaseAcademyService';
 import { calculateAge, getStudentInitials, parseScheduleItems } from '../utils/helpers';
 import useArenaData from '../hooks/useArenaData';
+import useUserAccessScope from '../hooks/useUserAccessScope';
+import { updateCoachPassword } from '../services/coachAuthService';
 import { isTennisSport } from '../config/tennisAssessmentData';
 import { sortClassesByAgeGroup } from '../config/tierCurriculumConfig';
 
@@ -173,21 +175,46 @@ export default function AcademyPage({ userProfile }) {
   const tabParam = searchParams.get('tab');
   const initialTab = (tabParam && validTabs.includes(tabParam)) ? tabParam : 'dasbor';
 
+  // Access scope & Coach RBAC
+  const accessScope = useUserAccessScope(userProfile);
+  const { isCoachOnly, coachProfile } = accessScope;
+
+  // Coach Self-Service Password Modal State
+  const [showCoachPasswordModal, setShowCoachPasswordModal] = useState(false);
+  const [newCoachPassword, setNewCoachPassword] = useState('');
+  const [confirmCoachPassword, setConfirmCoachPassword] = useState('');
+  const [updatingPassword, setUpdatingPassword] = useState(false);
+  const [pwdMsg, setPwdMsg] = useState(null);
+  const [pwdErr, setPwdErr] = useState(null);
+
   // Active Internal Tab: 'dasbor' | 'siswa' | 'pelatih' | 'kelas' | 'presensi' (Defaults to 'dasbor')
   const [activeAcademyTab, setActiveAcademyTab] = useState(initialTab);
   const [mobileAcademyHubMode, setMobileAcademyHubMode] = useState(true);
+
+  // Guard tab for Coach role: coaches can only access 'kelas' & 'presensi'
+  useEffect(() => {
+    if (isCoachOnly && (activeAcademyTab === 'dasbor' || activeAcademyTab === 'siswa' || activeAcademyTab === 'pelatih')) {
+      setActiveAcademyTab('kelas');
+      setSearchParams({ tab: 'kelas' });
+    }
+  }, [isCoachOnly, activeAcademyTab, setSearchParams]);
 
   // Sync activeAcademyTab when URL tab parameter changes
   useEffect(() => {
     const currentTab = searchParams.get('tab');
     if (currentTab && validTabs.includes(currentTab)) {
-      setActiveAcademyTab(currentTab);
+      if (isCoachOnly && (currentTab === 'dasbor' || currentTab === 'siswa' || currentTab === 'pelatih')) {
+        setActiveAcademyTab('kelas');
+      } else {
+        setActiveAcademyTab(currentTab);
+      }
     } else if (!currentTab) {
-      setActiveAcademyTab('dasbor');
+      setActiveAcademyTab(isCoachOnly ? 'kelas' : 'dasbor');
     }
-  }, [searchParams]);
+  }, [searchParams, isCoachOnly]);
 
   const handleTabChange = (tab) => {
+    if (isCoachOnly && (tab === 'dasbor' || tab === 'siswa' || tab === 'pelatih')) return;
     setActiveAcademyTab(tab);
     setSearchParams({ tab });
   };
@@ -232,12 +259,13 @@ export default function AcademyPage({ userProfile }) {
 
   // 2. STRICT ISOLATION & SELF-HEALING (IN-MEMORY):
   // Hanya ambil data yang academyId-nya persis sama dengan activeAcademy.id.
-  // Jika akademi aktif adalah Tenis, otomatis koreksi cabor kelas yang terlanjur terdaftar 'Badminton' menjadi 'Tenis' secara instan.
-  const activeStudents = activeAcademy ? students.filter((s) => s.academyId === activeAcademy.id) : [];
+  // Jika pengguna login sebagai Coach (isCoachOnly), filter kelas & siswa sesuai coachProfile ID / Email.
+  const rawActiveStudents = activeAcademy ? students.filter((s) => s.academyId === activeAcademy.id) : [];
   const activeCoaches = activeAcademy ? coaches.filter((c) => c.academyId === activeAcademy.id) : [];
+
   const activeClasses = useMemo(() => {
     if (!activeAcademy) return [];
-    const rawList = academyClasses
+    let rawList = academyClasses
       .filter((c) => c.academyId === activeAcademy.id)
       .map((c) => {
         if (isCurrentAcademyTennis && (!c.sport || c.sport.toLowerCase() === 'badminton' || !c.sport.toLowerCase().includes('tenis'))) {
@@ -245,8 +273,61 @@ export default function AcademyPage({ userProfile }) {
         }
         return c;
       });
+
+    if (isCoachOnly && coachProfile) {
+      const cId = coachProfile.id;
+      const cEmail = coachProfile.email;
+      const cName = coachProfile.name ? coachProfile.name.toLowerCase() : '';
+
+      rawList = rawList.filter((c) => {
+        if (cId && (c.coachId === cId || c.coach_id === cId)) return true;
+        if (cEmail && (c.coachEmail === cEmail || c.coach_email === cEmail)) return true;
+        if (cName && c.coachName && c.coachName.toLowerCase() === cName) return true;
+        return false;
+      });
+    }
+
     return sortClassesByAgeGroup(rawList);
-  }, [activeAcademy, academyClasses, isCurrentAcademyTennis]);
+  }, [activeAcademy, academyClasses, isCurrentAcademyTennis, isCoachOnly, coachProfile]);
+
+  const activeStudents = useMemo(() => {
+    if (!isCoachOnly || !coachProfile) return rawActiveStudents;
+    const allowedClassIds = new Set(activeClasses.map((c) => c.id));
+    return rawActiveStudents.filter((s) => s.classId && allowedClassIds.has(s.classId));
+  }, [rawActiveStudents, isCoachOnly, coachProfile, activeClasses]);
+
+  const handleUpdateSelfPassword = async (e) => {
+    e.preventDefault();
+    setPwdErr(null);
+    setPwdMsg(null);
+
+    if (!newCoachPassword || newCoachPassword.length < 6) {
+      setPwdErr('Password baru minimal 6 karakter.');
+      return;
+    }
+
+    if (newCoachPassword !== confirmCoachPassword) {
+      setPwdErr('Konfirmasi password tidak cocok.');
+      return;
+    }
+
+    setUpdatingPassword(true);
+    try {
+      await updateCoachPassword(newCoachPassword);
+      setPwdMsg('Password berhasil diperbarui! Silakan gunakan password baru pada login berikutnya.');
+      setNewCoachPassword('');
+      setConfirmCoachPassword('');
+      setTimeout(() => {
+        setShowCoachPasswordModal(false);
+        setPwdMsg(null);
+      }, 2500);
+    } catch (err) {
+      console.error('Error updating coach password:', err);
+      setPwdErr(err.message || 'Gagal mengubah password.');
+    } finally {
+      setUpdatingPassword(false);
+    }
+  };
 
   // 3. AUTO-FIX / SELF-HEALING MIGRATION:
   // Koreksi data dokumen kelas yang masih terlanjur tertulis non-Tenis pada Akademi Tenis
@@ -795,14 +876,29 @@ export default function AcademyPage({ userProfile }) {
                   </div>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(true)}
-                  className="px-3 py-1.5 bg-[#354944] hover:bg-[#2B3D38] text-white font-semibold text-xs rounded-lg border-b-2 border-[#C89D32] shadow-xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
-                >
-                  <Plus className="w-3 h-3 text-[#C89D32]" />
-                  <span>+ Akademi Baru</span>
-                </button>
+                {isCoachOnly ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPwdErr(null);
+                      setPwdMsg(null);
+                      setShowCoachPasswordModal(true);
+                    }}
+                    className="px-3 py-1.5 bg-[#354944] hover:bg-[#2B3D38] text-[#C89D32] font-semibold text-xs rounded-lg border border-[#C89D32]/40 shadow-xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    <Lock className="w-3.5 h-3.5" />
+                    <span>Ganti Password</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setShowCreateModal(true)}
+                    className="px-3 py-1.5 bg-[#354944] hover:bg-[#2B3D38] text-white font-semibold text-xs rounded-lg border-b-2 border-[#C89D32] shadow-xs transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
+                  >
+                    <Plus className="w-3 h-3 text-[#C89D32]" />
+                    <span>+ Akademi Baru</span>
+                  </button>
+                )}
               </div>
             </div>
           </div>
@@ -1920,6 +2016,93 @@ export default function AcademyPage({ userProfile }) {
         academyName={activeAcademy?.name || 'Akademi'}
         sportCategory={activeAcademy?.sport || ''}
       />
+
+      {/* MODAL 10: GANTI PASSWORD MANDIRI PELATIH */}
+      {showCoachPasswordModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-[#162320] rounded-2xl p-5 sm:p-6 shadow-2xl border border-slate-200 dark:border-white/10 w-full max-w-md space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-[#354944] text-[#C89D32] flex items-center justify-center font-bold">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Ubah Password Akun Pelatih</h3>
+                  <p className="text-[10px] text-slate-400">Pembaruan kredensial kata sandi mandiri</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCoachPasswordModal(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {pwdErr && (
+              <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl font-medium">
+                {pwdErr}
+              </div>
+            )}
+
+            {pwdMsg && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl font-medium">
+                {pwdMsg}
+              </div>
+            )}
+
+            <form onSubmit={handleUpdateSelfPassword} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Password Baru <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  value={newCoachPassword}
+                  onChange={(e) => setNewCoachPassword(e.target.value)}
+                  placeholder="Minimal 6 karakter"
+                  required
+                  minLength={6}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#354944]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Konfirmasi Password Baru <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="password"
+                  value={confirmCoachPassword}
+                  onChange={(e) => setConfirmCoachPassword(e.target.value)}
+                  placeholder="Ketik ulang password baru"
+                  required
+                  minLength={6}
+                  className="w-full px-3 py-2 text-xs rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-[#354944]"
+                />
+              </div>
+
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCoachPasswordModal(false)}
+                  className="px-3 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5 rounded-xl"
+                >
+                  Batal
+                </button>
+                <button
+                  type="submit"
+                  disabled={updatingPassword}
+                  className="px-4 py-2 bg-[#354944] hover:bg-[#2B3D38] text-white font-bold text-xs rounded-xl border-b-2 border-[#C89D32] shadow-sm disabled:opacity-50"
+                >
+                  {updatingPassword ? 'Menyimpan...' : 'Simpan Password'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
     </div>
   );

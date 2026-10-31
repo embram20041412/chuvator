@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import * as supabaseAcademyService from '../services/supabaseAcademyService';
-import { X, User, Phone, Award, Dumbbell, MapPin, Loader2, FileText, Check, Camera, Upload, Trash2 } from 'lucide-react';
+import { createCoachWithAccount } from '../services/coachAuthService';
+import { X, User, Phone, Award, Dumbbell, MapPin, Loader2, FileText, Check, Camera, Upload, Trash2, Mail, Lock } from 'lucide-react';
 import { uploadToCloudinary } from '../services/uploadService';
 
 export default function CoachModal({
@@ -22,6 +23,8 @@ export default function CoachModal({
   const [nickname, setNickname] = useState('');
   const [nik, setNik] = useState('');
   const [coachPhone, setCoachPhone] = useState('');
+  const [coachEmail, setCoachEmail] = useState('');
+  const [coachPassword, setCoachPassword] = useState('');
   const [sportSpecialty, setSportSpecialty] = useState(uniqueSports?.[0] || 'Badminton');
   const [license, setLicense] = useState('');
 
@@ -280,9 +283,24 @@ export default function CoachModal({
           onCoachUpdated(updatedCoach || { id: coachToEdit.id, ...coachData });
         }
       } else {
-        const createdCoach = await supabaseAcademyService.createCoach(coachData);
-        if (onCoachAdded) {
-          onCoachAdded(createdCoach || { id: `coach_${Date.now()}`, ...coachData });
+        if (coachEmail && coachPassword) {
+          const res = await createCoachWithAccount({
+            tenantId,
+            academyId: activeAcademy?.id || '',
+            name: coachName.trim(),
+            phone: coachPhone.trim(),
+            email: coachEmail.trim(),
+            password: coachPassword,
+            specialty: sportSpecialty || 'Pelatih Utama'
+          });
+          if (onCoachAdded) {
+            onCoachAdded(res.coach || { id: `coach_${Date.now()}`, ...coachData });
+          }
+        } else {
+          const createdCoach = await supabaseAcademyService.createCoach(coachData);
+          if (onCoachAdded) {
+            onCoachAdded(createdCoach || { id: `coach_${Date.now()}`, ...coachData });
+          }
         }
       }
 
@@ -292,6 +310,8 @@ export default function CoachModal({
       setNickname('');
       setNik('');
       setCoachPhone('');
+      setCoachEmail('');
+      setCoachPassword('');
       setLicense('');
       setPhotoPreview('');
       setPhotoFile(null);
@@ -484,6 +504,51 @@ export default function CoachModal({
                     />
                   </div>
                 </div>
+
+                {!isEditing && (
+                  <div className="p-3 bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-2xl space-y-3">
+                    <p className="text-[11px] font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                      <Lock className="w-3.5 h-3.5 text-amber-600" />
+                      <span>Akun Login Pelatih (Opsional)</span>
+                    </p>
+                    <div>
+                      <label htmlFor="coachEmail" className="block text-[10px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                        Email Login Pelatih
+                      </label>
+                      <div className="relative">
+                        <Mail className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-2.5" />
+                        <input
+                          id="coachEmail"
+                          name="coachEmail"
+                          type="email"
+                          value={coachEmail}
+                          onChange={(e) => setCoachEmail(e.target.value)}
+                          placeholder="pelatih@chuasport.com"
+                          className="w-full pl-8 pr-3 py-1.5 text-xs bg-white dark:bg-[#162320] border border-gray-200 dark:border-white/10 rounded-xl focus:outline-none focus:border-[#354944]"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="coachPassword" className="block text-[10px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                        Kata Sandi Awal
+                      </label>
+                      <div className="relative">
+                        <Lock className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-2.5" />
+                        <input
+                          id="coachPassword"
+                          name="coachPassword"
+                          type="password"
+                          minLength={6}
+                          value={coachPassword}
+                          onChange={(e) => setCoachPassword(e.target.value)}
+                          placeholder="Minimal 6 Karakter"
+                          className="w-full pl-8 pr-3 py-1.5 text-xs bg-white dark:bg-[#162320] border border-gray-200 dark:border-white/10 rounded-xl focus:outline-none focus:border-[#354944]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>

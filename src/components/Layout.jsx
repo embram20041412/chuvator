@@ -28,6 +28,8 @@ import {
   Pengaturan3DIcon
 } from './icons/App3DIcons';
 
+import useUserAccessScope from '../hooks/useUserAccessScope';
+
 const ALL_NAV_ITEMS = [
   { path: '/dashboard', label: 'Dashboard', name: 'Dashboard', icon: Dashboard3DIcon },
   { path: '/booking', label: 'Booking', name: 'Booking', icon: Booking3DIcon },
@@ -42,6 +44,7 @@ const ALL_NAV_ITEMS = [
 export default function Layout({ userProfile }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const userAccess = useUserAccessScope(userProfile);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [mobileMoreOpen, setMobileMoreOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
@@ -122,13 +125,21 @@ export default function Layout({ userProfile }) {
     return () => window.removeEventListener('simak_refresh_arena_data', fetchCounts);
   }, [tenantId]);
 
-  const academySubMenuItems = [
+  const rawAcademySubMenuItems = [
     { id: 'dasbor', label: 'Dasbor & Laporan', path: '/akademi?tab=dasbor', count: null },
     { id: 'siswa', label: 'Siswa & SPP', path: '/akademi?tab=siswa', count: academyCounts.students },
     { id: 'pelatih', label: 'Pelatih', path: '/akademi?tab=pelatih', count: academyCounts.coaches },
     { id: 'kelas', label: 'Kelas & Kelompok', path: '/akademi?tab=kelas', count: academyCounts.classes },
     { id: 'presensi', label: 'Presensi & Evaluasi', path: '/akademi?tab=presensi', count: null },
   ];
+
+  // Jika pelatih (coach), tampilkan hanya Kelas & Kelompok serta Presensi & Evaluasi
+  const academySubMenuItems = rawAcademySubMenuItems.filter((sub) => {
+    if (userAccess.isCoachOnly) {
+      return sub.id === 'kelas' || sub.id === 'presensi';
+    }
+    return true;
+  });
 
   const profileSubMenuItems = [
     { id: 'profil', label: 'Profil Identitas GOR', path: '/pengaturan?tab=profil' },
@@ -160,11 +171,11 @@ export default function Layout({ userProfile }) {
     userProfile?.role === 'superadmin' ? 'Super Admin' :
     userProfile?.role === 'owner' ? 'Owner GOR' :
     userProfile?.role === 'admin' ? 'Admin Staf' :
-    userProfile?.role === 'pelatih' ? 'Pelatih Akademi' : 'Staf';
+    userAccess.isCoach ? 'Pelatih Akademi' : 'Staf';
 
   // Filter Menu Berdasarkan Client-Side RBAC (Pelatih HANYA melihat Akademi)
   const navItems = ALL_NAV_ITEMS.filter((item) => {
-    if (userProfile?.role === 'pelatih') {
+    if (userAccess.isCoachOnly) {
       return item.path === '/akademi';
     }
     return true;
