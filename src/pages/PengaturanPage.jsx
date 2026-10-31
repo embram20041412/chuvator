@@ -5,6 +5,7 @@ import useArenaData from '../hooks/useArenaData';
 import { updateTenantProfile, updateCourt, updateCourtsBatch } from '../services/supabaseArenaService';
 import { logoutUser } from '../services/authService';
 import { 
+  registerNewStaff,
   registerStaffByOwner, 
   getStaffListByTenant, 
   deleteStaffDoc,
@@ -221,7 +222,8 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
     setStaffErrorMsg(null);
 
     try {
-      const regRes = await registerStaffByOwner({
+      await registerNewStaff({
+        fullName: newStaffName,
         name: newStaffName,
         email: newStaffEmail,
         password: newStaffPassword,
@@ -229,12 +231,7 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
         tenantId: tenant.id
       });
 
-      const isPending = regRes?.status === 'pending_confirmation';
-      setStaffSuccessMsg(
-        isPending
-          ? `Berhasil mendaftarkan ${newStaffRole === 'admin' ? 'Admin Staf' : 'Pelatih Akademi'} (${newStaffEmail})! Status: Menunggu Konfirmasi Email.`
-          : `Berhasil mendaftarkan ${newStaffRole === 'admin' ? 'Admin Staf' : 'Pelatih Akademi'} (${newStaffEmail}) dan langsung aktif!`
-      );
+      setStaffSuccessMsg(`Berhasil mendaftarkan ${newStaffRole === 'admin' ? 'Admin Staf' : 'Pelatih Akademi'} (${newStaffEmail})!`);
       setNewStaffName('');
       setNewStaffEmail('');
       setNewStaffPassword('');

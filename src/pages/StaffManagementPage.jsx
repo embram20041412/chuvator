@@ -24,7 +24,7 @@ import {
   Code2
 } from 'lucide-react';
 import { supabase } from '../config/supabase';
-import { createStaff, resendStaffInvitation } from '../services/staffService';
+import { registerNewStaff, createStaff, resendStaffInvitation } from '../services/staffService';
 import useAuthRole from '../hooks/useAuthRole';
 import { 
   resolveWorkerBaseUrl, 
@@ -205,16 +205,17 @@ export default function StaffManagementPage({ userProfile }) {
     setIsSubmitting(true);
 
     try {
-      await createStaff({
+      await registerNewStaff({
         email: cleanEmail,
         password: password,
+        fullName: cleanDisplayName,
         displayName: cleanDisplayName,
         role: staffRole,
         tenantId: tenantId,
       });
 
       setFormSuccess(
-        `Akun staff "${cleanDisplayName}" (${staffRole.toUpperCase()}) berhasil didaftarkan dan langsung Aktif!`
+        `Akun staff "${cleanDisplayName}" (${staffRole.toUpperCase()}) berhasil didaftarkan dan profil tersimpan!`
       );
 
       setEmail('');

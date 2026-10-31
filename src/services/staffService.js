@@ -1,56 +1,72 @@
 import { supabase } from '../config/supabase';
 
 /**
- * Registrasi Staf/Pelatih oleh Owner menggunakan Supabase Client secara langsung.
- * Didesain untuk deployment statis (misalnya Cloudflare Pages/Vite SPA) tanpa bergantung pada endpoint Express.
+ * Registrasi Staf Baru oleh Owner menggunakan Supabase Auth & PostgreSQL Table `users_staff`.
+ * @param {Object} params
+ * @param {string} params.email
+ * @param {string} params.password
+ * @param {string} params.role
+ * @param {string} params.tenantId
+ * @param {string} params.fullName
+ * @param {string} [params.displayName]
+ * @param {string} [params.name]
  */
-export async function createStaff({ email, password, role, tenantId, displayName, name }) {
+export async function registerNewStaff({ email, password, role, tenantId, fullName, displayName, name }) {
   const cleanEmail = String(email || '').trim().toLowerCase();
-  const cleanName = String(displayName || name || '').trim();
+  const cleanFullName = String(fullName || displayName || name || '').trim();
   const normalizedRole = String(role || 'kasir').toLowerCase().trim();
   const assignedRole = normalizedRole === 'coach' ? 'pelatih' : normalizedRole;
 
-  if (!cleanEmail || !cleanName || !tenantId) {
-    throw new Error('Semua data (Nama, Email, Role, Tenant ID) wajib diisi.');
+  if (!cleanEmail || !password || !cleanFullName || !tenantId) {
+    throw new Error('Semua data (Email, Password, Role, Tenant ID, Nama Lengkap) wajib diisi.');
   }
 
-  // 1. Pre-check apakah email sudah terdaftar di users_staff untuk tenant ini
-  const { data: existingStaff } = await supabase
-    .from('users_staff')
-    .select('id, email')
-    .eq('tenant_id', tenantId)
-    .eq('email', cleanEmail)
-    .maybeSingle();
+  // Langkah A: Daftarkan kredensial ke Supabase Auth secara langsung
+  const { data: authData, error: authError } = await supabase.auth.signUp({
+    email: cleanEmail,
+    password: password,
+    options: {
+      data: {
+        tenant_id: tenantId,
+        role: assignedRole,
+        full_name: cleanFullName,
+      },
+    },
+  });
 
-  if (existingStaff) {
-    throw new Error(`Staf dengan email "${cleanEmail}" sudah terdaftar di cabang/tenant ini.`);
+  if (authError) {
+    if (authError.message?.toLowerCase().includes('already registered')) {
+      throw new Error(`Email "${cleanEmail}" sudah terdaftar di sistem. Gunakan email lain.`);
+    }
+    throw new Error(`Gagal membuat akun Auth: ${authError.message}`);
   }
 
+  // Langkah B: Masukkan data profil staf ke tabel public.users_staff di Supabase
+  const userId = authData.user?.id || `staff-${Date.now()}`;
   const staffRecord = {
+    uid: userId,
     tenant_id: tenantId,
     email: cleanEmail,
-    name: cleanName,
-    full_name: cleanName,
-    display_name: cleanName,
+    name: cleanFullName,
+    full_name: cleanFullName,
+    display_name: cleanFullName,
     role: assignedRole,
     status: 'active',
     is_active: true,
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
   };
 
-  // 2. Simpan data staf ke tabel public.users_staff di Supabase
-  const { data, error } = await supabase
+  const { data: dbData, error: dbError } = await supabase
     .from('users_staff')
     .upsert([staffRecord], { onConflict: 'email,tenant_id' })
     .select()
     .single();
 
-  if (error) {
-    console.error('Error inserting users_staff:', error);
-    throw new Error(error.message || 'Gagal menyimpan data staf ke database Supabase.');
+  if (dbError) {
+    throw new Error(`Gagal menyimpan profil staf: ${dbError.message}`);
   }
 
-  // 3. Catat ke tabel invitations untuk audit riwayat GOR
+  // Langkah C: Catat juga ke tabel invitations untuk audit riwayat GOR
   try {
     await supabase.from('invitations').upsert([
       {
@@ -59,19 +75,23 @@ export async function createStaff({ email, password, role, tenantId, displayName
         role: assignedRole,
         status: 'accepted',
         created_at: new Date().toISOString(),
-        accepted_at: new Date().toISOString()
-      }
+        accepted_at: new Date().toISOString(),
+      },
     ], { onConflict: 'email,tenant_id' });
   } catch (invErr) {
     console.warn('[staffService] Invitations note:', invErr);
   }
 
-  return { success: true, data };
+  return { success: true, data: dbData, authData };
 }
 
-// Alias function untuk kompatibilitas
-export async function registerStaffByOwner(payload) {
-  return createStaff(payload);
+// Export alias functions untuk kompatibilitas penuh dengan komponen UI
+export async function createStaff(params) {
+  return registerNewStaff(params);
+}
+
+export async function registerStaffByOwner(params) {
+  return registerNewStaff(params);
 }
 
 /**
