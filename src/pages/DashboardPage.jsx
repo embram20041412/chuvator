@@ -170,31 +170,8 @@ const CustomPieTooltip = ({ active, payload }) => {
 };
 
 export default function DashboardPage({ userProfile }) {
+  // 1. SEMUA HOOKS & STATE HARUS DI SINI (PALING ATAS)
   const { tenantProfile, courts, bookings, transactions, isLoading } = useArenaData(userProfile);
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-[70vh] bg-gray-50 dark:bg-slate-900 rounded-3xl p-8">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-teal-600 dark:border-teal-400 mx-auto mb-3"></div>
-          <p className="text-gray-600 dark:text-gray-300 text-sm font-medium">Memuat halaman dasbor...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!userProfile) {
-    return (
-      <div className="flex items-center justify-center min-h-[70vh] bg-gray-50 dark:bg-slate-900 rounded-3xl p-8">
-        <p className="text-red-500 font-medium">Sesi tidak valid atau hak akses tidak ditemukan.</p>
-      </div>
-    );
-  }
-
-  const userRole = (userProfile.role || '').toLowerCase();
-  if (userRole === 'pelatih' || userRole === 'coach') {
-    return <Navigate to="/akademi" replace />;
-  }
 
   // Time Range Filter States
   const [timeFilter, setTimeFilter] = useState('today'); // 'today', 'week', 'month', 'custom'
@@ -209,13 +186,13 @@ export default function DashboardPage({ userProfile }) {
   // Mobile Tab State
   const [activeTab, setActiveTab] = useState('overview'); // 'overview' | 'charts' | 'recent'
 
-  // Total courts
-  const totalCourtsCount = courts.length || tenantProfile?.courtsCount || 0;
-
   // Reconciliation States (Enterprise Fase 12 Part 4)
   const [isClearing, setIsClearing] = useState(false);
   const [reconcileNotice, setReconcileNotice] = useState(null);
   const [reconcileError, setReconcileError] = useState(null);
+
+  // Total courts count derived safely
+  const totalCourtsCount = (courts || []).length || tenantProfile?.courtsCount || 0;
 
   // =====================================================================
   // 1. DATA TRANSAKSI GLOBAL & MERGED LEDGER (INTRUKSI 1)
@@ -645,12 +622,29 @@ export default function DashboardPage({ userProfile }) {
       : 0;
   }, [totalCourtsCount, totalBookingsCount, timeFilter, customDate]);
 
+  // 2. EARLY RETURNS HARUS DIBUAT DI BAWAH SEMUA DEKLARASI HOOKS
   if (isLoading) {
     return (
-      <div className="py-20 text-center text-xs text-gray-500 font-medium">
-        Memuat data buku besar keuangan global realtime...
+      <div className="flex items-center justify-center min-h-[70vh] bg-gray-50 dark:bg-slate-900 rounded-3xl p-8">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-teal-600 dark:border-teal-400 mx-auto mb-3"></div>
+          <p className="text-gray-600 dark:text-gray-300 text-sm font-medium">Memuat halaman dasbor...</p>
+        </div>
       </div>
     );
+  }
+
+  if (!userProfile) {
+    return (
+      <div className="flex items-center justify-center min-h-[70vh] bg-gray-50 dark:bg-slate-900 rounded-3xl p-8">
+        <p className="text-red-500 font-medium">Sesi tidak valid atau hak akses tidak ditemukan.</p>
+      </div>
+    );
+  }
+
+  const userRole = (userProfile.role || '').toLowerCase();
+  if (userRole === 'pelatih' || userRole === 'coach') {
+    return <Navigate to="/akademi" replace />;
   }
 
   return (
