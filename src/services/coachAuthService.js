@@ -140,6 +140,8 @@ export async function createCoachWithAccount({
   if (nickname) coachPayload.nickname = nickname.trim();
   if (nik) coachPayload.nik = nik.trim();
   if (photoUrl) coachPayload.photo_url = photoUrl;
+  if (license !== undefined) coachPayload.license = license ? String(license).trim() : null;
+  if (address !== undefined) coachPayload.address = address || null;
 
   let coachData = null;
   let { data: insertedCoach, error: coachError } = await supabase
@@ -161,6 +163,9 @@ export async function createCoachWithAccount({
       status: 'Aktif',
       created_at: new Date().toISOString()
     };
+    if (license !== undefined) corePayload.license = license ? String(license).trim() : null;
+    if (address !== undefined) corePayload.address = address || null;
+
     const retryRes = await supabase
       .from('coaches')
       .insert([corePayload])
@@ -194,6 +199,8 @@ export async function createCoachWithAccount({
         if (photoUrl) updatePayload.photo_url = photoUrl;
         if (nickname) updatePayload.nickname = nickname.trim();
         if (nik) updatePayload.nik = nik.trim();
+        if (license !== undefined) updatePayload.license = license ? String(license).trim() : null;
+        if (address !== undefined) updatePayload.address = address || null;
 
         await supabase
           .from('coaches')

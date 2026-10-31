@@ -92,13 +92,27 @@ export function mapCoachFromSupabase(row) {
     license: row.license || '',
     photoUrl: row.photo_url || row.photoUrl || '',
     address: typeof row.address === 'object' && row.address !== null
-      ? row.address
+      ? {
+          provinsi: row.address.provinsi || row.address.province || '',
+          kota: row.address.kota || row.address.city || '',
+          kecamatan: row.address.kecamatan || row.address.district || '',
+          kelurahan: row.address.kelurahan || row.address.village || '',
+          detail: row.address.detail || row.address.detailAlamat || '',
+          province: row.address.province || row.address.provinsi || '',
+          city: row.address.city || row.address.kota || '',
+          district: row.address.district || row.address.kecamatan || '',
+          village: row.address.village || row.address.kelurahan || ''
+        }
       : {
+          provinsi: row.province || '',
+          kota: row.city || row.regency || '',
+          kecamatan: row.district || '',
+          kelurahan: row.village || '',
+          detail: row.address_detail || (typeof row.address === 'string' ? row.address : ''),
           province: row.province || '',
           city: row.city || row.regency || '',
           district: row.district || '',
-          village: row.village || '',
-          detail: row.address_detail || row.address || ''
+          village: row.village || ''
         },
     status: row.status || 'Aktif',
     createdAt: row.created_at,
@@ -502,6 +516,8 @@ export async function createCoach({
     email: (email || '').trim() || null,
     sport_specialty: sportSpecialty || sport || 'Pelatih Utama',
     status: status || 'Aktif',
+    license: license ? String(license).trim() : null,
+    address: address || null,
     created_at: new Date().toISOString()
   };
 
@@ -528,6 +544,8 @@ export async function createCoach({
         email: (email || '').trim() || null,
         sport_specialty: sportSpecialty || sport || 'Pelatih Utama',
         status: status || 'Aktif',
+        license: license ? String(license).trim() : null,
+        address: address || null,
         created_at: new Date().toISOString()
       };
       const retryRes = await supabase
@@ -568,6 +586,8 @@ export async function updateCoach(coachId, payload) {
   }
   if (payload.sportCategory !== undefined) mapped.sport_category = payload.sportCategory;
   if (payload.photoUrl !== undefined) mapped.photo_url = payload.photoUrl;
+  if (payload.license !== undefined) mapped.license = payload.license ? String(payload.license).trim() : null;
+  if (payload.address !== undefined) mapped.address = payload.address || null;
   if (payload.status !== undefined) mapped.status = payload.status;
   mapped.updated_at = new Date().toISOString();
 

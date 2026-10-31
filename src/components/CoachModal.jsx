@@ -97,19 +97,38 @@ export default function CoachModal({
   // Pre-fill form if editing coach, or reset if creating
   useEffect(() => {
     if (coachToEdit && isOpen) {
-      setCoachName(coachToEdit.name || '');
+      setCoachName(coachToEdit.name || coachToEdit.coachName || '');
       setNickname(coachToEdit.nickname || '');
       setNik(coachToEdit.nik || '');
       setCoachPhone(coachToEdit.phone || '');
-      setSportSpecialty(coachToEdit.sportSpecialty || uniqueSports?.[0] || 'Badminton');
+      setSportSpecialty(coachToEdit.sportSpecialty || coachToEdit.sport || uniqueSports?.[0] || 'Badminton');
       setLicense(coachToEdit.license || '');
-      setPhotoPreview(coachToEdit.photoUrl || '');
+      setPhotoPreview(coachToEdit.photoUrl || coachToEdit.photo_url || '');
       setPhotoFile(null);
-      setSelectedProvince(coachToEdit.address?.province ? { name: coachToEdit.address.province } : null);
-      setSelectedRegency(coachToEdit.address?.city ? { name: coachToEdit.address.city } : null);
-      setSelectedDistrict(coachToEdit.address?.district ? { name: coachToEdit.address.district } : null);
-      setSelectedVillage(coachToEdit.address?.village ? { name: coachToEdit.address.village } : null);
-      setAddressDetail(coachToEdit.address?.detail || '');
+
+      // Hydration: Parsing objek JSON dari coach.address dan pecah kembali ke state masing-masing
+      let parsedAddress = {};
+      if (typeof coachToEdit.address === 'string') {
+        try {
+          parsedAddress = JSON.parse(coachToEdit.address);
+        } catch (e) {
+          parsedAddress = { detail: coachToEdit.address };
+        }
+      } else if (typeof coachToEdit.address === 'object' && coachToEdit.address !== null) {
+        parsedAddress = coachToEdit.address;
+      }
+
+      const provName = parsedAddress.provinsi || parsedAddress.province || '';
+      const cityName = parsedAddress.kota || parsedAddress.city || '';
+      const distName = parsedAddress.kecamatan || parsedAddress.district || '';
+      const vilName = parsedAddress.kelurahan || parsedAddress.village || '';
+      const detailStr = parsedAddress.detail || parsedAddress.detailAlamat || '';
+
+      setSelectedProvince(provName ? { name: provName } : null);
+      setSelectedRegency(cityName ? { name: cityName } : null);
+      setSelectedDistrict(distName ? { name: distName } : null);
+      setSelectedVillage(vilName ? { name: vilName } : null);
+      setAddressDetail(detailStr);
       setErrorMsg(null);
     } else if (!coachToEdit && isOpen) {
       setCoachName('');
@@ -317,13 +336,13 @@ export default function CoachModal({
         nik: nik.trim(),
         phone: coachPhone.trim(),
         sportSpecialty,
-        license: license.trim(),
+        license: license.trim() || null,
         photoUrl: finalPhotoUrl,
         address: {
-          province: selectedProvince?.name || coachToEdit?.address?.province || '',
-          city: selectedRegency?.name || coachToEdit?.address?.city || '',
-          district: selectedDistrict?.name || coachToEdit?.address?.district || '',
-          village: selectedVillage?.name || coachToEdit?.address?.village || '',
+          provinsi: selectedProvince?.name || coachToEdit?.address?.provinsi || coachToEdit?.address?.province || '',
+          kota: selectedRegency?.name || coachToEdit?.address?.kota || coachToEdit?.address?.city || '',
+          kecamatan: selectedDistrict?.name || coachToEdit?.address?.kecamatan || coachToEdit?.address?.district || '',
+          kelurahan: selectedVillage?.name || coachToEdit?.address?.kelurahan || coachToEdit?.address?.village || '',
           detail: addressDetail.trim()
         }
       };
@@ -343,9 +362,11 @@ export default function CoachModal({
             email: coachEmail.trim(),
             password: coachPassword,
             sportSpecialty: sportSpecialty || 'Pelatih Utama',
+            license: license.trim() || null,
             photoUrl: finalPhotoUrl,
             nickname: nickname.trim(),
-            nik: nik.trim()
+            nik: nik.trim(),
+            address: coachData.address
           });
           if (onCoachAdded) {
             onCoachAdded(res.coach || { id: `coach_${Date.now()}`, ...coachData });
