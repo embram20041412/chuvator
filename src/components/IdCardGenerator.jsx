@@ -108,135 +108,113 @@ export default function IdCardGenerator({
           </button>
         </div>
 
-        {/* Modal Body / Preview Area (Scrollable) */}
-        <div className="p-5 sm:p-6 overflow-y-auto flex-1 flex flex-col items-center justify-center bg-slate-50/50 dark:bg-slate-900/40">
+        {/* Modal Body / Preview Area (Scrollable with max-h-[90vh] on parent) */}
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1 flex flex-col items-center bg-slate-50/50 dark:bg-slate-900/40 min-h-0">
           
-          {/* THE ID CARD ELEMENT TO BE RENDERED/DOWNLOADED */}
+          {/* CONTAINER UTAMA ID CARD - Lebar terkunci 340px, tinggi OTOMATIS (h-auto), tanpa max-height yang memotong konten */}
           <div
             ref={cardRef}
-            className="w-[340px] h-fit min-h-[520px] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col relative border border-slate-200/90 select-none text-slate-800"
+            className="w-[340px] h-auto bg-white rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col mx-auto my-auto select-none"
             style={{
               fontFamily: "'Inter', sans-serif"
             }}
           >
-            {/* Lanyard Clip Slot Simulation */}
-            <div className="w-full pt-3 pb-1 flex justify-center bg-[#0a192f]">
-              <div className="w-14 h-1.5 rounded-full bg-slate-950/60 border border-white/10 shadow-inner" />
-            </div>
+            {/* 1. BAGIAN HEADER (NAVY & GOLD) */}
+            <div className="relative bg-[#0A192F] pt-6 pb-6 px-5 flex flex-col items-center text-center border-b-4 border-[#D4AF37]">
+              {/* Aksen Lengkung/Geometris Halus di Background Header */}
+              <div className="absolute inset-0 opacity-10 pointer-events-none bg-[radial-gradient(#D4AF37_1px,transparent_1px)] [background-size:16px_16px]" />
 
-            {/* 1. Desain Header (Navy & Emas) - Padding Vertikal Lega & Flex Layout */}
-            <div className="relative pt-8 pb-24 px-4 bg-[#0a192f] text-white flex flex-col items-center justify-center text-center gap-2 border-b-2 border-[#D4AF37]">
-              {/* Subtle geometric pattern lines */}
-              <div className="absolute inset-0 opacity-15 pointer-events-none overflow-hidden">
-                <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
-                  <defs>
-                    <pattern id="card-geo-pattern" width="24" height="24" patternUnits="userSpaceOnUse">
-                      <path d="M 0 12 L 12 0 L 24 12 L 12 24 Z" fill="none" stroke="#D4AF37" strokeWidth="0.75" />
-                      <circle cx="12" cy="12" r="1.5" fill="#D4AF37" />
-                    </pattern>
-                  </defs>
-                  <rect width="100%" height="100%" fill="url(#card-geo-pattern)" />
-                </svg>
-              </div>
+              {/* Lubang Lanyard Simulasi */}
+              <div className="w-12 h-1.5 bg-slate-800 rounded-full mb-4 border border-slate-700 z-10" />
 
-              {/* Baris 1: Logo Tenant (h-12 w-auto object-contain tanpa terpotong) */}
-              {finalTenantLogo ? (
+              {/* Logo Arena / Akademi */}
+              <div className="w-14 h-14 rounded-xl bg-white p-1.5 shadow-md mb-3 flex items-center justify-center z-10">
                 <img
-                  src={finalTenantLogo}
-                  alt={finalTenantName}
+                  src={finalTenantLogo || "/logo_3.png"}
+                  alt="Logo Arena"
+                  className="w-full h-full object-contain"
                   crossOrigin="anonymous"
-                  className="h-12 w-auto object-contain mx-auto relative z-10 filter drop-shadow"
                 />
-              ) : (
-                <div className="w-11 h-11 rounded-xl bg-[#D4AF37]/20 text-[#D4AF37] font-black text-base flex items-center justify-center mx-auto border border-[#D4AF37]/40 relative z-10 shadow-xs">
-                  {finalTenantName ? finalTenantName.charAt(0).toUpperCase() : 'C'}
-                </div>
-              )}
-
-              {/* Baris 2: Nama GOR ("Kediri Sport Arena") - Warna Emas & text-xl font-bold */}
-              <h4 className="text-xl font-bold leading-tight text-[#D4AF37] uppercase tracking-wide px-2 relative z-10 drop-shadow-sm">
-                {finalTenantName}
-              </h4>
-
-              {/* Baris 3: Alamat & Kontak Tenant (max-w-[250px] mx-auto leading-tight text-center) */}
-              <div className="flex flex-col items-center relative z-10">
-                {finalTenantAddress && (
-                  <p className="text-white text-xs opacity-90 max-w-[250px] mx-auto leading-tight text-center">
-                    {finalTenantAddress}
-                  </p>
-                )}
-                {finalTenantPhone && (
-                  <p className="text-white text-[11px] opacity-90 font-medium text-center mt-1">
-                    Telp/WA: {finalTenantPhone}
-                  </p>
-                )}
               </div>
+
+              {/* Nama GOR */}
+              <h2 className="text-[#D4AF37] font-extrabold text-lg tracking-wider uppercase leading-snug z-10">
+                {finalTenantName || "KEDIRI SPORT ARENA"}
+              </h2>
+
+              {/* Alamat & Kontak GOR */}
+              <p className="text-slate-200 text-[11px] leading-relaxed mt-1 max-w-[280px] font-normal z-10">
+                {finalTenantAddress || "Jalan Letjen Soetoyo No. 20, Kel. Tawang, Kec. Wates, Kab. Kediri, Jawa Timur"}
+              </p>
+              <p className="text-white text-[11px] font-semibold mt-1 z-10">
+                Telp/WA: {finalTenantPhone || "082131447972"}
+              </p>
             </div>
 
-            {/* 2 & 3. Card Body: Foto Profil Overlap (-mt-16 relative z-10) serta Nama & Tag Identitas */}
-            <div className="px-4 pt-0 pb-6 flex flex-col items-center text-center bg-gradient-to-b from-slate-50 via-white to-white flex-1">
-              {/* Foto Profil & Badge Posisi (relative z-10 -mt-16) */}
-              <div className="relative z-10 -mt-16 mb-6">
-                {photoUrl ? (
-                  <img
-                    src={photoUrl}
-                    alt={fullName}
-                    crossOrigin="anonymous"
-                    className="w-28 h-28 rounded-full object-cover border-4 border-[#D4AF37] shadow-xl bg-white"
-                  />
-                ) : (
-                  <div className="w-28 h-28 rounded-full flex items-center justify-center text-3xl font-black border-4 border-[#D4AF37] bg-[#0a192f] text-[#D4AF37] shadow-xl">
-                    {getStudentInitials(fullName)}
-                  </div>
-                )}
-                {/* Badge Posisi Overlapping Menumpuk Tepat di Bawah Tengah Foto */}
-                <span className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 bg-[#D4AF37] text-black font-extrabold text-xs px-5 py-1 rounded-full shadow-md whitespace-nowrap tracking-wider uppercase border border-amber-200/50">
+            {/* 2. BAGIAN BODY (PUTIH BERSIH - TANPA TABRAKAN) */}
+            <div className="bg-gradient-to-b from-slate-50 to-white pt-6 pb-6 px-6 flex flex-col items-center">
+              
+              {/* Foto Profil & Badge PELATIH */}
+              <div className="relative flex flex-col items-center">
+                <div className="w-28 h-28 rounded-full border-4 border-[#D4AF37] shadow-lg overflow-hidden bg-slate-200 flex items-center justify-center">
+                  {photoUrl ? (
+                    <img
+                      src={photoUrl}
+                      alt={fullName}
+                      className="w-full h-full object-cover"
+                      crossOrigin="anonymous"
+                    />
+                  ) : (
+                    <span className="text-3xl font-bold text-slate-500">
+                      {fullName?.charAt(0) || "P"}
+                    </span>
+                  )}
+                </div>
+                {/* Badge PELATIH tepat di bawah batas lingkaran foto */}
+                <span className="-mt-3.5 bg-gradient-to-r from-[#D4AF37] to-[#AA820A] text-slate-950 font-extrabold text-[11px] tracking-widest uppercase px-4 py-1 rounded-full shadow-md border border-white">
                   {role === 'PELATIH' ? 'PELATIH' : role}
                 </span>
               </div>
 
-              {/* 3. Nama & Tag Identitas */}
-              <h3 className="text-[#0a192f] font-bold text-xl leading-snug whitespace-normal break-words text-center px-2 mt-1">
-                {fullName}
+              {/* Nama Lengkap Pelatih */}
+              <h3 className="mt-3 text-[#0A192F] font-extrabold text-xl text-center leading-tight">
+                {fullName || "Nama Pelatih"}
               </h3>
 
-              {/* Tag Kategori: Olahraga & Lisensi */}
-              <div className="flex items-center justify-center gap-2 mt-2 flex-wrap">
-                <span className="px-3.5 py-0.5 rounded-full bg-blue-100 text-blue-900 text-xs font-bold shadow-2xs">
-                  {sport}
+              {/* Tag Cabang Olahraga & Lisensi */}
+              <div className="flex flex-wrap items-center justify-center gap-2 mt-2.5">
+                <span className="bg-blue-100 text-blue-900 font-bold text-xs px-3 py-1 rounded-full">
+                  {sport || "SepakBola"}
                 </span>
-                {subInfo && (
-                  <span className="px-3.5 py-0.5 rounded-full bg-slate-200 text-slate-600 text-xs font-semibold break-words max-w-[200px] shadow-2xs">
-                    {subInfo}
-                  </span>
-                )}
+                <span className="bg-slate-200 text-slate-700 font-semibold text-xs px-3 py-1 rounded-full">
+                  {subInfo || (data?.license ? `Lisensi: ${data.license}` : "Instruktur Resmi")}
+                </span>
               </div>
 
-              {/* 4. QR Code & ID Transaksi dengan Spasi Lega */}
-              <div className="mt-6 pt-2 pb-2 flex flex-col items-center">
-                <div className="p-2.5 bg-white rounded-xl border border-slate-200/90 shadow-sm">
-                  <QRCode
-                    value={documentId}
-                    size={84}
-                    level="M"
-                  />
-                </div>
-                {/* Teks UID/ID Pelatih berukuran kecil di bawah QR Code */}
-                <p className="font-mono text-[11px] text-slate-800 font-semibold mt-2 tracking-wider text-center">
-                  ID: {documentId}
-                </p>
+              {/* Kotak QR Code */}
+              <div className="mt-5 p-3 bg-white rounded-xl border border-slate-200 shadow-sm flex items-center justify-center">
+                <QRCode
+                  value={documentId}
+                  size={110}
+                  level="M"
+                />
               </div>
+
+              {/* Teks ID Pelatih */}
+              <p className="mt-2.5 font-mono text-[10px] font-semibold text-slate-600 tracking-tight text-center break-all px-2">
+                ID: {documentId || "N/A"}
+              </p>
             </div>
 
-            {/* 5. Desain Footer (Navy & Emas) - Padding Simetris py-3 */}
-            <div className="bg-[#0a192f] rounded-b-2xl border-t border-[#D4AF37]/30 flex justify-between items-center px-5 py-3 select-none">
-              <div className="flex items-center gap-1.5 text-[#D4AF37]">
-                <ShieldCheck className="w-4 h-4 text-[#D4AF37]" />
-                <span className="text-xs font-bold tracking-wider uppercase">
-                  OFFICIAL PASS
-                </span>
+            {/* 3. BAGIAN FOOTER (NAVY & GOLD) */}
+            <div className="bg-[#0A192F] px-5 py-3.5 flex items-center justify-between border-t border-slate-800 mt-auto">
+              <div className="flex items-center gap-1.5 text-[#D4AF37] font-bold text-xs tracking-wider">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                <span>OFFICIAL PASS</span>
               </div>
-              <span className="text-[#D4AF37] text-xs font-extrabold tracking-widest uppercase">
+              <span className="text-[#D4AF37] font-bold text-xs tracking-wider">
                 CHUA CORE
               </span>
             </div>
