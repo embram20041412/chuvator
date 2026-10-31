@@ -11,6 +11,8 @@ export default function CoachModal({
   onClose,
   userProfile,
   activeAcademy = null,
+  activeAcademyId = null,
+  academies = [],
   uniqueSports,
   coachToEdit = null,
   onCoachAdded,
@@ -18,6 +20,32 @@ export default function CoachModal({
 }) {
   const isEditing = Boolean(coachToEdit);
   const tenantId = userProfile?.tenant?.id || userProfile?.tenantId || userProfile?.uid;
+
+  // Selected Academy Penugasan State
+  const defaultAcademyId = 
+    activeAcademy?.id || 
+    activeAcademyId || 
+    coachToEdit?.academyId || 
+    coachToEdit?.academy_id || 
+    (academies && academies[0]?.id) || 
+    localStorage.getItem('activeAcademyId') || 
+    '';
+
+  const [selectedAcademyId, setSelectedAcademyId] = useState(defaultAcademyId);
+
+  useEffect(() => {
+    if (isOpen) {
+      const fallbackId = 
+        activeAcademy?.id || 
+        activeAcademyId || 
+        coachToEdit?.academyId || 
+        coachToEdit?.academy_id || 
+        (academies && academies[0]?.id) || 
+        localStorage.getItem('activeAcademyId') || 
+        '';
+      setSelectedAcademyId(fallbackId);
+    }
+  }, [isOpen, activeAcademy?.id, activeAcademyId, coachToEdit, academies]);
 
   // Form Fields
   const [coachName, setCoachName] = useState('');
@@ -258,10 +286,32 @@ export default function CoachModal({
         finalPhotoUrl = null;
       }
 
+      const resolvedAcademyId = 
+        selectedAcademyId || 
+        activeAcademy?.id || 
+        activeAcademyId || 
+        coachToEdit?.academyId || 
+        coachToEdit?.academy_id || 
+        (academies && academies[0]?.id) || 
+        localStorage.getItem('activeAcademyId') || 
+        null;
+
+      if (!resolvedAcademyId && !isEditing) {
+        setErrorMsg('ID Akademi tidak valid atau belum dipilih. Pastikan akademi telah dipilih sebelum mendaftar pelatih.');
+        setSubmitting(false);
+        return;
+      }
+
+      const resolvedAcademyName = 
+        (academies && academies.find(a => a.id === resolvedAcademyId)?.name) || 
+        activeAcademy?.name || 
+        coachToEdit?.academyName || 
+        '';
+
       const coachData = {
         tenantId,
-        academyId: activeAcademy?.id || coachToEdit?.academyId || '',
-        academyName: activeAcademy?.name || coachToEdit?.academyName || '',
+        academyId: resolvedAcademyId,
+        academyName: resolvedAcademyName,
         name: coachName.trim(),
         nickname: nickname.trim(),
         nik: nik.trim(),
@@ -287,7 +337,7 @@ export default function CoachModal({
         if (coachEmail && coachPassword) {
           const res = await createCoachWithAccount({
             tenantId,
-            academyId: activeAcademy?.id || '',
+            academyId: resolvedAcademyId,
             name: coachName.trim(),
             phone: coachPhone.trim(),
             email: coachEmail.trim(),
@@ -467,6 +517,34 @@ export default function CoachModal({
                     <User className="w-3.5 h-3.5" />
                     <span>Identitas &amp; Legal Pelatih</span>
                   </h4>
+                </div>
+
+                <div>
+                  <label htmlFor="selectedAcademyId" className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                    Akademi Penugasan <span className="text-[#C89D32]">*</span>
+                  </label>
+                  {academies && academies.length > 1 ? (
+                    <select
+                      id="selectedAcademyId"
+                      value={selectedAcademyId}
+                      onChange={(e) => setSelectedAcademyId(e.target.value)}
+                      required
+                      className="w-full px-3 py-2 text-xs bg-gray-50 dark:bg-[#1a2925] border border-gray-200 dark:border-white/10 rounded-xl focus:bg-white dark:focus:bg-[#162320] focus:outline-none focus:border-[#354944] focus:ring-1 focus:ring-[#354944]"
+                    >
+                      {academies.map((ac) => (
+                        <option key={ac.id} value={ac.id}>
+                          {ac.name} ({ac.sport || 'Umum'})
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <div className="px-3.5 py-2 text-xs bg-gray-50 dark:bg-[#1a2925] border border-gray-200 dark:border-white/10 rounded-xl text-slate-800 dark:text-slate-200 font-semibold flex items-center justify-between">
+                      <span className="truncate">{activeAcademy?.name || (academies && academies[0]?.name) || 'Akademi Aktif'}</span>
+                      <span className="text-[10px] bg-[#354944]/10 dark:bg-[#C89D32]/20 text-[#354944] dark:text-[#C89D32] px-2 py-0.5 rounded font-bold shrink-0 ml-2">
+                        Akademi Terpilih
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div>

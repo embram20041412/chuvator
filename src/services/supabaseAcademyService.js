@@ -78,9 +78,10 @@ export function mapCoachFromSupabase(row) {
     ...row,
     id: row.id,
     tenantId: row.tenant_id,
-    academyId: toUuidOrNull(row.academy_id),
+    academyId: row.academy_id || toUuidOrNull(row.academy_id) || null,
     academyName: row.academy_name || '',
-    name: row.name || '',
+    name: row.name || row.coach_name || '',
+    coachName: row.coach_name || row.name || '',
     nickname: row.nickname || '',
     nik: row.nik || '',
     phone: row.phone || '',
@@ -455,10 +456,10 @@ export async function getCoaches(tenantId, academyId = null) {
       .select('*')
       .eq('tenant_id', tenantId);
 
-    const safeAcademyId = toUuidOrNull(academyId);
+    const safeAcademyId = academyId ? String(academyId).trim() : null;
     if (safeAcademyId) query = query.eq('academy_id', safeAcademyId);
 
-    const { data, error } = await query;
+    const { data, error } = await query.order('created_at', { ascending: false });
     if (error) {
       console.warn('[Supabase getCoaches Error]:', error);
       return [];
@@ -487,12 +488,13 @@ export async function createCoach({
   address,
   status
 }) {
-  const safeAcademyId = toUuidOrNull(academyId);
+  const safeAcademyId = academyId ? String(academyId).trim() : null;
   const payload = {
     tenant_id: tenantId,
     academy_id: safeAcademyId,
     academy_name: academyName || '',
     name: (name || '').trim(),
+    coach_name: (name || '').trim(),
     nickname: (nickname || '').trim(),
     nik: (nik || '').trim(),
     phone: (phone || '').trim(),

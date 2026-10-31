@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import supabaseAcademyService from '../services/supabaseAcademyService';
+import supabaseAcademyService, { mapCoachFromSupabase } from '../services/supabaseAcademyService';
+import { supabase } from '../config/supabase';
 import { calculateAge, getStudentInitials, parseScheduleItems } from '../utils/helpers';
 import useArenaData from '../hooks/useArenaData';
 import useUserAccessScope from '../hooks/useUserAccessScope';
@@ -142,14 +143,6 @@ export function formatWhatsAppUrl(phone, studentName, arenaName) {
 }
 
 export default function AcademyPage({ userProfile }) {
-  if (!userProfile) {
-    return (
-      <div className="flex items-center justify-center min-h-[70vh] bg-gray-50 dark:bg-slate-900 rounded-3xl p-8">
-        <p className="text-red-500 font-medium">Sesi tidak valid atau hak akses tidak ditemukan.</p>
-      </div>
-    );
-  }
-
   const tenantId = userProfile?.tenant?.id || userProfile?.tenantId || userProfile?.uid;
 
   // Real-Time Arena Data
@@ -269,7 +262,14 @@ export default function AcademyPage({ userProfile }) {
   // Hanya ambil data yang academyId-nya persis sama dengan activeAcademy.id.
   // Jika pengguna login sebagai Coach (isCoachOnly), filter kelas & siswa sesuai coachProfile ID / Email.
   const rawActiveStudents = activeAcademy ? students.filter((s) => s.academyId === activeAcademy.id) : [];
-  const activeCoaches = activeAcademy ? coaches.filter((c) => c.academyId === activeAcademy.id) : [];
+  const activeCoaches = useMemo(() => {
+    if (!activeAcademy) return coaches;
+    return coaches.filter((c) => {
+      const cAcId = c.academyId || c.academy_id;
+      if (!cAcId) return true;
+      return String(cAcId).toLowerCase() === String(activeAcademy.id).toLowerCase();
+    });
+  }, [activeAcademy, coaches]);
 
   const activeClasses = useMemo(() => {
     if (!activeAcademy) return [];
@@ -411,6 +411,7 @@ export default function AcademyPage({ userProfile }) {
 
   const [loadingStudents, setLoadingStudents] = useState(true);
   const [loadingCoaches, setLoadingCoaches] = useState(true);
+  const [coachesError, setCoachesError] = useState(null);
   const [loadingClasses, setLoadingClasses] = useState(true);
 
   // Modal States
@@ -467,6 +468,54 @@ export default function AcademyPage({ userProfile }) {
     }
   }, [tenantId]);
 
+  // 1. Kueri Fetch Pelatih langsung ke public.coaches dengan filter academy_id dan tenant_id
+  const fetchCoaches = useCallback(async (customAcademyId = null) => {
+    if (!tenantId) {
+      setLoadingCoaches(false);
+      return;
+    }
+
+    const targetAcId = customAcademyId || activeAcademyId || activeAcademy?.id || localStorage.getItem('activeAcademyId') || null;
+    setLoadingCoaches(true);
+    setCoachesError(null);
+
+    try {
+      let query = supabase
+        .from('coaches')
+        .select('*')
+        .eq('tenant_id', tenantId);
+
+      // Wajib sertakan filter berdasarkan ID Akademi yang sedang aktif di dropdown
+      if (targetAcId) {
+        query = query.eq('academy_id', targetAcId);
+      }
+
+      const { data, error } = await query.order('name', { ascending: true });
+
+      if (error) {
+        console.warn('[fetchCoaches] Error kueri tabel public.coaches:', error);
+        setCoachesError(error.message || 'Gagal memuat daftar pelatih.');
+        setCoaches([]);
+      } else {
+        const mapped = (data || []).map(mapCoachFromSupabase);
+        setCoaches(mapped);
+      }
+    } catch (err) {
+      console.error('[fetchCoaches] Catch error:', err);
+      setCoachesError(err.message || 'Terjadi kesalahan sistem saat memuat data pelatih.');
+      setCoaches([]);
+    } finally {
+      setLoadingCoaches(false);
+    }
+  }, [tenantId, activeAcademyId, activeAcademy?.id]);
+
+  // Otomatis re-fetch daftar pelatih setiap kali activeAcademyId di dropdown berubah
+  useEffect(() => {
+    if (tenantId) {
+      fetchCoaches(activeAcademyId);
+    }
+  }, [tenantId, activeAcademyId, fetchCoaches]);
+
   // SINGLE ASYNCHRONOUS DATA FETCHER: Promise.all to Supabase
   const isFetchingRef = React.useRef(false);
 
@@ -481,47 +530,43 @@ export default function AcademyPage({ userProfile }) {
 
     isFetchingRef.current = true;
     setLoadingStudents(true);
-    setLoadingCoaches(true);
     setLoadingClasses(true);
     setLoadingAcademies(true);
 
     try {
-      const [studentsData, classesData, coachesData, academiesData] = await Promise.all([
+      const [studentsData, classesData, academiesData] = await Promise.all([
         supabaseAcademyService.getStudents(tenantId),
         supabaseAcademyService.getClasses(tenantId),
-        supabaseAcademyService.getCoaches(tenantId),
         supabaseAcademyService.getAcademies(tenantId)
       ]);
 
       setStudents(studentsData || []);
       setAcademyClasses(classesData || []);
-      setCoaches(coachesData || []);
 
+      let currentTargetId = activeAcademyId;
       if (academiesData && academiesData.length > 0) {
         setAcademies(academiesData);
         const storedId = localStorage.getItem('activeAcademyId');
         const found = academiesData.find((a) => a.id === storedId);
-        if (found) {
-          setActiveAcademyId((prevId) => (prevId === found.id ? prevId : found.id));
-        } else {
-          const firstId = academiesData[0].id;
-          setActiveAcademyId((prevId) => (prevId === firstId ? prevId : firstId));
-          localStorage.setItem('activeAcademyId', firstId);
-        }
+        currentTargetId = found ? found.id : academiesData[0].id;
+        setActiveAcademyId((prevId) => (prevId === currentTargetId ? prevId : currentTargetId));
+        localStorage.setItem('activeAcademyId', currentTargetId);
       } else {
         setAcademies([]);
         setActiveAcademyId('');
+        currentTargetId = null;
       }
+
+      await fetchCoaches(currentTargetId);
     } catch (err) {
       console.error('[Supabase fetchAcademyData Error]:', err);
     } finally {
       isFetchingRef.current = false;
       setLoadingStudents(false);
-      setLoadingCoaches(false);
       setLoadingClasses(false);
       setLoadingAcademies(false);
     }
-  }, [tenantId]);
+  }, [tenantId, activeAcademyId, fetchCoaches]);
 
   useEffect(() => {
     if (tenantId) {
@@ -830,6 +875,14 @@ export default function AcademyPage({ userProfile }) {
     if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   };
+
+  if (!userProfile) {
+    return (
+      <div className="flex items-center justify-center min-h-[70vh] bg-gray-50 dark:bg-slate-900 rounded-3xl p-8">
+        <p className="text-red-500 font-medium">Sesi tidak valid atau hak akses tidak ditemukan.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3.5 text-slate-800">
@@ -1433,15 +1486,18 @@ export default function AcademyPage({ userProfile }) {
 
       {/* TAB 3: PELATIH */}
       {activeAcademyTab === 'pelatih' && (
-        <div className="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200 space-y-4 text-left">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <h2 className="font-bold text-sm sm:text-base text-slate-800 flex items-center space-x-2" style={{ fontSize: '15px' }}>
-              <User className="w-4 h-4 text-[#354944]" />
+        <div className="bg-white dark:bg-[#14211E] rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200 dark:border-white/10 space-y-4 text-left">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 pb-3">
+            <h2 className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-100 flex items-center space-x-2" style={{ fontSize: '15px' }}>
+              <User className="w-4 h-4 text-[#354944] dark:text-[#C89D32]" />
               <span>Tim Pelatih ({filteredCoaches.length})</span>
             </h2>
 
             <button
-              onClick={() => setShowCoachModal(true)}
+              onClick={() => {
+                setEditingCoach(null);
+                setShowCoachModal(true);
+              }}
               className="px-3.5 py-2 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white font-semibold text-xs rounded-xl shadow-sm transition-colors cursor-pointer flex items-center space-x-1"
             >
               <UserPlus className="w-3.5 h-3.5" />
@@ -1449,14 +1505,30 @@ export default function AcademyPage({ userProfile }) {
             </button>
           </div>
 
+          {coachesError && (
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-amber-800 dark:text-amber-300 text-xs flex items-center justify-between">
+              <span>Perhatian: Gagal menyinkronkan data pelatih ({coachesError}).</span>
+              <button
+                type="button"
+                onClick={() => fetchCoaches(activeAcademyId)}
+                className="underline font-bold ml-2 text-xs hover:text-amber-900 dark:hover:text-amber-200 cursor-pointer"
+              >
+                Coba Lagi
+              </button>
+            </div>
+          )}
+
           {loadingCoaches ? (
-            <p className="py-12 text-center text-xs text-slate-500">Memuat data pelatih...</p>
+            <div className="py-12 text-center text-xs text-slate-500 dark:text-slate-400 flex flex-col items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#354944] dark:border-[#C89D32] mb-3"></div>
+              <p>Memuat data pelatih...</p>
+            </div>
           ) : filteredCoaches.length === 0 ? (
             /* EMPTY STATE UNTUK TAB PELATIH */
-            <div className="py-12 border-2 border-dashed border-slate-200 rounded-xl text-center flex flex-col items-center justify-center p-6">
-              <User className="w-12 h-12 text-slate-300 mb-3" />
-              <p className="text-sm font-semibold text-slate-700">Belum ada pelatih terdaftar di akademi ini.</p>
-              <p className="text-xs text-slate-400 max-w-sm mt-1 mb-4">
+            <div className="py-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl text-center flex flex-col items-center justify-center p-6">
+              <User className="w-12 h-12 text-slate-300 dark:text-slate-600 mb-3" />
+              <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Belum ada pelatih terdaftar di akademi ini.</p>
+              <p className="text-xs text-slate-400 dark:text-slate-400 max-w-sm mt-1 mb-4">
                 Daftarkan instruktur &amp; pelatih utama untuk memimpin kelas latihan {activeAcademy?.name || 'akademi Anda'}.
               </p>
               <button
@@ -1947,15 +2019,19 @@ export default function AcademyPage({ userProfile }) {
           }}
           userProfile={userProfile}
           activeAcademy={activeAcademy}
+          activeAcademyId={activeAcademyId}
+          academies={academies}
           uniqueSports={activeAcademySports}
           coachToEdit={editingCoach}
           onCoachAdded={() => {
             setSuccessMsg('Pelatih baru berhasil ditambahkan!');
+            fetchCoaches(activeAcademyId);
             fetchAcademyData();
             setTimeout(() => setSuccessMsg(null), 3000);
           }}
           onCoachUpdated={() => {
             setSuccessMsg('Data pelatih berhasil diperbarui!');
+            fetchCoaches(activeAcademyId);
             fetchAcademyData();
             setTimeout(() => setSuccessMsg(null), 3000);
           }}

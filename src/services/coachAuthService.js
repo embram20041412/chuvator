@@ -125,10 +125,12 @@ export async function createCoachWithAccount({
   }
 
   // 3. INSERT / UPSERT KE TABEL public.coaches
+  const cleanAcademyId = academyId ? String(academyId).trim() : null;
   const coachPayload = {
     tenant_id: tenantId,
-    academy_id: academyId || null,
+    academy_id: cleanAcademyId,
     name: cleanName,
+    coach_name: cleanName,
     phone: phone ? phone.trim() : null,
     email: cleanEmail,
     sport_specialty: chosenSpecialty,
@@ -163,12 +165,18 @@ export async function createCoachWithAccount({
 
       if (existingCoach) {
         coachData = existingCoach;
-        if (authUid && !existingCoach.auth_uid) {
-          await supabase
-            .from('coaches')
-            .update({ auth_uid: authUid, sport_specialty: chosenSpecialty })
-            .eq('id', existingCoach.id);
-        }
+        const updatePayload = {
+          sport_specialty: chosenSpecialty,
+          coach_name: cleanName,
+          updated_at: new Date().toISOString()
+        };
+        if (cleanAcademyId) updatePayload.academy_id = cleanAcademyId;
+        if (authUid) updatePayload.auth_uid = authUid;
+
+        await supabase
+          .from('coaches')
+          .update(updatePayload)
+          .eq('id', existingCoach.id);
       } else {
         throw new Error(`Gagal menyimpan data pelatih: ${coachError.message}`);
       }
