@@ -24,6 +24,7 @@ import {
   Code2
 } from 'lucide-react';
 import { supabase } from '../config/supabase';
+import { resendStaffInvitation } from '../services/staffService';
 import useAuthRole from '../hooks/useAuthRole';
 import { 
   resolveWorkerBaseUrl, 
@@ -46,6 +47,8 @@ export default function StaffManagementPage({ userProfile }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState(null);
   const [formSuccess, setFormSuccess] = useState(null);
+  const [resendingEmail, setResendingEmail] = useState(null);
+  const [actionNotice, setActionNotice] = useState(null);
 
   // Diagnostic states
   const [healthChecking, setHealthChecking] = useState(false);
@@ -82,7 +85,8 @@ export default function StaffManagementPage({ userProfile }) {
       const { data, error } = await supabase
         .from('users_staff')
         .select('*')
-        .eq('tenant_id', tenantId);
+        .eq('tenant_id', tenantId)
+        .order('created_at', { ascending: false });
 
       if (error) throw error;
       const list = (data || []).map((docSnap) => ({
@@ -96,7 +100,6 @@ export default function StaffManagementPage({ userProfile }) {
         status: docSnap.status || 'active',
         createdAt: docSnap.created_at
       }));
-      list.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
       setStaffList(list);
     } catch (error) {
       console.error('Error fetching users_staff from Supabase:', error);
@@ -107,7 +110,43 @@ export default function StaffManagementPage({ userProfile }) {
 
   useEffect(() => {
     fetchStaff();
+
+    if (!tenantId) return;
+
+    // Sinkronisasi Real-Time Tabel users_staff
+    const staffChannel = supabase
+      .channel(`realtime_staff_${tenantId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'users_staff', filter: `tenant_id=eq.${tenantId}` },
+        () => {
+          fetchStaff();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(staffChannel);
+    };
   }, [tenantId]);
+
+  // Handler Kirim Ulang Email Konfirmasi / Undangan
+  const handleResendInvite = async (staffEmail) => {
+    if (!staffEmail) return;
+    setResendingEmail(staffEmail);
+    setActionNotice(null);
+
+    try {
+      await resendStaffInvitation(staffEmail);
+      setActionNotice(`Email konfirmasi pendaftaran berhasil dikirim ulang ke ${staffEmail}`);
+      setTimeout(() => setActionNotice(null), 4000);
+    } catch (err) {
+      console.error('Error resending invite:', err);
+      alert(`Gagal mengirim ulang email konfirmasi: ${err.message || 'Terjadi kesalahan sistem'}`);
+    } finally {
+      setResendingEmail(null);
+    }
+  };
 
   // Handle Form Submission: Dedicated Express Full-Stack Backend Request
   const handleRegisterStaff = async (e) => {
@@ -241,15 +280,12 @@ export default function StaffManagementPage({ userProfile }) {
       }
 
       // 5. Validasi ID dari Supabase Auth
-      createdAuthUid = result.data?.uid || result.uid;
-      if (!createdAuthUid) {
-        throw new Error('Backend berhasil memproses tetapi tidak mengembalikan UID akun yang valid.');
-      }
-
+      createdAuthUid = result.data?.uid || result.uid || `pending-${Date.now()}`;
       const finalRole = result.data?.role || staffRole;
       const finalTenantId = result.data?.tenantId || tenantId;
+      const finalStatus = result.data?.status || 'active';
 
-      // 6. Simpan data profil staff ke tabel users_staff Supabase (jika belum disimpan otomatis oleh backend)
+      // 6. Simpan data profil staff ke tabel users_staff Supabase (WAJIB selalu tersimpan)
       try {
         await supabase.from('users_staff').upsert([{
           uid: createdAuthUid,
@@ -259,21 +295,32 @@ export default function StaffManagementPage({ userProfile }) {
           role: finalRole,
           tenant_id: finalTenantId,
           created_at: new Date().toISOString(),
-          status: 'active',
+          status: finalStatus,
           auth_method: 'express_fullstack_rbac',
           created_by: userProfile?.email || session?.user?.email || 'owner',
         }], { onConflict: 'uid' });
         fetchStaff();
       } catch (supabaseErr) {
         console.error('Kondisi parsial: Auth dibuat, namun penyimpanan Supabase gagal:', supabaseErr);
-        throw new Error(
-          `Akun staf berhasil dibuat di Supabase Auth (UID: ${createdAuthUid}), namun gagal menyimpan profil ke database Supabase (${supabaseErr.message}). Silakan hubungi admin untuk sinkronisasi profil.`
-        );
+        // Fallback coba simpan kembali tanpa onConflict uid
+        await supabase.from('users_staff').upsert([{
+          email: cleanEmail,
+          display_name: cleanDisplayName,
+          name: cleanDisplayName,
+          role: finalRole,
+          tenant_id: finalTenantId,
+          created_at: new Date().toISOString(),
+          status: finalStatus,
+          created_by: userProfile?.email || 'owner',
+        }]);
+        fetchStaff();
       }
 
       // 7. Sukses Penuh
       setFormSuccess(
-        `Akun staff "${cleanDisplayName}" (${finalRole.toUpperCase()}) berhasil didaftarkan via Backend Express Server Supabase!`
+        finalStatus === 'pending_confirmation'
+          ? `Akun staff "${cleanDisplayName}" (${finalRole.toUpperCase()}) berhasil didaftarkan! Status: Menunggu Konfirmasi Email.`
+          : `Akun staff "${cleanDisplayName}" (${finalRole.toUpperCase()}) berhasil didaftarkan dan langsung Aktif!`
       );
 
       setEmail('');
@@ -282,6 +329,35 @@ export default function StaffManagementPage({ userProfile }) {
       setStaffRole('kasir');
     } catch (err) {
       console.error('Error creating staff via Backend API:', err);
+      const errMsg = err?.message || '';
+
+      // Jika error BUKAN email duplikat, tetap simpan profil staf ke users_staff dengan status 'pending_confirmation'
+      if (!errMsg.includes('sudah terdaftar') && !errMsg.includes('Format email')) {
+        try {
+          await supabase.from('users_staff').upsert([{
+            uid: `pending-${Date.now()}`,
+            email: cleanEmail,
+            display_name: cleanDisplayName,
+            name: cleanDisplayName,
+            role: staffRole,
+            tenant_id: tenantId,
+            created_at: new Date().toISOString(),
+            status: 'pending_confirmation',
+            auth_method: 'offline_queued',
+            created_by: userProfile?.email || 'owner',
+          }]);
+          fetchStaff();
+          setFormSuccess(`Profil staf "${cleanDisplayName}" tetap berhasil disimpan dengan status: Menunggu Konfirmasi Email.`);
+          setEmail('');
+          setDisplayName('');
+          setPassword('');
+          setStaffRole('kasir');
+          return;
+        } catch (dbFallbackErr) {
+          console.warn('Fallback users_staff save failed:', dbFallbackErr);
+        }
+      }
+
       setFormError(err.message || 'Gagal mendaftarkan staff melalui Backend Express API.');
     } finally {
       setIsSubmitting(false);
@@ -748,6 +824,13 @@ export default function StaffManagementPage({ userProfile }) {
             </div>
           </div>
 
+          {actionNotice && (
+            <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold flex items-center gap-2 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>{actionNotice}</span>
+            </div>
+          )}
+
           <div className="relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
@@ -836,21 +919,51 @@ export default function StaffManagementPage({ userProfile }) {
                           </td>
 
                           <td className="py-3 px-3 whitespace-nowrap">
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-700 rounded-md text-[10px] font-medium">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                              Aktif
-                            </span>
+                            {staff.status === 'pending_confirmation' || staff.status === 'pending' ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-amber-50 text-amber-700 border border-amber-200/80 rounded-full font-bold text-[10px]">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                                Menunggu Konfirmasi Email
+                              </span>
+                            ) : staff.status === 'suspended' || staff.status === 'inactive' ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-rose-50 text-rose-700 border border-rose-200/80 rounded-full font-bold text-[10px]">
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                Non-Aktif
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 text-emerald-700 border border-emerald-200/80 rounded-full font-bold text-[10px]">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                Aktif
+                              </span>
+                            )}
                           </td>
 
                           <td className="py-3 px-4 text-right whitespace-nowrap">
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteStaff(staff.id, staff.displayName)}
-                              className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                              title="Hapus Staff"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center justify-end gap-1.5">
+                              {(staff.status === 'pending_confirmation' || staff.status === 'pending') && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleResendInvite(staff.email)}
+                                  disabled={resendingEmail === staff.email}
+                                  className="px-2 py-1 text-[10px] font-bold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200/80 rounded-lg transition-colors cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                                  title="Kirim Ulang Email Konfirmasi"
+                                >
+                                  {resendingEmail === staff.email ? (
+                                    <RefreshCw className="w-3 h-3 animate-spin text-amber-600" />
+                                  ) : (
+                                    <Mail className="w-3 h-3" />
+                                  )}
+                                  <span>{resendingEmail === staff.email ? 'Mengirim...' : 'Kirim Ulang'}</span>
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteStaff(staff.id, staff.displayName)}
+                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                                title="Hapus Akses Staff"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );

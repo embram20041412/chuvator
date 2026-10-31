@@ -1,12 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
+import { supabase } from '../config/supabase';
 import useArenaData from '../hooks/useArenaData';
 import { updateTenantProfile, updateCourt, updateCourtsBatch } from '../services/supabaseArenaService';
 import { logoutUser } from '../services/authService';
 import { 
   registerStaffByOwner, 
   getStaffListByTenant, 
-  deleteStaffDoc 
+  deleteStaffDoc,
+  resendStaffInvitation
 } from '../services/staffService';
 import { 
   Building2, 
@@ -34,7 +36,8 @@ import {
   ShieldCheck,
   LogOut,
   Sun,
-  Moon
+  Moon,
+  Mail
 } from 'lucide-react';
 import { Pengaturan3DIcon } from '../components/icons/App3DIcons';
 import { uploadToCloudinary } from '../services/uploadService';
@@ -169,10 +172,27 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
   const [newStaffEmail, setNewStaffEmail] = useState('');
   const [newStaffPassword, setNewStaffPassword] = useState('');
   const [newStaffRole, setNewStaffRole] = useState('admin');
+  const [resendingStaffEmail, setResendingStaffEmail] = useState(null);
 
   useEffect(() => {
     if (tenant?.id && activeTab === 'staf') {
       fetchStaffList();
+
+      // Realtime listener untuk users_staff di tenant aktif
+      const channel = supabase
+        .channel(`realtime_pengaturan_staff_${tenant.id}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'users_staff', filter: `tenant_id=eq.${tenant.id}` },
+          () => {
+            fetchStaffList();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(channel);
+      };
     }
   }, [tenant?.id, activeTab]);
 
@@ -201,7 +221,7 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
     setStaffErrorMsg(null);
 
     try {
-      await registerStaffByOwner({
+      const regRes = await registerStaffByOwner({
         name: newStaffName,
         email: newStaffEmail,
         password: newStaffPassword,
@@ -209,19 +229,40 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
         tenantId: tenant.id
       });
 
-      setStaffSuccessMsg(`Berhasil mendaftarkan ${newStaffRole === 'admin' ? 'Admin Staf' : 'Pelatih Akademi'} (${newStaffEmail})!`);
+      const isPending = regRes?.status === 'pending_confirmation';
+      setStaffSuccessMsg(
+        isPending
+          ? `Berhasil mendaftarkan ${newStaffRole === 'admin' ? 'Admin Staf' : 'Pelatih Akademi'} (${newStaffEmail})! Status: Menunggu Konfirmasi Email.`
+          : `Berhasil mendaftarkan ${newStaffRole === 'admin' ? 'Admin Staf' : 'Pelatih Akademi'} (${newStaffEmail}) dan langsung aktif!`
+      );
       setNewStaffName('');
       setNewStaffEmail('');
       setNewStaffPassword('');
       setNewStaffRole('admin');
 
       fetchStaffList();
-      setTimeout(() => setStaffSuccessMsg(null), 4000);
+      setTimeout(() => setStaffSuccessMsg(null), 5000);
     } catch (err) {
       console.error('Error registering staff:', err);
       setStaffErrorMsg(err.message || 'Gagal mendaftarkan akun staf.');
     } finally {
       setRegisteringStaff(false);
+    }
+  };
+
+  const handleResendInvite = async (staffEmail) => {
+    if (!staffEmail) return;
+    setResendingStaffEmail(staffEmail);
+    try {
+      await resendStaffInvitation(staffEmail);
+      setStaffSuccessMsg(`Email konfirmasi/undangan berhasil dikirim ulang ke ${staffEmail}`);
+      setTimeout(() => setStaffSuccessMsg(null), 4000);
+    } catch (err) {
+      console.error('Error resending invite in PengaturanPage:', err);
+      setStaffErrorMsg(`Gagal mengirim ulang email konfirmasi: ${err.message || 'Terjadi kesalahan sistem'}`);
+      setTimeout(() => setStaffErrorMsg(null), 4000);
+    } finally {
+      setResendingStaffEmail(null);
     }
   };
 
@@ -1643,7 +1684,7 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                 {staffList.map((staf) => (
                   <div key={staf.id} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
                     <div>
-                      <div className="flex items-center space-x-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <span className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200">{staf.name}</span>
                         <span className={`px-2 py-0.5 font-bold text-[9px] rounded uppercase ${
                           staf.role === 'admin' 
@@ -1652,16 +1693,48 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                         }`}>
                           {staf.role === 'admin' ? 'Admin Staf' : 'Pelatih Akademi'}
                         </span>
+
+                        {staf.status === 'pending_confirmation' || staf.status === 'pending' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 font-bold text-[9px] rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            Menunggu Konfirmasi Email
+                          </span>
+                        ) : staf.status === 'suspended' || staf.status === 'inactive' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 font-bold text-[9px] rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
+                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                            Non-Aktif
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 font-bold text-[9px] rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            Aktif
+                          </span>
+                        )}
                       </div>
-                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 font-mono">{staf.email}</p>
-                      <p className="text-[9px] text-slate-400 mt-0.5 font-mono">UID: {staf.uid || staf.id}</p>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-mono">{staf.email}</p>
+                      <p className="text-[9px] text-slate-400 mt-0.5 font-mono">
+                        UID: {staf.uid || staf.id} • Terdaftar: {staf.createdAt ? new Date(staf.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
+                      </p>
                     </div>
 
-                    <div>
+                    <div className="flex items-center gap-1.5 self-end sm:self-center">
+                      {(staf.status === 'pending_confirmation' || staf.status === 'pending') && (
+                        <button
+                          type="button"
+                          onClick={() => handleResendInvite(staf.email)}
+                          disabled={resendingStaffEmail === staf.email}
+                          className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/80 rounded-md text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1 disabled:opacity-50"
+                          title="Kirim Ulang Email Konfirmasi"
+                        >
+                          <Mail className="w-3 h-3" />
+                          <span>{resendingStaffEmail === staf.email ? 'Mengirim...' : 'Kirim Ulang'}</span>
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => handleDeleteStaff(staf.id, staf.email)}
                         className="px-2.5 py-1 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 rounded-md text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1"
+                        title="Hapus Akses Staf"
                       >
                         <Trash2 className="w-3 h-3" />
                         <span>Hapus Akses</span>

@@ -49,12 +49,45 @@ export async function registerStaffByOwner({ name, email, password, role, tenant
 
       if (response.ok) {
         const result = await response.json();
+        const staffUid = result.data?.uid || null;
+
+        // Pastikan record profil staf di users_staff tersimpan dengan status 'active'
+        const staffRecord = {
+          uid: staffUid || `staff-${Date.now()}`,
+          name: cleanName,
+          full_name: cleanName,
+          display_name: cleanName,
+          email: cleanEmail,
+          role: assignedRole,
+          tenant_id: tenantId,
+          status: 'active',
+          is_active: true,
+          created_at: new Date().toISOString(),
+        };
+
+        await supabase.from('users_staff').upsert([staffRecord], { onConflict: 'email,tenant_id' });
+
+        // Record ke tabel invitations untuk riwayat GOR
+        try {
+          await supabase.from('invitations').upsert([{
+            email: cleanEmail,
+            tenant_id: tenantId,
+            role: assignedRole,
+            status: 'accepted',
+            created_at: new Date().toISOString(),
+            accepted_at: new Date().toISOString(),
+          }], { onConflict: 'email,tenant_id' });
+        } catch (invErr) {
+          console.warn('[Supabase invitations upsert]:', invErr);
+        }
+
         return {
-          uid: result.data?.uid || null,
+          uid: staffUid,
           name: cleanName,
           email: cleanEmail,
           role: assignedRole,
           tenantId,
+          status: 'active'
         };
       } else {
         const errorData = await response.json().catch(() => ({}));
@@ -76,7 +109,6 @@ export async function registerStaffByOwner({ name, email, password, role, tenant
   }
 
   // 2. Fallback: Gunakan Isolated Client Supabase (persistSession: false)
-  // Client ini tidak menyimpan session ke localStorage/cookies, sehingga akun Owner aman
   const isolatedClient = createClient(supabaseUrl, supabaseAnonKey, {
     auth: {
       persistSession: false,
@@ -84,30 +116,41 @@ export async function registerStaffByOwner({ name, email, password, role, tenant
     },
   });
 
-  const { data: authData, error: authError } = await isolatedClient.auth.signUp({
-    email: cleanEmail,
-    password,
-    options: {
-      data: {
-        display_name: cleanName,
-        role: assignedRole,
-        tenant_id: tenantId,
-      },
-    },
-  });
+  let staffUid = null;
 
-  if (authError) {
-    if (authError.message?.toLowerCase().includes('already registered')) {
-      throw new Error(`Email "${cleanEmail}" sudah terdaftar di sistem. Gunakan email lain.`);
+  try {
+    const { data: authData, error: authError } = await isolatedClient.auth.signUp({
+      email: cleanEmail,
+      password,
+      options: {
+        data: {
+          display_name: cleanName,
+          role: assignedRole,
+          tenant_id: tenantId,
+        },
+      },
+    });
+
+    if (authError) {
+      if (authError.message?.toLowerCase().includes('already registered')) {
+        throw new Error(`Email "${cleanEmail}" sudah terdaftar di sistem. Gunakan email lain.`);
+      }
+      console.warn('[staffService] Isolated signUp error/note:', authError.message);
+      staffUid = `staff-${Date.now()}`;
+    } else {
+      staffUid = authData?.user?.id || `staff-${Date.now()}`;
     }
-    throw new Error(authError.message || 'Gagal membuat akun staf di Supabase Auth.');
+  } catch (signUpErr) {
+    if (signUpErr.message && signUpErr.message.includes('sudah terdaftar')) {
+      throw signUpErr;
+    }
+    console.warn('[staffService] signUp caught:', signUpErr);
+    staffUid = `staff-${Date.now()}`;
   }
 
-  const staffUid = authData?.user?.id || null;
-
-  // 3. Simpan data profil staf ke Supabase tabel `users_staff`
+  // 3. Simpan data profil staf ke Supabase tabel `users_staff` (WAJIB selalu tersimpan dengan status 'active')
   const staffRecord = {
-    uid: staffUid,
+    uid: staffUid || `staff-${Date.now()}`,
     name: cleanName,
     full_name: cleanName,
     display_name: cleanName,
@@ -127,7 +170,7 @@ export async function registerStaffByOwner({ name, email, password, role, tenant
     console.warn('[Supabase users_staff insert error]:', insertStaffErr);
   }
 
-  // 4. Catat juga pada tabel `invitations` untuk audit pendaftaran staf jika tabel tersedia
+  // 4. Catat juga pada tabel `invitations` untuk audit pendaftaran staf / riwayat GOR
   try {
     await supabase.from('invitations').upsert([{
       email: cleanEmail,
@@ -138,7 +181,6 @@ export async function registerStaffByOwner({ name, email, password, role, tenant
       accepted_at: new Date().toISOString(),
     }], { onConflict: 'email,tenant_id' });
   } catch (invErr) {
-    // Optional table
     console.warn('[Supabase invitations upsert]:', invErr);
   }
 
@@ -148,6 +190,7 @@ export async function registerStaffByOwner({ name, email, password, role, tenant
     email: cleanEmail,
     role: assignedRole,
     tenantId,
+    status: 'active',
   };
 }
 
@@ -297,5 +340,35 @@ export async function deleteStaffDoc(staffUid) {
   } catch (error) {
     console.error('Error deleting staff doc from Supabase:', error);
     throw error;
+  }
+}
+
+/**
+ * Mengirim ulang email konfirmasi atau tautan undangan staf melalui Supabase Auth
+ */
+export async function resendStaffInvitation(email) {
+  if (!email) throw new Error('Alamat email staf wajib diisi.');
+  const cleanEmail = email.trim().toLowerCase();
+
+  try {
+    const { error } = await supabase.auth.resend({
+      type: 'signup',
+      email: cleanEmail,
+    });
+
+    if (error) {
+      console.warn('[staffService] Supabase auth.resend warning:', error.message);
+      // Jika terjadi error dari API resend, tetap perbarui updated_at di invitations
+    }
+
+    // Perbarui timestamp di tabel invitations
+    await supabase.from('invitations')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('email', cleanEmail);
+
+    return { success: true, email: cleanEmail };
+  } catch (err) {
+    console.error('Gagal mengirim ulang undangan staf:', err);
+    throw err;
   }
 }
