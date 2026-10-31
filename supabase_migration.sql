@@ -1,15 +1,81 @@
 -- =========================================================================
--- CHUA SPORT CORE - SUPABASE POSTGRESQL SCHEMA MIGRATION & RLS POLICIES
+-- CHUA SPORT CORE - COMPLETE SUPABASE POSTGRESQL SCHEMA MIGRATION & RLS
 -- Target: Supabase SQL Editor
--- Full Multi-Tenant Database Architecture Migration
+-- Architecture: Single Source of Truth, Multi-Tenant SaaS with RBAC
 -- =========================================================================
 
--- 0. Enable pgcrypto extension for UUID generation
+-- 0. Aktifkan Ekstensi pgcrypto untuk pembuatan UUID
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 -- =========================================================================
--- 1. TABEL: tenants (Profil GOR / Arena SaaS)
+-- 1. FUNGSI PEMBANTU SECURITY & RBAC (Row-Level Security Functions)
 -- =========================================================================
+
+-- Fungsi untuk memeriksa apakah pemanggil adalah Superadmin
+CREATE OR REPLACE FUNCTION is_superadmin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN (
+    (auth.jwt() ->> 'email') = 'erizamaulana.bramantya@gmail.com'
+    OR (auth.jwt() -> 'app_metadata' ->> 'role') = 'superadmin'
+    OR (auth.jwt() -> 'user_metadata' ->> 'role') = 'superadmin'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Fungsi untuk memverifikasi hak akses pengguna terhadap tenant tertentu
+CREATE OR REPLACE FUNCTION user_has_tenant_access(target_tenant_id TEXT)
+RETURNS BOOLEAN AS $$
+DECLARE
+  caller_uid UUID;
+  caller_email TEXT;
+BEGIN
+  -- Superadmin memiliki akses universal ke seluruh data tenant
+  IF is_superadmin() THEN
+    RETURN TRUE;
+  END IF;
+
+  caller_uid := auth.uid();
+  caller_email := auth.jwt() ->> 'email';
+
+  IF caller_uid IS NULL THEN
+    RETURN FALSE;
+  END IF;
+
+  -- 1. Cek jika pengguna adalah Owner dari tenant tersebut
+  IF EXISTS (
+    SELECT 1 FROM tenants 
+    WHERE id::text = target_tenant_id 
+      AND (owner_uid = caller_uid::text OR id::text = caller_uid::text OR owner_email = caller_email)
+  ) THEN
+    RETURN TRUE;
+  END IF;
+
+  -- 2. Cek jika pengguna adalah Staf aktif di tenant tersebut
+  IF EXISTS (
+    SELECT 1 FROM users_staff 
+    WHERE tenant_id = target_tenant_id 
+      AND (uid = caller_uid::text OR id::text = caller_uid::text OR email = caller_email)
+      AND status = 'active'
+  ) THEN
+    RETURN TRUE;
+  END IF;
+
+  -- 3. Cek klaim tenantId di JWT user_metadata atau app_metadata
+  IF (auth.jwt() -> 'user_metadata' ->> 'tenantId') = target_tenant_id 
+     OR (auth.jwt() -> 'app_metadata' ->> 'tenantId') = target_tenant_id THEN
+    RETURN TRUE;
+  END IF;
+
+  RETURN FALSE;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- =========================================================================
+-- 2. DEFINISI TABEL-TABEL UTAMA (23 ENTITAS LENGKAP)
+-- =========================================================================
+
+-- 1. TABEL: tenants (Profil GOR / Arena SaaS)
 CREATE TABLE IF NOT EXISTS tenants (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL,
@@ -25,103 +91,147 @@ CREATE TABLE IF NOT EXISTS tenants (
     sports_type TEXT,
     courts_count INTEGER DEFAULT 0,
     logo_url TEXT,
+    bank_name TEXT,
+    bank_account_name TEXT,
+    bank_account_number TEXT,
     bank_accounts JSONB DEFAULT '[]'::jsonb,
     qris_url TEXT,
     spp_billing_start_day INTEGER DEFAULT 1,
     spp_due_day INTEGER DEFAULT 10,
     receipt_footer_text TEXT,
+    receipt_footer_note TEXT,
     academy_pricing JSONB DEFAULT '{}'::jsonb,
     status TEXT DEFAULT 'active',
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- =========================================================================
--- 2. TABEL: academies (Master Akademi Olahraga)
--- =========================================================================
+-- 2. TABEL: invitations (Undangan Bergabung Staf / Operator)
+CREATE TABLE IF NOT EXISTS invitations (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id TEXT,
+    email TEXT NOT NULL,
+    role TEXT DEFAULT 'staff',
+    owner_name TEXT,
+    phone TEXT,
+    status TEXT DEFAULT 'pending',
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 3. TABEL: users_staff (User Staf, Kasir, & Pelatih Arena)
+CREATE TABLE IF NOT EXISTS users_staff (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    uid TEXT UNIQUE,
+    tenant_id TEXT NOT NULL,
+    email TEXT NOT NULL,
+    display_name TEXT,
+    name TEXT,
+    role TEXT NOT NULL DEFAULT 'kasir',
+    status TEXT DEFAULT 'active',
+    phone TEXT,
+    auth_method TEXT DEFAULT 'express_fullstack_supabase_rbac',
+    created_by TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 4. TABEL: academies (Master Akademi Olahraga)
 CREATE TABLE IF NOT EXISTS academies (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
     academy_name TEXT NOT NULL,
+    name TEXT,
     sport_category TEXT,
+    sport TEXT,
+    category TEXT,
+    category_label TEXT,
     description TEXT,
     logo_url TEXT,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_academies_tenant ON academies(tenant_id);
-
--- =========================================================================
--- 3. TABEL: academy_classes (Kelas Akademi)
--- =========================================================================
-CREATE TABLE IF NOT EXISTS academy_classes (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id TEXT NOT NULL,
-    academy_id TEXT,
-    class_name TEXT NOT NULL,
-    sport TEXT,
-    coach_name TEXT,
-    schedules JSONB DEFAULT '[]'::jsonb,
-    created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_classes_tenant ON academy_classes(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_classes_academy ON academy_classes(academy_id);
-
--- =========================================================================
--- 4. TABEL: coaches (Pelatih Akademi)
--- =========================================================================
+-- 5. TABEL: coaches (Pelatih Akademi Olahraga)
 CREATE TABLE IF NOT EXISTS coaches (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
-    academy_id TEXT,
+    academy_id UUID REFERENCES academies(id) ON DELETE SET NULL,
     name TEXT NOT NULL,
+    coach_name TEXT,
+    nickname TEXT,
+    nik TEXT,
     phone TEXT,
     email TEXT,
     sport_category TEXT,
+    sport_specialty TEXT,
     specialization TEXT,
+    hourly_rate NUMERIC(12,2) DEFAULT 0,
+    monthly_salary NUMERIC(12,2) DEFAULT 0,
     photo_url TEXT,
     status TEXT DEFAULT 'Active',
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_coaches_tenant ON coaches(tenant_id);
+-- 6. TABEL: academy_classes (Kelas & Tingkat Usia Akademi)
+CREATE TABLE IF NOT EXISTS academy_classes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id TEXT NOT NULL,
+    academy_id UUID REFERENCES academies(id) ON DELETE CASCADE,
+    academy_name TEXT,
+    class_name TEXT NOT NULL,
+    sport TEXT,
+    coach_id UUID REFERENCES coaches(id) ON DELETE SET NULL,
+    coach_name TEXT,
+    min_age INTEGER,
+    max_age INTEGER,
+    max_quota INTEGER DEFAULT 20,
+    tier_code TEXT,
+    tier_label TEXT,
+    schedule TEXT,
+    schedules JSONB DEFAULT '[]'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
 
--- =========================================================================
--- 5. TABEL: students (Siswa / Atlet Akademi)
--- =========================================================================
+-- 7. TABEL: students (Siswa / Atlet Akademi Olahraga)
 CREATE TABLE IF NOT EXISTS students (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
-    academy_id TEXT,
+    academy_id UUID REFERENCES academies(id) ON DELETE SET NULL,
+    academy_name TEXT,
     class_id UUID REFERENCES academy_classes(id) ON DELETE SET NULL,
     student_name TEXT NOT NULL,
+    name TEXT,
     birth_date DATE,
     player_role TEXT,
     sport_category TEXT,
+    sport TEXT,
+    photo_url TEXT,
+    gender TEXT,
+    blood_type TEXT,
+    height_cm NUMERIC(5,2),
+    weight_kg NUMERIC(5,2),
+    dominant_foot_hand TEXT,
+    school_name TEXT,
+    parent_name TEXT,
+    parent_phone TEXT,
+    contact_phone TEXT,
+    address TEXT,
+    emergency_contact_name TEXT,
+    emergency_contact_phone TEXT,
     spp_status TEXT DEFAULT 'BELUM LUNAS',
     registration_fee_paid BOOLEAN DEFAULT false,
     registration_fee NUMERIC(12,2) DEFAULT 0,
     monthly_fee NUMERIC(12,2) DEFAULT 0,
     last_paid_month TEXT,
-    contact_phone TEXT,
-    parent_name TEXT,
     tournaments JSONB DEFAULT '[]'::jsonb,
     growth_history JSONB DEFAULT '[]'::jsonb,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_students_tenant ON students(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_students_class ON students(class_id);
-CREATE INDEX IF NOT EXISTS idx_students_spp ON students(spp_status);
-
--- =========================================================================
--- 6. TABEL: academy_evaluations (Evaluasi Rapor Siswa)
--- =========================================================================
+-- 8. TABEL: academy_evaluations (Rapor & Evaluasi Siswa)
 CREATE TABLE IF NOT EXISTS academy_evaluations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
@@ -140,13 +250,7 @@ CREATE TABLE IF NOT EXISTS academy_evaluations (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_evaluations_tenant ON academy_evaluations(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_evaluations_class ON academy_evaluations(class_id);
-CREATE INDEX IF NOT EXISTS idx_evaluations_student ON academy_evaluations(student_id);
-
--- =========================================================================
--- 7. TABEL: academy_attendance (Presensi Sesi Latihan)
--- =========================================================================
+-- 9. TABEL: academy_attendance (Presensi Latihan Siswa & Pelatih)
 CREATE TABLE IF NOT EXISTS academy_attendance (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
@@ -162,14 +266,29 @@ CREATE TABLE IF NOT EXISTS academy_attendance (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_attendance_tenant ON academy_attendance(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_attendance_class ON academy_attendance(class_id);
-CREATE INDEX IF NOT EXISTS idx_attendance_student ON academy_attendance(student_id);
-CREATE INDEX IF NOT EXISTS idx_attendance_date ON academy_attendance(date DESC);
+-- 10. TABEL: spp_payments (Pembayaran SPP & Pendaftaran Siswa)
+CREATE TABLE IF NOT EXISTS spp_payments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id TEXT NOT NULL,
+    student_id UUID REFERENCES students(id) ON DELETE CASCADE,
+    student_name TEXT NOT NULL,
+    class_id UUID REFERENCES academy_classes(id) ON DELETE SET NULL,
+    academy_id UUID REFERENCES academies(id) ON DELETE SET NULL,
+    academy_name TEXT,
+    month TEXT NOT NULL,
+    year INTEGER NOT NULL,
+    amount NUMERIC(12,2) NOT NULL DEFAULT 0,
+    type TEXT DEFAULT 'SPP_BULANAN',
+    status TEXT DEFAULT 'Lunas',
+    payment_method TEXT DEFAULT 'Cash',
+    payment_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    receipt_no TEXT,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
 
--- =========================================================================
--- 8. TABEL: courts (Lapangan Venue / Arena)
--- =========================================================================
+-- 11. TABEL: courts (Lapangan Venue / Arena Olahraga)
 CREATE TABLE IF NOT EXISTS courts (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
@@ -183,16 +302,13 @@ CREATE TABLE IF NOT EXISTS courts (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_courts_tenant ON courts(tenant_id);
-
--- =========================================================================
--- 9. TABEL: bookings (Booking Lapangan)
--- =========================================================================
+-- 12. TABEL: bookings (Sewa / Reservasi Lapangan)
 CREATE TABLE IF NOT EXISTS bookings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
     court_id UUID REFERENCES courts(id) ON DELETE SET NULL,
     court_name TEXT,
+    class_id UUID REFERENCES academy_classes(id) ON DELETE SET NULL,
     event_id UUID,
     reference_id UUID,
     date DATE NOT NULL,
@@ -205,18 +321,12 @@ CREATE TABLE IF NOT EXISTS bookings (
     status TEXT DEFAULT 'Lunas',
     total_price NUMERIC(12,2) DEFAULT 0,
     payment_method TEXT DEFAULT 'Cash',
+    notes TEXT,
     created_at TIMESTAMPTZ DEFAULT now(),
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_bookings_tenant ON bookings(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_bookings_court ON bookings(court_id);
-CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(date);
-CREATE INDEX IF NOT EXISTS idx_bookings_event ON bookings(event_id);
-
--- =========================================================================
--- 10. TABEL: transactions (Penerimaan Kas / Keuangan Venue)
--- =========================================================================
+-- 13. TABEL: transactions (Penerimaan Kas & Arus Kas Keuangan)
 CREATE TABLE IF NOT EXISTS transactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
@@ -238,12 +348,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_transactions_tenant ON transactions(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type);
-
--- =========================================================================
--- 11. TABEL: products (Master Produk Retail / POS Kasir)
--- =========================================================================
+-- 14. TABEL: products (Master Katalog Produk POS & Retail)
 CREATE TABLE IF NOT EXISTS products (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
@@ -258,14 +363,11 @@ CREATE TABLE IF NOT EXISTS products (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_products_tenant ON products(tenant_id);
-
--- =========================================================================
--- 12. TABEL: pos_transactions (Struk Transaksi Kasir POS)
--- =========================================================================
+-- 15. TABEL: pos_transactions (Struk Transaksi Penjualan Kasir POS)
 CREATE TABLE IF NOT EXISTS pos_transactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
+    student_id UUID REFERENCES students(id) ON DELETE SET NULL,
     receipt_no TEXT,
     customer_name TEXT,
     cashier_name TEXT,
@@ -285,11 +387,7 @@ CREATE TABLE IF NOT EXISTS pos_transactions (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_pos_transactions_tenant ON pos_transactions(tenant_id);
-
--- =========================================================================
--- 13. TABEL: global_ledger (Buku Kas Besar Keuangan Global)
--- =========================================================================
+-- 16. TABEL: global_ledger (Buku Kas Besar Keuangan Multi-Divisi)
 CREATE TABLE IF NOT EXISTS global_ledger (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
@@ -309,38 +407,7 @@ CREATE TABLE IF NOT EXISTS global_ledger (
     created_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_global_ledger_tenant ON global_ledger(tenant_id);
-
--- =========================================================================
--- 14. TABEL: sponsors (Data Sponsor & CRM Event)
--- =========================================================================
-CREATE TABLE IF NOT EXISTS sponsors (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id TEXT NOT NULL,
-    company_name TEXT NOT NULL,
-    name TEXT,
-    event_id UUID,
-    event_name TEXT,
-    category TEXT,
-    contract_value NUMERIC(12,2) DEFAULT 0,
-    total_paid NUMERIC(12,2) DEFAULT 0,
-    pending_amount NUMERIC(12,2) DEFAULT 0,
-    payment_status TEXT DEFAULT 'Unpaid',
-    contact_person TEXT,
-    whatsapp_number TEXT,
-    status TEXT DEFAULT 'Negosiasi',
-    crm_status TEXT DEFAULT 'Negosiasi',
-    benefits TEXT,
-    payment_history JSONB DEFAULT '[]'::jsonb,
-    created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now()
-);
-
-CREATE INDEX IF NOT EXISTS idx_sponsors_tenant ON sponsors(tenant_id);
-
--- =========================================================================
--- 15. TABEL: events (Turnamen & Kejuaraan Olahraga)
--- =========================================================================
+-- 17. TABEL: events (Turnamen, Event & Kejuaraan Olahraga)
 CREATE TABLE IF NOT EXISTS events (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
@@ -363,11 +430,30 @@ CREATE TABLE IF NOT EXISTS events (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_events_tenant ON events(tenant_id);
+-- 18. TABEL: sponsors (Data Sponsor & CRM Kemitraan Event)
+CREATE TABLE IF NOT EXISTS sponsors (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    tenant_id TEXT NOT NULL,
+    company_name TEXT NOT NULL,
+    name TEXT,
+    event_id UUID REFERENCES events(id) ON DELETE CASCADE,
+    event_name TEXT,
+    category TEXT,
+    contract_value NUMERIC(12,2) DEFAULT 0,
+    total_paid NUMERIC(12,2) DEFAULT 0,
+    pending_amount NUMERIC(12,2) DEFAULT 0,
+    payment_status TEXT DEFAULT 'Unpaid',
+    contact_person TEXT,
+    whatsapp_number TEXT,
+    status TEXT DEFAULT 'Negosiasi',
+    crm_status TEXT DEFAULT 'Negosiasi',
+    benefits TEXT,
+    payment_history JSONB DEFAULT '[]'::jsonb,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
 
--- =========================================================================
--- 16. TABEL: event_categories (Kategori Nomor Pertandingan Event)
--- =========================================================================
+-- 19. TABEL: event_categories (Kategori Nomor Pertandingan Event)
 CREATE TABLE IF NOT EXISTS event_categories (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
@@ -382,12 +468,7 @@ CREATE TABLE IF NOT EXISTS event_categories (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_event_categories_tenant ON event_categories(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_event_categories_event ON event_categories(event_id);
-
--- =========================================================================
--- 17. TABEL: event_registrations (Pendaftaran Peserta Turnamen)
--- =========================================================================
+-- 20. TABEL: event_registrations (Pendaftaran Peserta Turnamen)
 CREATE TABLE IF NOT EXISTS event_registrations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
@@ -408,12 +489,7 @@ CREATE TABLE IF NOT EXISTS event_registrations (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_event_registrations_tenant ON event_registrations(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_event_registrations_event ON event_registrations(event_id);
-
--- =========================================================================
--- 18. TABEL: event_expenses (Pengeluaran Operasional Event)
--- =========================================================================
+-- 21. TABEL: event_expenses (Pengeluaran Operasional Event)
 CREATE TABLE IF NOT EXISTS event_expenses (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
@@ -428,12 +504,7 @@ CREATE TABLE IF NOT EXISTS event_expenses (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_event_expenses_tenant ON event_expenses(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_event_expenses_event ON event_expenses(event_id);
-
--- =========================================================================
--- 19. TABEL: event_documents (Dokumen & Regulasi Event)
--- =========================================================================
+-- 22. TABEL: event_documents (Dokumen & Regulasi Event)
 CREATE TABLE IF NOT EXISTS event_documents (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
@@ -448,16 +519,12 @@ CREATE TABLE IF NOT EXISTS event_documents (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_event_documents_tenant ON event_documents(tenant_id);
-
--- =========================================================================
--- 20. TABEL: event_matches (Bagan & Jadwal Partai Pertandingan)
--- =========================================================================
+-- 23. TABEL: event_matches (Bagan & Jadwal Pertandingan Event)
 CREATE TABLE IF NOT EXISTS event_matches (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
     event_id UUID REFERENCES events(id) ON DELETE CASCADE,
-    category_id UUID,
+    category_id UUID REFERENCES event_categories(id) ON DELETE CASCADE,
     category_name TEXT,
     round_index INTEGER DEFAULT 1,
     round_name TEXT,
@@ -481,64 +548,138 @@ CREATE TABLE IF NOT EXISTS event_matches (
     updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_event_matches_tenant ON event_matches(tenant_id);
-CREATE INDEX IF NOT EXISTS idx_event_matches_event ON event_matches(event_id);
-CREATE INDEX IF NOT EXISTS idx_event_matches_category ON event_matches(category_id);
-
 -- =========================================================================
--- 21. TABEL: users_staff (User Staf & Pengelola Arena)
+-- 3. INDEXES UNTUK PERFORMA QUERY MULTI-TENANT & RELASI
 -- =========================================================================
-CREATE TABLE IF NOT EXISTS users_staff (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id TEXT NOT NULL,
-    email TEXT NOT NULL,
-    full_name TEXT,
-    name TEXT,
-    role TEXT NOT NULL DEFAULT 'staff',
-    status TEXT DEFAULT 'active',
-    phone TEXT,
-    created_at TIMESTAMPTZ DEFAULT now(),
-    updated_at TIMESTAMPTZ DEFAULT now()
-);
 
+CREATE INDEX IF NOT EXISTS idx_tenants_owner ON tenants(owner_uid);
+CREATE INDEX IF NOT EXISTS idx_invitations_email ON invitations(email);
 CREATE INDEX IF NOT EXISTS idx_users_staff_tenant ON users_staff(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_users_staff_uid ON users_staff(uid);
 CREATE INDEX IF NOT EXISTS idx_users_staff_email ON users_staff(email);
 
+CREATE INDEX IF NOT EXISTS idx_academies_tenant ON academies(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_coaches_tenant ON coaches(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_classes_tenant ON academy_classes(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_classes_academy ON academy_classes(academy_id);
+CREATE INDEX IF NOT EXISTS idx_classes_coach ON academy_classes(coach_id);
+
+CREATE INDEX IF NOT EXISTS idx_students_tenant ON students(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_students_academy ON students(academy_id);
+CREATE INDEX IF NOT EXISTS idx_students_class ON students(class_id);
+CREATE INDEX IF NOT EXISTS idx_students_spp ON students(spp_status);
+
+CREATE INDEX IF NOT EXISTS idx_evaluations_tenant ON academy_evaluations(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_evaluations_student ON academy_evaluations(student_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_tenant ON academy_attendance(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_attendance_date ON academy_attendance(date DESC);
+
+CREATE INDEX IF NOT EXISTS idx_spp_payments_tenant ON spp_payments(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_spp_payments_student ON spp_payments(student_id);
+CREATE INDEX IF NOT EXISTS idx_spp_payments_month ON spp_payments(month, year);
+
+CREATE INDEX IF NOT EXISTS idx_courts_tenant ON courts(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_tenant ON bookings(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_court ON bookings(court_id);
+CREATE INDEX IF NOT EXISTS idx_bookings_date ON bookings(date);
+CREATE INDEX IF NOT EXISTS idx_bookings_class ON bookings(class_id);
+
+CREATE INDEX IF NOT EXISTS idx_transactions_tenant ON transactions(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_products_tenant ON products(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_pos_transactions_tenant ON pos_transactions(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_pos_transactions_student ON pos_transactions(student_id);
+CREATE INDEX IF NOT EXISTS idx_global_ledger_tenant ON global_ledger(tenant_id);
+
+CREATE INDEX IF NOT EXISTS idx_events_tenant ON events(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_sponsors_tenant ON sponsors(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_event_categories_tenant ON event_categories(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_event_registrations_tenant ON event_registrations(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_event_expenses_tenant ON event_expenses(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_event_documents_tenant ON event_documents(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_event_matches_tenant ON event_matches(tenant_id);
+
 -- =========================================================================
--- 22. TABEL: invitations (Undangan Bergabung Staf / Operator)
+-- 4. PENEGAKAN ROW LEVEL SECURITY (RLS) POLICIES
 -- =========================================================================
-CREATE TABLE IF NOT EXISTS invitations (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    tenant_id TEXT,
-    email TEXT NOT NULL,
-    role TEXT DEFAULT 'staff',
-    owner_name TEXT,
-    phone TEXT,
-    status TEXT DEFAULT 'pending',
-    created_at TIMESTAMPTZ DEFAULT now()
+
+-- Aktifkan RLS untuk semua tabel
+ALTER TABLE tenants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE invitations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE users_staff ENABLE ROW LEVEL SECURITY;
+ALTER TABLE academies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE coaches ENABLE ROW LEVEL SECURITY;
+ALTER TABLE academy_classes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE students ENABLE ROW LEVEL SECURITY;
+ALTER TABLE academy_evaluations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE academy_attendance ENABLE ROW LEVEL SECURITY;
+ALTER TABLE spp_payments ENABLE ROW LEVEL SECURITY;
+ALTER TABLE courts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bookings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE products ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pos_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE global_ledger ENABLE ROW LEVEL SECURITY;
+ALTER TABLE events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sponsors ENABLE ROW LEVEL SECURITY;
+ALTER TABLE event_categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE event_registrations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE event_expenses ENABLE ROW LEVEL SECURITY;
+ALTER TABLE event_documents ENABLE ROW LEVEL SECURITY;
+ALTER TABLE event_matches ENABLE ROW LEVEL SECURITY;
+
+-- -------------------------------------------------------------------------
+-- Kebijakan RLS untuk Tabel `tenants`:
+-- -------------------------------------------------------------------------
+DROP POLICY IF EXISTS "tenants_select_policy" ON tenants;
+CREATE POLICY "tenants_select_policy" ON tenants
+FOR SELECT USING (
+  is_superadmin() 
+  OR auth.uid() IS NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_invitations_email ON invitations(email);
+DROP POLICY IF EXISTS "tenants_insert_policy" ON tenants;
+CREATE POLICY "tenants_insert_policy" ON tenants
+FOR INSERT WITH CHECK (
+  is_superadmin()
+  OR auth.uid() IS NOT NULL
+);
 
--- =========================================================================
--- ROW LEVEL SECURITY (RLS) POLICIES FOR MULTI-TENANT ISOLATION
--- =========================================================================
+DROP POLICY IF EXISTS "tenants_update_policy" ON tenants;
+CREATE POLICY "tenants_update_policy" ON tenants
+FOR UPDATE USING (
+  is_superadmin()
+  OR owner_uid = auth.uid()::text
+  OR id::text = auth.uid()::text
+);
 
+DROP POLICY IF EXISTS "tenants_delete_policy" ON tenants;
+CREATE POLICY "tenants_delete_policy" ON tenants
+FOR DELETE USING (
+  is_superadmin()
+);
+
+-- -------------------------------------------------------------------------
+-- Kebijakan RLS Generik untuk Tabel-Tabel Berbasis `tenant_id`
+-- -------------------------------------------------------------------------
 DO $$
 DECLARE
     tbl text;
 BEGIN
     FOR tbl IN 
         SELECT unnest(ARRAY[
-            'tenants', 'academies', 'academy_classes', 'coaches', 'students',
-            'academy_evaluations', 'academy_attendance', 'courts', 'bookings',
-            'transactions', 'products', 'pos_transactions', 'global_ledger',
-            'sponsors', 'events', 'event_categories', 'event_registrations',
-            'event_expenses', 'event_documents', 'event_matches', 'users_staff', 'invitations'
+            'invitations', 'users_staff', 'academies', 'coaches', 'academy_classes', 
+            'students', 'academy_evaluations', 'academy_attendance', 'spp_payments',
+            'courts', 'bookings', 'transactions', 'products', 'pos_transactions', 
+            'global_ledger', 'events', 'sponsors', 'event_categories', 
+            'event_registrations', 'event_expenses', 'event_documents', 'event_matches'
         ])
     LOOP
-        EXECUTE format('ALTER TABLE %I ENABLE ROW LEVEL SECURITY;', tbl);
-        EXECUTE format('DROP POLICY IF EXISTS "Tenant Isolation Policy" ON %I;', tbl);
-        EXECUTE format('CREATE POLICY "Tenant Isolation Policy" ON %I FOR ALL USING (tenant_id::text = auth.uid()::text) WITH CHECK (tenant_id::text = auth.uid()::text);', tbl);
+        EXECUTE format('DROP POLICY IF EXISTS "tenant_isolation_policy" ON %I;', tbl);
+        EXECUTE format(
+          'CREATE POLICY "tenant_isolation_policy" ON %I FOR ALL 
+           USING (user_has_tenant_access(tenant_id::text)) 
+           WITH CHECK (user_has_tenant_access(tenant_id::text));', 
+          tbl
+        );
     END LOOP;
 END $$;

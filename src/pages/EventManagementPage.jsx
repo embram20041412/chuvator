@@ -495,7 +495,10 @@ export default function EventManagementPage({ userProfile }) {
       if (posterFile) {
         setIsUploadingPoster(true);
         try {
-          const uploadResult = await uploadToCloudinary(posterFile, { folder: 'chua_sport/events' });
+          const uploadResult = await uploadToCloudinary(posterFile, {
+            tenantId,
+            category: 'events',
+          });
           finalBannerUrl = uploadResult.secure_url;
         } catch (uploadErr) {
           console.error('Gagal mengunggah banner/poster ke Cloudinary:', uploadErr);
@@ -873,7 +876,8 @@ export default function EventManagementPage({ userProfile }) {
       setIsUploadingDoc(true);
       try {
         const uploadResult = await uploadToCloudinary(docFile, {
-          folder: 'chua_sport_regulations',
+          tenantId,
+          category: 'documents',
         });
         finalFileUrl = uploadResult.secure_url;
         finalFileName = docFile.name;

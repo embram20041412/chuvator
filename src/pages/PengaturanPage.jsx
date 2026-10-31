@@ -344,7 +344,8 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
 
     try {
       const uploadResult = await uploadToCloudinary(file, {
-        folder: 'chua_sport_tenant_logos',
+        tenantId: tenant.id,
+        category: 'logos',
       });
       const cloudUrl = uploadResult.secure_url;
       setLogoUrl(cloudUrl);
