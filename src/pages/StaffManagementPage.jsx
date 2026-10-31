@@ -24,7 +24,7 @@ import {
   Code2
 } from 'lucide-react';
 import { supabase } from '../config/supabase';
-import { resendStaffInvitation } from '../services/staffService';
+import { createStaff, resendStaffInvitation } from '../services/staffService';
 import useAuthRole from '../hooks/useAuthRole';
 import { 
   resolveWorkerBaseUrl, 
@@ -204,171 +204,27 @@ export default function StaffManagementPage({ userProfile }) {
 
     setIsSubmitting(true);
 
-    let createdAuthUid = null;
-
     try {
-      // 3. Ambil Token ID / Access Token Owner saat ini untuk otorisasi
-      const { data: { session } } = await supabase.auth.getSession();
-      const ownerToken = session?.access_token;
-      if (!ownerToken) {
-        throw new Error('Sesi autentikasi Anda tidak aktif. Silakan login ulang.');
-      }
-
-      // 4. Kirim Request ke Backend Endpoint POST /api/create-staff
-      const payload = {
+      await createStaff({
         email: cleanEmail,
         password: password,
         displayName: cleanDisplayName,
         role: staffRole,
         tenantId: tenantId,
-      };
+      });
 
-      let response;
-      try {
-        response = await fetch(endpoints.CREATE_STAFF, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${ownerToken}`,
-          },
-          body: JSON.stringify(payload),
-        });
-      } catch (networkErr) {
-        const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
-        if (isOffline) {
-          throw new Error('Koneksi internet Anda terputus. Periksa jaringan Anda dan coba lagi.');
-        }
-
-        throw new Error(
-          `Gagal menghubungi Backend API (${networkErr.message}). Pastikan server Express Node.js aktif pada port 3000 untuk memproses pendaftaran staf secara aman via Admin SDK.`
-        );
-      }
-
-      const contentType = response.headers.get('content-type') || '';
-      let result = null;
-
-      if (contentType.includes('application/json')) {
-        result = await response.json().catch(() => null);
-      } else {
-        const text = await response.text().catch(() => '');
-        if (text.includes('<!doctype') || text.includes('<html')) {
-          throw new Error(
-            `Backend API (${endpoints.CREATE_STAFF}) merespons dengan HTML. Pastikan server Express pada server.ts berjalan di port 3000.`
-          );
-        }
-      }
-
-      if (!response.ok || !result || result.success === false) {
-        if (response.status === 405) {
-          throw new Error(
-            'Metode HTTP tidak diizinkan (405). Pastikan server Express pada port 3000 aktif dan menangani POST /api/create-staff.'
-          );
-        }
-        if (response.status === 429) {
-          throw new Error(
-            'Terlalu banyak permintaan pendaftaran (429). Silakan tunggu beberapa saat dan coba lagi.'
-          );
-        }
-        if (response.status === 401) {
-          throw new Error(
-            result?.message || 'Otorisasi ditolak (401). Token sesi Owner Anda mungkin kedaluwarsa. Silakan refresh halaman atau login ulang.'
-          );
-        }
-        if (response.status === 403) {
-          throw new Error(
-            result?.message || 'Akses ditolak (403). Hanya akun berstatus Owner atau SuperAdmin yang diizinkan mendaftarkan staf.'
-          );
-        }
-        if (response.status === 409) {
-          throw new Error(
-            result?.message || `Email "${cleanEmail}" sudah terdaftar di sistem otentikasi. Gunakan email lain.`
-          );
-        }
-
-        const errorMsg = result?.message || result?.error || `Backend API mengembalikan status ${response.status}. Pastikan server Express Node.js aktif pada port 3000.`;
-        throw new Error(errorMsg);
-      }
-
-      // 5. Validasi ID dari Supabase Auth
-      createdAuthUid = result.data?.uid || result.uid || `pending-${Date.now()}`;
-      const finalRole = result.data?.role || staffRole;
-      const finalTenantId = result.data?.tenantId || tenantId;
-      const finalStatus = result.data?.status || 'active';
-
-      // 6. Simpan data profil staff ke tabel users_staff Supabase (WAJIB selalu tersimpan)
-      try {
-        await supabase.from('users_staff').upsert([{
-          uid: createdAuthUid,
-          email: cleanEmail,
-          display_name: cleanDisplayName,
-          name: cleanDisplayName,
-          role: finalRole,
-          tenant_id: finalTenantId,
-          created_at: new Date().toISOString(),
-          status: finalStatus,
-          auth_method: 'express_fullstack_rbac',
-          created_by: userProfile?.email || session?.user?.email || 'owner',
-        }], { onConflict: 'uid' });
-        fetchStaff();
-      } catch (supabaseErr) {
-        console.error('Kondisi parsial: Auth dibuat, namun penyimpanan Supabase gagal:', supabaseErr);
-        // Fallback coba simpan kembali tanpa onConflict uid
-        await supabase.from('users_staff').upsert([{
-          email: cleanEmail,
-          display_name: cleanDisplayName,
-          name: cleanDisplayName,
-          role: finalRole,
-          tenant_id: finalTenantId,
-          created_at: new Date().toISOString(),
-          status: finalStatus,
-          created_by: userProfile?.email || 'owner',
-        }]);
-        fetchStaff();
-      }
-
-      // 7. Sukses Penuh
       setFormSuccess(
-        finalStatus === 'pending_confirmation'
-          ? `Akun staff "${cleanDisplayName}" (${finalRole.toUpperCase()}) berhasil didaftarkan! Status: Menunggu Konfirmasi Email.`
-          : `Akun staff "${cleanDisplayName}" (${finalRole.toUpperCase()}) berhasil didaftarkan dan langsung Aktif!`
+        `Akun staff "${cleanDisplayName}" (${staffRole.toUpperCase()}) berhasil didaftarkan dan langsung Aktif!`
       );
 
       setEmail('');
       setDisplayName('');
       setPassword('');
       setStaffRole('kasir');
+      fetchStaff();
     } catch (err) {
-      console.error('Error creating staff via Backend API:', err);
-      const errMsg = err?.message || '';
-
-      // Jika error BUKAN email duplikat, tetap simpan profil staf ke users_staff dengan status 'pending_confirmation'
-      if (!errMsg.includes('sudah terdaftar') && !errMsg.includes('Format email')) {
-        try {
-          await supabase.from('users_staff').upsert([{
-            uid: `pending-${Date.now()}`,
-            email: cleanEmail,
-            display_name: cleanDisplayName,
-            name: cleanDisplayName,
-            role: staffRole,
-            tenant_id: tenantId,
-            created_at: new Date().toISOString(),
-            status: 'pending_confirmation',
-            auth_method: 'offline_queued',
-            created_by: userProfile?.email || 'owner',
-          }]);
-          fetchStaff();
-          setFormSuccess(`Profil staf "${cleanDisplayName}" tetap berhasil disimpan dengan status: Menunggu Konfirmasi Email.`);
-          setEmail('');
-          setDisplayName('');
-          setPassword('');
-          setStaffRole('kasir');
-          return;
-        } catch (dbFallbackErr) {
-          console.warn('Fallback users_staff save failed:', dbFallbackErr);
-        }
-      }
-
-      setFormError(err.message || 'Gagal mendaftarkan staff melalui Backend Express API.');
+      console.error('Error creating staff:', err);
+      setFormError(err.message || 'Gagal mendaftarkan staff ke database Supabase.');
     } finally {
       setIsSubmitting(false);
     }

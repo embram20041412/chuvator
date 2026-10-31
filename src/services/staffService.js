@@ -1,9 +1,8 @@
 import { supabase } from '../config/supabase';
 
 /**
- * Registrasi Staf/Pelatih oleh Owner menggunakan Backend Express API (/api/create-staff).
- * TIDAK MENGGUNAKAN supabase.auth.signUp() dari browser untuk menghindari error 429 Rate Limit
- * dan menjaga sesi Owner tetap aktif.
+ * Registrasi Staf/Pelatih oleh Owner menggunakan Supabase Client secara langsung.
+ * Didesain untuk deployment statis (misalnya Cloudflare Pages/Vite SPA) tanpa bergantung pada endpoint Express.
  */
 export async function createStaff({ email, password, role, tenantId, displayName, name }) {
   const cleanEmail = String(email || '').trim().toLowerCase();
@@ -11,88 +10,63 @@ export async function createStaff({ email, password, role, tenantId, displayName
   const normalizedRole = String(role || 'kasir').toLowerCase().trim();
   const assignedRole = normalizedRole === 'coach' ? 'pelatih' : normalizedRole;
 
-  if (!cleanEmail || !password || !cleanName || !tenantId) {
-    throw new Error('Semua data (Nama, Email, Password, Role, Tenant ID) wajib diisi.');
+  if (!cleanEmail || !cleanName || !tenantId) {
+    throw new Error('Semua data (Nama, Email, Role, Tenant ID) wajib diisi.');
   }
 
-  // 1. Ambil access token sesi Owner yang sedang aktif di Supabase
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session || !session.access_token) {
-    throw new Error('Sesi autentikasi Owner tidak aktif. Silakan login ulang.');
+  // 1. Pre-check apakah email sudah terdaftar di users_staff untuk tenant ini
+  const { data: existingStaff } = await supabase
+    .from('users_staff')
+    .select('id, email')
+    .eq('tenant_id', tenantId)
+    .eq('email', cleanEmail)
+    .maybeSingle();
+
+  if (existingStaff) {
+    throw new Error(`Staf dengan email "${cleanEmail}" sudah terdaftar di cabang/tenant ini.`);
   }
 
-  let response;
-  try {
-    response = await fetch('/api/create-staff', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${session.access_token}`,
-      },
-      body: JSON.stringify({
-        email: cleanEmail,
-        password,
-        displayName: cleanName,
-        role: assignedRole,
-        tenantId,
-      }),
-    });
-  } catch (networkErr) {
-    throw new Error('Gagal menghubungi backend server. Pastikan server Express Node.js aktif pada port 3000 untuk memproses pendaftaran staf secara aman via Admin SDK.');
-  }
-
-  const result = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    if (response.status === 409 || result?.error === 'EMAIL_ALREADY_EXISTS') {
-      throw new Error(`Email "${cleanEmail}" sudah terdaftar di sistem. Harap gunakan alamat email lain.`);
-    }
-    if (response.status === 429) {
-      throw new Error('Terlalu banyak permintaan pendaftaran. Silakan tunggu beberapa saat dan coba lagi.');
-    }
-    if (response.status === 405) {
-      throw new Error('Metode HTTP tidak diizinkan (405). Pastikan server Express pada port 3000 aktif dan menangani POST /api/create-staff.');
-    }
-    throw new Error(result?.message || result?.error || `Gagal mendaftarkan staf via backend (Status ${response.status}). Pastikan server Express Node.js aktif pada port 3000.`);
-  }
-
-  const staffUid = result.data?.uid || `staff-${Date.now()}`;
-
-  // 2. Garansi Sinkronisasi Profil Staf ke `public.users_staff`
   const staffRecord = {
-    uid: staffUid,
+    tenant_id: tenantId,
+    email: cleanEmail,
     name: cleanName,
     full_name: cleanName,
     display_name: cleanName,
-    email: cleanEmail,
     role: assignedRole,
-    tenant_id: tenantId,
     status: 'active',
     is_active: true,
-    created_at: new Date().toISOString(),
+    created_at: new Date().toISOString()
   };
 
-  try {
-    await supabase.from('users_staff').upsert([staffRecord], { onConflict: 'email,tenant_id' });
-  } catch (dbErr) {
-    console.warn('[staffService] DB sync note:', dbErr);
+  // 2. Simpan data staf ke tabel public.users_staff di Supabase
+  const { data, error } = await supabase
+    .from('users_staff')
+    .upsert([staffRecord], { onConflict: 'email,tenant_id' })
+    .select()
+    .single();
+
+  if (error) {
+    console.error('Error inserting users_staff:', error);
+    throw new Error(error.message || 'Gagal menyimpan data staf ke database Supabase.');
   }
 
-  // 3. Record ke tabel `invitations` untuk audit riwayat GOR
+  // 3. Catat ke tabel invitations untuk audit riwayat GOR
   try {
-    await supabase.from('invitations').upsert([{
-      email: cleanEmail,
-      tenant_id: tenantId,
-      role: assignedRole,
-      status: 'accepted',
-      created_at: new Date().toISOString(),
-      accepted_at: new Date().toISOString(),
-    }], { onConflict: 'email,tenant_id' });
+    await supabase.from('invitations').upsert([
+      {
+        tenant_id: tenantId,
+        email: cleanEmail,
+        role: assignedRole,
+        status: 'accepted',
+        created_at: new Date().toISOString(),
+        accepted_at: new Date().toISOString()
+      }
+    ], { onConflict: 'email,tenant_id' });
   } catch (invErr) {
     console.warn('[staffService] Invitations note:', invErr);
   }
 
-  return result;
+  return { success: true, data };
 }
 
 // Alias function untuk kompatibilitas
