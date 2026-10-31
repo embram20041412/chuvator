@@ -172,7 +172,7 @@ export async function loginStaffWithEmail(email, password) {
         };
       }
 
-      await supabase.auth.signOut();
+      await supabase.auth.signOut({ scope: 'local' });
       const err = new Error('Akun staf tidak terdaftar dalam database staf aktif.');
       err.code = 'STAFF_NOT_FOUND';
       throw err;

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import * as supabaseAcademyService from '../services/supabaseAcademyService';
 import { createCoachWithAccount } from '../services/coachAuthService';
+import { supabase } from '../config/supabase';
 import { X, User, Phone, Award, Dumbbell, MapPin, Loader2, FileText, Check, Camera, Upload, Trash2, Mail, Lock } from 'lucide-react';
 import { uploadToCloudinary } from '../services/uploadService';
 
@@ -291,13 +292,49 @@ export default function CoachModal({
             phone: coachPhone.trim(),
             email: coachEmail.trim(),
             password: coachPassword,
-            specialty: sportSpecialty || 'Pelatih Utama'
+            sportSpecialty: sportSpecialty || 'Pelatih Utama',
+            specialty: sportSpecialty || 'Pelatih Utama',
+            photoUrl: finalPhotoUrl,
+            nickname: nickname.trim(),
+            nik: nik.trim(),
+            license: license.trim(),
+            address: coachData.address
           });
           if (onCoachAdded) {
             onCoachAdded(res.coach || { id: `coach_${Date.now()}`, ...coachData });
           }
         } else {
           const createdCoach = await supabaseAcademyService.createCoach(coachData);
+          
+          // Sinkronisasi otomatis ke users_staff & invitations jika email disertakan
+          if (coachEmail && tenantId) {
+            const cleanEmail = coachEmail.trim().toLowerCase();
+            const cleanName = coachName.trim();
+            try {
+              await supabase.from('users_staff').upsert([{
+                tenant_id: tenantId,
+                email: cleanEmail,
+                name: cleanName,
+                full_name: cleanName,
+                role: 'coach',
+                status: 'active',
+                is_active: true,
+                created_at: new Date().toISOString()
+              }], { onConflict: 'email,tenant_id' });
+
+              await supabase.from('invitations').upsert([{
+                tenant_id: tenantId,
+                email: cleanEmail,
+                role: 'coach',
+                status: 'accepted',
+                created_at: new Date().toISOString(),
+                accepted_at: new Date().toISOString()
+              }], { onConflict: 'email,tenant_id' });
+            } catch (syncErr) {
+              console.warn('[CoachModal] Sync users_staff & invitations note:', syncErr);
+            }
+          }
+
           if (onCoachAdded) {
             onCoachAdded(createdCoach || { id: `coach_${Date.now()}`, ...coachData });
           }

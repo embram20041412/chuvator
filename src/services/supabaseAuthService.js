@@ -168,7 +168,7 @@ export async function verifyUserRoleAndTenant(user) {
   }
 
   // 5. IF NOT IN invitations, NOT IN tenants, AND NOT IN users_staff: STRICT FAIL-CLOSED ACCESS DENIED!
-  await supabase.auth.signOut();
+  await supabase.auth.signOut({ scope: 'local' });
   const uninvitedErr = new Error(
     `Akses Ditolak: Email Anda (${user.email || 'tanpa email'}) belum terdaftar dalam daftar undangan resmi CHUA SPORT CORE. Silakan hubungi Administrator Sistem untuk mendapatkan akses.`
   );
@@ -222,7 +222,7 @@ export const supabaseAuthService = {
   },
 
   async logout() {
-    const { error } = await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
     if (error) throw error;
   }
 };
