@@ -532,6 +532,17 @@ export default function Layout({ userProfile }) {
         </div>
 
         <div className="flex items-center gap-2">
+          {userAccess.isCoachOnly && (
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="p-1.5 px-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 rounded-xl transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold border border-rose-500/30"
+              title="Keluar Akun"
+            >
+              <LogOut className="w-3.5 h-3.5 text-rose-300" />
+              <span>Keluar</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={toggleTheme}
@@ -743,69 +754,71 @@ export default function Layout({ userProfile }) {
         )}
       </AnimatePresence>
 
-      {/* MOBILE BOTTOM NAVIGATION BAR (< 1024px) */}
-      <nav className="flex lg:hidden fixed bottom-0 inset-x-0 z-40 h-16 bg-[#354944] dark:bg-[#111C19] rounded-t-2xl shadow-2xl border-t border-white/10 px-3 items-center justify-around">
-        {/* Dasbor */}
-        <NavLink
-          to="/dashboard"
-          className={({ isActive }) => `flex flex-col items-center justify-center flex-1 py-1 transition-colors ${
-            isActive ? 'text-[#C89D32] font-bold' : 'text-slate-300 hover:text-white font-medium'
-          }`}
-        >
-          <span className="text-[17px] mb-0.5">🏠</span>
-          <span className="text-[10px] tracking-tight">Dasbor</span>
-        </NavLink>
-
-        {/* Booking */}
-        <NavLink
-          to="/booking"
-          className={({ isActive }) => `flex flex-col items-center justify-center flex-1 py-1 transition-colors ${
-            isActive ? 'text-[#C89D32] font-bold' : 'text-slate-300 hover:text-white font-medium'
-          }`}
-        >
-          <span className="text-[17px] mb-0.5">📅</span>
-          <span className="text-[10px] tracking-tight">Booking</span>
-        </NavLink>
-
-        {/* Kasir POS (Prominent Center Pill) */}
-        <div className="flex-1 flex justify-center -mt-5">
+      {/* MOBILE BOTTOM NAVIGATION BAR (< 1024px) - DISEMBUNYIKAN KHUSUS ROLE COACH */}
+      {!userAccess.isCoachOnly && (
+        <nav className="flex lg:hidden fixed bottom-0 inset-x-0 z-40 h-16 bg-[#354944] dark:bg-[#111C19] rounded-t-2xl shadow-2xl border-t border-white/10 px-3 items-center justify-around">
+          {/* Dasbor */}
           <NavLink
-            to="/kasir"
-            className="w-13 h-13 rounded-full bg-[#C89D32] hover:bg-[#B38A28] text-slate-950 font-black shadow-lg border-4 border-[#354944] flex flex-col items-center justify-center transition-transform active:scale-95 cursor-pointer"
-            title="Kasir POS"
+            to="/dashboard"
+            className={({ isActive }) => `flex flex-col items-center justify-center flex-1 py-1 transition-colors ${
+              isActive ? 'text-[#C89D32] font-bold' : 'text-slate-300 hover:text-white font-medium'
+            }`}
           >
-            <span className="text-lg leading-none">💳</span>
-            <span className="text-[9px] font-black uppercase tracking-tighter mt-0.5">POS</span>
+            <span className="text-[17px] mb-0.5">🏠</span>
+            <span className="text-[10px] tracking-tight">Dasbor</span>
           </NavLink>
-        </div>
 
-        {/* Akademi */}
-        <NavLink
-          to="/akademi?tab=dasbor"
-          className={({ isActive }) => `flex flex-col items-center justify-center flex-1 py-1 transition-colors ${
-            isActive ? 'text-[#C89D32] font-bold' : 'text-slate-300 hover:text-white font-medium'
-          }`}
-        >
-          <span className="text-[17px] mb-0.5">🎓</span>
-          <span className="text-[10px] tracking-tight">Akademi</span>
-        </NavLink>
+          {/* Booking */}
+          <NavLink
+            to="/booking"
+            className={({ isActive }) => `flex flex-col items-center justify-center flex-1 py-1 transition-colors ${
+              isActive ? 'text-[#C89D32] font-bold' : 'text-slate-300 hover:text-white font-medium'
+            }`}
+          >
+            <span className="text-[17px] mb-0.5">📅</span>
+            <span className="text-[10px] tracking-tight">Booking</span>
+          </NavLink>
 
-        {/* Lainnya (Trigger Bottom Sheet Drawer) */}
-        <button
-          type="button"
-          onClick={() => setMobileMoreOpen(true)}
-          className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors cursor-pointer ${
-            mobileMoreOpen ? 'text-[#C89D32] font-bold' : 'text-slate-300 hover:text-white font-medium'
-          }`}
-        >
-          <span className="text-[17px] mb-0.5">📂</span>
-          <span className="text-[10px] tracking-tight">Lainnya</span>
-        </button>
-      </nav>
+          {/* Kasir POS (Prominent Center Pill) */}
+          <div className="flex-1 flex justify-center -mt-5">
+            <NavLink
+              to="/kasir"
+              className="w-13 h-13 rounded-full bg-[#C89D32] hover:bg-[#B38A28] text-slate-950 font-black shadow-lg border-4 border-[#354944] flex flex-col items-center justify-center transition-transform active:scale-95 cursor-pointer"
+              title="Kasir POS"
+            >
+              <span className="text-lg leading-none">💳</span>
+              <span className="text-[9px] font-black uppercase tracking-tighter mt-0.5">POS</span>
+            </NavLink>
+          </div>
+
+          {/* Akademi */}
+          <NavLink
+            to="/akademi?tab=dasbor"
+            className={({ isActive }) => `flex flex-col items-center justify-center flex-1 py-1 transition-colors ${
+              isActive ? 'text-[#C89D32] font-bold' : 'text-slate-300 hover:text-white font-medium'
+            }`}
+          >
+            <span className="text-[17px] mb-0.5">🎓</span>
+            <span className="text-[10px] tracking-tight">Akademi</span>
+          </NavLink>
+
+          {/* Lainnya (Trigger Bottom Sheet Drawer) */}
+          <button
+            type="button"
+            onClick={() => setMobileMoreOpen(true)}
+            className={`flex flex-col items-center justify-center flex-1 py-1 transition-colors cursor-pointer ${
+              mobileMoreOpen ? 'text-[#C89D32] font-bold' : 'text-slate-300 hover:text-white font-medium'
+            }`}
+          >
+            <span className="text-[17px] mb-0.5">📂</span>
+            <span className="text-[10px] tracking-tight">Lainnya</span>
+          </button>
+        </nav>
+      )}
 
       {/* BOTTOM SHEET DRAWER FOR 'LAINNYA' (< 1024px) */}
       <AnimatePresence>
-        {mobileMoreOpen && (
+        {!userAccess.isCoachOnly && mobileMoreOpen && (
           <>
             <motion.div
               initial={{ opacity: 0 }}
@@ -911,7 +924,7 @@ export default function Layout({ userProfile }) {
       </AnimatePresence>
 
       {/* MAIN CONTENT AREA */}
-      <main className={`flex-1 h-full overflow-y-auto relative ${isSidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'} transition-[margin] duration-300 min-w-0 max-w-full pb-20 lg:pb-5 pt-3 lg:pt-3.5 px-3 sm:px-4 lg:px-6`}>
+      <main className={`flex-1 h-full overflow-y-auto relative ${isSidebarCollapsed ? 'lg:ml-20' : 'lg:ml-64'} transition-[margin] duration-300 min-w-0 max-w-full ${userAccess.isCoachOnly ? 'pb-4 lg:pb-5' : 'pb-20 lg:pb-5'} pt-3 lg:pt-3.5 px-3 sm:px-4 lg:px-6`}>
         <div key={location.pathname + location.search} className="max-w-[1536px] mx-auto w-full min-w-0 animate-page-enter">
           <Outlet />
         </div>

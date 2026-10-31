@@ -992,7 +992,7 @@ export default function AcademyPage({ userProfile }) {
 
           {/* MOBILE ACADEMY HUB (FULL-SCREEN GRID MENU LAUNCHER WHEN mobileAcademyHubMode === true) */}
           {mobileAcademyHubMode && (
-            <div className="block lg:hidden space-y-4 pb-12">
+            <div className={`block lg:hidden space-y-4 ${isCoachOnly ? 'pb-4' : 'pb-12'}`}>
               {/* Hero Section & Floating Workspace Card */}
               <div className="bg-[#354944] text-white pt-4 pb-12 px-5 rounded-3xl shadow-lg relative overflow-hidden space-y-1.5">
                 <div className="absolute right-0 top-0 w-64 h-64 bg-white/5 rounded-full blur-2xl pointer-events-none" />
