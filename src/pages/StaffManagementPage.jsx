@@ -240,7 +240,7 @@ export default function StaffManagementPage({ userProfile }) {
         }
 
         throw new Error(
-          `Gagal menghubungi Backend API (${networkErr.message}). Klik tombol "Uji Status" di atas untuk memeriksa kesehatan endpoint Express.`
+          `Gagal menghubungi Backend API (${networkErr.message}). Pastikan server Express Node.js aktif pada port 3000 untuk memproses pendaftaran staf secara aman via Admin SDK.`
         );
       }
 
@@ -259,6 +259,16 @@ export default function StaffManagementPage({ userProfile }) {
       }
 
       if (!response.ok || !result || result.success === false) {
+        if (response.status === 405) {
+          throw new Error(
+            'Metode HTTP tidak diizinkan (405). Pastikan server Express pada port 3000 aktif dan menangani POST /api/create-staff.'
+          );
+        }
+        if (response.status === 429) {
+          throw new Error(
+            'Terlalu banyak permintaan pendaftaran (429). Silakan tunggu beberapa saat dan coba lagi.'
+          );
+        }
         if (response.status === 401) {
           throw new Error(
             result?.message || 'Otorisasi ditolak (401). Token sesi Owner Anda mungkin kedaluwarsa. Silakan refresh halaman atau login ulang.'
@@ -275,7 +285,7 @@ export default function StaffManagementPage({ userProfile }) {
           );
         }
 
-        const errorMsg = result?.message || result?.error || `Backend API mengembalikan status ${response.status}.`;
+        const errorMsg = result?.message || result?.error || `Backend API mengembalikan status ${response.status}. Pastikan server Express Node.js aktif pada port 3000.`;
         throw new Error(errorMsg);
       }
 
