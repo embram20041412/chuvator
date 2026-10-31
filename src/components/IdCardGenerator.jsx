@@ -125,9 +125,9 @@ export default function IdCardGenerator({
             </div>
 
             {/* 1. Desain Header (Navy & Emas) - Padding Vertikal Lega & Flex Layout */}
-            <div className="relative pt-6 pb-16 px-4 bg-[#0a192f] text-white flex flex-col items-center justify-center text-center gap-2 border-b-2 border-[#D4AF37] overflow-hidden">
+            <div className="relative pt-8 pb-24 px-4 bg-[#0a192f] text-white flex flex-col items-center justify-center text-center gap-2 border-b-2 border-[#D4AF37]">
               {/* Subtle geometric pattern lines */}
-              <div className="absolute inset-0 opacity-15 pointer-events-none">
+              <div className="absolute inset-0 opacity-15 pointer-events-none overflow-hidden">
                 <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
                   <defs>
                     <pattern id="card-geo-pattern" width="24" height="24" patternUnits="userSpaceOnUse">
@@ -139,16 +139,16 @@ export default function IdCardGenerator({
                 </svg>
               </div>
 
-              {/* Baris 1: Logo Tenant (jika ada) */}
+              {/* Baris 1: Logo Tenant (h-12 w-auto object-contain tanpa terpotong) */}
               {finalTenantLogo ? (
                 <img
                   src={finalTenantLogo}
                   alt={finalTenantName}
                   crossOrigin="anonymous"
-                  className="w-10 h-10 object-contain rounded-md mx-auto relative z-10 filter drop-shadow"
+                  className="h-12 w-auto object-contain mx-auto relative z-10 filter drop-shadow"
                 />
               ) : (
-                <div className="w-9 h-9 rounded-md bg-[#D4AF37]/20 text-[#D4AF37] font-black text-sm flex items-center justify-center mx-auto border border-[#D4AF37]/40 relative z-10 shadow-xs">
+                <div className="w-11 h-11 rounded-xl bg-[#D4AF37]/20 text-[#D4AF37] font-black text-base flex items-center justify-center mx-auto border border-[#D4AF37]/40 relative z-10 shadow-xs">
                   {finalTenantName ? finalTenantName.charAt(0).toUpperCase() : 'C'}
                 </div>
               )}
@@ -158,25 +158,25 @@ export default function IdCardGenerator({
                 {finalTenantName}
               </h4>
 
-              {/* Baris 3: Alamat & Kontak Tenant (Putih, text-xs, opacity-90) */}
-              <div className="flex flex-col items-center gap-0.5 relative z-10 max-w-[290px]">
+              {/* Baris 3: Alamat & Kontak Tenant (max-w-[250px] mx-auto leading-tight text-center) */}
+              <div className="flex flex-col items-center relative z-10">
                 {finalTenantAddress && (
-                  <p className="text-white text-xs opacity-90 whitespace-normal break-words leading-relaxed text-center px-2">
+                  <p className="text-white text-xs opacity-90 max-w-[250px] mx-auto leading-tight text-center">
                     {finalTenantAddress}
                   </p>
                 )}
                 {finalTenantPhone && (
-                  <p className="text-white text-[11px] opacity-90 font-medium text-center">
+                  <p className="text-white text-[11px] opacity-90 font-medium text-center mt-1">
                     Telp/WA: {finalTenantPhone}
                   </p>
                 )}
               </div>
             </div>
 
-            {/* 2 & 3. Card Body: Foto Profil Overlap (-mt-14) serta Nama & Tag Identitas */}
+            {/* 2 & 3. Card Body: Foto Profil Overlap (-mt-16 relative z-10) serta Nama & Tag Identitas */}
             <div className="px-4 pt-0 pb-6 flex flex-col items-center text-center bg-gradient-to-b from-slate-50 via-white to-white flex-1">
-              {/* Foto Profil & Badge Posisi (Overlapping tepat di garis perbatasan header navy) */}
-              <div className="relative -mt-14 mb-6 z-20">
+              {/* Foto Profil & Badge Posisi (relative z-10 -mt-16) */}
+              <div className="relative z-10 -mt-16 mb-6">
                 {photoUrl ? (
                   <img
                     src={photoUrl}
