@@ -8,7 +8,7 @@ import {
   createLedgerEntry, 
   createPosReceipt 
 } from '../services/supabaseArenaService';
-import { getStudents, updateStudent } from '../services/supabaseAcademyService';
+import { getStudents, updateStudent, fetchAcademyBills } from '../services/supabaseAcademyService';
 import { supabase } from '../config/supabase';
 import useArenaData from '../hooks/useArenaData';
 import PosCheckoutModal from '../components/PosCheckoutModal';
@@ -49,7 +49,7 @@ export default function POSPage({ userProfile }) {
   const tenantId = userProfile?.tenant?.id || userProfile?.tenantId || userProfile?.uid;
 
   // =====================================================================
-  // 1 & 2. REACT QUERY CACHE: PRODUK & SISWA (INSTANT IN-MEMORY UI)
+  // 1 & 2. REACT QUERY CACHE: PRODUK, SISWA & TAGIHAN AKADEMI (INSTANT IN-MEMORY UI)
   // =====================================================================
   const { data: cachedProducts, isLoading: isProductsLoading } = useQuery({
     queryKey: ['posProducts', tenantId],
@@ -65,13 +65,23 @@ export default function POSPage({ userProfile }) {
     staleTime: 5 * 60 * 1000,
   });
 
+  const { data: cachedBills, isLoading: isBillsLoading } = useQuery({
+    queryKey: ['posAcademyBills', tenantId],
+    queryFn: () => fetchAcademyBills(tenantId),
+    enabled: Boolean(tenantId),
+    staleTime: 5 * 60 * 1000,
+  });
+
   const [localProducts, setLocalProducts] = useState(null);
   const [localStudents, setLocalStudents] = useState(null);
+  const [localBills, setLocalBills] = useState(null);
 
   const products = localProducts || cachedProducts || [];
   const students = localStudents || cachedStudents || [];
+  const academyBills = localBills || cachedBills || [];
   const loadingProducts = isProductsLoading && !cachedProducts;
   const loadingStudents = isStudentsLoading && !cachedStudents;
+  const loadingBills = isBillsLoading && !cachedBills;
 
   // Sinkronisasi data cache ke local state saat ada update latar belakang
   useEffect(() => {
@@ -81,6 +91,10 @@ export default function POSPage({ userProfile }) {
   useEffect(() => {
     if (cachedStudents) setLocalStudents(cachedStudents);
   }, [cachedStudents]);
+
+  useEffect(() => {
+    if (cachedBills) setLocalBills(cachedBills);
+  }, [cachedBills]);
 
   const setProducts = useCallback((updater) => {
     setLocalProducts((prev) => {
@@ -100,6 +114,15 @@ export default function POSPage({ userProfile }) {
     });
   }, [cachedStudents, queryClient, tenantId]);
 
+  const setAcademyBills = useCallback((updater) => {
+    setLocalBills((prev) => {
+      const current = prev || cachedBills || [];
+      const updated = typeof updater === 'function' ? updater(current) : updater;
+      queryClient.setQueryData(['posAcademyBills', tenantId], updated);
+      return updated;
+    });
+  }, [cachedBills, queryClient, tenantId]);
+
   const fetchProducts = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['posProducts', tenantId] });
   }, [queryClient, tenantId]);
@@ -107,6 +130,11 @@ export default function POSPage({ userProfile }) {
   const fetchStudents = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['posStudents', tenantId] });
   }, [queryClient, tenantId]);
+
+  const fetchBills = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['posAcademyBills', tenantId] });
+  }, [queryClient, tenantId]);
+
 
   // =====================================================================
   // 3. STATE KERANJANG, SEARCH, BARCODE SCANNER, RECEIPT & TAB KATALOG
@@ -289,22 +317,67 @@ export default function POSPage({ userProfile }) {
     });
   }, [products, activeCatalogTab, searchQuery]);
 
-  const filteredUnpaidStudents = useMemo(() => {
-    return unpaidStudents.filter((st) => {
-      const q = searchQuery.toLowerCase();
-      const sName = (st.studentName || st.name || '').toLowerCase();
-      const cName = (st.className || '').toLowerCase();
-      const pName = (st.parentName || '').toLowerCase();
-      const pPhone = (st.parentPhone || st.phone || '').toLowerCase();
-      return sName.includes(q) || cName.includes(q) || pName.includes(q) || pPhone.includes(q);
+  // Filter Tagihan Akademi (Pendaftaran & SPP Bulanan)
+  const filteredBills = useMemo(() => {
+    const q = searchQuery.toLowerCase().trim();
+    if (!q) return academyBills;
+    return academyBills.filter((bill) => {
+      const bName = (bill.name || '').toLowerCase();
+      const sName = (bill.studentName || '').toLowerCase();
+      const cName = (bill.className || '').toLowerCase();
+      const pName = (bill.parentName || '').toLowerCase();
+      const pPhone = (bill.parentPhone || '').toLowerCase();
+      const subCat = (bill.subCategory || '').toLowerCase();
+      return bName.includes(q) || sName.includes(q) || cName.includes(q) || pName.includes(q) || pPhone.includes(q) || subCat.includes(q);
     });
-  }, [unpaidStudents, searchQuery]);
+  }, [academyBills, searchQuery]);
 
   // =====================================================================
   // 8. CART HANDLERS & STOCK CHECK
   // =====================================================================
   const handleAddToCart = (product) => {
-    // Check stock if retail product
+    // 1. Khusus tagihan akademi (Pendaftaran Siswa Baru atau SPP Bulanan)
+    if (product.type === 'spp' || product.type === 'registration') {
+      const isAlreadyInCart = cart.some((item) => item.id === product.id);
+      if (isAlreadyInCart) {
+        setScanNotification({
+          type: 'error',
+          message: `⚠️ Tagihan "${product.name}" sudah ada di keranjang!`
+        });
+        setTimeout(() => setScanNotification(null), 3000);
+        return;
+      }
+
+      const billItem = {
+        id: product.id,
+        name: product.name,
+        price: parseFloat(product.price) || 0,
+        cogs: 0,
+        category: 'Tagihan SPP',
+        subCategory: product.subCategory || (product.type === 'registration' ? 'Biaya Pendaftaran' : 'SPP Bulanan'),
+        type: product.type,
+        studentId: product.studentId || product.student_id,
+        student_id: product.student_id || product.studentId,
+        sppId: product.sppId || product.spp_id || null,
+        spp_id: product.spp_id || product.sppId || null,
+        studentName: product.studentName || '',
+        className: product.className || '',
+        month: product.month || '',
+        paid_month: product.paid_month || '',
+        stock: 1,
+        qty: 1
+      };
+
+      setCart((prev) => [...prev, billItem]);
+      setScanNotification({
+        type: 'success',
+        message: `⚡ TAGIHAN DITAMBAHKAN: "${product.name}" siap di-checkout`
+      });
+      setTimeout(() => setScanNotification(null), 3000);
+      return;
+    }
+
+    // 2. Produk retail & sewa inventaris
     if (product.type !== 'sewa' && (product.stock ?? 0) <= 0) {
       setScanNotification({
         type: 'error',
@@ -346,37 +419,11 @@ export default function POSPage({ userProfile }) {
     }
   };
 
-  // Tambah Tagihan SPP ke Keranjang Kasir
-  const handleAddSppToCart = (student) => {
-    const itemId = `spp_${student.id}`;
-    const studentName = student.studentName || student.name || 'Siswa';
-    const fee = parseFloat(student.monthlyFee || student.tuitionFee || 0) || 0;
-
-    const isAlreadyInCart = cart.some((item) => item.id === itemId);
-    if (isAlreadyInCart) return;
-
-    const sppItem = {
-      id: itemId,
-      name: `SPP - ${studentName}`,
-      category: 'Akademi',
-      price: fee,
-      cogs: 0,
-      qty: 1,
-      type: 'spp',
-      studentId: student.id,
-      academyId: student.academyId || '',
-      studentName: studentName,
-      className: student.className || student.sportCategory || 'Akademi'
-    };
-
-    setCart((prev) => [...prev, sppItem]);
-  };
-
   const handleUpdateQty = (itemId, delta) => {
     const updated = cart
       .map((item) => {
         if (item.id === itemId) {
-          if (item.type === 'spp') {
+          if (item.type === 'spp' || item.type === 'registration') {
             return delta < 0 ? null : item;
           }
           const newQty = item.qty + delta;
@@ -415,107 +462,191 @@ export default function POSPage({ userProfile }) {
     const finalCashReceived = isCashMode ? (Number(cashReceived) || cartTotal) : cartTotal;
     const finalChange = isCashMode ? Math.max(0, Number(changeAmount) || (finalCashReceived - cartTotal)) : 0;
 
+    const isUuid = (val) => Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(val).trim()));
+
     try {
       const itemsSummary = cart.map((i) => `${i.name} (${i.qty}x)`).join(', ');
-      const hasSpp = cart.some((i) => i.type === 'spp');
+      const hasAcademy = cart.some((i) => i.type === 'spp' || i.type === 'registration');
 
-      // 1. Update product stocks in Supabase
-      const physicalItems = cart.filter((i) => i.type !== 'spp' && i.type !== 'sewa' && i.id);
+      // 1. Update product stocks in Supabase (produk fisik retail)
+      const physicalItems = cart.filter((i) => i.type !== 'spp' && i.type !== 'registration' && i.type !== 'sewa' && i.id);
       for (const item of physicalItems) {
-        const currentProd = products.find((p) => p.id === item.id);
-        const currentStock = currentProd ? Number(currentProd.stock || 0) : item.stock || 0;
-        const newStock = Math.max(0, currentStock - item.qty);
-        await updateProduct(item.id, { stock: newStock });
+        if (isUuid(item.id)) {
+          try {
+            const currentProd = products.find((p) => p.id === item.id);
+            const currentStock = currentProd ? Number(currentProd.stock || 0) : item.stock || 0;
+            const newStock = Math.max(0, currentStock - item.qty);
+            await updateProduct(item.id, { stock: newStock });
+          } catch (e) {
+            console.warn('Stock update skipped for non-persisted product:', item.id, e);
+          }
+        }
       }
 
-      // 2. Update SPP students and record spp_payments
-      const sppItems = cart.filter((i) => i.type === 'spp' && i.studentId);
+      // 2. Update status Biaya Pendaftaran Siswa di tabel students
+      const regItems = cart.filter((i) => i.type === 'registration');
+      for (const reg of regItems) {
+        const sId = reg.studentId || reg.student_id;
+        if (sId && isUuid(sId)) {
+          try {
+            await updateStudent(sId, {
+              registrationFeePaid: true,
+              isRegistrationFeePaid: true,
+              registrationFeePaidAt: new Date().toISOString()
+            });
+          } catch (e) {
+            console.warn('Student registration fee update error:', e);
+          }
+        }
+      }
+
+      // 3. Update SPP students and record spp_payments
+      const sppItems = cart.filter((i) => i.type === 'spp');
       for (const s of sppItems) {
-        await updateStudent(s.studentId, {
-          paymentStatus: 'lunas',
-          sppStatus: 'Lunas',
-          lastPaidMonth: currentMonth
-        });
+        const sId = s.studentId || s.student_id;
+        const targetMonth = s.paid_month || currentMonth;
+        if (sId && isUuid(sId)) {
+          try {
+            await updateStudent(sId, {
+              paymentStatus: 'lunas',
+              sppStatus: 'Lunas',
+              lastPaidMonth: targetMonth
+            });
+          } catch (e) {
+            console.warn('Student SPP update error:', e);
+          }
+        }
 
-        await supabase.from('spp_payments').insert([{
-          tenant_id: tenantId,
-          student_id: s.studentId,
-          student_name: s.studentName || 'Siswa',
-          amount: Number(s.price || 0),
-          paid_month: currentMonth,
-          payment_method: activePaymentMethod,
-          status: 'COMPLETED',
-          created_at: new Date().toISOString()
-        }]);
+        if (isUuid(tenantId)) {
+          try {
+            if ((s.sppId || s.spp_id) && isUuid(s.sppId || s.spp_id)) {
+              await supabase
+                .from('spp_payments')
+                .update({
+                  status: 'COMPLETED',
+                  payment_method: activePaymentMethod,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', s.sppId || s.spp_id);
+            } else if (sId && isUuid(sId)) {
+              await supabase.from('spp_payments').insert([{
+                tenant_id: tenantId,
+                student_id: sId,
+                student_name: s.studentName || 'Siswa',
+                amount: Number(s.price || 0),
+                paid_month: targetMonth,
+                payment_method: activePaymentMethod,
+                status: 'COMPLETED',
+                created_at: new Date().toISOString()
+              }]);
+            }
+          } catch (e) {
+            console.warn('spp_payments insert error:', e);
+          }
+        }
       }
 
-      // 3. Create transaction record in Supabase
-      const txRes = await createTransaction({
-        tenantId,
-        itemName: itemsSummary,
-        itemCategory: hasSpp ? 'POS & Tagihan SPP Akademi' : 'Penjualan Retail POS',
-        amount: cartTotal,
-        paymentMethod: activePaymentMethod,
-        itemsCount: cart.reduce((a, b) => a + b.qty, 0),
-        items: cart.map((i) => ({
-          id: i.id,
-          productId: i.id,
-          name: i.name,
-          price: i.price,
-          cogs: i.cogs || 0,
-          qty: i.qty,
-          type: i.type || 'jual',
-          category: i.category || 'Retail',
-          barcode: i.barcode || '',
-          studentId: i.studentId || null,
-          academyId: i.academyId || null
-        })),
-        status: 'COMPLETED'
-      });
+      // 4. Create transaction record in Supabase
+      let txRes = null;
+      if (isUuid(tenantId)) {
+        try {
+          txRes = await createTransaction({
+            tenantId,
+            itemName: itemsSummary,
+            itemCategory: hasAcademy ? 'POS & Tagihan SPP Akademi' : 'Penjualan Retail POS',
+            amount: cartTotal,
+            paymentMethod: activePaymentMethod,
+            itemsCount: cart.reduce((a, b) => a + b.qty, 0),
+            items: cart.map((i) => ({
+              id: i.id,
+              productId: i.id,
+              name: i.name,
+              price: i.price,
+              cogs: i.cogs || 0,
+              qty: i.qty,
+              type: i.type || 'jual',
+              category: i.category || 'Retail',
+              barcode: i.barcode || '',
+              studentId: i.studentId || i.student_id || null,
+              academyId: i.academyId || null
+            })),
+            status: 'COMPLETED'
+          });
+        } catch (e) {
+          console.warn('createTransaction error:', e);
+        }
+      }
 
-      // 4. Create POS receipt record
-      await createPosReceipt({
-        tenantId,
-        amount: cartTotal,
-        total: cartTotal,
-        paymentMethod: activePaymentMethod,
-        items: cart,
-        transactionId: txRes?.id || null,
-        status: 'LUNAS'
-      });
+      // 5. Create POS receipt record
+      if (isUuid(tenantId)) {
+        try {
+          await createPosReceipt({
+            tenantId,
+            amount: cartTotal,
+            total: cartTotal,
+            paymentMethod: activePaymentMethod,
+            items: cart,
+            transactionId: txRes?.id || null,
+            status: 'LUNAS'
+          });
+        } catch (e) {
+          console.warn('createPosReceipt error:', e);
+        }
+      }
 
-      // 5. Create cash ledger record
-      await createLedgerEntry({
-        tenantId,
-        type: 'PEMASUKAN',
-        source: 'KASIR_POS',
-        description: `Penjualan POS Kasir (${itemsSummary})`,
-        amount: cartTotal,
-        paymentMethod: activePaymentMethod,
-        referenceId: txRes?.id || null,
-        status: 'COMPLETED'
-      });
+      // 6. Create cash ledger record
+      if (isUuid(tenantId)) {
+        try {
+          await createLedgerEntry({
+            tenantId,
+            type: 'PEMASUKAN',
+            source: 'KASIR_POS',
+            description: `Penjualan POS Kasir (${itemsSummary})`,
+            amount: cartTotal,
+            paymentMethod: activePaymentMethod,
+            referenceId: txRes?.id || null,
+            status: 'COMPLETED'
+          });
+        } catch (e) {
+          console.warn('createLedgerEntry error:', e);
+        }
+      }
 
       // Update local product stocks optimistically
       setProducts((prev) =>
         prev.map((p) => {
           const cartItem = cart.find((c) => c.id === p.id);
-          if (cartItem && cartItem.type !== 'spp' && cartItem.type !== 'sewa') {
+          if (cartItem && cartItem.type !== 'spp' && cartItem.type !== 'registration' && cartItem.type !== 'sewa') {
             return { ...p, stock: Math.max(0, (p.stock || 0) - cartItem.qty) };
           }
           return p;
         })
       );
 
-      // Update local students SPP status optimistically
+      // Update local students SPP & Registration status optimistically
       setStudents((prev) =>
         prev.map((st) => {
-          if (sppItems.some((si) => si.studentId === st.id)) {
-            return { ...st, sppStatus: 'Lunas', paymentStatus: 'lunas', lastPaidMonth: currentMonth };
+          let updated = { ...st };
+          if (regItems.some((ri) => (ri.studentId || ri.student_id) === st.id)) {
+            updated.registrationFeePaid = true;
+            updated.isRegistrationFeePaid = true;
           }
-          return st;
+          if (sppItems.some((si) => (si.studentId || si.student_id) === st.id)) {
+            updated.sppStatus = 'Lunas';
+            updated.paymentStatus = 'lunas';
+            updated.lastPaidMonth = currentMonth;
+          }
+          return updated;
         })
       );
+
+      // Remove paid bills from local academyBills state optimistically
+      setAcademyBills((prev) => prev.filter((b) => !cart.some((c) => c.id === b.id)));
+
+      // Invalidate queries so TanStack Query background refetches fresh data
+      queryClient.invalidateQueries({ queryKey: ['posAcademyBills', tenantId] });
+      queryClient.invalidateQueries({ queryKey: ['posStudents', tenantId] });
+      queryClient.invalidateQueries({ queryKey: ['posProducts', tenantId] });
 
       window.dispatchEvent(new CustomEvent('simak_refresh_arena_data'));
 
@@ -822,7 +953,7 @@ export default function POSPage({ userProfile }) {
                 <span>Rental Alat</span>
               </button>
 
-              {/* TAB KHUSUS: TAGIHAN SPP AKADEMI */}
+              {/* TAB KHUSUS: TAGIHAN SPP & PENDAFTARAN AKADEMI */}
               <button
                 type="button"
                 onClick={() => setActiveCatalogTab('spp')}
@@ -833,85 +964,97 @@ export default function POSPage({ userProfile }) {
                 }`}
               >
                 <GraduationCap className="w-4 h-4" />
-                <span>Tagihan SPP</span>
-                {unpaidStudents.length > 0 && (
+                <span>Tagihan SPP &amp; Pendaftaran</span>
+                {academyBills.length > 0 && (
                   <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
                     activeCatalogTab === 'spp' ? 'bg-white text-[#354944]' : 'bg-rose-500 text-white'
                   }`}>
-                    {unpaidStudents.length}
+                    {academyBills.length}
                   </span>
                 )}
               </button>
             </div>
           </div>
 
-          {/* KONTEN KATALOG: TAB 'SPP' */}
+          {/* KONTEN KATALOG: TAB 'SPP & PENDAFTARAN' */}
           {activeCatalogTab === 'spp' ? (
-            loadingStudents ? (
+            loadingBills ? (
               <div className="py-12 text-center text-xs text-slate-500 font-medium">
                 Memuat data tagihan siswa akademi...
               </div>
-            ) : filteredUnpaidStudents.length === 0 ? (
-              <div className="py-12 border-2 border-dashed border-emerald-200 rounded-2xl text-center flex flex-col items-center justify-center p-6 bg-emerald-50/30">
+            ) : filteredBills.length === 0 ? (
+              <div className="py-12 border-2 border-dashed border-emerald-200 dark:border-emerald-800/40 rounded-2xl text-center flex flex-col items-center justify-center p-6 bg-emerald-50/30 dark:bg-emerald-950/20">
                 <CheckCircle2 className="w-12 h-12 text-emerald-500 mb-2" />
-                <p className="text-sm font-bold text-emerald-800">
-                  Semua Tagihan SPP Siswa Lunas!
+                <p className="text-sm font-bold text-emerald-800 dark:text-emerald-300">
+                  Semua Tagihan Siswa Selesai!
                 </p>
-                <p className="text-xs text-emerald-600 max-w-sm mt-1">
-                  Tidak ada siswa akademi dengan status SPP menunggak untuk bulan ini.
+                <p className="text-xs text-emerald-600 dark:text-emerald-400 max-w-sm mt-1">
+                  Tidak ada siswa akademi dengan status pendaftaran atau SPP menunggak saat ini.
                 </p>
               </div>
             ) : (
               <div className="space-y-3">
-                <div className="flex items-center justify-between text-xs text-slate-500 px-1">
-                  <span>Daftar Siswa Belum Lunas ({filteredUnpaidStudents.length})</span>
-                  <span className="text-[10px] text-purple-600 font-bold">Klik kartu untuk menambahkan ke struk</span>
+                <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 px-1">
+                  <span>Daftar Tagihan Belum Lunas ({filteredBills.length})</span>
+                  <span className="text-[10px] text-[#354944] dark:text-[#C89D32] font-bold">Klik kartu atau tombol untuk menambahkan ke kasir</span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {filteredUnpaidStudents.map((st) => {
-                    const itemId = `spp_${st.id}`;
-                    const isAdded = cart.some((c) => c.id === itemId);
-                    const fee = parseFloat(st.monthlyFee || st.tuitionFee || 0) || 0;
+                  {filteredBills.map((bill) => {
+                    const isAdded = cart.some((c) => c.id === bill.id);
+                    const isRegistration = bill.type === 'registration';
 
                     return (
                       <div
-                        key={st.id}
-                        onClick={() => !isAdded && handleAddSppToCart(st)}
-                        className={`p-4 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between space-y-3 ${
+                        key={bill.id}
+                        onClick={() => !isAdded && handleAddToCart(bill)}
+                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex flex-col justify-between space-y-3 ${
                           isAdded
-                            ? 'bg-purple-50/70 border-purple-300 ring-2 ring-purple-400/50'
-                            : 'bg-white border-slate-200 hover:border-purple-400 hover:bg-purple-50/30 shadow-2xs'
+                            ? 'bg-[#354944]/10 dark:bg-white/10 border-[#354944] dark:border-[#C89D32] ring-2 ring-[#354944]/30'
+                            : 'bg-white dark:bg-[#14211E] border-slate-200/80 dark:border-white/10 hover:border-[#354944]/40 hover:bg-[#354944]/5 shadow-2xs'
                         }`}
                       >
-                        <div className="space-y-1">
-                          <div className="flex items-center justify-between">
-                            <span className="px-2 py-0.5 bg-purple-100 text-purple-800 font-extrabold text-[9px] rounded-md uppercase">
-                              {st.className || st.sportCategory || 'Akademi'}
-                            </span>
-                            <span className="px-2 py-0.5 bg-rose-100 text-rose-800 font-black text-[9px] rounded-md uppercase">
-                              MENUNGGAK
-                            </span>
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between gap-1">
+                            {isRegistration ? (
+                              <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200 border border-amber-300/80 dark:border-amber-700/80 font-extrabold text-[9px] rounded-md uppercase tracking-wider flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                <span>PENDAFTARAN</span>
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 bg-purple-100 dark:bg-purple-950/60 text-purple-900 dark:text-purple-200 border border-purple-200 dark:border-purple-800 font-extrabold text-[9px] rounded-md uppercase tracking-wider flex items-center gap-1">
+                                <GraduationCap className="w-3 h-3 text-purple-700 dark:text-purple-300" />
+                                <span>SPP BULANAN</span>
+                              </span>
+                            )}
+
+                            {bill.className && (
+                              <span className="px-2 py-0.5 bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-slate-300 font-bold text-[9px] rounded-md truncate max-w-[130px]">
+                                {bill.className}
+                              </span>
+                            )}
                           </div>
 
-                          <h3 className="font-extrabold text-sm text-slate-900 pt-1">
-                            {st.studentName || st.name}
+                          <h3 className="font-extrabold text-sm text-slate-900 dark:text-slate-100 pt-0.5 leading-snug">
+                            {bill.name}
                           </h3>
-                          <p className="text-[11px] text-slate-500">
-                            Wali: <strong className="text-slate-700">{st.parentName || '-'}</strong> ({st.parentPhone || st.phone || '-'})
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Wali: <strong className="text-slate-700 dark:text-slate-300">{bill.parentName || '-'}</strong> {bill.parentPhone ? `(${bill.parentPhone})` : ''}
                           </p>
                         </div>
 
-                        <div className="flex items-center justify-between pt-2.5 border-t border-slate-100">
+                        <div className="flex items-center justify-between pt-2.5 border-t border-slate-100 dark:border-white/10">
                           <div>
-                            <span className="text-[10px] text-slate-400 font-bold block uppercase">Tagihan SPP:</span>
-                            <span className="font-black text-sm text-purple-700">
-                              Rp {fee.toLocaleString('id-ID')}
+                            <span className="text-[10px] text-slate-400 font-bold block uppercase">
+                              {isRegistration ? 'Biaya Pendaftaran:' : 'Nominal SPP:'}
+                            </span>
+                            <span className={`font-black text-sm ${isRegistration ? 'text-amber-700 dark:text-amber-300' : 'text-purple-700 dark:text-purple-300'}`}>
+                              Rp {Number(bill.price || 0).toLocaleString('id-ID')}
                             </span>
                           </div>
 
                           {isAdded ? (
-                            <span className="px-2.5 py-1 bg-purple-600 text-white rounded-xl text-xs font-bold flex items-center space-x-1 shadow-2xs">
+                            <span className="px-2.5 py-1 bg-[#354944] text-white rounded-xl text-xs font-bold flex items-center space-x-1 shadow-2xs">
                               <Check className="w-3.5 h-3.5" />
                               <span>Di Keranjang</span>
                             </span>
@@ -920,9 +1063,13 @@ export default function POSPage({ userProfile }) {
                               type="button"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                handleAddSppToCart(st);
+                                handleAddToCart(bill);
                               }}
-                              className="px-3 py-1.5 bg-purple-50 hover:bg-purple-600 text-purple-700 hover:text-white border border-purple-200 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs flex items-center space-x-1"
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shadow-2xs flex items-center space-x-1 border ${
+                                isRegistration
+                                  ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-800 dark:text-amber-200 border-amber-300 dark:border-amber-700 hover:bg-amber-600 hover:text-white'
+                                  : 'bg-purple-50 dark:bg-purple-950/30 text-purple-800 dark:text-purple-200 border-purple-200 dark:border-purple-800 hover:bg-purple-600 hover:text-white'
+                              }`}
                             >
                               <Plus className="w-3.5 h-3.5" />
                               <span>Bayar di Kasir</span>
@@ -1097,9 +1244,13 @@ export default function POSPage({ userProfile }) {
                         <div className="flex items-center space-x-1.5">
                           <span className="font-semibold text-xs text-slate-800 dark:text-slate-100 truncate">{item.name}</span>
                           
-                          {item.type === 'spp' ? (
-                            <span className="text-[8px] bg-purple-100 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 px-1.5 py-0.2 rounded font-extrabold flex items-center gap-0.5 shrink-0">
-                              <GraduationCap className="w-2.5 h-2.5 text-purple-700" />
+                          {item.type === 'registration' ? (
+                            <span className="text-[8px] bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 px-1.5 py-0.2 rounded font-extrabold flex items-center gap-0.5 shrink-0 border border-amber-300 dark:border-amber-700">
+                              <span>Pendaftaran</span>
+                            </span>
+                          ) : item.type === 'spp' ? (
+                            <span className="text-[8px] bg-purple-100 dark:bg-purple-950/40 text-purple-800 dark:text-purple-300 px-1.5 py-0.2 rounded font-extrabold flex items-center gap-0.5 shrink-0 border border-purple-200 dark:border-purple-800">
+                              <GraduationCap className="w-2.5 h-2.5 text-purple-700 dark:text-purple-300" />
                               <span>SPP</span>
                             </span>
                           ) : item.type === 'sewa' ? (
@@ -1114,9 +1265,13 @@ export default function POSPage({ userProfile }) {
                       </div>
 
                       <div className="flex items-center space-x-1.5 shrink-0">
-                        {item.type === 'spp' ? (
-                          <div className="px-2 py-0.5 bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 rounded-md text-[10px] font-semibold">
-                            1 Bln
+                        {item.type === 'registration' || item.type === 'spp' ? (
+                          <div className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${
+                            item.type === 'registration'
+                              ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800'
+                              : 'bg-purple-50 dark:bg-purple-950/30 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
+                          }`}>
+                            {item.type === 'registration' ? '1 Siswa' : '1 Bln'}
                           </div>
                         ) : (
                           <div className="flex items-center bg-slate-100 dark:bg-white/10 rounded-md p-0.5 border border-slate-200 dark:border-white/10">

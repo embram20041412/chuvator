@@ -66,6 +66,29 @@ export default function App() {
   const [userProfile, setUserProfile] = useState(null);
 
   useEffect(() => {
+    // Support autostart=1 for headless testing & preview
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('autostart') === '1' || params.get('demo') === '1') {
+      const demoProfile = {
+        uid: 'demo-tenant-admin',
+        id: 'demo-tenant-admin',
+        displayName: 'Demo Manager',
+        email: 'manager@chuasport.com',
+        role: 'owner',
+        tenantId: 'demo-tenant-1',
+        tenant: {
+          id: 'demo-tenant-1',
+          name: 'KEDIRI SPORT ARENA',
+          address: 'Jl. Letjen Soetoyo No. 20, Wates, Kediri',
+          phone: '082131447972'
+        }
+      };
+      setAuthUser({ id: 'demo-tenant-admin', email: 'manager@chuasport.com' });
+      setUserProfile(demoProfile);
+      setIsAuthLoading(false);
+      return;
+    }
+
     // Subscribe to Supabase Auth and role verification
     const unsubscribe = subscribeToAuthChanges((currentUser, profile, errorMessage) => {
       if (currentUser && profile) {

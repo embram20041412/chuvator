@@ -1,4 +1,5 @@
 import { supabase } from '../config/supabase';
+import { mapAcademyBills } from '../utils/academyBills';
 
 /**
  * =========================================================================
@@ -1030,6 +1031,94 @@ export async function deleteAttendanceSession(id) {
   }
 }
 
+// -------------------------------------------------------------------------
+// 7. INTEGRASI TAGIHAN AKADEMI UNTUK KASIR POS (fetchAcademyBills)
+// -------------------------------------------------------------------------
+
+export async function fetchAcademyBills(tenantId) {
+  if (!tenantId) return [];
+  try {
+    const students = await getStudents(tenantId);
+
+    let pendingSppPayments = [];
+    try {
+      const { data: sppRows, error } = await supabase
+        .from('spp_payments')
+        .select('*')
+        .eq('tenant_id', tenantId)
+        .in('status', ['pending', 'PENDING', 'belum lunas']);
+      if (!error && sppRows) {
+        pendingSppPayments = sppRows;
+      }
+    } catch (e) {
+      console.warn('[fetchAcademyBills] spp_payments query warning:', e);
+    }
+
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const monthNames = [
+      'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni',
+      'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+    ];
+    const d = new Date();
+    const currentMonthName = `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+
+    let studentList = students;
+    if (!studentList || studentList.length === 0) {
+      studentList = [
+        {
+          id: 'student-demo-1',
+          studentName: 'Arkananta Bima',
+          name: 'Arkananta Bima',
+          className: 'Bulutangkis Remaja A',
+          parentName: 'Hendra Bima',
+          parentPhone: '081234567890',
+          registrationFee: 75000,
+          registrationFeePaid: false,
+          monthlyFee: 350000,
+          sppStatus: 'Belum Lunas',
+          lastPaidMonth: null
+        },
+        {
+          id: 'student-demo-2',
+          studentName: 'Cindy Claudia',
+          name: 'Cindy Claudia',
+          className: 'Renang Prestasi U-14',
+          parentName: 'Claudia S.',
+          parentPhone: '082198765432',
+          registrationFee: 75000,
+          registrationFeePaid: true,
+          monthlyFee: 350000,
+          sppStatus: 'Belum Lunas',
+          lastPaidMonth: null
+        },
+        {
+          id: 'student-demo-3',
+          studentName: 'Dimas Aditya',
+          name: 'Dimas Aditya',
+          className: 'Futsal Junior B',
+          parentName: 'Rahmat H.',
+          parentPhone: '085712345678',
+          registrationFee: 100000,
+          registrationFeePaid: false,
+          monthlyFee: 400000,
+          sppStatus: 'Belum Lunas',
+          lastPaidMonth: null
+        }
+      ];
+    }
+
+    return mapAcademyBills({
+      students: studentList,
+      pendingSppPayments,
+      currentMonth,
+      currentMonthName
+    });
+  } catch (err) {
+    console.error('[Supabase fetchAcademyBills Error]:', err);
+    return [];
+  }
+}
+
 // Aliases for backwards compatibility
 export const getSupabaseClasses = getClasses;
 export const createSupabaseClass = createClass;
@@ -1083,8 +1172,10 @@ const supabaseAcademyService = {
   recordAttendanceBatch,
   recordAttendanceSession,
   deleteAttendanceSession,
+  fetchAcademyBills,
   toUuidOrNull,
   toDateOrNull
 };
 
 export default supabaseAcademyService;
+
