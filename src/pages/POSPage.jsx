@@ -10,6 +10,9 @@ import {
 } from '../services/supabaseArenaService';
 import { getStudents, updateStudent } from '../services/supabaseAcademyService';
 import { supabase } from '../config/supabase';
+import useArenaData from '../hooks/useArenaData';
+import PosCheckoutModal from '../components/PosCheckoutModal';
+import PosThermalReceipt from '../components/PosThermalReceipt';
 import { 
   ShoppingBag, 
   Plus, 
@@ -34,7 +37,8 @@ import {
   Edit3,
   TrendingUp,
   AlertTriangle,
-  Sparkles
+  Sparkles,
+  Printer
 } from 'lucide-react';
 import { Kasir3DIcon, Akademi3DIcon } from '../components/icons/App3DIcons';
 
@@ -105,12 +109,29 @@ export default function POSPage({ userProfile }) {
   }, [queryClient, tenantId]);
 
   // =====================================================================
-  // 3. STATE KERANJANG, SEARCH, BARCODE SCANNER & TAB KATALOG
+  // 3. STATE KERANJANG, SEARCH, BARCODE SCANNER, RECEIPT & TAB KATALOG
   // =====================================================================
+  const { tenantProfile } = useArenaData(userProfile);
   const [cart, setCart] = useState([]);
-  const [paymentMethod, setPaymentMethod] = useState('QRIS / Transfer');
+  const [paymentMethod, setPaymentMethod] = useState('Tunai (Cash)');
   const [submittingCheckout, setSubmittingCheckout] = useState(false);
   const [checkoutSuccessMsg, setCheckoutSuccessMsg] = useState(null);
+
+  // POS Checkout & Thermal Receipt Modal States
+  const [showCheckoutModal, setShowCheckoutModal] = useState(false);
+  const [showReceiptModal, setShowReceiptModal] = useState(false);
+  const [lastTransactionData, setLastTransactionData] = useState(null);
+  const receiptRef = useRef(null);
+
+  const arenaData = useMemo(() => ({
+    name: tenantProfile?.name || tenantProfile?.receiptHeaderName || 'KEDIRI SPORT ARENA',
+    address: tenantProfile?.address || tenantProfile?.alamat || tenantProfile?.receiptAddress || 'Jl. Letjen Soetoyo No. 20, Wates, Kediri',
+    phone: tenantProfile?.phone || tenantProfile?.whatsapp || tenantProfile?.receiptContact || '082131447972',
+    qrisImageBase64: tenantProfile?.qrisImageBase64 || tenantProfile?.qrisUrl || '',
+    bankName: tenantProfile?.bankName || 'BCA',
+    bankAccountNumber: tenantProfile?.bankAccountNumber || '1234-567-890',
+    bankAccountHolder: tenantProfile?.bankAccountHolder || tenantProfile?.name || 'GOR Arena'
+  }), [tenantProfile]);
 
   // Barcode Scanner & Manual Barcode Entry States
   const [barcodeInput, setBarcodeInput] = useState('');
@@ -384,10 +405,15 @@ export default function POSPage({ userProfile }) {
   // =====================================================================
   // 9. CHECKOUT HANDLER & SUPABASE TRANSACTION (STOK DEDUCTION + KAS LEDGER)
   // =====================================================================
-  const handleCheckout = async () => {
+  const handleConfirmPayment = async ({ paymentMethod: chosenMethod, cashReceived, changeAmount, customerName } = {}) => {
     if (cart.length === 0 || !tenantId) return;
     setSubmittingCheckout(true);
     setCheckoutSuccessMsg(null);
+
+    const activePaymentMethod = chosenMethod || paymentMethod;
+    const isCashMode = activePaymentMethod?.toLowerCase().includes('cash') || activePaymentMethod?.toLowerCase().includes('tunai');
+    const finalCashReceived = isCashMode ? (Number(cashReceived) || cartTotal) : cartTotal;
+    const finalChange = isCashMode ? Math.max(0, Number(changeAmount) || (finalCashReceived - cartTotal)) : 0;
 
     try {
       const itemsSummary = cart.map((i) => `${i.name} (${i.qty}x)`).join(', ');
@@ -417,7 +443,7 @@ export default function POSPage({ userProfile }) {
           student_name: s.studentName || 'Siswa',
           amount: Number(s.price || 0),
           paid_month: currentMonth,
-          payment_method: paymentMethod,
+          payment_method: activePaymentMethod,
           status: 'COMPLETED',
           created_at: new Date().toISOString()
         }]);
@@ -429,7 +455,7 @@ export default function POSPage({ userProfile }) {
         itemName: itemsSummary,
         itemCategory: hasSpp ? 'POS & Tagihan SPP Akademi' : 'Penjualan Retail POS',
         amount: cartTotal,
-        paymentMethod,
+        paymentMethod: activePaymentMethod,
         itemsCount: cart.reduce((a, b) => a + b.qty, 0),
         items: cart.map((i) => ({
           id: i.id,
@@ -452,7 +478,7 @@ export default function POSPage({ userProfile }) {
         tenantId,
         amount: cartTotal,
         total: cartTotal,
-        paymentMethod,
+        paymentMethod: activePaymentMethod,
         items: cart,
         transactionId: txRes?.id || null,
         status: 'LUNAS'
@@ -465,7 +491,7 @@ export default function POSPage({ userProfile }) {
         source: 'KASIR_POS',
         description: `Penjualan POS Kasir (${itemsSummary})`,
         amount: cartTotal,
-        paymentMethod,
+        paymentMethod: activePaymentMethod,
         referenceId: txRes?.id || null,
         status: 'COMPLETED'
       });
@@ -493,12 +519,37 @@ export default function POSPage({ userProfile }) {
 
       window.dispatchEvent(new CustomEvent('simak_refresh_arena_data'));
 
+      // Format payload struk thermal untuk preview & cetak
+      const now = new Date();
+      const receiptPayload = {
+        date: now.toLocaleDateString('id-ID'),
+        time: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+        receiptNo: `POS-${txRes?.id ? String(txRes.id).slice(-6).toUpperCase() : Math.floor(Date.now() / 1000)}`,
+        cashierName: userProfile?.fullName || userProfile?.name || 'Kasir',
+        customerName: customerName || 'Pelanggan Umum',
+        items: cart.map((i) => ({
+          id: i.id,
+          name: i.name,
+          qty: i.qty,
+          price: i.price,
+          type: i.type,
+          subtotal: i.qty * i.price
+        })),
+        totalAmount: cartTotal,
+        paymentMethod: activePaymentMethod,
+        cashReceived: finalCashReceived,
+        changeAmount: finalChange
+      };
+
+      setLastTransactionData(receiptPayload);
+      setShowCheckoutModal(false);
+      setShowReceiptModal(true);
+
       setCheckoutSuccessMsg(
         hasSpp 
-          ? 'Transaksi kasir & pelunasan SPP Akademi berhasil disimpan! Stok produk telah dikurangi.' 
-          : 'Transaksi kasir berhasil disimpan & stok produk telah dikurangi!'
+          ? 'Transaksi kasir & pelunasan SPP Akademi berhasil disimpan! Silakan cetak struk.' 
+          : 'Transaksi kasir berhasil disimpan! Silakan cetak struk.'
       );
-      setCart([]);
       setTimeout(() => setCheckoutSuccessMsg(null), 4000);
     } catch (err) {
       console.error('Error during POS checkout in Supabase:', err);
@@ -506,6 +557,12 @@ export default function POSPage({ userProfile }) {
     } finally {
       setSubmittingCheckout(false);
     }
+  };
+
+  const handleFinishTransaction = () => {
+    setShowReceiptModal(false);
+    setLastTransactionData(null);
+    setCart([]);
   };
 
   // =====================================================================
@@ -1120,7 +1177,7 @@ export default function POSPage({ userProfile }) {
 
               <button
                 type="button"
-                onClick={handleCheckout}
+                onClick={() => setShowCheckoutModal(true)}
                 disabled={cart.length === 0 || submittingCheckout}
                 className="w-full py-2 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] disabled:bg-slate-200 dark:disabled:bg-slate-800 disabled:text-slate-400 dark:disabled:text-slate-500 disabled:border dark:disabled:border-slate-700/80 disabled:cursor-not-allowed text-white font-semibold text-xs rounded-lg shadow-xs disabled:shadow-none transition-all cursor-pointer flex items-center justify-center space-x-1.5"
               >
@@ -1322,6 +1379,86 @@ export default function POSPage({ userProfile }) {
               </div>
 
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 1: KONFIRMASI PEMBAYARAN KASIR (POS CHECKOUT MODAL) */}
+      <PosCheckoutModal
+        isOpen={showCheckoutModal}
+        onClose={() => setShowCheckoutModal(false)}
+        cart={cart}
+        totalAmount={cartTotal}
+        paymentMethod={paymentMethod}
+        setPaymentMethod={setPaymentMethod}
+        cashierName={userProfile?.fullName || userProfile?.name || 'Kasir'}
+        arena={arenaData}
+        onConfirmPayment={handleConfirmPayment}
+        isProcessing={submittingCheckout}
+      />
+
+      {/* MODAL 2: PRATINJAU STRUK KASIR & CETAK THERMAL */}
+      {showReceiptModal && lastTransactionData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-fade-category">
+          <div className="bg-white dark:bg-[#162320] w-full max-w-md rounded-2xl shadow-2xl border border-slate-200 dark:border-white/10 text-slate-800 dark:text-slate-100 flex flex-col my-auto max-h-[92vh] overflow-hidden">
+            
+            {/* Header Dialog */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-100 dark:border-white/10 bg-emerald-50/80 dark:bg-emerald-950/40 shrink-0">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <div>
+                  <h2 className="font-bold text-sm sm:text-base text-slate-900 dark:text-slate-100">Pratinjau Struk Kasir</h2>
+                  <p className="text-[11px] text-emerald-700 dark:text-emerald-300">Pembayaran Berhasil &amp; Transaksi Dicatat</p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={handleFinishTransaction} 
+                className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+                title="Tutup & Transaksi Baru"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Scrollable Receipt Body */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 flex flex-col items-center justify-center bg-slate-50 dark:bg-slate-900/50">
+              <div className="w-full text-center space-y-0.5">
+                <p className="text-xs font-bold text-slate-800 dark:text-slate-200">Struk Siap Dicetak</p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">Gunakan printer thermal 58mm / 80mm untuk mencetak bukti transaksi.</p>
+              </div>
+
+              {/* Printable Container */}
+              <div className="w-full flex justify-center overflow-x-auto p-2 bg-slate-200 dark:bg-slate-800 rounded-xl border border-slate-300 dark:border-slate-700">
+                <div id="thermal-receipt-printable" className="bg-white rounded-md shadow-xs">
+                  <PosThermalReceipt 
+                    ref={receiptRef} 
+                    transaction={lastTransactionData} 
+                    arena={arenaData} 
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="p-3.5 border-t border-slate-100 dark:border-white/10 bg-white dark:bg-[#162320] flex items-center justify-between gap-2.5 shrink-0">
+              <button
+                type="button"
+                onClick={handleFinishTransaction}
+                className="flex-1 py-2 px-3 border border-slate-300 dark:border-white/10 hover:bg-slate-100 dark:hover:bg-white/5 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-xl transition-all cursor-pointer text-center"
+              >
+                Selesai / Transaksi Baru
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="flex-1 py-2 px-3 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white text-xs font-bold rounded-xl shadow-xs transition-all cursor-pointer flex items-center justify-center space-x-1.5"
+              >
+                <Printer className="w-3.5 h-3.5 text-[#F4D068]" />
+                <span>Cetak Struk</span>
+              </button>
+            </div>
+
           </div>
         </div>
       )}
