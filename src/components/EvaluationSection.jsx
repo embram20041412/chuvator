@@ -803,25 +803,25 @@ function FutsalAssessmentView({
   const overallGrade = getScoreGrade(axisScores.overall);
 
   return (
-    <div className="space-y-6 text-left">
+    <div className="space-y-3.5 text-left">
       {/* 1. COMPACT HEADER BAR */}
-      <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-sm space-y-4">
+      <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-slate-200/80 shadow-xs space-y-3">
         {/* MOBILE COMPACT TITLE BAR (< 1024px) */}
-        <div className="flex lg:hidden items-center justify-between pb-2.5 border-b border-slate-100">
-          <h2 className="font-extrabold text-sm text-slate-900 tracking-tight">
+        <div className="flex lg:hidden items-center justify-between pb-2 border-b border-slate-100">
+          <h2 className="font-bold text-xs sm:text-sm text-slate-900 tracking-tight">
             Evaluasi Atlet
           </h2>
           <div className="flex items-center gap-1.5">
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#354944]/10 text-[#354944] border border-[#354944]/20">
+            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-[#354944]/10 text-[#354944] border border-[#354944]/20">
               Futsal
             </span>
             {latestEvalDoc ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-[10px] font-bold">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-[9px] font-bold">
                 <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
                 <span>Terisi ({formatDateIndonesian(latestEvalDoc.date)})</span>
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-[10px] font-bold">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-[9px] font-bold">
                 <span>Belum Ada</span>
               </span>
             )}
@@ -829,16 +829,16 @@ function FutsalAssessmentView({
         </div>
 
         {/* DESKTOP TITLE BAR (>= 1024px) */}
-        <div className="hidden lg:flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#354944] text-white flex items-center justify-center font-bold shrink-0 shadow-xs border border-[#C89D32]/40">
-              <Flame className="w-5 h-5 text-[#C89D32]" />
+        <div className="hidden lg:flex items-center justify-between gap-2.5 border-b border-slate-100 pb-2.5">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-[#354944] text-white flex items-center justify-center font-bold shrink-0 shadow-2xs border border-[#C89D32]/40">
+              <Flame className="w-4 h-4 text-[#C89D32]" />
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="font-extrabold text-lg text-slate-900 tracking-tight">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <h2 className="font-bold text-sm sm:text-base text-slate-900 tracking-tight">
                 Athlete Development Assessment
               </h2>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-[#354944]/10 text-[#354944] border border-[#354944]/20">
+              <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[11px] font-bold bg-[#354944]/10 text-[#354944] border border-[#354944]/20">
                 Futsal
               </span>
             </div>
@@ -846,18 +846,18 @@ function FutsalAssessmentView({
 
           <div className="self-start sm:self-center">
             {loadingHistory ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-full text-xs font-bold animate-pulse">
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-full text-[11px] font-bold animate-pulse">
+                <Loader2 className="w-3 h-3 animate-spin text-amber-600" />
                 <span>Memuat riwayat...</span>
               </span>
             ) : latestEvalDoc ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-xs font-bold">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span>Riwayat Terakhir Terpasang (Tanggal: {formatDateIndonesian(latestEvalDoc.date)})</span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-[11px] font-bold">
+                <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                <span>Riwayat Terakhir ({formatDateIndonesian(latestEvalDoc.date)})</span>
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-xs font-bold">
-                <AlertCircle className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-[11px] font-bold">
+                <AlertCircle className="w-3 h-3 text-slate-500 shrink-0" />
                 <span>Belum ada riwayat (Mulai dari 0)</span>
               </span>
             )}
@@ -865,30 +865,30 @@ function FutsalAssessmentView({
         </div>
 
         {successMsg && (
-          <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-2xl font-bold flex items-center gap-2 animate-fadeIn">
+          <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl font-bold flex items-center gap-1.5 animate-fadeIn">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{successMsg}</span>
           </div>
         )}
         {errorMsg && (
-          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-2xl font-bold flex items-center gap-2 animate-fadeIn">
+          <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl font-bold flex items-center gap-1.5 animate-fadeIn">
             <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
             <span>{errorMsg}</span>
           </div>
         )}
 
         {students.length === 0 ? (
-          <div className="py-8 border border-dashed border-slate-200 rounded-2xl text-center p-6 bg-slate-50/50">
-            <User className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+          <div className="py-6 border border-dashed border-slate-200 rounded-xl text-center p-4 bg-slate-50/50">
+            <User className="w-8 h-8 text-slate-300 mx-auto mb-1.5" />
             <p className="text-xs font-bold text-slate-700">Belum ada siswa terdaftar di kelas Futsal ini.</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {/* INPUT FILTER AREA (2 BARIS KOMPAK DI MOBILE) */}
-            <div className="bg-slate-50/90 p-3 sm:p-4 rounded-2xl border border-slate-200/90 space-y-2.5">
+            <div className="bg-slate-50/90 p-2.5 sm:p-3 rounded-xl border border-slate-200/90 space-y-2">
               {/* Baris 1: Pilih Atlet (1 Kolom Penuh) */}
               <div>
-                <label className="block text-[11px] sm:text-xs font-black text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                <label className="block text-[11px] font-bold text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
                   <UserCheck className="w-3.5 h-3.5 text-[#354944]" />
                   <span>Pilih Atlet ({students.length})</span>
                 </label>
@@ -896,7 +896,7 @@ function FutsalAssessmentView({
                   <select
                     value={selectedStudent?.id || ''}
                     onChange={(e) => setSelectedStudentId(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#354944] font-bold text-slate-800 shadow-2xs cursor-pointer appearance-none pr-8"
+                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#354944] font-bold text-slate-800 shadow-2xs cursor-pointer appearance-none pr-7"
                   >
                     {students.map((st) => {
                       const isEvaluatedToday = evaluatedStudentIdsToday.has(st.id);
@@ -908,36 +908,36 @@ function FutsalAssessmentView({
                       );
                     })}
                   </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-500">
-                    <ChevronDown className="w-4 h-4" />
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+                    <ChevronDown className="w-3.5 h-3.5" />
                   </div>
                 </div>
               </div>
 
               {/* Baris 2: Tanggal Evaluasi & Jenjang Evaluasi (2 Kolom Berdampingan) */}
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[10px] sm:text-xs font-black text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-[#354944]" />
+                  <label className="block text-[10px] font-bold text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <Calendar className="w-3 h-3 text-[#354944]" />
                     <span>Tanggal</span>
                   </label>
                   <input
                     type="date"
                     value={evaluationDate}
                     onChange={(e) => setEvaluationDate(e.target.value)}
-                    className="w-full px-2.5 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#354944] font-bold text-slate-800 shadow-2xs cursor-pointer"
+                    className="w-full px-2 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#354944] font-bold text-slate-800 shadow-2xs cursor-pointer"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] sm:text-xs font-black text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
-                    <GraduationCap className="w-3.5 h-3.5 text-[#354944]" />
+                  <label className="block text-[10px] font-bold text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <GraduationCap className="w-3 h-3 text-[#354944]" />
                     <span>Jenjang</span>
                   </label>
                   <select
                     value={overrideFutsalTier}
                     onChange={(e) => setOverrideFutsalTier(e.target.value)}
-                    className="w-full px-2.5 py-2 text-xs bg-white border border-slate-200 rounded-xl font-bold text-slate-800 focus:ring-2 focus:ring-[#354944] shadow-2xs cursor-pointer truncate"
+                    className="w-full px-2 py-1.5 text-xs bg-white border border-slate-200 rounded-lg font-bold text-slate-800 focus:ring-1 focus:ring-[#354944] shadow-2xs cursor-pointer truncate"
                   >
                     <option value="AUTO">Otomatis: Tier {detectedFutsalTier} ({studentAge} Thn)</option>
                     <option value="1">Tier 1 — Usia Dini (6–12 Thn)</option>
@@ -951,31 +951,31 @@ function FutsalAssessmentView({
 
             {/* 2. PANEL ATAS: SCOUTING RADAR & KONFIGURASI POSISI */}
             {selectedStudent && (
-              <form onSubmit={handleSaveEvaluation} className="space-y-6">
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+              <form onSubmit={handleSaveEvaluation} className="space-y-3.5">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-stretch">
                   
                   {/* RADAR 7-AXIS */}
-                  <div className="lg:col-span-5 bg-slate-900 rounded-3xl p-4 sm:p-5 text-white shadow-md flex flex-col justify-between space-y-3">
-                    <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
-                      <div className="flex items-center gap-2">
-                        <BarChart2 className="w-4 h-4 text-[#C89D32]" />
-                        <span className="text-xs font-black uppercase tracking-wider text-white">
+                  <div className="lg:col-span-5 bg-slate-900 rounded-xl p-3 sm:p-3.5 text-white shadow-xs flex flex-col justify-between space-y-2.5">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      <div className="flex items-center gap-1.5">
+                        <BarChart2 className="w-3.5 h-3.5 text-[#C89D32]" />
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-white">
                           Scouting Radar
                         </span>
                       </div>
 
                       {/* Header kanan: Skor Realtime & Toggle Mobile */}
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] font-bold text-[#C89D32] bg-slate-800 px-2 py-0.5 rounded-full border border-white/10">
+                      <div className="flex items-center gap-1">
+                        <span className="text-[9px] font-bold text-[#C89D32] bg-slate-800 px-1.5 py-0.2 rounded-full border border-white/10">
                           {axisScores.overall}/100
                         </span>
-                        <span className={`lg:hidden px-2 py-0.5 text-[10px] font-bold rounded-full ${overallGrade.badge}`}>
+                        <span className={`lg:hidden px-1.5 py-0.2 text-[9px] font-bold rounded-full ${overallGrade.badge}`}>
                           {overallGrade.grade.split(' ')[0]}
                         </span>
                         <button
                           type="button"
                           onClick={() => setShowMobileRadar(!showMobileRadar)}
-                          className="lg:hidden text-[10px] font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded-lg border border-white/10 transition-colors cursor-pointer"
+                          className="lg:hidden text-[9px] font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 px-1.5 py-0.2 rounded border border-white/10 transition-colors cursor-pointer"
                         >
                           {showMobileRadar ? 'Lipat ▴' : 'Buka ▾'}
                         </button>
@@ -983,11 +983,11 @@ function FutsalAssessmentView({
                     </div>
 
                     {showMobileRadar && (
-                      <div className="h-56 sm:h-64 w-full flex items-center justify-center my-auto">
-                        <ResponsiveContainer width="100%" height={230}>
-                          <RadarChart cx="50%" cy="50%" outerRadius="62%" data={radarData} margin={{ top: 8, right: 15, bottom: 8, left: 15 }}>
+                      <div className="h-44 sm:h-48 w-full flex items-center justify-center my-auto">
+                        <ResponsiveContainer width="100%" height={180}>
+                          <RadarChart cx="50%" cy="50%" outerRadius="62%" data={radarData} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>
                             <PolarGrid stroke="#334155" />
-                            <PolarAngleAxis dataKey="subject" stroke="#94a3b8" tick={{ fill: '#e2e8f0', fontSize: 10, fontWeight: 700 }} />
+                            <PolarAngleAxis dataKey="subject" stroke="#94a3b8" tick={{ fill: '#e2e8f0', fontSize: 9, fontWeight: 700 }} />
                             <PolarRadiusAxis angle={30} domain={[0, 100]} stroke="#475569" tick={false} />
                             <Radar
                               name="Skor Futsal"
@@ -1001,11 +1001,11 @@ function FutsalAssessmentView({
                       </div>
                     )}
 
-                    <div className="text-[11px] text-slate-300 bg-slate-800/80 p-2.5 rounded-xl flex items-center justify-between border border-white/5">
+                    <div className="text-[10px] text-slate-300 bg-slate-800/80 p-2 rounded-lg flex items-center justify-between border border-white/5">
                       <span className="text-slate-400">Rata-Rata (7 Kategori):</span>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1">
                         <strong className="text-[#C89D32] font-black text-xs">{axisScores.overall} / 100</strong>
-                        <span className="text-[10px] font-bold text-slate-400">({overallGrade.grade})</span>
+                        <span className="text-[9px] font-bold text-slate-400">({overallGrade.grade})</span>
                       </div>
                     </div>
                   </div>
@@ -1459,30 +1459,30 @@ function FutsalAssessmentView({
                   </div>
 
                   <textarea
-                    rows={4}
+                    rows={2.5}
                     value={coachNote}
                     onChange={(e) => setCoachNote(e.target.value)}
                     placeholder={`Contoh: Atlet ${selectedStudent.studentName} sangat kuat pada posisi ${currentPosIndicatorsConfig.shortLabel} dengan kontrol sole dan rotasi passing cepat. Perlu peningkatan stamina transisi.`}
-                    className="w-full px-4 py-3 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-medium text-slate-800 leading-relaxed"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#354944] font-medium text-slate-800 leading-normal"
                   />
 
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-                    <p className="text-[11px] text-slate-400">
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-1.5">
+                    <p className="text-[10px] text-slate-400">
                       * Hasil assessment Futsal ini tersimpan permanen dan otomatis dapat diakses oleh Wali Murid di Portal Resmi.
                     </p>
                     <button
                       type="submit"
                       disabled={isSaving}
-                      className="w-full sm:w-auto px-8 py-3.5 bg-[#354944] hover:bg-[#2B3D38] text-white font-black text-xs rounded-2xl border-b-2 border-[#C89D32] shadow-md transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                      className="w-full sm:w-auto px-5 py-2 bg-[#354944] hover:bg-[#2B3D38] text-white font-bold text-xs rounded-xl border-b-2 border-[#C89D32] shadow-xs transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
                     >
                       {isSaving ? (
                         <>
-                          <Loader2 className="w-4 h-4 animate-spin text-white" />
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
                           <span>Menyimpan Assessment Futsal...</span>
                         </>
                       ) : (
                         <>
-                          <Award className="w-4 h-4 text-[#C89D32]" />
+                          <Award className="w-3.5 h-3.5 text-[#C89D32]" />
                           <span>Simpan Assessment Futsal ({futsalTierConfig.shortLabel})</span>
                         </>
                       )}
@@ -1998,23 +1998,23 @@ function BadmintonAssessmentView({
   return (
     <div className="space-y-6 text-left">
       {/* 1. COMPACT HEADER BAR */}
-      <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-sm space-y-4">
+      <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-slate-200/80 shadow-xs space-y-3">
         {/* MOBILE COMPACT TITLE BAR (< 1024px) */}
-        <div className="flex lg:hidden items-center justify-between pb-2.5 border-b border-slate-100">
-          <h2 className="font-extrabold text-sm text-slate-900 tracking-tight">
+        <div className="flex lg:hidden items-center justify-between pb-2 border-b border-slate-100">
+          <h2 className="font-bold text-xs sm:text-sm text-slate-900 tracking-tight">
             Evaluasi Atlet
           </h2>
           <div className="flex items-center gap-1.5">
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#354944]/10 text-[#354944] border border-[#354944]/20">
+            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-[#354944]/10 text-[#354944] border border-[#354944]/20">
               Badminton
             </span>
             {latestEvalDoc ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-[10px] font-bold">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-[9px] font-bold">
                 <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
                 <span>Terisi ({formatDateIndonesian(latestEvalDoc.date)})</span>
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-[10px] font-bold">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-[9px] font-bold">
                 <span>Belum Ada</span>
               </span>
             )}
@@ -2022,16 +2022,16 @@ function BadmintonAssessmentView({
         </div>
 
         {/* DESKTOP TITLE BAR (>= 1024px) */}
-        <div className="hidden lg:flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#354944] text-white flex items-center justify-center font-bold shrink-0 shadow-xs border border-[#C89D32]/40">
-              <Target className="w-5 h-5 text-[#C89D32]" />
+        <div className="hidden lg:flex items-center justify-between gap-2.5 border-b border-slate-100 pb-2.5">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-[#354944] text-white flex items-center justify-center font-bold shrink-0 shadow-2xs border border-[#C89D32]/40">
+              <Target className="w-4 h-4 text-[#C89D32]" />
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="font-extrabold text-lg text-slate-900 tracking-tight">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <h2 className="font-bold text-sm sm:text-base text-slate-900 tracking-tight">
                 Athlete Development Assessment
               </h2>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-[#354944]/10 text-[#354944] border border-[#354944]/20">
+              <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[11px] font-bold bg-[#354944]/10 text-[#354944] border border-[#354944]/20">
                 Badminton
               </span>
             </div>
@@ -2039,18 +2039,18 @@ function BadmintonAssessmentView({
 
           <div className="self-start sm:self-center">
             {loadingHistory ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-full text-xs font-bold animate-pulse">
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-full text-[11px] font-bold animate-pulse">
+                <Loader2 className="w-3 h-3 animate-spin text-amber-600" />
                 <span>Memuat riwayat...</span>
               </span>
             ) : latestEvalDoc ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-xs font-bold">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span>Riwayat Terakhir Terpasang (Tanggal: {formatDateIndonesian(latestEvalDoc.date)})</span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-[11px] font-bold">
+                <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                <span>Riwayat Terakhir ({formatDateIndonesian(latestEvalDoc.date)})</span>
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-xs font-bold">
-                <AlertCircle className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-[11px] font-bold">
+                <AlertCircle className="w-3 h-3 text-slate-500 shrink-0" />
                 <span>Belum ada riwayat (Mulai dari 0)</span>
               </span>
             )}
@@ -2058,30 +2058,30 @@ function BadmintonAssessmentView({
         </div>
 
         {successMsg && (
-          <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-2xl font-bold flex items-center gap-2 animate-fadeIn">
+          <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl font-bold flex items-center gap-1.5 animate-fadeIn">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{successMsg}</span>
           </div>
         )}
         {errorMsg && (
-          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-2xl font-bold flex items-center gap-2 animate-fadeIn">
+          <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl font-bold flex items-center gap-1.5 animate-fadeIn">
             <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
             <span>{errorMsg}</span>
           </div>
         )}
 
         {students.length === 0 ? (
-          <div className="py-8 border border-dashed border-slate-200 rounded-2xl text-center p-6 bg-slate-50/50">
-            <User className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+          <div className="py-6 border border-dashed border-slate-200 rounded-xl text-center p-4 bg-slate-50/50">
+            <User className="w-8 h-8 text-slate-300 mx-auto mb-1.5" />
             <p className="text-xs font-bold text-slate-700">Belum ada siswa terdaftar di kelas Badminton ini.</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="space-y-3">
             {/* INPUT FILTER AREA (2 BARIS KOMPAK DI MOBILE) */}
-            <div className="bg-slate-50/90 p-3 sm:p-4 rounded-2xl border border-slate-200/90 space-y-2.5">
+            <div className="bg-slate-50/90 p-2.5 sm:p-3 rounded-xl border border-slate-200/90 space-y-2">
               {/* Baris 1: Pilih Atlet (1 Kolom Penuh) */}
               <div>
-                <label className="block text-[11px] sm:text-xs font-black text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                <label className="block text-[11px] font-bold text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
                   <UserCheck className="w-3.5 h-3.5 text-[#354944]" />
                   <span>Pilih Atlet ({students.length})</span>
                 </label>
@@ -2089,7 +2089,7 @@ function BadmintonAssessmentView({
                   <select
                     value={selectedStudentId}
                     onChange={(e) => setSelectedStudentId(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#354944] font-bold text-slate-800 shadow-2xs cursor-pointer appearance-none pr-8"
+                    className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#354944] font-bold text-slate-800 shadow-2xs cursor-pointer appearance-none pr-7"
                   >
                     {students.map((st) => (
                       <option key={st.id} value={st.id}>
@@ -2097,36 +2097,36 @@ function BadmintonAssessmentView({
                       </option>
                     ))}
                   </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2.5 text-slate-500">
-                    <ChevronDown className="w-4 h-4" />
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+                    <ChevronDown className="w-3.5 h-3.5" />
                   </div>
                 </div>
               </div>
 
               {/* Baris 2: Tanggal Evaluasi & Jenjang Evaluasi (2 Kolom Berdampingan) */}
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[10px] sm:text-xs font-black text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
-                    <Calendar className="w-3.5 h-3.5 text-[#354944]" />
+                  <label className="block text-[10px] font-bold text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <Calendar className="w-3 h-3 text-[#354944]" />
                     <span>Tanggal</span>
                   </label>
                   <input
                     type="date"
                     value={evaluationDate}
                     onChange={(e) => setEvaluationDate(e.target.value)}
-                    className="w-full px-2.5 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#354944] font-bold text-slate-800 shadow-2xs cursor-pointer"
+                    className="w-full px-2 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#354944] font-bold text-slate-800 shadow-2xs cursor-pointer"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] sm:text-xs font-black text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
-                    <GraduationCap className="w-3.5 h-3.5 text-[#354944]" />
+                  <label className="block text-[10px] font-bold text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <GraduationCap className="w-3 h-3 text-[#354944]" />
                     <span>Jenjang</span>
                   </label>
                   <select
                     value={overrideBadmintonTier}
                     onChange={(e) => setOverrideBadmintonTier(e.target.value)}
-                    className="w-full px-2.5 py-2 text-xs bg-white border border-slate-200 rounded-xl font-bold text-slate-800 focus:ring-2 focus:ring-[#354944] shadow-2xs cursor-pointer truncate"
+                    className="w-full px-2 py-1.5 text-xs bg-white border border-slate-200 rounded-lg font-bold text-slate-800 focus:ring-1 focus:ring-[#354944] shadow-2xs cursor-pointer truncate"
                   >
                     <option value="AUTO">Otomatis: Tier {detectedBadmintonTier} ({pbsiLevelInfo.name})</option>
                     <option value="1">Tier 1 — Usia Dini (&le;10 Thn)</option>
@@ -2140,30 +2140,30 @@ function BadmintonAssessmentView({
 
             {/* 2. PANEL ATAS: SCOUTING RADAR & KONFIGURASI NOMOR */}
             {selectedStudent && (
-              <div className="space-y-6">
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+              <div className="space-y-3.5">
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-stretch">
                   {/* RADAR CHART */}
-                  <div className="lg:col-span-5 bg-slate-900 rounded-3xl p-4 sm:p-5 text-white shadow-md flex flex-col justify-between space-y-3">
-                    <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
-                      <div className="flex items-center gap-2">
-                        <BarChart2 className="w-4 h-4 text-[#C89D32]" />
-                        <span className="text-xs font-black uppercase tracking-wider text-white">
+                  <div className="lg:col-span-5 bg-slate-900 rounded-xl p-3 sm:p-3.5 text-white shadow-xs flex flex-col justify-between space-y-2.5">
+                    <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                      <div className="flex items-center gap-1.5">
+                        <BarChart2 className="w-3.5 h-3.5 text-[#C89D32]" />
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-white">
                           Scouting Radar
                         </span>
                       </div>
 
                       {/* Header kanan: Skor Realtime & Toggle Mobile */}
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[10px] font-bold text-[#C89D32] bg-slate-800 px-2 py-0.5 rounded-full border border-white/10">
+                      <div className="flex items-center gap-1">
+                        <span className="text-[9px] font-bold text-[#C89D32] bg-slate-800 px-1.5 py-0.2 rounded-full border border-white/10">
                           {axisScores.overall}/100
                         </span>
-                        <span className={`lg:hidden px-2 py-0.5 text-[10px] font-bold rounded-full ${gradeInfo.badge}`}>
+                        <span className={`lg:hidden px-1.5 py-0.2 text-[9px] font-bold rounded-full ${gradeInfo.badge}`}>
                           {gradeInfo.grade.split(' ')[0]}
                         </span>
                         <button
                           type="button"
                           onClick={() => setShowMobileRadar(!showMobileRadar)}
-                          className="lg:hidden text-[10px] font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded-lg border border-white/10 transition-colors cursor-pointer"
+                          className="lg:hidden text-[9px] font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 px-1.5 py-0.2 rounded border border-white/10 transition-colors cursor-pointer"
                         >
                           {showMobileRadar ? 'Lipat ▴' : 'Buka ▾'}
                         </button>
@@ -2171,11 +2171,11 @@ function BadmintonAssessmentView({
                     </div>
 
                     {showMobileRadar && (
-                      <div className="h-56 sm:h-64 w-full flex items-center justify-center my-auto">
-                        <ResponsiveContainer width="100%" height={230}>
-                          <RadarChart cx="50%" cy="50%" outerRadius="62%" data={radarData} margin={{ top: 8, right: 15, bottom: 8, left: 15 }}>
+                      <div className="h-44 sm:h-48 w-full flex items-center justify-center my-auto">
+                        <ResponsiveContainer width="100%" height={180}>
+                          <RadarChart cx="50%" cy="50%" outerRadius="62%" data={radarData} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>
                             <PolarGrid stroke="#334155" />
-                            <PolarAngleAxis dataKey="subject" stroke="#94a3b8" tick={{ fill: '#e2e8f0', fontSize: 10, fontWeight: 700 }} />
+                            <PolarAngleAxis dataKey="subject" stroke="#94a3b8" tick={{ fill: '#e2e8f0', fontSize: 9, fontWeight: 700 }} />
                             <PolarRadiusAxis angle={30} domain={[0, 100]} stroke="#475569" tick={false} />
                             <Radar
                               name="Performa"
@@ -2189,11 +2189,11 @@ function BadmintonAssessmentView({
                       </div>
                     )}
 
-                    <div className="text-[11px] text-slate-300 bg-slate-800/80 p-2.5 rounded-xl flex items-center justify-between border border-white/5">
+                    <div className="text-[10px] text-slate-300 bg-slate-800/80 p-2 rounded-lg flex items-center justify-between border border-white/5">
                       <span className="text-slate-400">Rata-Rata ({radarData.length} Kategori):</span>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1">
                         <strong className="text-[#C89D32] font-black text-xs">{axisScores.overall} / 100</strong>
-                        <span className="text-[10px] font-bold text-slate-400">({gradeInfo.grade})</span>
+                        <span className="text-[9px] font-bold text-slate-400">({gradeInfo.grade})</span>
                       </div>
                     </div>
                   </div>
@@ -2792,11 +2792,11 @@ function BadmintonAssessmentView({
 
       {/* 4. CATATAN EVALUASI & TOMBOL SIMPAN */}
       {selectedStudent && (
-        <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-sm space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-            <div className="flex items-center gap-2">
-              <MessageSquare className="w-4.5 h-4.5 text-[#354944]" />
-              <h3 className="font-extrabold text-sm text-slate-900">
+        <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-slate-200/80 shadow-xs space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
+            <div className="flex items-center gap-1.5">
+              <MessageSquare className="w-4 h-4 text-[#354944]" />
+              <h3 className="font-bold text-xs sm:text-sm text-slate-900">
                 Catatan Pelatih ({pbsiLevelInfo.name})
               </h3>
             </div>
@@ -2804,7 +2804,7 @@ function BadmintonAssessmentView({
             <button
               type="button"
               onClick={handleGenerateDraft}
-              className="px-3 py-1.5 text-xs font-extrabold bg-[#354944]/10 hover:bg-[#354944]/20 text-[#354944] border border-[#354944]/30 rounded-xl transition-all cursor-pointer flex items-center gap-1.5 self-start sm:self-auto"
+              className="px-2.5 py-1 text-xs font-bold bg-[#354944]/10 hover:bg-[#354944]/20 text-[#354944] border border-[#354944]/30 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 self-start sm:self-auto"
             >
               <Sparkles className="w-3.5 h-3.5 text-[#C89D32]" />
               <span>Buat Draf Analisis Otomatis</span>
@@ -2814,40 +2814,40 @@ function BadmintonAssessmentView({
           <textarea
             value={coachNote}
             onChange={(e) => setCoachNote(e.target.value)}
-            rows={5}
+            rows={2.5}
             placeholder="Tuliskan umpan balik pelatih, keunggulan pukulan, area perbaikan footwork/taktik, dan rekomendasi program latihan..."
-            className="w-full p-4 text-xs font-medium bg-slate-50 border border-slate-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#354944] leading-relaxed text-slate-800 placeholder:text-slate-400"
+            className="w-full p-2.5 text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#354944] leading-normal text-slate-800 placeholder:text-slate-400"
           />
 
           {errorMsg && (
-            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 font-bold flex items-center gap-2">
+            <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-800 font-bold flex items-center gap-1.5">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
               <span>{errorMsg}</span>
             </div>
           )}
 
           {successMsg && (
-            <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800 font-bold flex items-center gap-2">
+            <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-xs text-emerald-800 font-bold flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               <span>{successMsg}</span>
             </div>
           )}
 
-          <div className="pt-2 flex justify-end">
+          <div className="pt-1.5 flex justify-end">
             <button
               type="button"
               onClick={handleSaveEvaluation}
               disabled={isSaving}
-              className="w-full sm:w-auto px-8 py-3.5 bg-[#354944] hover:bg-[#2B3D38] active:bg-[#1E2E2A] text-white border-b-2 border-[#C89D32] font-black text-sm rounded-2xl transition-all shadow-md hover:shadow-lg disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+              className="w-full sm:w-auto px-5 py-2 bg-[#354944] hover:bg-[#2B3D38] active:bg-[#1E2E2A] text-white border-b-2 border-[#C89D32] font-bold text-xs rounded-xl transition-all shadow-xs disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
             >
               {isSaving ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin text-[#C89D32]" />
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-[#C89D32]" />
                   <span>Menyimpan Rapor Badminton...</span>
                 </>
               ) : (
                 <>
-                  <Award className="w-4.5 h-4.5 text-[#C89D32]" />
+                  <Award className="w-4 h-4 text-[#C89D32]" />
                   <span>Simpan Assessment Badminton ({badmintonTierConfig.shortLabel})</span>
                 </>
               )}
@@ -3368,26 +3368,26 @@ function FootballAssessmentView({
   const overallGrade = getScoreGrade(axisScores.overall);
 
   return (
-    <div className="space-y-6 text-left">
+    <div className="space-y-3.5 text-left">
       {/* HEADER BAR */}
-      <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-sm space-y-4">
+      <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-slate-200/80 shadow-xs space-y-3">
         
         {/* MOBILE COMPACT TITLE BAR (< 1024px) */}
-        <div className="flex lg:hidden items-center justify-between pb-2.5 border-b border-slate-100">
-          <h2 className="font-extrabold text-sm text-slate-900 tracking-tight">
+        <div className="flex lg:hidden items-center justify-between pb-2 border-b border-slate-100">
+          <h2 className="font-bold text-xs sm:text-sm text-slate-900 tracking-tight">
             Evaluasi Atlet
           </h2>
           <div className="flex items-center gap-1.5">
-            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#354944]/10 text-[#354944] border border-[#354944]/20">
+            <span className="inline-flex items-center px-1.5 py-0.2 rounded-full text-[9px] font-bold bg-[#354944]/10 text-[#354944] border border-[#354944]/20">
               {detectedSport}
             </span>
             {latestEvalDoc ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-[10px] font-bold">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-[9px] font-bold">
                 <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
                 <span>Terisi ({formatDateIndonesian(latestEvalDoc.date)})</span>
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-[10px] font-bold">
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.2 bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-[9px] font-bold">
                 <span>Belum Ada</span>
               </span>
             )}
@@ -3395,16 +3395,16 @@ function FootballAssessmentView({
         </div>
 
         {/* DESKTOP TITLE BAR (>= 1024px) */}
-        <div className="hidden lg:flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#354944] text-white flex items-center justify-center font-bold shrink-0 shadow-xs border border-[#C89D32]/40">
-              <Compass className="w-5 h-5 text-[#C89D32]" />
+        <div className="hidden lg:flex items-center justify-between gap-2.5 border-b border-slate-100 pb-2.5">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-[#354944] text-white flex items-center justify-center font-bold shrink-0 shadow-2xs border border-[#C89D32]/40">
+              <Compass className="w-4 h-4 text-[#C89D32]" />
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="font-extrabold text-lg text-slate-900 tracking-tight">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <h2 className="font-bold text-sm sm:text-base text-slate-900 tracking-tight">
                 Athlete Development Assessment
               </h2>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-extrabold bg-[#354944]/10 text-[#354944] border border-[#354944]/20">
+              <span className="inline-flex items-center gap-1 px-2 py-0.2 rounded-full text-[11px] font-bold bg-[#354944]/10 text-[#354944] border border-[#354944]/20">
                 {detectedSport}
               </span>
             </div>
@@ -3412,18 +3412,18 @@ function FootballAssessmentView({
 
           <div className="self-start sm:self-center">
             {loadingHistory ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-full text-xs font-bold animate-pulse">
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-full text-[11px] font-bold animate-pulse">
+                <Loader2 className="w-3 h-3 animate-spin text-amber-600" />
                 <span>Memuat riwayat...</span>
               </span>
             ) : latestEvalDoc ? (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-xs font-bold">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
-                <span>Riwayat Terakhir Terpasang (Tanggal: {formatDateIndonesian(latestEvalDoc.date)})</span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full text-[11px] font-bold">
+                <CheckCircle2 className="w-3 h-3 text-emerald-600 shrink-0" />
+                <span>Riwayat Terakhir ({formatDateIndonesian(latestEvalDoc.date)})</span>
               </span>
             ) : (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-xs font-bold">
-                <AlertCircle className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-slate-100 text-slate-700 border border-slate-200 rounded-full text-[11px] font-bold">
+                <AlertCircle className="w-3 h-3 text-slate-500 shrink-0" />
                 <span>Belum ada riwayat (Mulai dari 0)</span>
               </span>
             )}
@@ -3432,13 +3432,13 @@ function FootballAssessmentView({
 
         {/* ALERTS */}
         {successMsg && (
-          <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-2xl font-bold flex items-center gap-2 animate-fadeIn">
+          <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl font-bold flex items-center gap-1.5 animate-fadeIn">
             <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
             <span>{successMsg}</span>
           </div>
         )}
         {errorMsg && (
-          <div className="p-3 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-2xl font-bold flex items-center gap-2 animate-fadeIn">
+          <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-xl font-bold flex items-center gap-1.5 animate-fadeIn">
             <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
             <span>{errorMsg}</span>
           </div>
@@ -3522,31 +3522,31 @@ function FootballAssessmentView({
 
       {/* PANEL ATAS */}
       {selectedStudent && (
-        <form onSubmit={handleSaveEvaluation} className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+        <form onSubmit={handleSaveEvaluation} className="space-y-3.5">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-stretch">
             
             {/* RADAR 7-AXIS */}
-            <div className="lg:col-span-5 bg-slate-900 rounded-3xl p-4 sm:p-5 text-white shadow-md flex flex-col justify-between space-y-3">
-              <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
-                <div className="flex items-center gap-2">
-                  <BarChart2 className="w-4 h-4 text-[#C89D32]" />
-                  <span className="text-xs font-black uppercase tracking-wider text-white">
+            <div className="lg:col-span-5 bg-slate-900 rounded-xl p-3 sm:p-3.5 text-white shadow-xs flex flex-col justify-between space-y-2.5">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                <div className="flex items-center gap-1.5">
+                  <BarChart2 className="w-3.5 h-3.5 text-[#C89D32]" />
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-white">
                     Scouting Radar
                   </span>
                 </div>
 
                 {/* Header kanan: Skor Realtime & Toggle Mobile */}
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] font-bold text-[#C89D32] bg-slate-800 px-2 py-0.5 rounded-full border border-white/10">
+                <div className="flex items-center gap-1">
+                  <span className="text-[9px] font-bold text-[#C89D32] bg-slate-800 px-1.5 py-0.2 rounded-full border border-white/10">
                     {axisScores.overall}/100
                   </span>
-                  <span className={`lg:hidden px-2 py-0.5 text-[10px] font-bold rounded-full ${overallGrade.badge}`}>
+                  <span className={`lg:hidden px-1.5 py-0.2 text-[9px] font-bold rounded-full ${overallGrade.badge}`}>
                     {overallGrade.grade.split(' ')[0]}
                   </span>
                   <button
                     type="button"
                     onClick={() => setShowMobileRadar(!showMobileRadar)}
-                    className="lg:hidden text-[10px] font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 px-2 py-0.5 rounded-lg border border-white/10 transition-colors cursor-pointer"
+                    className="lg:hidden text-[9px] font-bold text-slate-300 bg-slate-800 hover:bg-slate-700 px-1.5 py-0.2 rounded border border-white/10 transition-colors cursor-pointer"
                   >
                     {showMobileRadar ? 'Lipat ▴' : 'Buka ▾'}
                   </button>
@@ -3554,11 +3554,11 @@ function FootballAssessmentView({
               </div>
 
               {showMobileRadar && (
-                <div className="h-56 sm:h-64 w-full flex items-center justify-center my-auto">
-                  <ResponsiveContainer width="100%" height={230}>
-                    <RadarChart cx="50%" cy="50%" outerRadius="62%" data={radarData} margin={{ top: 8, right: 15, bottom: 8, left: 15 }}>
+                <div className="h-44 sm:h-48 w-full flex items-center justify-center my-auto">
+                  <ResponsiveContainer width="100%" height={180}>
+                    <RadarChart cx="50%" cy="50%" outerRadius="62%" data={radarData} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>
                       <PolarGrid stroke="#334155" />
-                      <PolarAngleAxis dataKey="subject" stroke="#94a3b8" tick={{ fill: '#e2e8f0', fontSize: 10, fontWeight: 700 }} />
+                      <PolarAngleAxis dataKey="subject" stroke="#94a3b8" tick={{ fill: '#e2e8f0', fontSize: 9, fontWeight: 700 }} />
                       <PolarRadiusAxis angle={30} domain={[0, 100]} stroke="#475569" tick={false} />
                       <Radar
                         name="Skor Atlet"
@@ -3572,7 +3572,7 @@ function FootballAssessmentView({
                 </div>
               )}
 
-              <div className="text-[11px] text-slate-300 bg-slate-800/80 p-2.5 rounded-xl flex items-center justify-between border border-white/5">
+              <div className="text-[10px] text-slate-300 bg-slate-800/80 p-2 rounded-lg flex items-center justify-between border border-white/5">
                 <span className="text-slate-400">Rata-Rata (7 Kategori):</span>
                 <div className="flex items-center gap-1.5">
                   <strong className="text-[#C89D32] font-black text-xs">{axisScores.overall} / 100</strong>
@@ -4074,16 +4074,16 @@ function FootballAssessmentView({
               )}
 
                 {/* CATATAN & SIMPAN */}
-                <div className="p-5 sm:p-6 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                    <label className="block text-xs font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                <div className="p-3 sm:p-3.5 rounded-xl bg-white border border-slate-200 shadow-sm space-y-2.5">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                    <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                       <MessageSquare className="w-4 h-4 text-[#354944]" />
                       <span>Catatan Evaluasi Taktis &amp; Rekomendasi Pelatih ({tierConfig.shortLabel})</span>
                     </label>
                     <button
                       type="button"
                       onClick={handleGenerateDraft}
-                      className="px-3.5 py-1.5 bg-[#354944]/10 hover:bg-[#354944]/20 text-[#354944] border border-[#354944]/30 text-xs font-extrabold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto"
+                      className="px-2.5 py-1 bg-[#354944]/10 hover:bg-[#354944]/20 text-[#354944] border border-[#354944]/30 text-[11px] font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto"
                     >
                       <Sparkles className="w-3.5 h-3.5 text-[#C89D32]" />
                       <span>Buat Draf Analisis Otomatis</span>
@@ -4091,21 +4091,21 @@ function FootballAssessmentView({
                   </div>
 
                   <textarea
-                    rows={4}
+                    rows={2.5}
                     value={coachNote}
                     onChange={(e) => setCoachNote(e.target.value)}
                     placeholder={`Contoh: Atlet ${selectedStudent.studentName} menunjukkan penempatan posisi dan timing finishing yang tajam. Perlu peningkatan koordinasi pressing.`}
-                    className="w-full px-4 py-3 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-2xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-medium text-slate-800 leading-relaxed"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-medium text-slate-800 leading-relaxed"
                   />
 
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
-                    <p className="text-[11px] text-slate-400">
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-1">
+                    <p className="text-[10px] text-slate-400">
                       * Hasil assessment ini tersimpan permanen dan otomatis dapat diakses oleh Wali Murid di Portal Resmi.
                     </p>
                     <button
                       type="submit"
                       disabled={isSaving}
-                      className="w-full sm:w-auto px-8 py-3.5 bg-[#354944] hover:bg-[#2B3D38] text-white font-black text-xs rounded-2xl border-b-2 border-[#C89D32] shadow-md transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                      className="w-full sm:w-auto px-5 py-2 bg-[#354944] hover:bg-[#2B3D38] text-white font-bold text-xs rounded-xl border-b-2 border-[#C89D32] shadow-sm transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                       {isSaving ? (
                         <>
@@ -4882,13 +4882,13 @@ function Standard4PillarView({
         </div>
 
         {selectedStudent && (
-          <form onSubmit={handleSaveEvaluation} className="space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div className="bg-slate-900 rounded-2xl p-4 text-white space-y-3">
+          <form onSubmit={handleSaveEvaluation} className="space-y-3.5">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+              <div className="space-y-3">
+                <div className="bg-slate-900 rounded-xl p-3 text-white space-y-2">
                   <span className="text-xs font-bold uppercase text-indigo-400">Scouting Radar</span>
-                  <div className="h-56 w-full">
-                    <ResponsiveContainer width="100%" height={220}>
+                  <div className="h-44 sm:h-48 w-full">
+                    <ResponsiveContainer width="100%" height={180}>
                       <RadarChart data={radarData}>
                         <PolarGrid stroke="#334155" />
                         <PolarAngleAxis dataKey="subject" stroke="#94a3b8" tick={{ fill: '#cbd5e1', fontSize: 10 }} />
@@ -4900,10 +4900,10 @@ function Standard4PillarView({
                 </div>
 
                 {/* PANEL RINGKASAN SKOR KATEGORI (FULL-WIDTH INTERACTIVE CARDS) */}
-                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 space-y-3 shadow-2xs">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-200/80 pb-2.5">
+                <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 space-y-2 shadow-2xs">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-2">
                     <div>
-                      <span className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
                         <BarChart2 className="w-4 h-4 text-[#354944]" />
                         <span>Ringkasan Skor Kategori</span>
                       </span>
@@ -4912,9 +4912,9 @@ function Standard4PillarView({
                       </p>
                     </div>
 
-                    <div className="flex items-center gap-2.5 flex-wrap">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-xs font-bold text-slate-600 mr-1">
-                        Rata-Rata: <strong className="text-slate-900 font-black">{pillarScores.overall} / 100</strong>
+                        Rata-Rata: <strong className="text-slate-900 font-bold">{pillarScores.overall} / 100</strong>
                       </span>
 
                       <button
@@ -4923,7 +4923,7 @@ function Standard4PillarView({
                           setActiveModalCategoryKey(standardCategoryList[0]?.key);
                           setIsModalOpen(true);
                         }}
-                        className="px-3.5 py-1.5 bg-[#354944] hover:bg-[#2B3D38] text-white border-b-2 border-[#C89D32] rounded-xl font-bold text-xs shadow-sm shadow-[#354944]/20 flex items-center gap-1.5 cursor-pointer transition-all shrink-0"
+                        className="px-2.5 py-1 bg-[#354944] hover:bg-[#2B3D38] text-white border-b-2 border-[#C89D32] rounded-lg font-bold text-xs shadow-sm flex items-center gap-1.5 cursor-pointer transition-all shrink-0"
                       >
                         <Edit3 className="w-3.5 h-3.5 text-[#C89D32]" />
                         <span>✎ Edit / Input Penilaian</span>
@@ -4931,7 +4931,7 @@ function Standard4PillarView({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {standardCategoryList.map((cat) => {
                       return (
                         <div
@@ -4940,7 +4940,7 @@ function Standard4PillarView({
                             setActiveModalCategoryKey(cat.key);
                             setIsModalOpen(true);
                           }}
-                          className="bg-white p-3 rounded-xl border border-slate-200/90 hover:border-[#354944] shadow-2xs transition-all cursor-pointer group flex flex-col justify-between space-y-2"
+                          className="bg-white p-2.5 rounded-lg border border-slate-200/90 hover:border-[#354944] shadow-2xs transition-all cursor-pointer group flex flex-col justify-between space-y-1.5"
                         >
                           <div className="flex items-start justify-between gap-1.5">
                             <div className="space-y-0.5 min-w-0">
@@ -4951,7 +4951,7 @@ function Standard4PillarView({
                                 {cat.count} Indikator
                               </span>
                             </div>
-                            <span className="text-xs font-black text-slate-900 shrink-0 ml-1 font-mono">
+                            <span className="text-xs font-bold text-slate-900 shrink-0 ml-1 font-mono">
                               {cat.score || 0} <span className="text-[10px] font-normal text-slate-400">/ 100</span>
                             </span>
                           </div>
@@ -4969,8 +4969,8 @@ function Standard4PillarView({
                 </div>
               </div>
 
-              <div className="space-y-4">
-                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-3">
+              <div className="space-y-3">
+                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
                     <span className="text-xs font-bold uppercase text-slate-800">Kategori Key Performance</span>
                     <div className="flex items-center gap-1">
@@ -4982,12 +4982,12 @@ function Standard4PillarView({
                   </div>
 
                   {Object.entries(pillars).map(([pillarKey, kpiList]) => (
-                    <div key={pillarKey} className="space-y-2">
-                      <span className="text-[11px] font-extrabold uppercase text-slate-600">{pillarKey}</span>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div key={pillarKey} className="space-y-1.5">
+                      <span className="text-[10px] font-bold uppercase text-slate-600">{pillarKey}</span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                         {kpiList.map((kpi) => (
-                          <div key={kpi} className="p-2.5 bg-white border border-slate-200 rounded-xl space-y-1">
-                            <div className="flex justify-between text-xs font-bold">
+                          <div key={kpi} className="p-2 bg-white border border-slate-200 rounded-lg space-y-1">
+                            <div className="flex justify-between text-[11px] font-bold">
                               <span className="truncate">{kpi}</span>
                               <span className="text-indigo-600">{scores[kpi] !== undefined ? scores[kpi] : 0}</span>
                             </div>
@@ -5009,21 +5009,21 @@ function Standard4PillarView({
               </div>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white border border-slate-200 space-y-3">
+            <div className="p-3 sm:p-3.5 rounded-xl bg-white border border-slate-200 space-y-2.5 shadow-sm">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold uppercase text-slate-800">Catatan Pelatih</label>
-                <button type="button" onClick={handleGenerateDraft} className="text-xs font-bold text-indigo-600">⚡ Buat Draf</button>
+                <button type="button" onClick={handleGenerateDraft} className="text-xs font-bold text-[#354944] hover:underline">⚡ Buat Draf</button>
               </div>
               <textarea
-                rows={3}
+                rows={2.5}
                 value={coachNote}
                 onChange={(e) => setCoachNote(e.target.value)}
-                className="w-full p-3 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium"
+                className="w-full p-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944]"
               />
               <button
                 type="submit"
                 disabled={isSaving}
-                className="px-6 py-2.5 bg-[#354944] text-white font-bold text-xs rounded-xl border-b-2 border-[#C89D32] shadow-sm cursor-pointer"
+                className="px-5 py-2 bg-[#354944] hover:bg-[#2B3D38] text-white font-bold text-xs rounded-xl border-b-2 border-[#C89D32] shadow-sm cursor-pointer transition-colors"
               >
                 Simpan Evaluasi
               </button>
@@ -5078,11 +5078,11 @@ function HistorySection({
     : history.filter((h) => h.studentId === filterStudentId);
 
   return (
-    <div className="bg-white rounded-3xl p-5 sm:p-6 border border-slate-200 shadow-sm space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+    <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-slate-200 shadow-sm space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-100 pb-2">
         <div className="flex items-center gap-2">
-          <Award className="w-4.5 h-4.5 text-emerald-600" />
-          <h3 className="font-extrabold text-sm text-slate-900">
+          <Award className="w-4 h-4 text-emerald-600" />
+          <h3 className="font-bold text-xs sm:text-sm text-slate-900">
             Riwayat Rapor Assessment Tersimpan ({filteredHistory.length})
           </h3>
         </div>
@@ -5092,7 +5092,7 @@ function HistorySection({
           <select
             value={filterStudentId}
             onChange={(e) => setFilterStudentId(e.target.value)}
-            className="px-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-700 cursor-pointer"
+            className="px-2.5 py-1 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-700 cursor-pointer"
           >
             <option value="ALL">Semua Siswa Kelas Ini</option>
             {students.map((st) => (
@@ -5103,13 +5103,13 @@ function HistorySection({
       </div>
 
       {loadingHistory ? (
-        <p className="py-8 text-center text-xs text-slate-400 font-medium">Memuat riwayat assessment...</p>
+        <p className="py-6 text-center text-xs text-slate-400 font-medium">Memuat riwayat assessment...</p>
       ) : filteredHistory.length === 0 ? (
-        <div className="py-8 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-2xl p-4">
+        <div className="py-6 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl p-3">
           Belum ada rekam assessment disimpan untuk siswa/kelas ini.
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
           {filteredHistory.map((item) => {
             const ps = item.pillarScores || {};
             const gradeInfo = getScoreGrade(item.overallScore || 0);
@@ -5117,46 +5117,46 @@ function HistorySection({
             return (
               <div 
                 key={item.id} 
-                className="p-4 rounded-2xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-emerald-400 transition-all space-y-3 relative group shadow-2xs"
+                className="p-2.5 sm:p-3 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-emerald-400 transition-all space-y-2 relative group shadow-2xs"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="font-extrabold text-sm text-slate-900">{item.studentName}</h4>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <h4 className="font-bold text-xs sm:text-sm text-slate-900">{item.studentName}</h4>
                       {item.playerRole && (
-                        <span className="px-2 py-0.5 text-[9px] font-black uppercase rounded-md bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
                           {item.playerRole} {item.specialization && item.specialization !== 'N/A' && item.specialization !== 'Eksplorasi/Dasar' && item.specialization !== 'Eksplorasi Futsal' ? `• ${item.specialization}` : ''}
                         </span>
                       )}
                       {item.activeTier && (
-                        <span className="px-2 py-0.5 text-[9px] font-black uppercase rounded-md bg-amber-100 text-amber-800 border border-amber-200">
+                        <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-amber-100 text-amber-800 border border-amber-200">
                           Tier {item.activeTier}
                         </span>
                       )}
                       {item.styleCode && item.styleCode !== 'N/A' && (
-                        <span className="px-2 py-0.5 text-[9px] font-black uppercase rounded-md bg-slate-800 text-slate-100">
+                        <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-slate-800 text-slate-100">
                           {item.styleCode}
                         </span>
                       )}
                     </div>
-                    <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-1">
+                    <p className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
                       <Calendar className="w-3 h-3 text-emerald-600" />
                       <span>Tgl: {formatDateIndonesian(item.date)}</span> &bull; 
                       <span>Pelatih: {item.evaluator || 'Pelatih'}</span>
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className={`px-2.5 py-1 text-xs font-black rounded-xl border ${gradeInfo.badge}`}>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className={`px-2 py-0.5 text-[11px] font-bold rounded-lg border ${gradeInfo.badge}`}>
                       {item.overallScore || 0} / 100
                     </span>
                     <button
                       type="button"
                       onClick={() => onDeleteEvaluation(item.id, item.studentName)}
                       title="Hapus Evaluasi"
-                      className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
+                      className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 </div>
@@ -5165,47 +5165,47 @@ function HistorySection({
                 {ps.fisik !== undefined && ps.komunikasi !== undefined ? (
                   <div className="grid grid-cols-4 sm:grid-cols-7 gap-1 text-[9px] text-center font-bold">
                     <div className="p-1 bg-rose-50 text-rose-800 rounded-lg border border-rose-100">
-                      <span className="block text-[7px] uppercase font-black text-rose-600">Fisik</span>
+                      <span className="block text-[7px] uppercase font-bold text-rose-600">Fisik</span>
                       <span>{ps.fisik}</span>
                     </div>
                     <div className="p-1 bg-blue-50 text-blue-800 rounded-lg border border-blue-100">
-                      <span className="block text-[7px] uppercase font-black text-blue-600">Teknik</span>
+                      <span className="block text-[7px] uppercase font-bold text-blue-600">Teknik</span>
                       <span>{ps.teknik}</span>
                     </div>
                     <div className="p-1 bg-purple-50 text-purple-800 rounded-lg border border-purple-100">
-                      <span className="block text-[7px] uppercase font-black text-purple-600">Taktik</span>
+                      <span className="block text-[7px] uppercase font-bold text-purple-600">Taktik</span>
                       <span>{ps.taktik}</span>
                     </div>
                     <div className="p-1 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-100">
-                      <span className="block text-[7px] uppercase font-black text-emerald-600">Mental</span>
+                      <span className="block text-[7px] uppercase font-bold text-emerald-600">Mental</span>
                       <span>{ps.mental}</span>
                     </div>
                     <div className="p-1 bg-cyan-50 text-cyan-800 rounded-lg border border-cyan-100">
-                      <span className="block text-[7px] uppercase font-black text-cyan-600">Dev.</span>
+                      <span className="block text-[7px] uppercase font-bold text-cyan-600">Dev.</span>
                       <span>{ps.perkembangan}</span>
                     </div>
                     <div className="p-1 bg-amber-50 text-amber-800 rounded-lg border border-amber-100">
-                      <span className="block text-[7px] uppercase font-black text-amber-600">Kom.</span>
+                      <span className="block text-[7px] uppercase font-bold text-amber-600">Kom.</span>
                       <span>{ps.komunikasi}</span>
                     </div>
                     <div className="p-1 bg-indigo-50 text-indigo-800 rounded-lg border border-indigo-100 col-span-2 sm:col-span-1">
-                      <span className="block text-[7px] uppercase font-black text-indigo-600">Posisi</span>
+                      <span className="block text-[7px] uppercase font-bold text-indigo-600">Posisi</span>
                       <span>{ps.khususPosisi || ps.position}</span>
                     </div>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-5 gap-1 text-[10px] text-center font-bold">
-                    <div className="p-1.5 bg-rose-50 text-rose-800 rounded-lg">Fisik: {ps.fisik || 0}</div>
-                    <div className="p-1.5 bg-blue-50 text-blue-800 rounded-lg">Teknik: {ps.teknik || 0}</div>
-                    <div className="p-1.5 bg-purple-50 text-purple-800 rounded-lg">Taktik: {ps.taktik || 0}</div>
-                    <div className="p-1.5 bg-emerald-50 text-emerald-800 rounded-lg">Mental: {ps.mental || 0}</div>
-                    <div className="p-1.5 bg-indigo-50 text-indigo-800 rounded-lg">Posisi: {ps.position || 0}</div>
+                  <div className="grid grid-cols-5 gap-1 text-[9px] text-center font-bold">
+                    <div className="p-1 bg-rose-50 text-rose-800 rounded-md">Fisik: {ps.fisik || 0}</div>
+                    <div className="p-1 bg-blue-50 text-blue-800 rounded-md">Teknik: {ps.teknik || 0}</div>
+                    <div className="p-1 bg-purple-50 text-purple-800 rounded-md">Taktik: {ps.taktik || 0}</div>
+                    <div className="p-1 bg-emerald-50 text-emerald-800 rounded-md">Mental: {ps.mental || 0}</div>
+                    <div className="p-1 bg-indigo-50 text-indigo-800 rounded-md">Posisi: {ps.position || 0}</div>
                   </div>
                 )}
 
                 {item.coachNote && (
-                  <div className="p-2.5 bg-emerald-50/70 border border-emerald-200/80 rounded-xl text-xs text-emerald-950 leading-relaxed whitespace-pre-line">
-                    <strong className="block text-[10px] uppercase font-black text-emerald-800 mb-0.5">Catatan Pelatih:</strong>
+                  <div className="p-2 bg-emerald-50/70 border border-emerald-200/80 rounded-lg text-xs text-emerald-950 leading-relaxed whitespace-pre-line">
+                    <strong className="block text-[10px] uppercase font-bold text-emerald-800 mb-0.5">Catatan Pelatih:</strong>
                     "{item.coachNote}"
                   </div>
                 )}

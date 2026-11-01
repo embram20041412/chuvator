@@ -729,12 +729,12 @@ export default function TennisAssessmentView({
       {/* =================================================================== */}
       {/* 2. GRID 2 KOLOM SEIMBANG: RADAR KIRI & KONFIGURASI KANAN            */}
       {/* =================================================================== */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-stretch">
         
         {/* KOLOM KIRI (5 COLS): KARTU GELAP SCOUTING RADAR */}
-        <div className="lg:col-span-5 bg-slate-900 border border-slate-800 text-white rounded-3xl p-5 sm:p-6 shadow-md flex flex-col justify-between space-y-4">
+        <div className="lg:col-span-5 bg-slate-900 border border-slate-800 text-white rounded-xl p-3 sm:p-3.5 shadow-md flex flex-col justify-between space-y-2.5">
           <div>
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-2">
               <div className="flex items-center gap-2">
                 <div className="p-1.5 bg-emerald-500/10 text-emerald-400 rounded-lg">
                   <Activity className="w-4 h-4" />
@@ -747,13 +747,13 @@ export default function TennisAssessmentView({
                 {activeEvent.code} &bull; {categoryScores.overall}/100
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 mt-2">
-              Visualisasi keseimbangan 6 pilar performa atlet tenis terhadap penekanan nomor pertandingan.
+            <p className="text-[10px] text-slate-400 mt-1.5">
+              Visualisasi keseimbangan performa atlet tenis terhadap nomor pertandingan.
             </p>
           </div>
 
           {/* RECHARTS RADAR CHART */}
-          <div className="h-64 sm:h-72 w-full flex items-center justify-center my-auto">
+          <div className="h-44 sm:h-48 w-full flex items-center justify-center my-auto">
             <ResponsiveContainer width="100%" height="100%">
               <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarData}>
                 <PolarGrid stroke="#334155" />
@@ -778,26 +778,26 @@ export default function TennisAssessmentView({
             </ResponsiveContainer>
           </div>
 
-          <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
+          <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">
             <span>Fokus: <strong className="text-slate-200">{activeEvent.label}</strong></span>
             <span>Level: <strong className="text-emerald-400">{activeTennisLevel.name}</strong></span>
           </div>
         </div>
 
         {/* KOLOM KANAN (7 COLS): KONFIGURASI NOMOR & PROFIL GAYA BERMAIN */}
-        <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-3xl p-5 sm:p-6 shadow-sm flex flex-col justify-between space-y-5">
+        <div className="lg:col-span-7 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl p-3 sm:p-3.5 shadow-sm flex flex-col justify-between space-y-3">
           
           {/* BANNER REALTIME OVERALL SKOR & PREDIKAT */}
-          <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 dark:from-emerald-950/40 dark:via-teal-950/30 dark:to-blue-950/30 border border-emerald-200/80 dark:border-emerald-800/60 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+          <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-blue-50 dark:from-emerald-950/40 dark:via-teal-950/30 dark:to-blue-950/30 border border-emerald-200/80 dark:border-emerald-800/60 rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 shadow-2xs">
             <div>
               <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 block mb-0.5">
                 Skor Realtime Atlet Tenis
               </span>
-              <div className="flex items-baseline gap-2">
-                <span className="text-3xl sm:text-4xl font-black text-slate-900 dark:text-slate-100 tracking-tight font-mono">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-2xl font-black text-slate-900 dark:text-slate-100 tracking-tight font-mono">
                   {categoryScores.overall}
                 </span>
-                <span className="text-xs font-bold text-slate-400">/ 100 PTS</span>
+                <span className="text-[11px] font-bold text-slate-400">/ 100 PTS</span>
               </div>
             </div>
 
@@ -1553,22 +1553,22 @@ export default function TennisAssessmentView({
       {/* =================================================================== */}
       {/* 5. CATATAN PELATIH & TOMBOL SIMPAN EVALUASI                         */}
       {/* =================================================================== */}
-      <form onSubmit={handleSaveAssessment} className="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
+      <form onSubmit={handleSaveAssessment} className="bg-white dark:bg-slate-900 rounded-xl p-3 sm:p-3.5 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-2.5">
         <div>
-          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-2 mb-2">
+          <label className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider flex items-center gap-1.5 mb-1.5">
             <MessageSquare className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             <span>Catatan Khusus Pelatih &amp; Rekomendasi Latihan Tenis</span>
           </label>
           <textarea
-            rows={3}
+            rows={2.5}
             value={coachNote}
             onChange={(e) => setCoachNote(e.target.value)}
             placeholder="Tuliskan evaluasi tertulis, kelemahan footwork, target akurasi servis, catatan sparring, atau instruksi turnamen berikutnya..."
-            className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-2xl text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500 font-medium"
+            className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500 font-medium"
           />
         </div>
 
-        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-1.5 border-t border-slate-100 dark:border-slate-800">
           <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
             <span>Atlet: <strong className="text-slate-800 dark:text-slate-200">{selectedStudent?.studentName || selectedStudent?.name}</strong></span>
             <span>&bull;</span>
@@ -1580,7 +1580,7 @@ export default function TennisAssessmentView({
           <button
             type="submit"
             disabled={isSaving || !selectedStudent?.id}
-            className="w-full sm:w-auto px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-xs rounded-xl shadow-md shadow-emerald-500/20 transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full sm:w-auto px-5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {isSaving ? (
               <span>Menyimpan Evaluasi...</span>
@@ -1610,15 +1610,15 @@ export default function TennisAssessmentView({
       {/* =================================================================== */}
       {/* 6. RIWAYAT EVALUASI ATLET TENIS (HISTORICAL ASSESSMENTS)           */}
       {/* =================================================================== */}
-      <div className="bg-white dark:bg-slate-900 rounded-3xl p-5 sm:p-6 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-4">
-        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+      <div className="bg-white dark:bg-slate-900 rounded-xl p-3 sm:p-3.5 border border-slate-200/80 dark:border-slate-800 shadow-sm space-y-3">
+        <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
           <div className="flex items-center gap-2">
             <History className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-            <h3 className="font-extrabold text-sm text-slate-900 dark:text-slate-100 tracking-tight">
+            <h3 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 tracking-tight">
               Riwayat Evaluasi Atlet Tenis ({history.filter((h) => h.sport === 'Tenis' || !h.sport).length})
             </h3>
           </div>
-          <span className="text-xs text-slate-400 font-medium">Tersimpan di Cloud Database</span>
+          <span className="text-[11px] text-slate-400 font-medium">Tersimpan di Cloud Database</span>
         </div>
 
         {history.filter((h) => h.sport === 'Tenis' || !h.sport).length === 0 ? (

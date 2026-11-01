@@ -1345,9 +1345,9 @@ export default function AcademyPage({ userProfile }) {
 
       {/* TAB 2: SISWA & SPP */}
       {activeAcademyTab === 'siswa' && (
-        <div className="bg-white dark:bg-[#14211E] rounded-xl p-3.5 sm:p-4 shadow-xs border border-slate-200/80 dark:border-white/10 space-y-3">
-          <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 pb-2.5">
-            <h2 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-2">
+        <div className="bg-white dark:bg-[#14211E] rounded-xl p-3 sm:p-3.5 shadow-xs border border-slate-200/80 dark:border-white/10 space-y-2.5">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 pb-2">
+            <h2 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-1.5">
               <GraduationCap className="w-4 h-4 text-[#354944] dark:text-[#C89D32]" />
               <span>Daftar Siswa ({filteredStudents.length})</span>
             </h2>
@@ -1358,7 +1358,7 @@ export default function AcademyPage({ userProfile }) {
                 setEditingStudent(null);
                 setShowAddModal(true);
               }}
-              className="px-3 py-1.5 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white font-semibold text-xs rounded-lg shadow-xs transition-colors cursor-pointer flex items-center space-x-1.5 shrink-0"
+              className="px-2.5 py-1 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white font-semibold text-xs rounded-lg shadow-xs transition-colors cursor-pointer flex items-center space-x-1.5 shrink-0"
             >
               <UserPlus className="w-3.5 h-3.5" />
               <span>+ Siswa Baru</span>
@@ -1366,15 +1366,15 @@ export default function AcademyPage({ userProfile }) {
           </div>
 
           {loadingStudents ? (
-            <div className="py-12 text-center text-xs text-gray-500 font-medium">Memuat data siswa akademi...</div>
+            <div className="py-8 text-center text-xs text-gray-500 font-medium">Memuat data siswa akademi...</div>
           ) : filteredStudents.length === 0 ? (
             /* MANDATORY ZERO MOCK DATA EMPTY STATE UI */
-            <div className="py-12 border-2 border-dashed border-gray-200 rounded-xl text-center flex flex-col items-center justify-center p-6">
-              <GraduationCap className="w-12 h-12 text-gray-300 mb-3" />
-              <p className="text-sm font-semibold text-gray-700">
+            <div className="py-8 border-2 border-dashed border-gray-200 rounded-xl text-center flex flex-col items-center justify-center p-4">
+              <GraduationCap className="w-10 h-10 text-gray-300 mb-2" />
+              <p className="text-xs sm:text-sm font-semibold text-gray-700">
                 Belum ada siswa terdaftar di akademi {activeAcademy?.name || ''}. Tambahkan siswa baru.
               </p>
-              <p className="text-xs text-gray-400 max-w-sm mt-1 mb-4">
+              <p className="text-[11px] text-gray-400 max-w-sm mt-0.5 mb-3">
                 Klik tombol "+ Tambah Siswa Baru" di atas untuk mendaftarkan siswa pertama akademi Anda.
               </p>
               <button
@@ -1382,14 +1382,14 @@ export default function AcademyPage({ userProfile }) {
                   setEditingStudent(null);
                   setShowAddModal(true);
                 }}
-                className="px-4 py-2 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white text-xs font-semibold rounded-xl transition-colors cursor-pointer shadow-sm"
+                className="px-3 py-1.5 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs"
               >
                 + Tambah Siswa Pertama
               </button>
             </div>
           ) : (
             /* DAFTAR SISWA (LIST VIEW / ROW HORIZONTAL MODERN) */
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {filteredStudents.map((st) => {
                 const sppInfo = calculateSppStatus(st, sppBillingStartDay, sppDueDay);
                 const waUrl = formatWhatsAppUrl(st.parentPhone, st.studentName, arenaName);
@@ -1398,7 +1398,7 @@ export default function AcademyPage({ userProfile }) {
                 return (
                   <div
                     key={st.id}
-                    className="flex flex-col lg:flex-row gap-3 lg:items-center justify-between p-3 border border-slate-200/80 dark:border-white/10 rounded-xl bg-white dark:bg-[#162320] mb-2 hover:border-[#354944]/40 hover:shadow-xs transition-all"
+                    className="flex flex-col lg:flex-row gap-2.5 lg:items-center justify-between p-2.5 sm:p-3 border border-slate-200/80 dark:border-white/10 rounded-xl bg-white dark:bg-[#162320] mb-1.5 hover:border-[#354944]/40 hover:shadow-xs transition-all"
                   >
                     {/* Area 1: Profil Siswa (Kiri) */}
                     <div className="flex items-center gap-2.5 flex-1 min-w-0">
@@ -1407,10 +1407,10 @@ export default function AcademyPage({ userProfile }) {
                         <img
                           src={st.photoUrl}
                           alt={st.studentName}
-                          className="w-8 h-8 rounded-full object-cover flex-shrink-0 border border-[#354944]/30 shadow-2xs"
+                          className="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover flex-shrink-0 border border-[#354944]/30 shadow-2xs"
                         />
                       ) : (
-                        <div className="w-8 h-8 rounded-full bg-[#354944] text-white font-bold flex items-center justify-center text-xs flex-shrink-0 border border-[#C89D32]/40 shadow-2xs">
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#354944] text-white font-bold flex items-center justify-center text-[11px] sm:text-xs flex-shrink-0 border border-[#C89D32]/40 shadow-2xs">
                           {getStudentInitials(st.studentName)}
                         </div>
                       )}
@@ -1418,18 +1418,18 @@ export default function AcademyPage({ userProfile }) {
                       {/* Teks: Nama Siswa (tanpa truncate) & Usia / Asal Sekolah */}
                       <div className="min-w-0 flex-1">
                         <h3
-                          className="font-bold text-gray-900 whitespace-normal break-words text-sm sm:text-base leading-snug hover:text-[#354944] transition-colors cursor-pointer"
+                          className="font-bold text-gray-900 whitespace-normal break-words text-xs sm:text-sm leading-snug hover:text-[#354944] transition-colors cursor-pointer"
                           onClick={() => setDetailModalStudent(st)}
                           title={st.studentName}
                         >
                           {st.studentName}
                         </h3>
-                        <p className="text-xs text-gray-500 break-words whitespace-normal mt-0.5 leading-relaxed">
+                        <p className="text-[11px] text-gray-500 break-words whitespace-normal mt-0.5 leading-tight">
                           {age !== '-' && (
-                            <span>{age} Tahun</span>
+                            <span>{age} Thn</span>
                           )}
                           {age !== '-' && st.schoolOrigin && (
-                            <span className="mx-1.5 text-gray-400">&bull;</span>
+                            <span className="mx-1 text-gray-400">&bull;</span>
                           )}
                           {st.schoolOrigin && (
                             <span>{st.schoolOrigin}</span>
@@ -1442,22 +1442,22 @@ export default function AcademyPage({ userProfile }) {
                     </div>
 
                     {/* Area 2: Info Akademi (Tengah Kiri) */}
-                    <div className="flex flex-col gap-1 flex-1 min-w-0">
+                    <div className="flex flex-col gap-0.5 flex-1 min-w-0">
                       {/* Badge Cabang & Kelas Sejajar */}
                       <div className="inline-flex items-center gap-1.5 flex-wrap">
-                        <span className="px-2.5 py-0.5 bg-[#354944]/10 text-[#354944] font-semibold text-xs rounded border border-[#354944]/20">
+                        <span className="px-2 py-0.5 bg-[#354944]/10 text-[#354944] font-semibold text-[10px] sm:text-[11px] rounded border border-[#354944]/20">
                           {st.sportCategory || activeAcademy?.sport || 'Olahraga'}
                         </span>
                         {st.className && (
-                          <span className="px-2.5 py-0.5 bg-slate-100 text-slate-700 font-medium text-xs rounded border border-slate-200">
+                          <span className="px-2 py-0.5 bg-slate-100 text-slate-700 font-medium text-[10px] sm:text-[11px] rounded border border-slate-200">
                             {st.className}
                           </span>
                         )}
                       </div>
 
                       {/* Teks Abu-abu Kecil dengan Ikon User untuk Nama Pelatih */}
-                      <div className="flex items-center gap-1.5 text-xs text-gray-500 mt-0.5">
-                        <User className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                      <div className="flex items-center gap-1 text-[11px] text-gray-500 mt-0.5">
+                        <User className="w-3 h-3 text-gray-400 shrink-0" />
                         <span className="truncate">
                           <span>Pelatih: </span>
                           <span className="font-medium text-gray-700">{st.coachName || 'Belum Ditentukan'}</span>
@@ -1466,14 +1466,14 @@ export default function AcademyPage({ userProfile }) {
                     </div>
 
                     {/* Area 3: Kontak Wali & Keuangan (Tengah Kanan) */}
-                    <div className="flex flex-col gap-1 flex-1 min-w-0">
+                    <div className="flex flex-col gap-0.5 flex-1 min-w-0">
                       {/* Nama Wali & No HP dengan Ikon Phone */}
-                      <div className="flex items-center gap-1.5 text-xs text-gray-700 font-medium">
-                        <Phone className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                      <div className="flex items-center gap-1 text-[11px] text-gray-700 font-medium">
+                        <Phone className="w-3 h-3 text-gray-400 shrink-0" />
                         <span className="truncate">
                           <span>{st.parentName || '-'}</span>
                           {st.parentPhone && (
-                            <span className="text-gray-500 text-[11px] ml-1">({st.parentPhone})</span>
+                            <span className="text-gray-500 text-[10px] ml-1">({st.parentPhone})</span>
                           )}
                         </span>
                       </div>
@@ -1481,11 +1481,11 @@ export default function AcademyPage({ userProfile }) {
                       {/* Badge Status SPP */}
                       <div className="mt-0.5">
                         {sppInfo.isPaid ? (
-                          <span className="inline-block px-2.5 py-0.5 bg-green-100 text-green-700 font-bold text-[10px] rounded-full uppercase tracking-wider border border-green-200/80">
+                          <span className="inline-block px-2 py-0.5 bg-green-100 text-green-700 font-bold text-[9px] rounded-full uppercase tracking-wider border border-green-200/80">
                             LUNAS BULAN INI
                           </span>
                         ) : (
-                          <span className="inline-block px-2.5 py-0.5 bg-rose-100 text-rose-700 font-bold text-[10px] rounded-full uppercase tracking-wider border border-rose-200/80">
+                          <span className="inline-block px-2 py-0.5 bg-rose-100 text-rose-700 font-bold text-[9px] rounded-full uppercase tracking-wider border border-rose-200/80">
                             {sppInfo.statusText || 'MENUNGGAK'}
                           </span>
                         )}
@@ -1493,22 +1493,22 @@ export default function AcademyPage({ userProfile }) {
                     </div>
 
                     {/* Area 4: Aksi (Kanan) */}
-                    <div className="flex items-center gap-2 justify-start lg:justify-end shrink-0 pt-2 lg:pt-0 border-t lg:border-t-0 border-gray-100">
+                    <div className="flex items-center gap-1.5 justify-start lg:justify-end shrink-0 pt-1.5 lg:pt-0 border-t lg:border-t-0 border-gray-100">
                       {/* Tombol Utama: Hubungi Wali */}
                       {st.parentPhone ? (
                         <a
                           href={waUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/90 rounded-lg transition-colors cursor-pointer"
+                          className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/90 rounded-lg transition-colors cursor-pointer"
                           title="Hubungi Wali Murid via WhatsApp"
                         >
-                          <MessageCircle className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <MessageCircle className="w-3 h-3 text-emerald-600 shrink-0" />
                           <span>Hubungi Wali</span>
                         </a>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-400 bg-slate-50 rounded-lg select-none">
-                          <MessageCircle className="w-3.5 h-3.5 text-slate-300 shrink-0" />
+                        <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-slate-400 bg-slate-50 rounded-lg select-none">
+                          <MessageCircle className="w-3 h-3 text-slate-300 shrink-0" />
                           <span>Tanpa No. HP</span>
                         </span>
                       )}
@@ -1518,10 +1518,10 @@ export default function AcademyPage({ userProfile }) {
                         <button
                           type="button"
                           onClick={() => setPaymentModalStudent(st)}
-                          className="p-1.5 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer border border-emerald-200/80"
+                          className="p-1 text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors cursor-pointer border border-emerald-200/80"
                           title="Catat Pembayaran SPP"
                         >
-                          <CreditCard className="w-4 h-4" />
+                          <CreditCard className="w-3.5 h-3.5" />
                         </button>
                       )}
 
@@ -1529,19 +1529,19 @@ export default function AcademyPage({ userProfile }) {
                       <button
                         type="button"
                         onClick={() => setIdCardTarget({ data: st, role: 'SISWA' })}
-                        className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                        className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
                         title="Generate ID Card Siswa"
                       >
-                        <IdCard className="w-4 h-4" />
+                        <IdCard className="w-3.5 h-3.5" />
                       </button>
 
                       <button
                         type="button"
                         onClick={() => setDetailModalStudent(st)}
-                        className="p-1.5 text-slate-400 hover:text-[#354944] hover:bg-[#354944]/10 rounded-lg transition-colors cursor-pointer"
+                        className="p-1 text-slate-400 hover:text-[#354944] hover:bg-[#354944]/10 rounded-lg transition-colors cursor-pointer"
                         title="Lihat Detail Siswa"
                       >
-                        <Eye className="w-4 h-4" />
+                        <Eye className="w-3.5 h-3.5" />
                       </button>
 
                       <button
@@ -1550,10 +1550,10 @@ export default function AcademyPage({ userProfile }) {
                           setEditingStudent(st);
                           setShowAddModal(true);
                         }}
-                        className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
+                        className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer"
                         title="Edit Siswa / Pindah Kelas"
                       >
-                        <Edit3 className="w-4 h-4" />
+                        <Edit3 className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
@@ -1566,9 +1566,9 @@ export default function AcademyPage({ userProfile }) {
 
       {/* TAB 3: PELATIH */}
       {activeAcademyTab === 'pelatih' && (
-        <div className="bg-white dark:bg-[#14211E] rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200 dark:border-white/10 space-y-4 text-left">
-          <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 pb-3">
-            <h2 className="font-bold text-sm sm:text-base text-slate-800 dark:text-slate-100 flex items-center space-x-2" style={{ fontSize: '15px' }}>
+        <div className="bg-white dark:bg-[#14211E] rounded-xl p-3 sm:p-3.5 shadow-xs border border-slate-200/80 dark:border-white/10 space-y-2.5 text-left">
+          <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 pb-2">
+            <h2 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 flex items-center space-x-1.5">
               <User className="w-4 h-4 text-[#354944] dark:text-[#C89D32]" />
               <span>Tim Pelatih ({filteredCoaches.length})</span>
             </h2>
@@ -1578,7 +1578,7 @@ export default function AcademyPage({ userProfile }) {
                 setEditingCoach(null);
                 setShowCoachModal(true);
               }}
-              className="px-3.5 py-2 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white font-semibold text-xs rounded-xl shadow-sm transition-colors cursor-pointer flex items-center space-x-1"
+              className="px-2.5 py-1 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white font-semibold text-xs rounded-lg shadow-xs transition-colors cursor-pointer flex items-center space-x-1"
             >
               <UserPlus className="w-3.5 h-3.5" />
               <span>+ Tambah Pelatih</span>
@@ -1586,7 +1586,7 @@ export default function AcademyPage({ userProfile }) {
           </div>
 
           {coachesError && (
-            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-xl text-amber-800 dark:text-amber-300 text-xs flex items-center justify-between">
+            <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 rounded-lg text-amber-800 dark:text-amber-300 text-xs flex items-center justify-between">
               <span>Perhatian: Gagal menyinkronkan data pelatih ({coachesError}).</span>
               <button
                 type="button"
@@ -1599,16 +1599,16 @@ export default function AcademyPage({ userProfile }) {
           )}
 
           {loadingCoaches ? (
-            <div className="py-12 text-center text-xs text-slate-500 dark:text-slate-400 flex flex-col items-center justify-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#354944] dark:border-[#C89D32] mb-3"></div>
+            <div className="py-8 text-center text-xs text-slate-500 dark:text-slate-400 flex flex-col items-center justify-center">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#354944] dark:border-[#C89D32] mb-2"></div>
               <p>Memuat data pelatih...</p>
             </div>
           ) : filteredCoaches.length === 0 ? (
             /* EMPTY STATE UNTUK TAB PELATIH */
-            <div className="py-12 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl text-center flex flex-col items-center justify-center p-6">
-              <User className="w-12 h-12 text-slate-300 dark:text-slate-600 mb-3" />
-              <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">Belum ada pelatih terdaftar di akademi ini.</p>
-              <p className="text-xs text-slate-400 dark:text-slate-400 max-w-sm mt-1 mb-4">
+            <div className="py-8 border-2 border-dashed border-slate-200 dark:border-white/10 rounded-xl text-center flex flex-col items-center justify-center p-4">
+              <User className="w-10 h-10 text-slate-300 dark:text-slate-600 mb-2" />
+              <p className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200">Belum ada pelatih terdaftar di akademi ini.</p>
+              <p className="text-[11px] text-slate-400 dark:text-slate-400 max-w-sm mt-0.5 mb-3">
                 Daftarkan instruktur &amp; pelatih utama untuk memimpin kelas latihan {activeAcademy?.name || 'akademi Anda'}.
               </p>
               <button
@@ -1616,31 +1616,31 @@ export default function AcademyPage({ userProfile }) {
                   setEditingCoach(null);
                   setShowCoachModal(true);
                 }}
-                className="px-4 py-2 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white text-xs font-semibold rounded-xl transition-colors cursor-pointer shadow-sm"
+                className="px-3 py-1.5 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs"
               >
                 + Tambah Pelatih Pertama
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">
               {filteredCoaches.map((c) => (
-                <div key={c.id} className="p-4 rounded-xl border border-slate-200 bg-white hover:border-[#354944]/40 hover:shadow-xs transition-all space-y-3">
+                <div key={c.id} className="p-2.5 sm:p-3 rounded-xl border border-slate-200/80 bg-white hover:border-[#354944]/40 hover:shadow-xs transition-all space-y-2">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="px-2 py-0.5 bg-[#354944]/10 text-[#354944] font-bold text-[9px] rounded-md uppercase">
+                    <div className="flex items-center gap-1 flex-wrap">
+                      <span className="px-1.5 py-0.5 bg-[#354944]/10 text-[#354944] font-bold text-[9px] rounded uppercase">
                         {c.sportSpecialty || 'Badminton'}
                       </span>
                       {c.license && (
-                        <span className="px-2 py-0.5 bg-indigo-50 text-indigo-800 font-bold text-[9px] rounded-md">
+                        <span className="px-1.5 py-0.5 bg-indigo-50 text-indigo-800 font-bold text-[9px] rounded">
                           {c.license}
                         </span>
                       )}
                     </div>
-                    <div className="flex items-center gap-1">
+                    <div className="flex items-center gap-0.5">
                       <button
                         type="button"
                         onClick={() => setIdCardTarget({ data: c, role: 'PELATIH' })}
-                        className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                        className="p-1 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded transition-colors cursor-pointer"
                         title="Generate ID Card Pelatih"
                       >
                         <IdCard className="w-3.5 h-3.5" />
@@ -1651,7 +1651,7 @@ export default function AcademyPage({ userProfile }) {
                           setEditingCoach(c);
                           setShowCoachModal(true);
                         }}
-                        className="p-1 text-slate-400 hover:text-[#354944] hover:bg-[#354944]/10 rounded-lg transition-colors cursor-pointer"
+                        className="p-1 text-slate-400 hover:text-[#354944] hover:bg-[#354944]/10 rounded transition-colors cursor-pointer"
                         title="Edit Data Pelatih"
                       >
                         <Edit3 className="w-3.5 h-3.5" />
@@ -1659,25 +1659,25 @@ export default function AcademyPage({ userProfile }) {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2.5">
                     {c.photoUrl ? (
                       <img
                         src={c.photoUrl}
                         alt={c.name}
-                        className="w-10 h-10 rounded-full object-cover shrink-0 border border-[#354944]/30 shadow-2xs"
+                        className="w-8 h-8 sm:w-9 sm:h-9 rounded-full object-cover shrink-0 border border-[#354944]/30 shadow-2xs"
                       />
                     ) : (
-                      <div className="w-10 h-10 rounded-full bg-[#354944] text-white font-bold flex items-center justify-center text-sm shrink-0 border border-[#C89D32]/40 shadow-2xs">
+                      <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-full bg-[#354944] text-white font-bold flex items-center justify-center text-xs shrink-0 border border-[#C89D32]/40 shadow-2xs">
                         {getStudentInitials(c.name)}
                       </div>
                     )}
                     <div className="min-w-0 flex-1">
-                      <h4 className="font-bold text-sm text-slate-800 truncate" title={c.name}>
+                      <h4 className="font-bold text-xs sm:text-sm text-slate-800 truncate" title={c.name}>
                         {c.name}
                       </h4>
-                      <p className="text-xs text-slate-500 flex items-center space-x-1 mt-0.5 truncate">
+                      <p className="text-[11px] text-slate-500 flex items-center space-x-1 mt-0.5 truncate">
                         <Phone className="w-3 h-3 text-green-600 shrink-0" />
-                        <span>{c.phone || 'Tidak ada nomor WhatsApp'}</span>
+                        <span>{c.phone || 'Tidak ada WhatsApp'}</span>
                       </p>
                     </div>
                   </div>
@@ -1690,9 +1690,9 @@ export default function AcademyPage({ userProfile }) {
 
       {/* TAB 4: KELAS & KELOMPOK */}
       {activeAcademyTab === 'kelas' && (
-        <div className="bg-white rounded-2xl p-5 sm:p-6 shadow-sm border border-slate-200 space-y-4 text-left">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-            <h2 className="font-bold text-sm sm:text-base text-slate-800 flex items-center space-x-2" style={{ fontSize: '15px' }}>
+        <div className="bg-white rounded-xl p-3 sm:p-3.5 shadow-xs border border-slate-200/80 space-y-2.5 text-left">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+            <h2 className="font-bold text-xs sm:text-sm text-slate-800 flex items-center space-x-1.5">
               <BookOpen className="w-4 h-4 text-[#354944]" />
               <span>Daftar Kelas ({filteredClasses.length})</span>
             </h2>
@@ -1703,7 +1703,7 @@ export default function AcademyPage({ userProfile }) {
                   setEditingClass(null);
                   setShowClassModal(true);
                 }}
-                className="px-3.5 py-2 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white font-semibold text-xs rounded-xl shadow-sm transition-colors cursor-pointer flex items-center space-x-1"
+                className="px-2.5 py-1 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white font-semibold text-xs rounded-lg shadow-xs transition-colors cursor-pointer flex items-center space-x-1"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>+ Buat Kelas</span>
@@ -1712,13 +1712,13 @@ export default function AcademyPage({ userProfile }) {
           </div>
 
           {loadingClasses ? (
-            <p className="py-12 text-center text-xs text-slate-500">Memuat daftar kelas...</p>
+            <p className="py-8 text-center text-xs text-slate-500">Memuat daftar kelas...</p>
           ) : filteredClasses.length === 0 ? (
             /* EMPTY STATE UNTUK TAB KELAS */
-            <div className="py-12 border-2 border-dashed border-slate-200 rounded-xl text-center flex flex-col items-center justify-center p-6">
-              <BookOpen className="w-12 h-12 text-slate-300 mb-3" />
-              <p className="text-sm font-semibold text-slate-700">Belum ada kelas/kelompok latihan.</p>
-              <p className="text-xs text-slate-400 max-w-sm mt-1 mb-4">
+            <div className="py-8 border-2 border-dashed border-slate-200 rounded-xl text-center flex flex-col items-center justify-center p-4">
+              <BookOpen className="w-10 h-10 text-slate-300 mb-2" />
+              <p className="text-xs sm:text-sm font-semibold text-slate-700">Belum ada kelas/kelompok latihan.</p>
+              <p className="text-[11px] text-slate-400 max-w-sm mt-0.5 mb-3">
                 {isCoachOnly
                   ? 'Belum ada kelas yang terdaftar atau ditugaskan kepada Anda pada akademi ini.'
                   : 'Buat kelas latihan berdasarkan kelompok umur & alokasikan pelatih utama.'}
@@ -1729,18 +1729,18 @@ export default function AcademyPage({ userProfile }) {
                     setEditingClass(null);
                     setShowClassModal(true);
                   }}
-                  className="px-4 py-2 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white text-xs font-semibold rounded-xl transition-colors cursor-pointer shadow-sm"
+                  className="px-3 py-1.5 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs"
                 >
                   + Buat Kelas Pertama
                 </button>
               ) : (
-                <p className="text-xs text-slate-500 font-medium italic">
+                <p className="text-[11px] text-slate-500 font-medium italic">
                   Hubungi pengelola akademi untuk penugasan kelas Anda.
                 </p>
               )}
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">
               {filteredClasses.map((cls) => {
                 const scheduleItems = parseScheduleItems(cls);
                 const enrolledCount = filteredStudents.filter((s) => s.classId === cls.id).length;
@@ -1748,30 +1748,30 @@ export default function AcademyPage({ userProfile }) {
                 const isFull = enrolledCount >= maxQuota;
 
                 return (
-                  <div key={cls.id} className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm rounded-2xl p-4 hover:border-[#354944]/40 transition-all space-y-3 flex flex-col justify-between group">
-                    <div className="space-y-2.5">
+                  <div key={cls.id} className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-2xs rounded-xl p-3 sm:p-3.5 hover:border-[#354944]/40 transition-all space-y-2 flex flex-col justify-between group">
+                    <div className="space-y-2">
                       {/* Header Kelas */}
-                      <div className="flex items-center justify-between flex-wrap gap-1.5">
+                      <div className="flex items-center justify-between flex-wrap gap-1">
                         <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                          <span className="px-2.5 py-0.5 bg-[#354944]/10 dark:bg-[#354944]/30 text-[#354944] dark:text-[#C89D32] font-bold text-[10px] rounded-md uppercase border border-[#354944]/20 shrink-0">
+                          <span className="px-2 py-0.5 bg-[#354944]/10 dark:bg-[#354944]/30 text-[#354944] dark:text-[#C89D32] font-bold text-[9px] rounded uppercase border border-[#354944]/20 shrink-0">
                             {cls.sport || 'Sports'}
                           </span>
                           {cls.tierCode && cls.tierCode !== 'ALL_AGE' && (
-                            <span className="px-2 py-0.5 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-[#C89D32] font-extrabold text-[10px] rounded-md border border-amber-200/80 dark:border-amber-800/60 truncate max-w-[120px]" title={cls.tierLabel || cls.tierCode}>
+                            <span className="px-1.5 py-0.5 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-[#C89D32] font-extrabold text-[9px] rounded border border-amber-200/80 dark:border-amber-800/60 truncate max-w-[110px]" title={cls.tierLabel || cls.tierCode}>
                               {cls.tierLabel || cls.tierCode}
                             </span>
                           )}
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200/80 dark:border-emerald-800/50">Aktif</span>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded-full border border-emerald-200/80 dark:border-emerald-800/50">Aktif</span>
                           
                           {/* Tombol Edit & Hapus Kelas */}
                           {!isCoachOnly && (
-                            <div className="flex items-center gap-1 ml-1 pl-1 border-l border-slate-200 dark:border-slate-700">
+                            <div className="flex items-center gap-0.5 ml-1 pl-1 border-l border-slate-200 dark:border-slate-700">
                               <button
                                 type="button"
                                 onClick={() => handleEditClass(cls)}
-                                className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/50 rounded-lg transition-colors cursor-pointer"
+                                className="p-0.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/50 rounded transition-colors cursor-pointer"
                                 title="Edit Data Kelas"
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
@@ -1779,7 +1779,7 @@ export default function AcademyPage({ userProfile }) {
                               <button
                                 type="button"
                                 onClick={() => handleDeleteClass(cls.id)}
-                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors cursor-pointer"
+                                className="p-0.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded transition-colors cursor-pointer"
                                 title="Hapus Kelas"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
@@ -1791,63 +1791,63 @@ export default function AcademyPage({ userProfile }) {
 
                       {/* Judul & Pelatih */}
                       <div>
-                        <h4 className="font-bold text-base text-slate-900 dark:text-slate-100 tracking-tight">{cls.className}</h4>
-                        <div className="flex items-center justify-between mt-1 flex-wrap gap-1 text-xs">
+                        <h4 className="font-bold text-xs sm:text-sm text-slate-900 dark:text-slate-100 tracking-tight">{cls.className}</h4>
+                        <div className="flex items-center justify-between mt-0.5 flex-wrap gap-1 text-[11px]">
                           <p className="text-slate-600 dark:text-slate-400 font-medium flex items-center gap-1">
-                            <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <User className="w-3 h-3 text-slate-400 shrink-0" />
                             <span>Pelatih: <strong className="text-slate-800 dark:text-slate-200">{cls.coachName || 'Pelatih Utama'}</strong></span>
                           </p>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
                             isFull 
                               ? 'bg-rose-50 text-rose-700 border-rose-200' 
                               : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                           }`}>
-                            Kuota: {enrolledCount}/{maxQuota} Atlet {isFull ? '● Penuh' : ''}
+                            {enrolledCount}/{maxQuota} Atlet {isFull ? '● Penuh' : ''}
                           </span>
                         </div>
                         {((cls.minAge !== undefined && cls.minAge !== null) || (cls.maxAge !== undefined && cls.maxAge !== null)) && (
                           <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
-                            Target Usia: <strong className="text-slate-600 dark:text-slate-300">{cls.minAge || 0} - {cls.maxAge || 99} Tahun</strong>
+                            Target Usia: <strong className="text-slate-600 dark:text-slate-300">{cls.minAge || 0} - {cls.maxAge || 99} Thn</strong>
                           </p>
                         )}
                       </div>
 
                       {/* Daftar Jadwal Per Hari (Vertical List) */}
-                      <div className="pt-2 border-t border-slate-200/70 dark:border-slate-800 space-y-2">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                            <Calendar className="w-3.5 h-3.5 text-[#354944] dark:text-[#C89D32] shrink-0" />
+                      <div className="pt-1.5 border-t border-slate-200/70 dark:border-slate-800 space-y-1.5">
+                        <div className="flex items-center justify-between text-[10px]">
+                          <span className="font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                            <Calendar className="w-3 h-3 text-[#354944] dark:text-[#C89D32] shrink-0" />
                             <span>Jadwal Latihan Rutin</span>
                           </span>
-                          <span className="text-[10px] text-slate-400 dark:text-slate-500 font-medium">
+                          <span className="text-[9px] text-slate-400 dark:text-slate-500 font-medium">
                             {scheduleItems.length} Sesi/Minggu
                           </span>
                         </div>
 
                         {scheduleItems.length === 0 ? (
-                          <div className="text-[11px] text-slate-400 dark:text-slate-500 italic bg-slate-50 dark:bg-slate-800/60 p-2.5 rounded-lg border border-slate-200/80 dark:border-slate-700">
+                          <div className="text-[10px] text-slate-400 dark:text-slate-500 italic bg-slate-50 dark:bg-slate-800/60 p-1.5 rounded-lg border border-slate-200/80 dark:border-slate-700">
                             Belum ada jadwal
                           </div>
                         ) : (
-                          <div className="space-y-1.5">
+                          <div className="space-y-1">
                             {scheduleItems.map((item, idx) => (
                               <div
                                 key={idx}
-                                className="bg-slate-50 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/70 flex items-center justify-between gap-2 p-2 rounded-lg shadow-2xs text-xs"
+                                className="bg-slate-50 dark:bg-slate-800/80 border border-slate-200/60 dark:border-slate-700/70 flex items-center justify-between gap-1.5 p-1.5 rounded-lg shadow-2xs text-[11px]"
                               >
-                                <div className="flex items-center gap-2 min-w-0 flex-wrap sm:flex-nowrap">
-                                  <span className="text-[#354944] dark:text-[#C89D32] font-bold text-xs shrink-0">📅 {item.day}</span>
+                                <div className="flex items-center gap-1.5 min-w-0 flex-wrap sm:flex-nowrap">
+                                  <span className="text-[#354944] dark:text-[#C89D32] font-bold text-[11px] shrink-0">📅 {item.day}</span>
                                   {item.time && (
                                     <>
-                                      <span className="text-slate-300 dark:text-slate-600 font-bold text-[10px] hidden sm:inline">&bull;</span>
-                                      <span className="bg-slate-100 dark:bg-slate-700/80 text-slate-700 dark:text-slate-200 px-2 py-0.5 rounded font-mono text-[11px] font-semibold border border-slate-200/60 dark:border-slate-600/70 shrink-0">
+                                      <span className="text-slate-300 dark:text-slate-600 font-bold text-[9px] hidden sm:inline">&bull;</span>
+                                      <span className="bg-slate-100 dark:bg-slate-700/80 text-slate-700 dark:text-slate-200 px-1.5 py-0.2 rounded font-mono text-[10px] font-semibold border border-slate-200/60 dark:border-slate-600/70 shrink-0">
                                         {item.time}
                                       </span>
                                     </>
                                   )}
                                 </div>
                                 {item.court && (
-                                  <span className="bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2.5 py-0.5 rounded-md text-xs font-medium whitespace-nowrap ml-2 shrink-0">
+                                  <span className="bg-slate-100 dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 px-2 py-0.2 rounded text-[10px] font-medium whitespace-nowrap ml-1 shrink-0">
                                     ({item.court})
                                   </span>
                                 )}
@@ -1860,11 +1860,11 @@ export default function AcademyPage({ userProfile }) {
 
                     {/* Tombol Kunci Jadwal (Hanya untuk Owner & Admin) */}
                     {!isCoachOnly && (
-                      <div className="pt-2.5 border-t border-slate-200/70 dark:border-slate-800">
+                      <div className="pt-2 border-t border-slate-200/70 dark:border-slate-800">
                         <button
                           type="button"
                           onClick={() => setGenerateModalClass(cls)}
-                          className="w-full py-2 bg-[#354944]/10 dark:bg-[#354944]/30 text-[#354944] dark:text-[#C89D32] border border-[#354944]/20 hover:bg-[#354944]/20 font-bold text-xs rounded-xl transition-colors cursor-pointer flex items-center justify-center space-x-1.5 shadow-2xs"
+                          className="w-full py-1.5 bg-[#354944]/10 dark:bg-[#354944]/30 text-[#354944] dark:text-[#C89D32] border border-[#354944]/20 hover:bg-[#354944]/20 font-bold text-xs rounded-lg transition-colors cursor-pointer flex items-center justify-center space-x-1.5 shadow-2xs"
                         >
                           <Lock className="w-3.5 h-3.5 text-[#354944] dark:text-[#C89D32]" />
                           <span>Kunci Jadwal Lapangan</span>
@@ -1881,38 +1881,38 @@ export default function AcademyPage({ userProfile }) {
 
       {/* TAB 5: PRESENSI & EVALUASI */}
       {activeAcademyTab === 'presensi' && (
-        <div className="space-y-6 text-left">
+        <div className="space-y-3.5 text-left">
           {/* HERO SECTION BERGRADIEN ELEGAN (#354944) */}
-          <div className="hidden lg:block bg-[#354944] text-white p-5 sm:p-6 pb-12 rounded-3xl shadow-lg relative overflow-hidden space-y-2">
-            <div className="absolute right-0 top-0 w-64 h-64 bg-white/5 rounded-full blur-2xl pointer-events-none" />
+          <div className="hidden lg:block bg-[#354944] text-white p-3.5 sm:p-4 pb-8 rounded-2xl shadow-md relative overflow-hidden space-y-1.5">
+            <div className="absolute right-0 top-0 w-48 h-48 bg-white/5 rounded-full blur-xl pointer-events-none" />
             <div className="flex items-center justify-between">
-              <span className="px-3 py-1 bg-[#C89D32]/20 text-[#C89D32] border border-[#C89D32]/40 rounded-full text-[10px] font-black uppercase tracking-wider">
+              <span className="px-2.5 py-0.5 bg-[#C89D32]/20 text-[#C89D32] border border-[#C89D32]/40 rounded-full text-[9px] font-bold uppercase tracking-wider">
                 Modul Akademik &amp; Asesmen
               </span>
               <span className="text-xs text-slate-300 font-medium">
                 {activeAcademy?.name || 'Workspace Aktif'}
               </span>
             </div>
-            <h2 className="text-lg sm:text-xl font-black tracking-tight">Presensi &amp; Evaluasi Atlet</h2>
+            <h2 className="text-base sm:text-lg font-bold tracking-tight">Presensi &amp; Evaluasi Atlet</h2>
             <p className="text-xs text-slate-300 max-w-xl">
               Pencatatan presensi harian, rapor asesmen performa komprehensif, dan kurva tumbuh kembang antropometri atlet.
             </p>
           </div>
 
           {/* KONTANTER KONTEN UTAMA DENGAN EFEK KARTU MENGAMBANG MELENGKUNG */}
-          <div className="rounded-3xl lg:rounded-t-3xl bg-[#F8FAF9] dark:bg-[#0F1715] shadow-2xl p-4 sm:p-6 mt-0 lg:mt-[-32px] relative z-10 border border-slate-200/70 dark:border-slate-800 space-y-5">
+          <div className="rounded-2xl bg-[#F8FAF9] dark:bg-[#0F1715] shadow-xs p-3 sm:p-3.5 mt-0 lg:mt-[-20px] relative z-10 border border-slate-200/70 dark:border-slate-800 space-y-3">
             
             {/* BARIS KONTROL ATAS: SEGMENTED NAVIGATION PILLS + FILTER DROPDOWN KELAS GLOBAL */}
-            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 p-2.5 bg-white dark:bg-[#162320] rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs">
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 p-1.5 sm:p-2 bg-white dark:bg-[#162320] rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs">
               
               {/* 1. SEGMENTED CONTROL 3 TAB (1 BARIS PENUH TANPA SCROLL) */}
-              <div className="grid grid-cols-3 gap-1 p-1 bg-slate-200/70 dark:bg-[#111C19] rounded-2xl w-full">
+              <div className="grid grid-cols-3 gap-1 p-0.5 bg-slate-200/70 dark:bg-[#111C19] rounded-xl w-full">
                 <button
                   type="button"
                   onClick={() => setAttendanceSubTab('presensi')}
-                  className={`text-[11px] font-bold py-2 text-center rounded-xl transition-all cursor-pointer ${
+                  className={`text-xs font-bold py-1.5 text-center rounded-lg transition-all cursor-pointer ${
                     attendanceSubTab === 'presensi'
-                      ? 'bg-[#354944] text-white shadow-sm border-b-2 border-[#C89D32]'
+                      ? 'bg-[#354944] text-white shadow-xs border-b-2 border-[#C89D32]'
                       : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
                   }`}
                 >
@@ -1922,9 +1922,9 @@ export default function AcademyPage({ userProfile }) {
                 <button
                   type="button"
                   onClick={() => setAttendanceSubTab('evaluasi')}
-                  className={`text-[11px] font-bold py-2 text-center rounded-xl transition-all cursor-pointer ${
+                  className={`text-xs font-bold py-1.5 text-center rounded-lg transition-all cursor-pointer ${
                     attendanceSubTab === 'evaluasi'
-                      ? 'bg-[#354944] text-white shadow-sm border-b-2 border-[#C89D32]'
+                      ? 'bg-[#354944] text-white shadow-xs border-b-2 border-[#C89D32]'
                       : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
                   }`}
                 >
@@ -1934,9 +1934,9 @@ export default function AcademyPage({ userProfile }) {
                 <button
                   type="button"
                   onClick={() => setAttendanceSubTab('antropometri')}
-                  className={`text-[11px] font-bold py-2 text-center rounded-xl transition-all cursor-pointer ${
+                  className={`text-xs font-bold py-1.5 text-center rounded-lg transition-all cursor-pointer ${
                     attendanceSubTab === 'antropometri'
-                      ? 'bg-[#354944] text-white shadow-sm border-b-2 border-[#C89D32]'
+                      ? 'bg-[#354944] text-white shadow-xs border-b-2 border-[#C89D32]'
                       : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
                   }`}
                 >
@@ -1945,14 +1945,14 @@ export default function AcademyPage({ userProfile }) {
               </div>
 
               {/* 2. DROPDOWN KELAS SEBAGAI FILTER GLOBAL */}
-              <div className="flex items-center gap-2.5 shrink-0 w-full xl:w-80">
+              <div className="flex items-center gap-2 shrink-0 w-full xl:w-72">
                 <label className="text-xs font-bold text-slate-700 whitespace-nowrap shrink-0">
                   Kelas:
                 </label>
                 <select
                   value={selectedClassId}
                   onChange={(e) => setSelectedClassId(e.target.value)}
-                  className="w-full px-3.5 py-2 bg-white border border-slate-300 rounded-xl focus:bg-white focus:outline-none focus:border-[#354944] focus:ring-2 focus:ring-[#354944]/20 text-xs font-bold text-slate-800 cursor-pointer shadow-2xs"
+                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:bg-white focus:outline-none focus:border-[#354944] focus:ring-1 focus:ring-[#354944]/30 text-xs font-bold text-slate-800 cursor-pointer shadow-2xs"
                 >
                   <option value="">-- Pilih Kelas Latihan --</option>
                   {filteredClasses.map((cls) => (
@@ -1967,14 +1967,14 @@ export default function AcademyPage({ userProfile }) {
             {/* RENDER CONTENT SESUAI KELAS TERPILIH & MODE TAB AKTIF */}
             {!selectedClassId ? (
               /* EMPTY STATE: BELUM MEMILIH KELAS */
-              <div className="py-12 border-2 border-dashed border-slate-200 rounded-xl text-center flex flex-col items-center justify-center p-6 bg-slate-50/50">
-                <ClipboardCheck className="w-12 h-12 text-slate-300 mb-3" />
-                <p className="text-sm font-semibold text-slate-700">
+              <div className="py-8 border-2 border-dashed border-slate-200 rounded-xl text-center flex flex-col items-center justify-center p-4 bg-slate-50/50">
+                <ClipboardCheck className="w-10 h-10 text-slate-300 mb-2" />
+                <p className="text-xs sm:text-sm font-semibold text-slate-700">
                   {filteredClasses.length === 0
                     ? 'Belum ada kelas/kelompok latihan terdaftar.'
                     : 'Pilih kelas terlebih dahulu untuk mulai mencatat presensi, evaluasi, atau growth tracking.'}
                 </p>
-                <p className="text-xs text-slate-400 max-w-sm mt-1 mb-4">
+                <p className="text-[11px] text-slate-400 max-w-sm mt-0.5 mb-3">
                   {filteredClasses.length === 0
                     ? 'Buat kelas latihan terlebih dahulu di tab "Kelas & Kelompok" untuk mulai mengelola presensi.'
                     : 'Pilih salah satu kelas pada dropdown filter di atas untuk membuka lembar kerja.'}
@@ -1982,7 +1982,7 @@ export default function AcademyPage({ userProfile }) {
                 {filteredClasses.length === 0 && (
                   <button
                     onClick={() => setActiveAcademyTab('kelas')}
-                    className="px-4 py-2 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white text-xs font-semibold rounded-xl transition-colors cursor-pointer shadow-sm"
+                    className="px-3 py-1.5 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs"
                   >
                     + Buat Kelas Baru
                   </button>
@@ -1990,38 +1990,38 @@ export default function AcademyPage({ userProfile }) {
               </div>
             ) : (
               /* KELAS DIPILIH: RINCIAN KELAS RINGKAS & BERSIH (TANPA DUPLIKASI TOMBOL TAB) */
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {(() => {
                   const currentClass = filteredClasses.find((c) => c.id === selectedClassId);
                   if (!currentClass) return null;
 
                   return (
-                    <div className={`${attendanceSubTab === 'evaluasi' || attendanceSubTab === 'antropometri' ? 'hidden lg:flex' : 'flex'} flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 text-slate-700 dark:text-slate-200 rounded-xl px-4 py-2.5`}>
-                      <div className="flex flex-wrap items-center gap-3">
-                        <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 tracking-tight">
+                    <div className={`${attendanceSubTab === 'evaluasi' || attendanceSubTab === 'antropometri' ? 'hidden lg:flex' : 'flex'} flex-col sm:flex-row sm:items-center justify-between gap-2 bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700/80 text-slate-700 dark:text-slate-200 rounded-lg px-3 py-1.5`}>
+                      <div className="flex flex-wrap items-center gap-2.5">
+                        <h3 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100 tracking-tight">
                           {currentClass.className}
                         </h3>
 
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span className="px-2.5 py-0.5 bg-[#354944]/10 dark:bg-[#354944]/30 text-[#354944] dark:text-[#C89D32] font-medium text-[11px] rounded-full border border-[#354944]/20">
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <span className="px-2 py-0.2 bg-[#354944]/10 dark:bg-[#354944]/30 text-[#354944] dark:text-[#C89D32] font-medium text-[10px] rounded-full border border-[#354944]/20">
                             {currentClass.sport || 'Sports'}
                           </span>
                           {currentClass.ageGroup && (
-                            <span className="px-2.5 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-medium text-[11px] rounded-full border border-emerald-100/80 dark:border-emerald-800/50">
+                            <span className="px-2 py-0.2 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-medium text-[10px] rounded-full border border-emerald-100/80 dark:border-emerald-800/50">
                               {currentClass.ageGroup}
                             </span>
                           )}
                         </div>
 
-                        <div className="h-3.5 w-px bg-slate-300 dark:bg-slate-600 hidden sm:block" />
+                        <div className="h-3 w-px bg-slate-300 dark:bg-slate-600 hidden sm:block" />
 
-                        <div className="flex items-center gap-3 text-xs text-slate-600 dark:text-slate-400 flex-wrap">
+                        <div className="flex items-center gap-2.5 text-[11px] text-slate-600 dark:text-slate-400 flex-wrap">
                           <span className="flex items-center gap-1" title="Pelatih">
-                            <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <User className="w-3 h-3 text-slate-400 shrink-0" />
                             <span className="font-medium text-slate-700 dark:text-slate-200">{currentClass.coachName || 'Instruktur'}</span>
                           </span>
                           <span className="flex items-center gap-1" title="Jadwal Latihan">
-                            <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <Clock className="w-3 h-3 text-slate-400 shrink-0" />
                             <span className="font-medium text-slate-700 dark:text-slate-200">{currentClass.schedule || '-'}</span>
                           </span>
                         </div>
