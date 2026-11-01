@@ -31,12 +31,17 @@ export default function ClassModal({
   onClose,
   userProfile,
   activeAcademy = null,
+  activeAcademyId = null,
   uniqueSports,
   coaches,
   courts = [],
-  onClassAdded
+  classToEdit = null,
+  existingClasses = [],
+  onClassAdded,
+  onClassUpdated
 }) {
   const tenantId = userProfile?.tenant?.id || userProfile?.tenantId || userProfile?.uid;
+  const isEdit = Boolean(classToEdit);
 
   // Cabang olahraga yang mutlak diwarisi dari activeAcademy
   const inheritedSport = useMemo(() => {
@@ -88,17 +93,66 @@ export default function ClassModal({
   // Tiers yang relevan dengan cabang olahraga yang dipilih
   const currentTiers = useMemo(() => getTiersForSport(sport), [sport]);
 
-  // Re-sync sport state whenever modal opens or inheritedSport changes
+  // Normalisasi string pada filter lapangan (case & space insensitive)
+  const normSelectedSport = normalizeSportString(sport);
+  const matchedCourts = safeCourts.filter((court) => {
+    return normalizeSportString(court.sport) === normSelectedSport;
+  });
+  const fallbackCourts = safeCourts.filter((court) => {
+    return normalizeSportString(court.sport) !== normSelectedSport;
+  });
+  const hasMatchedCourts = matchedCourts.length > 0;
+  const displayCourts = hasMatchedCourts ? matchedCourts : safeCourts;
+
+  // Hydrate or reset form state whenever modal opens or classToEdit changes
   useEffect(() => {
     if (isOpen) {
-      setSport(inheritedSport);
-    }
-  }, [isOpen, inheritedSport]);
+      setErrorMsg(null);
+      if (classToEdit) {
+        setClassName(classToEdit.className || classToEdit.name || '');
+        setSport(classToEdit.sport || inheritedSport);
+        setCoachId(classToEdit.coachId || coaches?.[0]?.id || '');
+        setTierCode(classToEdit.tierCode || 'ALL_AGE');
+        setTierLabel(classToEdit.tierLabel || 'Umum / Lintas Usia');
+        setMinAge(classToEdit.minAge !== undefined && classToEdit.minAge !== null ? classToEdit.minAge : 6);
+        setMaxAge(classToEdit.maxAge !== undefined && classToEdit.maxAge !== null ? classToEdit.maxAge : 12);
+        setMaxQuota(classToEdit.maxQuota || 20);
 
-  // Re-sync tier ketika sport atau modal dibuka
+        if (Array.isArray(classToEdit.schedules) && classToEdit.schedules.length > 0) {
+          setSchedules(classToEdit.schedules.map((s, idx) => ({
+            id: s.id || String(idx + 1),
+            day: s.day || 'Senin',
+            startTime: s.startTime || s.start_time || '15:00',
+            endTime: s.endTime || s.end_time || '17:00',
+            courtId: s.courtId || s.court_id || '',
+            courtName: s.courtName || s.court_name || s.court || ''
+          })));
+        } else {
+          const defaultCourt = displayCourts[0];
+          setSchedules([
+            { id: '1', day: 'Senin', startTime: '15:00', endTime: '17:00', courtId: defaultCourt?.id || '', courtName: defaultCourt?.name || '' }
+          ]);
+        }
+      } else {
+        setClassName('');
+        setSport(inheritedSport);
+        setCoachId(coaches?.[0]?.id || '');
+        setTierCode('ALL_AGE');
+        setTierLabel('Umum / Lintas Usia');
+        setMinAge(6);
+        setMaxAge(12);
+        setMaxQuota(20);
+        const defaultCourt = displayCourts[0];
+        setSchedules([
+          { id: '1', day: 'Senin', startTime: '15:00', endTime: '17:00', courtId: defaultCourt?.id || '', courtName: defaultCourt?.name || '' }
+        ]);
+      }
+    }
+  }, [isOpen, classToEdit]);
+
+  // Re-sync tier ketika sport diubah secara manual jika bukan mode edit
   useEffect(() => {
-    if (isOpen && currentTiers.length > 0) {
-      // Prioritaskan tier representatif jika ada
+    if (isOpen && !classToEdit && currentTiers.length > 0) {
       const defaultTier = currentTiers.find((t) => 
         t.code === 'U-12' || t.code === 'T10_RED' || t.code === 'LEVEL_2'
       ) || currentTiers[0];
@@ -109,12 +163,11 @@ export default function ClassModal({
       setMaxAge(defaultTier.maxAge);
       setMaxQuota(defaultTier.defaultQuota || 20);
 
-      // Otomatis rekomendasikan nama kelas jika masih kosong
       if (!className) {
         setClassName(getSuggestedClassName(sport, defaultTier));
       }
     }
-  }, [sport, isOpen]);
+  }, [sport, isOpen, classToEdit]);
 
   // Handler pergantian Tier / Kelompok Umur
   const handleTierChange = (newCode) => {
@@ -127,29 +180,17 @@ export default function ClassModal({
     setMaxAge(selected.maxAge);
     setMaxQuota(selected.defaultQuota || 20);
 
-    // Sugesti nama jika nama masih kosong atau pola bawaan
     if (!className || className.includes('Grup') || className.includes('Prestasi') || className.includes('Kelas') || className.includes('ITF') || className.includes('U-')) {
       setClassName(getSuggestedClassName(sport, selected));
     }
   };
 
-  // Normalisasi string pada filter lapangan (case & space insensitive)
-  const normSelectedSport = normalizeSportString(sport);
-  const matchedCourts = safeCourts.filter((court) => {
-    return normalizeSportString(court.sport) === normSelectedSport;
-  });
-  const fallbackCourts = safeCourts.filter((court) => {
-    return normalizeSportString(court.sport) !== normSelectedSport;
-  });
-  const hasMatchedCourts = matchedCourts.length > 0;
-  const displayCourts = hasMatchedCourts ? matchedCourts : safeCourts;
-
-  // Auto-set initial court for schedule rows when sport/courts change
+  // Auto-set initial court for schedule rows if empty
   useEffect(() => {
     if (displayCourts.length > 0) {
       setSchedules((prev) =>
         prev.map((row) => {
-          if (!row.courtId || !displayCourts.some((c) => c.id === row.courtId)) {
+          if (!row.courtId || !safeCourts.some((c) => c.id === row.courtId)) {
             return {
               ...row,
               courtId: displayCourts[0].id,
@@ -158,14 +199,6 @@ export default function ClassModal({
           }
           return row;
         })
-      );
-    } else {
-      setSchedules((prev) =>
-        prev.map((row) => ({
-          ...row,
-          courtId: '',
-          courtName: ''
-        }))
       );
     }
   }, [sport, safeCourts.length, hasMatchedCourts]);
@@ -211,9 +244,11 @@ export default function ClassModal({
     );
   };
 
-  const handleCreateClass = async (e) => {
+  const handleSaveClass = async (e) => {
     e.preventDefault();
     setErrorMsg(null);
+
+    if (submitting) return; // Prevent duplicate execution on double click
 
     if (!className.trim() || !tenantId) {
       setErrorMsg('Nama kelas wajib diisi.');
@@ -227,22 +262,90 @@ export default function ClassModal({
       return;
     }
 
+    // 1. Intra-form schedule conflict validation (within current modal schedules)
+    const hasIntraConflict = schedules.some((sched1, idx1) => {
+      return schedules.some((sched2, idx2) => {
+        if (idx1 >= idx2) return false;
+        const isSameDay = sched1.day === sched2.day;
+        const isSameField = Boolean(
+          (sched1.courtId && sched2.courtId && String(sched1.courtId) === String(sched2.courtId)) ||
+          (sched1.courtName && sched2.courtName && sched1.courtName.trim().toLowerCase() === sched2.courtName.trim().toLowerCase())
+        );
+        const isTimeOverlap = (sched1.startTime < sched2.endTime) && (sched1.endTime > sched2.startTime);
+        return isSameDay && isSameField && isTimeOverlap;
+      });
+    });
+
+    if (hasIntraConflict) {
+      setErrorMsg('Gagal menyimpan: Terdapat dua sesi yang bentrok pada form jadwal kelas ini.');
+      return;
+    }
+
     setSubmitting(true);
 
     try {
-      const selectedCoachObj = coaches.find((c) => c.id === coachId);
+      // 2. Fetch or prepare existing classes to check schedule conflict against
+      let classesToCheck = existingClasses;
+      if (!classesToCheck || classesToCheck.length === 0) {
+        const targetAcademyId = activeAcademy?.id || activeAcademyId;
+        const dbClasses = await supabaseAcademyService.getClasses(tenantId, targetAcademyId);
+        if (dbClasses) classesToCheck = dbClasses;
+      }
 
-      // Summary string for fast table display
+      const currentEditId = classToEdit?.id;
+
+      // 3. Schedule Overlap Checker Logic (Same day + Same field + Time overlap)
+      const hasConflict = schedules.some((newSched) => {
+        return (classesToCheck || []).some((existingClass) => {
+          // If edit mode, skip checking against self
+          if (isEdit && String(existingClass.id) === String(currentEditId)) return false;
+
+          const existSchedules = Array.isArray(existingClass.schedules) ? existingClass.schedules : [];
+
+          return existSchedules.some((existSched) => {
+            const isSameDay = newSched.day === existSched.day;
+
+            const newCourtId = newSched.courtId;
+            const newCourtName = newSched.courtName || newSched.field;
+            const existCourtId = existSched.courtId || existSched.court_id;
+            const existCourtName = existSched.courtName || existSched.court_name || existSched.field || existSched.court;
+
+            const isSameField = Boolean(
+              (newCourtId && existCourtId && String(newCourtId) === String(existCourtId)) ||
+              (newCourtName && existCourtName && newCourtName.trim().toLowerCase() === existCourtName.trim().toLowerCase())
+            );
+
+            const newStart = newSched.startTime;
+            const newEnd = newSched.endTime;
+            const existStart = existSched.startTime || existSched.start_time;
+            const existEnd = existSched.endTime || existSched.end_time;
+
+            const isTimeOverlap = Boolean(
+              newStart && newEnd && existStart && existEnd &&
+              (newStart < existEnd) && (newEnd > existStart)
+            );
+
+            return isSameDay && isSameField && isTimeOverlap;
+          });
+        });
+      });
+
+      if (hasConflict) {
+        setErrorMsg('Gagal menyimpan: Jadwal bentrok dengan kelas lain di lapangan dan waktu yang sama.');
+        setSubmitting(false);
+        return;
+      }
+
+      const selectedCoachObj = coaches.find((c) => c.id === coachId);
       const scheduleSummary = schedules
         .map((s) => `${s.day} (${s.startTime}-${s.endTime}, ${s.courtName || 'Lapangan'})`)
         .join('; ');
 
-      // Mutlak prioritaskan cabor akademi aktif atau pilihan eksplisit
       const finalSport = activeAcademy?.sport || sport || inheritedSport;
 
-      const newClass = {
+      const classPayload = {
         tenantId,
-        academyId: activeAcademy?.id || '',
+        academyId: activeAcademy?.id || activeAcademyId || '',
         academyName: activeAcademy?.name || '',
         className: className.trim(),
         sport: finalSport,
@@ -253,30 +356,33 @@ export default function ClassModal({
         maxQuota: Number(maxQuota) > 0 ? Number(maxQuota) : 20,
         coachId: selectedCoachObj?.id || '',
         coachName: selectedCoachObj?.name || 'Pelatih Utama',
-        schedules: schedules, // Array of structured objects
+        schedules: schedules,
         schedule: scheduleSummary,
-        createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
       };
 
-      const createdClass = await supabaseAcademyService.createClass({
-        ...newClass,
-        schedules,
-        schedule: scheduleSummary,
-        maxQuota: Number(maxQuota) || 20,
-        tierCode,
-        tierLabel
-      });
-
-      if (onClassAdded) {
-        onClassAdded(createdClass || { id: `cls_${Date.now()}`, ...newClass });
+      if (isEdit) {
+        const updated = await supabaseAcademyService.updateClass(classToEdit.id, classPayload);
+        if (onClassUpdated) {
+          onClassUpdated(updated);
+        } else if (onClassAdded) {
+          onClassAdded(updated);
+        }
+      } else {
+        const created = await supabaseAcademyService.createClass({
+          ...classPayload,
+          createdAt: new Date().toISOString()
+        });
+        if (onClassAdded) {
+          onClassAdded(created);
+        }
       }
 
       onClose();
       setClassName('');
     } catch (err) {
-      console.error('Error adding academy class:', err);
-      setErrorMsg('Gagal membuat kelas. Silakan coba lagi.');
+      console.error('Error saving academy class:', err);
+      setErrorMsg(err.message || 'Gagal menyimpan kelas. Silakan coba lagi.');
     } finally {
       setSubmitting(false);
     }
@@ -292,7 +398,9 @@ export default function ClassModal({
         <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-4 bg-slate-50/80 dark:bg-slate-900/80 shrink-0">
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-extrabold text-base text-slate-900 dark:text-slate-100">Buat Kelas / Kelompok Latihan</h3>
+              <h3 className="font-extrabold text-base text-slate-900 dark:text-slate-100">
+                {isEdit ? 'Edit Kelas / Kelompok Latihan' : 'Buat Kelas / Kelompok Latihan'}
+              </h3>
               {activeAcademy?.sport && (
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#354944]/10 text-[#354944] dark:text-[#C89D32] border border-[#354944]/20">
                   {activeAcademy.sport}
@@ -318,7 +426,7 @@ export default function ClassModal({
           </div>
         )}
 
-        <form onSubmit={handleCreateClass} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        <form onSubmit={handleSaveClass} className="flex flex-col flex-1 min-h-0 overflow-hidden">
           <div className="flex-1 overflow-y-auto p-6 space-y-4 text-left">
 
           {/* CABANG OLAHRAGA & PELATIH */}
@@ -626,9 +734,9 @@ export default function ClassModal({
             <button
               type="submit"
               disabled={submitting}
-              className="flex-1 py-2.5 bg-[#354944] hover:bg-[#2B3D38] text-white font-bold text-xs rounded-xl border-b-2 border-[#C89D32] shadow-sm cursor-pointer disabled:opacity-50 transition-colors"
+              className="flex-1 py-2.5 bg-[#354944] hover:bg-[#2B3D38] text-white font-bold text-xs rounded-xl border-b-2 border-[#C89D32] shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
             >
-              {submitting ? 'Memproses...' : `Buat Kelas (${sport})`}
+              {submitting ? 'Memproses...' : (isEdit ? `Simpan Perubahan (${sport})` : `Buat Kelas (${sport})`)}
             </button>
           </div>
 

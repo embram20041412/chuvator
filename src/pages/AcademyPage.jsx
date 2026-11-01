@@ -52,6 +52,7 @@ import {
   Sparkles,
   Lock,
   Edit3,
+  Trash2,
   ChevronDown,
   ChevronUp,
   Building2,
@@ -436,7 +437,28 @@ export default function AcademyPage({ userProfile }) {
   const [detailModalStudent, setDetailModalStudent] = useState(null);
   const [editingStudent, setEditingStudent] = useState(null);
   const [editingCoach, setEditingCoach] = useState(null);
+  const [editingClass, setEditingClass] = useState(null);
   const [idCardTarget, setIdCardTarget] = useState(null); // { data, role: 'SISWA' | 'PELATIH' }
+
+  const handleEditClass = (classData) => {
+    setEditingClass(classData);
+    setShowClassModal(true);
+  };
+
+  const handleDeleteClass = async (classId) => {
+    if (!window.confirm('Yakin ingin menghapus kelas ini?')) return;
+
+    try {
+      await supabaseAcademyService.deleteClass(classId);
+      setSuccessMsg('Kelas berhasil dihapus!');
+      fetchAcademyData();
+      setTimeout(() => setSuccessMsg(null), 3000);
+    } catch (err) {
+      console.error('Error deleting class:', err);
+      setErrorMsg(err.message || 'Gagal menghapus kelas. Silakan coba lagi.');
+      setTimeout(() => setErrorMsg(null), 3500);
+    }
+  };
 
   // Student Form States
   const [studentName, setStudentName] = useState('');
@@ -1677,7 +1699,10 @@ export default function AcademyPage({ userProfile }) {
 
             {!isCoachOnly && (
               <button
-                onClick={() => setShowClassModal(true)}
+                onClick={() => {
+                  setEditingClass(null);
+                  setShowClassModal(true);
+                }}
                 className="px-3.5 py-2 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white font-semibold text-xs rounded-xl shadow-sm transition-colors cursor-pointer flex items-center space-x-1"
               >
                 <Plus className="w-3.5 h-3.5" />
@@ -1700,7 +1725,10 @@ export default function AcademyPage({ userProfile }) {
               </p>
               {!isCoachOnly ? (
                 <button
-                  onClick={() => setShowClassModal(true)}
+                  onClick={() => {
+                    setEditingClass(null);
+                    setShowClassModal(true);
+                  }}
                   className="px-4 py-2 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white text-xs font-semibold rounded-xl transition-colors cursor-pointer shadow-sm"
                 >
                   + Buat Kelas Pertama
@@ -1720,21 +1748,45 @@ export default function AcademyPage({ userProfile }) {
                 const isFull = enrolledCount >= maxQuota;
 
                 return (
-                  <div key={cls.id} className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm rounded-2xl p-4 hover:border-[#354944]/40 transition-all space-y-3 flex flex-col justify-between">
+                  <div key={cls.id} className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-sm rounded-2xl p-4 hover:border-[#354944]/40 transition-all space-y-3 flex flex-col justify-between group">
                     <div className="space-y-2.5">
                       {/* Header Kelas */}
                       <div className="flex items-center justify-between flex-wrap gap-1.5">
-                        <div className="flex items-center gap-1.5">
-                          <span className="px-2.5 py-0.5 bg-[#354944]/10 dark:bg-[#354944]/30 text-[#354944] dark:text-[#C89D32] font-bold text-[10px] rounded-md uppercase border border-[#354944]/20">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                          <span className="px-2.5 py-0.5 bg-[#354944]/10 dark:bg-[#354944]/30 text-[#354944] dark:text-[#C89D32] font-bold text-[10px] rounded-md uppercase border border-[#354944]/20 shrink-0">
                             {cls.sport || 'Sports'}
                           </span>
                           {cls.tierCode && cls.tierCode !== 'ALL_AGE' && (
-                            <span className="px-2 py-0.5 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-[#C89D32] font-extrabold text-[10px] rounded-md border border-amber-200/80 dark:border-amber-800/60 truncate max-w-[150px]" title={cls.tierLabel || cls.tierCode}>
+                            <span className="px-2 py-0.5 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-[#C89D32] font-extrabold text-[10px] rounded-md border border-amber-200/80 dark:border-amber-800/60 truncate max-w-[120px]" title={cls.tierLabel || cls.tierCode}>
                               {cls.tierLabel || cls.tierCode}
                             </span>
                           )}
                         </div>
-                        <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200/80 dark:border-emerald-800/50">Aktif</span>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full border border-emerald-200/80 dark:border-emerald-800/50">Aktif</span>
+                          
+                          {/* Tombol Edit & Hapus Kelas */}
+                          {!isCoachOnly && (
+                            <div className="flex items-center gap-1 ml-1 pl-1 border-l border-slate-200 dark:border-slate-700">
+                              <button
+                                type="button"
+                                onClick={() => handleEditClass(cls)}
+                                className="p-1 text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/50 rounded-lg transition-colors cursor-pointer"
+                                title="Edit Data Kelas"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteClass(cls.id)}
+                                className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded-lg transition-colors cursor-pointer"
+                                title="Hapus Kelas"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </div>
                       </div>
 
                       {/* Judul & Pelatih */}
@@ -2108,18 +2160,29 @@ export default function AcademyPage({ userProfile }) {
         />
       )}
 
-      {/* MODAL 5: BUAT KELAS AKADEMI BARU */}
+      {/* MODAL 5: BUAT / EDIT KELAS AKADEMI */}
       {showClassModal && (
         <ClassModal
           isOpen={showClassModal}
-          onClose={() => setShowClassModal(false)}
+          onClose={() => {
+            setShowClassModal(false);
+            setEditingClass(null);
+          }}
           userProfile={userProfile}
           activeAcademy={activeAcademy}
+          activeAcademyId={activeAcademyId}
           uniqueSports={activeAcademySports}
           coaches={filteredCoaches}
           courts={courts}
+          classToEdit={editingClass}
+          existingClasses={filteredClasses}
           onClassAdded={() => {
             setSuccessMsg('Kelas baru berhasil dibuat!');
+            fetchAcademyData();
+            setTimeout(() => setSuccessMsg(null), 3000);
+          }}
+          onClassUpdated={() => {
+            setSuccessMsg('Data kelas berhasil diperbarui!');
             fetchAcademyData();
             setTimeout(() => setSuccessMsg(null), 3000);
           }}
