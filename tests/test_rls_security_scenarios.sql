@@ -74,7 +74,7 @@ DECLARE
     v_initial_val NUMERIC;
     v_verify_val NUMERIC;
 
-    -- State integrity verification variables for Test 13 (Fase 1AG)
+    -- State integrity verification variables for Test 13 & 13B (Fase 1AG/1AH)
     v_pre_tenant_id text;
     v_pre_uid text;
     v_pre_role text;
@@ -83,9 +83,21 @@ DECLARE
     v_post_uid text;
     v_post_role text;
     v_post_status text;
+
+    -- State integrity verification variables for Test 13C (tenants table - Fase 1AH)
+    v_pre_t_id uuid;
+    v_pre_t_tenant_id text;
+    v_pre_t_owner_uid text;
+    v_pre_t_owner_email text;
+    v_pre_t_name text;
+    v_post_t_id uuid;
+    v_post_t_tenant_id text;
+    v_post_t_owner_uid text;
+    v_post_t_owner_email text;
+    v_post_t_name text;
 BEGIN
     RAISE NOTICE '=======================================================';
-    RAISE NOTICE 'MEMULAI TEST SUITE KEAMANAN DATABASE CHUVATOR (FASE 1AG - TENANT BOUNDARY & TRIGGER INTEGRITY)';
+    RAISE NOTICE 'MEMULAI TEST SUITE KEAMANAN DATABASE CHUVATOR (FASE 1AH - HARDENING TRIGGER EXECUTION PROOF & RLS TEST INTEGRITY)';
     RAISE NOTICE 'MODE: SIMULATED TEST / STATIC CODE REVIEW';
     RAISE NOTICE '=======================================================';
 
@@ -582,6 +594,10 @@ BEGIN
         v_cur_expr text;
         v_norm_stripped text;
         v_trg_count int;
+        v_trg_tgenabled_txt text;
+        v_trg_tgtype smallint;
+        v_trg_isinternal_int int;
+        v_trg_proname text;
         v_func_src text;
     BEGIN
         FOREACH v_cur_tbl IN ARRAY v_check_tables
@@ -759,75 +775,140 @@ BEGIN
         END LOOP;
 
         -- =====================================================================
-        -- 14. AUDIT INTEGRITAS TRIGGER PADA KATALOG POSTGRESQL (FASE 1AG)
-        -- Memvalidasi pendaftaran trigger dan integritas fungsi proteksi kolom
+        -- 14. AUDIT STATUS & KONFIGURASI TRIGGER PADA KATALOG POSTGRESQL (FASE 1AH)
+        -- Memvalidasi tgenabled, tgtype (BEFORE UPDATE FOR EACH ROW = 19),
+        -- fungsi terkait, is_internal, dan audit mendalam definisi fungsi
         -- =====================================================================
 
         -- A. Verifikasi trigger trg_protect_users_staff_columns pada tabel users_staff
-        SELECT COUNT(*) INTO v_trg_count
+        SELECT 
+            COUNT(*),
+            COALESCE(MAX(t.tgenabled::text), ''),
+            COALESCE(MAX(t.tgtype), 0::smallint),
+            COALESCE(MAX(CASE WHEN t.tgisinternal THEN 1 ELSE 0 END), 0),
+            COALESCE(MAX(p.proname::text), '')
+        INTO v_trg_count, v_trg_tgenabled_txt, v_trg_tgtype, v_trg_isinternal_int, v_trg_proname
         FROM pg_trigger t
         JOIN pg_class c ON t.tgrelid = c.oid
         JOIN pg_proc p ON t.tgfoid = p.oid
         JOIN pg_namespace n ON c.relnamespace = n.oid
         WHERE n.nspname = 'public'
           AND c.relname = 'users_staff'
-          AND t.tgname = 'trg_protect_users_staff_columns'
-          AND p.proname = 'protect_users_staff_columns'
-          AND NOT t.tgisinternal;
+          AND t.tgname = 'trg_protect_users_staff_columns';
 
         IF v_trg_count <> 1 THEN
-            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Audit): Trigger trg_protect_users_staff_columns tidak terdaftar pada tabel users_staff atau tidak terikat ke protect_users_staff_columns() (Ditemukan: %).', v_trg_count;
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Audit): Trigger trg_protect_users_staff_columns tidak ditemukan tepat satu kali pada tabel users_staff (Ditemukan: %).', v_trg_count;
         END IF;
 
-        -- Verifikasi definisi fungsi protect_users_staff_columns() memvalidasi OLD.tenant_id vs NEW.tenant_id dan melempar 42501
+        IF v_trg_isinternal_int <> 0 THEN
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Audit): Trigger trg_protect_users_staff_columns ditandai sebagai internal trigger PostgreSQL!';
+        END IF;
+
+        IF v_trg_tgenabled_txt NOT IN ('O', 'A') THEN
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Audit): Trigger trg_protect_users_staff_columns tidak aktif (tgenabled = %). Wajib O (origin) atau A (always).', v_trg_tgenabled_txt;
+        END IF;
+
+        -- Bitmask check: BEFORE (bit 1 = 2) UPDATE (bit 4 = 16) FOR EACH ROW (bit 0 = 1) -> tgtype = 19
+        IF v_trg_tgtype <> 19 OR (v_trg_tgtype & 1 = 0) OR (v_trg_tgtype & 2 = 0) OR (v_trg_tgtype & 16 = 0) OR (v_trg_tgtype & 64 <> 0) THEN
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Audit): Konfigurasi tgtype trg_protect_users_staff_columns tidak valid (tgtype = %). Wajib BEFORE UPDATE FOR EACH ROW (tgtype = 19).', v_trg_tgtype;
+        END IF;
+
+        IF v_trg_proname <> 'protect_users_staff_columns' THEN
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Audit): Trigger trg_protect_users_staff_columns terhubung ke fungsi yang salah (%). Wajib protect_users_staff_columns.', v_trg_proname;
+        END IF;
+
+        -- Audit mendalam definisi fungsi protect_users_staff_columns()
         SELECT p.prosrc INTO v_func_src
         FROM pg_proc p
         JOIN pg_namespace n ON p.pronamespace = n.oid
         WHERE n.nspname = 'public' AND p.proname = 'protect_users_staff_columns';
 
-        IF v_func_src IS NULL OR (
-            v_func_src NOT LIKE '%OLD.tenant_id%' OR v_func_src NOT LIKE '%NEW.tenant_id%'
-        ) THEN
-            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Audit): Fungsi protect_users_staff_columns() tidak membandingkan OLD.tenant_id dan NEW.tenant_id!';
+        IF v_func_src IS NULL THEN
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Function Audit): Sumber fungsi protect_users_staff_columns() tidak ditemukan!';
+        END IF;
+
+        IF v_func_src NOT LIKE '%IS DISTINCT FROM%' THEN
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Function Audit): Fungsi protect_users_staff_columns() tidak menggunakan perbandingan aman IS DISTINCT FROM!';
+        END IF;
+
+        IF v_func_src NOT LIKE '%OLD.tenant_id%' OR v_func_src NOT LIKE '%NEW.tenant_id%' THEN
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Function Audit): Fungsi protect_users_staff_columns() tidak membandingkan OLD.tenant_id dan NEW.tenant_id!';
         END IF;
 
         IF v_func_src NOT LIKE '%42501%' THEN
-            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Audit): Fungsi protect_users_staff_columns() tidak mendefinisikan penolakan dengan ERRCODE 42501!';
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Function Audit): Fungsi protect_users_staff_columns() tidak mendefinisikan penolakan dengan ERRCODE 42501!';
+        END IF;
+
+        IF v_func_src NOT LIKE '%RETURN NEW;%' THEN
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Function Audit): Fungsi protect_users_staff_columns() tidak mengembalikan RETURN NEW;!';
         END IF;
 
         -- B. Verifikasi trigger trg_protect_tenants_columns pada tabel tenants
-        SELECT COUNT(*) INTO v_trg_count
+        SELECT 
+            COUNT(*),
+            COALESCE(MAX(t.tgenabled::text), ''),
+            COALESCE(MAX(t.tgtype), 0::smallint),
+            COALESCE(MAX(CASE WHEN t.tgisinternal THEN 1 ELSE 0 END), 0),
+            COALESCE(MAX(p.proname::text), '')
+        INTO v_trg_count, v_trg_tgenabled_txt, v_trg_tgtype, v_trg_isinternal_int, v_trg_proname
         FROM pg_trigger t
         JOIN pg_class c ON t.tgrelid = c.oid
         JOIN pg_proc p ON t.tgfoid = p.oid
         JOIN pg_namespace n ON c.relnamespace = n.oid
         WHERE n.nspname = 'public'
           AND c.relname = 'tenants'
-          AND t.tgname = 'trg_protect_tenants_columns'
-          AND p.proname = 'protect_tenants_columns'
-          AND NOT t.tgisinternal;
+          AND t.tgname = 'trg_protect_tenants_columns';
 
         IF v_trg_count <> 1 THEN
-            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Audit): Trigger trg_protect_tenants_columns tidak terdaftar pada tabel tenants atau tidak terikat ke protect_tenants_columns() (Ditemukan: %).', v_trg_count;
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Audit): Trigger trg_protect_tenants_columns tidak ditemukan tepat satu kali pada tabel tenants (Ditemukan: %).', v_trg_count;
         END IF;
 
-        -- Verifikasi definisi fungsi protect_tenants_columns() memvalidasi perpindahan tenant_id dan melempar 42501
+        IF v_trg_isinternal_int <> 0 THEN
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Audit): Trigger trg_protect_tenants_columns ditandai sebagai internal trigger PostgreSQL!';
+        END IF;
+
+        IF v_trg_tgenabled_txt NOT IN ('O', 'A') THEN
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Audit): Trigger trg_protect_tenants_columns tidak aktif (tgenabled = %). Wajib O (origin) atau A (always).', v_trg_tgenabled_txt;
+        END IF;
+
+        IF v_trg_tgtype <> 19 OR (v_trg_tgtype & 1 = 0) OR (v_trg_tgtype & 2 = 0) OR (v_trg_tgtype & 16 = 0) OR (v_trg_tgtype & 64 <> 0) THEN
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Audit): Konfigurasi tgtype trg_protect_tenants_columns tidak valid (tgtype = %). Wajib BEFORE UPDATE FOR EACH ROW (tgtype = 19).', v_trg_tgtype;
+        END IF;
+
+        IF v_trg_proname <> 'protect_tenants_columns' THEN
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Audit): Trigger trg_protect_tenants_columns terhubung ke fungsi yang salah (%). Wajib protect_tenants_columns.', v_trg_proname;
+        END IF;
+
+        -- Audit mendalam definisi fungsi protect_tenants_columns()
         SELECT p.prosrc INTO v_func_src
         FROM pg_proc p
         JOIN pg_namespace n ON p.pronamespace = n.oid
         WHERE n.nspname = 'public' AND p.proname = 'protect_tenants_columns';
 
-        IF v_func_src IS NULL OR (
-            v_func_src NOT LIKE '%OLD.tenant_id%' OR v_func_src NOT LIKE '%NEW.tenant_id%'
-        ) THEN
-            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Audit): Fungsi protect_tenants_columns() tidak membandingkan OLD.tenant_id dan NEW.tenant_id!';
+        IF v_func_src IS NULL THEN
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Function Audit): Sumber fungsi protect_tenants_columns() tidak ditemukan!';
+        END IF;
+
+        IF v_func_src NOT LIKE '%IS DISTINCT FROM%' THEN
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Function Audit): Fungsi protect_tenants_columns() tidak menggunakan perbandingan aman IS DISTINCT FROM!';
+        END IF;
+
+        IF v_func_src NOT LIKE '%OLD.id%' OR v_func_src NOT LIKE '%NEW.id%' OR
+           v_func_src NOT LIKE '%OLD.tenant_id%' OR v_func_src NOT LIKE '%NEW.tenant_id%' OR
+           v_func_src NOT LIKE '%OLD.owner_uid%' OR v_func_src NOT LIKE '%NEW.owner_uid%' OR
+           v_func_src NOT LIKE '%OLD.owner_email%' OR v_func_src NOT LIKE '%NEW.owner_email%' THEN
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Function Audit): Fungsi protect_tenants_columns() tidak memeriksa seluruh kolom sensitif (id, tenant_id, owner_uid, owner_email)!';
         END IF;
 
         IF v_func_src NOT LIKE '%42501%' THEN
-            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Audit): Fungsi protect_tenants_columns() tidak mendefinisikan penolakan dengan ERRCODE 42501!';
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Function Audit): Fungsi protect_tenants_columns() tidak mendefinisikan penolakan dengan ERRCODE 42501!';
         END IF;
 
-        RAISE NOTICE '[PASS] Test 11: Seluruh 24 tabel canonical terkelola tervalidasi individual (RLS aktif, FORCE RLS aktif, 4 RBAC CRUD policies per tabel, ekspresi RBAC akurat pada 4 operasi CRUD, 0 legacy permissive, deteksi normalisasi ekspresi permisif lulus, katalog trigger & integritas fungsi trigger diverifikasi).';
+        IF v_func_src NOT LIKE '%RETURN NEW;%' THEN
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Function Audit): Fungsi protect_tenants_columns() tidak mengembalikan RETURN NEW;!';
+        END IF;
+
+        RAISE NOTICE '[PASS] Test 11: Seluruh 24 tabel canonical terkelola tervalidasi individual (RLS aktif, FORCE RLS aktif, 4 RBAC CRUD policies per tabel, ekspresi RBAC akurat pada 4 operasi CRUD, 0 legacy permissive, deteksi normalisasi ekspresi permisif lulus, katalog trigger [tgenabled, tgtype=19 BEFORE UPDATE FOR EACH ROW, NOT internal, linked function] & integritas fungsi trigger [IS DISTINCT FROM, 42501, RETURN NEW] diverifikasi penuh).';
     END;
 
     -- TEST 12: INSERT Data dengan tenant_id milik Tenant Lain (Harus Ditolak RLS / WITH CHECK)
@@ -902,6 +983,148 @@ BEGIN
 
     RAISE NOTICE '[PASS] Test 13: UPDATE memindahkan record staf ke tenant lain ditolak (SQLSTATE 42501) dan integritas state row utuh tanpa perubahan (tenant_id, uid, role, status verified).';
 
+    -- =========================================================================
+    -- TEST 13B: PENGUJIAN FUNGSIONAL TRIGGER users_staff DENGAN RLS BYPASS (FASE 1AH)
+    -- Membuktikan bahwa penolakan perpindahan tenant dieksekusi secara independen
+    -- oleh BEFORE UPDATE trigger, bahkan saat RLS tidak membatasi operasi (role = postgres).
+    -- =========================================================================
+    -- 1. Snapshot state sebelum mutasi
+    PERFORM set_config('role', 'postgres', true);
+    PERFORM set_config('request.jwt.claims', '', true);
+    SELECT tenant_id::text, uid, role, status
+    INTO v_pre_tenant_id, v_pre_uid, v_pre_role, v_pre_status
+    FROM public.users_staff
+    WHERE id = staff_staff_id;
+
+    -- 2. Jalankan UPDATE dalam konteks role = postgres (RLS Bypassed),
+    --    namun dengan JWT claims Admin Tenant A (non-superadmin).
+    --    Di sini RLS tabel tidak aktif memfilter, tetapi trigger BEFORE UPDATE
+    --    terpanggil dan mengevaluasi is_superadmin() = FALSE, sehingga mendeteksi
+    --    perpindahan tenant_id dan melempar SQLSTATE 42501!
+    PERFORM set_config('role', 'postgres', true);
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', admin_a_uid, 'email', 'admin_a@arena.com')::text, true);
+    test_passed := FALSE;
+    caught_sqlstate := '';
+    BEGIN
+        UPDATE public.users_staff SET tenant_id = tenant_b::text WHERE id = staff_staff_id;
+    EXCEPTION WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE;
+        IF caught_sqlstate = '42501' THEN test_passed := TRUE; END IF;
+    END;
+
+    IF NOT test_passed THEN
+        RAISE EXCEPTION '[FAIL] Test 13B: Mutasi lintas tenant pada users_staff dalam konteks RLS-bypass tidak diblokir oleh trigger dengan SQLSTATE 42501 (Caught: %).', caught_sqlstate;
+    END IF;
+
+    -- 3. Verifikasi snapshot integritas state row tetap utuh
+    PERFORM set_config('role', 'postgres', true);
+    PERFORM set_config('request.jwt.claims', '', true);
+    SELECT tenant_id::text, uid, role, status
+    INTO v_post_tenant_id, v_post_uid, v_post_role, v_post_status
+    FROM public.users_staff
+    WHERE id = staff_staff_id;
+
+    IF v_post_tenant_id IS DISTINCT FROM v_pre_tenant_id OR
+       v_post_uid IS DISTINCT FROM v_pre_uid OR
+       v_post_role IS DISTINCT FROM v_pre_role OR
+       v_post_status IS DISTINCT FROM v_pre_status THEN
+        RAISE EXCEPTION '[FAIL] Test 13B: Integritas record users_staff rusak setelah penolakan trigger!';
+    END IF;
+
+    RAISE NOTICE '[PASS] Test 13B: Mutasi lintas tenant pada users_staff dalam konteks RLS-bypass berhasil diblokir secara independen oleh trigger trg_protect_users_staff_columns (SQLSTATE 42501) dan state row 100%% utuh.';
+
+    -- =========================================================================
+    -- TEST 13C: PENGUJIAN FUNGSIONAL TRIGGER tenants (KOLOM SENSITIF IMUTABEL - FASE 1AH)
+    -- Membuktikan bahwa trg_protect_tenants_columns menolak modifikasi id, tenant_id,
+    -- owner_uid, dan owner_email oleh pengguna non-superadmin secara independen dari RLS.
+    -- =========================================================================
+    -- 1. Snapshot state awal baris tenants (tenant_a)
+    PERFORM set_config('role', 'postgres', true);
+    PERFORM set_config('request.jwt.claims', '', true);
+    SELECT id, tenant_id::text, owner_uid, owner_email, name
+    INTO v_pre_t_id, v_pre_t_tenant_id, v_pre_t_owner_uid, v_pre_t_owner_email, v_pre_t_name
+    FROM public.tenants
+    WHERE id = tenant_a;
+
+    IF v_pre_t_id IS NULL THEN
+        RAISE EXCEPTION '[FAIL] Test 13C: Fixture record tenant_a tidak ditemukan.';
+    END IF;
+
+    -- Skenario C.1: Percobaan mengubah tenant_id oleh non-superadmin (RLS Bypassed via postgres role)
+    PERFORM set_config('role', 'postgres', true);
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', owner_a_uid, 'email', 'owner_a@arena.com')::text, true);
+    test_passed := FALSE;
+    caught_sqlstate := '';
+    BEGIN
+        UPDATE public.tenants SET tenant_id = 'tenant-hijacked' WHERE id = tenant_a;
+    EXCEPTION WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE;
+        IF caught_sqlstate = '42501' THEN test_passed := TRUE; END IF;
+    END;
+    IF NOT test_passed THEN
+        RAISE EXCEPTION '[FAIL] Test 13C.1: Mutasi tenant_id pada tabel tenants tidak diblokir trigger dengan SQLSTATE 42501 (Caught: %).', caught_sqlstate;
+    END IF;
+
+    -- Skenario C.2: Percobaan mengubah primary key id oleh non-superadmin
+    test_passed := FALSE;
+    caught_sqlstate := '';
+    BEGIN
+        UPDATE public.tenants SET id = gen_random_uuid() WHERE id = tenant_a;
+    EXCEPTION WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE;
+        IF caught_sqlstate = '42501' THEN test_passed := TRUE; END IF;
+    END;
+    IF NOT test_passed THEN
+        RAISE EXCEPTION '[FAIL] Test 13C.2: Mutasi id primary key pada tabel tenants tidak diblokir trigger dengan SQLSTATE 42501 (Caught: %).', caught_sqlstate;
+    END IF;
+
+    -- Skenario C.3: Percobaan memindahkan kepemilikan owner_uid via UPDATE langsung oleh non-superadmin
+    test_passed := FALSE;
+    caught_sqlstate := '';
+    BEGIN
+        UPDATE public.tenants SET owner_uid = owner_b_uid WHERE id = tenant_a;
+    EXCEPTION WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE;
+        IF caught_sqlstate = '42501' THEN test_passed := TRUE; END IF;
+    END;
+    IF NOT test_passed THEN
+        RAISE EXCEPTION '[FAIL] Test 13C.3: Mutasi owner_uid pada tabel tenants tidak diblokir trigger dengan SQLSTATE 42501 (Caught: %).', caught_sqlstate;
+    END IF;
+
+    -- Skenario C.4: Percobaan mengubah owner_email via UPDATE langsung oleh non-superadmin
+    test_passed := FALSE;
+    caught_sqlstate := '';
+    BEGIN
+        UPDATE public.tenants SET owner_email = 'attacker@arena.com' WHERE id = tenant_a;
+    EXCEPTION WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE;
+        IF caught_sqlstate = '42501' THEN test_passed := TRUE; END IF;
+    END;
+    IF NOT test_passed THEN
+        RAISE EXCEPTION '[FAIL] Test 13C.4: Mutasi owner_email pada tabel tenants tidak diblokir trigger dengan SQLSTATE 42501 (Caught: %).', caught_sqlstate;
+    END IF;
+
+    -- 3. Verifikasi snapshot integritas baris tenants tetap 100% utuh
+    PERFORM set_config('role', 'postgres', true);
+    PERFORM set_config('request.jwt.claims', '', true);
+    SELECT id, tenant_id::text, owner_uid, owner_email, name
+    INTO v_post_t_id, v_post_t_tenant_id, v_post_t_owner_uid, v_post_t_owner_email, v_post_t_name
+    FROM public.tenants
+    WHERE id = tenant_a;
+
+    IF v_post_t_id IS DISTINCT FROM v_pre_t_id OR
+       v_post_t_tenant_id IS DISTINCT FROM v_pre_t_tenant_id OR
+       v_post_t_owner_uid IS DISTINCT FROM v_pre_t_owner_uid OR
+       v_post_t_owner_email IS DISTINCT FROM v_pre_t_owner_email OR
+       v_post_t_name IS DISTINCT FROM v_pre_t_name THEN
+        RAISE EXCEPTION '[FAIL] Test 13C: Integritas record tenants rusak setelah penolakan trigger!';
+    END IF;
+
+    -- Kembalikan role authenticated
+    PERFORM set_config('role', 'authenticated', true);
+
+    RAISE NOTICE '[PASS] Test 13C: Seluruh upaya mutasi kolom sensitif pada tabel tenants (tenant_id, id, owner_uid, owner_email) berhasil ditolak oleh trigger trg_protect_tenants_columns (SQLSTATE 42501) dan state baris tetap utuh.';
+
     -- TEST 14: DELETE Lintas Tenant (Harus Ditolak RLS / 0 rows deleted)
     PERFORM set_config('request.jwt.claims', json_build_object('sub', owner_a_uid, 'email', 'owner_a@arena.com')::text, true);
     DELETE FROM public.users_staff WHERE tenant_id = tenant_b::text;
@@ -913,7 +1136,7 @@ BEGIN
     END IF;
 
     RAISE NOTICE '=======================================================';
-    RAISE NOTICE 'SELURUH 14 TEST SCENARIOS KEAMANAN FASE 1AG BERHASIL PASSED!';
+    RAISE NOTICE 'SELURUH 16 TEST SCENARIOS KEAMANAN FASE 1AH BERHASIL PASSED!';
     RAISE NOTICE '=======================================================';
 
 END $$;
