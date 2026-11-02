@@ -1,25 +1,26 @@
 -- =========================================================================
--- CHUVATOR (CHUA SPORT CORE) — FASE 1U: FINAL DATABASE SECURITY CONSOLIDATION
+-- CHUVATOR (CHUA SPORT CORE) — FINAL SUPABASE SECURITY HARDENING MIGRATION
 -- Target: Supabase PostgreSQL (SQL Editor)
 -- Architecture: React Client SDK (Cloudflare Pages) -> Supabase PostgreSQL (RLS)
--- Key Security Guarantees:
---   1. Targeted Function Privileges (Explicit REVOKE/GRANT per audited function, zero mass schema REVOKE)
---   2. Valid CTE Multi-Row Candidate Locking (WITH locked_candidates AS (...) SELECT array_agg(id) FOR UPDATE)
---   3. Fail-Closed Tenant & Staff Status Validation (COALESCE(is_active, FALSE) = TRUE)
---   4. Immutable Partial Unique Engine Index (idx_invitations_pending_unique)
---   5. Expired Pending Invitation Auto-Transition (status = 'expired') prior to New Invitation Creation
---   6. Canonical Tenant Identity Standardization (tenant_id TEXT) across all tables & functions
---   7. Cryptographic SHA-256 Token Sealing (token_hash) & Zero Raw Token Storage in Database
---   8. Column Privilege Revocation (token_hash Sealed from Direct PostgREST SELECT for anon & authenticated)
---   9. Masked Email Preview RPC (get_invitation_info) for Anon & Authenticated Users
---  10. Pure Read-Only Authorization Functions with Preserved Signatures (check_tenant_id TEXT)
+-- Key Guarantees:
+--   1. Safe Verified Platform Superadmin Bootstrap (bootstrap_platform_superadmin RPC)
+--   2. Hardened Tenant Column Protection Trigger (protect_tenants_columns) protecting id, tenant_id, owner_uid, owner_email
+--   3. Hardened Staff Column Protection Trigger (protect_users_staff_columns) preventing direct uid mutation
+--   4. Valid CTE Multi-Row Candidate Locking (WITH locked_candidates AS (...) SELECT array_agg(id) FOR UPDATE)
+--   5. Engine Partial Unique Index (idx_invitations_pending_unique) on Immutable Predicate
+--   6. Sealed token_hash on invitations (Column-level SELECT Grant excluding token_hash)
+--   7. Full CRUD RLS Matrix policies across all 25+ tenant-scoped tables
+--   8. Targeted SECURITY DEFINER search_path = public, extensions, pg_temp
+--   9. Read-only PostgreSQL Catalog Verification Queries appended at end
 -- =========================================================================
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto" WITH SCHEMA extensions;
 
 -- =========================================================================
--- 1. SCHEMAS: INVITATIONS, PLATFORM SUPERADMINS, TENANTS & USERS_STAFF COLUMNS
+-- 1. SCHEMAS: PLATFORM SUPERADMINS, TENANTS, INVITATIONS, & USERS_STAFF
 -- =========================================================================
+
+-- A. Platform Superadmins Table
 CREATE TABLE IF NOT EXISTS public.platform_superadmins (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     auth_uid TEXT UNIQUE,
@@ -34,10 +35,11 @@ INSERT INTO public.platform_superadmins (email, notes)
 VALUES ('erizamaulana.bramantya@gmail.com', 'Primary Platform Superadmin')
 ON CONFLICT (email) DO NOTHING;
 
--- Canonical Tenant Identity Schema
+-- B. Canonical Tenant Identity Schema
 ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS tenant_id TEXT;
 UPDATE public.tenants SET tenant_id = id::text WHERE tenant_id IS NULL;
 
+-- C. Invitations Table
 CREATE TABLE IF NOT EXISTS public.invitations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
@@ -58,20 +60,22 @@ CREATE TABLE IF NOT EXISTS public.invitations (
 
 ALTER TABLE public.invitations ENABLE ROW LEVEL SECURITY;
 
--- Ensure users_staff has both is_active and status columns for canonical schema compatibility
+-- D. Users Staff Columns
 ALTER TABLE public.users_staff ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
 ALTER TABLE public.users_staff ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
 
--- Drop outdated indexes if present
+-- Partial Unique Index on Invitations (Engine-level 1 pending invitation per tenant/email)
 DROP INDEX IF EXISTS public.idx_invitations_pending_unique;
-
--- Immutable Partial Unique Index: Guarantees 1 active pending invitation per (tenant_id, LOWER(invite_email))
 CREATE UNIQUE INDEX idx_invitations_pending_unique 
 ON public.invitations (tenant_id, LOWER(invite_email)) 
 WHERE status = 'pending' AND accepted_at IS NULL AND revoked_at IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_invitations_token_hash ON public.invitations(token_hash);
 CREATE INDEX IF NOT EXISTS idx_invitations_tenant_invite_email ON public.invitations(tenant_id, invite_email);
+
+-- =========================================================================
+-- 2. OTORISASI SUPERADMIN & BOOTSTRAP RPC
+-- =========================================================================
 
 -- 1. is_superadmin() - Pure UID-Based Read-Only Function
 CREATE OR REPLACE FUNCTION public.is_superadmin()
@@ -95,6 +99,44 @@ BEGIN
 END;
 $$;
 
+-- 2. bootstrap_platform_superadmin() - Verified One-Time Bootstrap RPC
+CREATE OR REPLACE FUNCTION public.bootstrap_platform_superadmin()
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, extensions, pg_temp
+AS $$
+DECLARE
+    v_caller_uid TEXT;
+    v_auth_email TEXT;
+    v_email_confirmed TIMESTAMPTZ;
+    v_updated INT := 0;
+BEGIN
+    v_caller_uid := auth.uid()::text;
+    IF v_caller_uid IS NULL OR trim(v_caller_uid) = '' THEN
+        RETURN FALSE;
+    END IF;
+
+    SELECT LOWER(trim(u.email)), u.email_confirmed_at
+    INTO v_auth_email, v_email_confirmed
+    FROM auth.users u
+    WHERE u.id::text = v_caller_uid;
+
+    IF v_auth_email IS NULL OR v_email_confirmed IS NULL THEN
+        RETURN FALSE;
+    END IF;
+
+    UPDATE public.platform_superadmins
+    SET auth_uid = v_caller_uid
+    WHERE LOWER(trim(email)) = v_auth_email
+      AND auth_uid IS NULL;
+
+    GET DIAGNOSTICS v_updated = ROW_COUNT;
+    RETURN (v_updated > 0);
+END;
+$$;
+
+-- Platform Superadmins RLS Policies
 DROP POLICY IF EXISTS "platform_superadmins_select_policy" ON public.platform_superadmins;
 CREATE POLICY "platform_superadmins_select_policy" ON public.platform_superadmins
 FOR SELECT USING (
@@ -122,11 +164,11 @@ FOR DELETE USING (
 );
 
 -- =========================================================================
--- 2. FUNGSI OTORISASI DATABASE TEPERCAYA (SECURITY DEFINER)
+-- 3. FUNGSI OTORISASI DATABASE TEPERCAYA (SECURITY DEFINER)
 -- Parameter: check_tenant_id TEXT (Preserved)
 -- =========================================================================
 
--- 1. get_user_tenant_role(check_tenant_id TEXT) - Canonical Tenant Identity Lookup (Fail-Closed)
+-- 1. get_user_tenant_role(check_tenant_id TEXT)
 CREATE OR REPLACE FUNCTION public.get_user_tenant_role(check_tenant_id TEXT)
 RETURNS TEXT
 LANGUAGE plpgsql
@@ -150,17 +192,17 @@ BEGIN
         RETURN NULL;
     END IF;
 
-    -- Canonical Owner Check on tenants (Fail-Closed: is_active MUST be TRUE)
+    -- Owner Check on tenants (Fail-Closed: is_active MUST be TRUE)
     IF EXISTS (
         SELECT 1 FROM public.tenants t
-        WHERE t.tenant_id::text = check_tenant_id
+        WHERE (t.tenant_id::text = check_tenant_id OR t.id::text = check_tenant_id)
           AND t.owner_uid::text = caller_uid
           AND COALESCE(t.is_active, FALSE) = TRUE
     ) THEN
         RETURN 'owner';
     END IF;
 
-    -- Canonical Staff Check on users_staff (Fail-Closed: is_active MUST be TRUE)
+    -- Staff Check on users_staff (Fail-Closed: is_active MUST be TRUE)
     SELECT LOWER(s.role) INTO staff_role
     FROM public.users_staff s
     WHERE s.tenant_id::text = check_tenant_id
@@ -195,7 +237,7 @@ BEGIN
 END;
 $$;
 
--- 3. get_coach_id_for_user(check_tenant_id TEXT) - Pure Read-Only Function
+-- 3. get_coach_id_for_user(check_tenant_id TEXT)
 CREATE OR REPLACE FUNCTION public.get_coach_id_for_user(check_tenant_id TEXT)
 RETURNS TEXT
 LANGUAGE plpgsql
@@ -225,7 +267,11 @@ BEGIN
 END;
 $$;
 
--- 4. RPC Create Staff Invitation (CTE Locking + Engine Unique Index + Fail-Closed Status)
+-- =========================================================================
+-- 4. INVITATION RPCs (CREATE, GET, CLAIM, REVOKE)
+-- =========================================================================
+
+-- 1. create_staff_invitation()
 CREATE OR REPLACE FUNCTION public.create_staff_invitation(
     target_tenant_id TEXT,
     invite_email TEXT,
@@ -249,7 +295,6 @@ DECLARE
     v_candidate_staff_ids UUID[];
     v_candidate_count INT := 0;
 BEGIN
-    -- 1. Memastikan auth.uid() tersedia
     v_caller_uid := auth.uid()::text;
     IF v_caller_uid IS NULL OR trim(v_caller_uid) = '' THEN
         RAISE EXCEPTION 'Akses ditolak: Pengguna tidak terotentikasi.';
@@ -259,16 +304,14 @@ BEGIN
         RAISE EXCEPTION 'ID Tenant tidak boleh kosong.';
     END IF;
 
-    -- 2. Validasi status tenant aktif (Fail-closed: COALESCE(is_active, FALSE))
     SELECT COALESCE(is_active, FALSE) INTO v_tenant_active
     FROM public.tenants
-    WHERE tenant_id::text = target_tenant_id;
+    WHERE tenant_id::text = target_tenant_id OR id::text = target_tenant_id;
 
     IF v_tenant_active IS NULL OR v_tenant_active = FALSE THEN
         RAISE EXCEPTION 'Tenant % tidak aktif atau tidak ditemukan.', target_tenant_id;
     END IF;
 
-    -- 3. Validasi Otorisasi Pemanggil
     v_caller_role := LOWER(COALESCE(public.get_user_tenant_role(target_tenant_id), ''));
 
     IF NOT public.is_superadmin() THEN
@@ -304,7 +347,7 @@ BEGIN
         RAISE EXCEPTION 'Format email undangan tidak valid.';
     END IF;
 
-    -- Transisi Otomatis Undangan Kedaluwarsa
+    -- Auto-transition expired pending invitations
     UPDATE public.invitations
     SET status = 'expired'
     WHERE tenant_id::text = target_tenant_id
@@ -314,7 +357,7 @@ BEGIN
       AND revoked_at IS NULL
       AND expires_at <= now();
 
-    -- Lock kandidat users_staff secara deterministik via CTE dengan ORDER BY & FOR UPDATE
+    -- CTE Multi-Row Lock
     WITH locked_candidates AS (
         SELECT s.id
         FROM public.users_staff s
@@ -337,7 +380,6 @@ BEGIN
         RAISE EXCEPTION 'Terdeteksi % akun staf duplikat untuk email % pada tenant %. Undangan dibatalkan demi keamanan.', v_candidate_count, v_clean_email, target_tenant_id;
     END IF;
 
-    -- Cryptographic 32-byte Token & SHA-256 Hash
     v_raw_token := encode(gen_random_bytes(32), 'hex');
     v_token_hash := encode(digest(v_raw_token, 'sha256'), 'hex');
     v_expires_at := now() + INTERVAL '7 days';
@@ -365,7 +407,7 @@ BEGIN
 END;
 $$;
 
--- 5. RPC Safe Invitation Info Preview (Anon/Auth Allowed, Masked Email, Zero token_hash Exposure)
+-- 2. get_invitation_info()
 CREATE OR REPLACE FUNCTION public.get_invitation_info(raw_invite_token TEXT)
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -408,7 +450,7 @@ BEGIN
         RETURN jsonb_build_object('is_valid', false, 'message', 'Masa berlaku undangan telah kedaluwarsa.');
     END IF;
 
-    -- Email Masking e.g. u***r@domain.com
+    -- Email Masking
     v_email_parts := regexp_split_to_array(v_inv.email, '@');
     IF array_length(v_email_parts, 1) = 2 THEN
         v_username := v_email_parts[1];
@@ -424,7 +466,7 @@ BEGIN
 
     SELECT name INTO v_tenant_name
     FROM public.tenants
-    WHERE tenant_id::text = v_inv.tenant_id;
+    WHERE tenant_id::text = v_inv.tenant_id OR id::text = v_inv.tenant_id;
 
     RETURN jsonb_build_object(
         'is_valid', true,
@@ -437,7 +479,7 @@ BEGIN
 END;
 $$;
 
--- 6. RPC Claim Staff Invitation (CTE Deterministic Locking, Zero Arbitrary LIMIT 1)
+-- 3. claim_staff_invitation()
 CREATE OR REPLACE FUNCTION public.claim_staff_invitation(raw_invite_token TEXT)
 RETURNS BOOLEAN
 LANGUAGE plpgsql
@@ -460,13 +502,11 @@ BEGIN
         RETURN FALSE;
     END IF;
 
-    -- 1. Verifikasi auth.uid()
     v_caller_uid := auth.uid()::text;
     IF v_caller_uid IS NULL OR trim(v_caller_uid) = '' THEN
         RETURN FALSE;
     END IF;
 
-    -- 2. Ambil email dan email_confirmed_at dari auth.users
     SELECT LOWER(trim(u.email)), u.email_confirmed_at
     INTO v_auth_email, v_email_confirmed
     FROM auth.users u
@@ -476,10 +516,8 @@ BEGIN
         RAISE EXCEPTION 'Klaim gagal: Email % belum diverifikasi.', v_auth_email;
     END IF;
 
-    -- 3. Hitung SHA-256 dari raw token
     v_computed_hash := encode(digest(raw_invite_token, 'sha256'), 'hex');
 
-    -- 4, 5. Lock record undangan dengan SELECT FOR UPDATE
     SELECT i.id, i.tenant_id, LOWER(trim(COALESCE(i.invite_email, i.email))) AS invite_email, LOWER(trim(COALESCE(i.invite_role, i.role))) AS invite_role, i.expires_at, i.accepted_at, i.revoked_at, i.status
     INTO v_inv
     FROM public.invitations i
@@ -498,7 +536,6 @@ BEGIN
         RETURN FALSE;
     END IF;
 
-    -- 6. Lock kandidat users_staff secara deterministik via CTE dengan ORDER BY & FOR UPDATE
     WITH locked_candidates AS (
         SELECT s.id
         FROM public.users_staff s
@@ -553,7 +590,7 @@ BEGIN
 END;
 $$;
 
--- 7. RPC Revoke Invitation (Authorized Owner/Admin only, SELECT FOR UPDATE)
+-- 4. revoke_staff_invitation()
 CREATE OR REPLACE FUNCTION public.revoke_staff_invitation(target_invitation_id UUID)
 RETURNS BOOLEAN
 LANGUAGE plpgsql
@@ -613,13 +650,9 @@ BEGIN
 END;
 $$;
 
--- Drop legacy bypass functions if exist
-DROP FUNCTION IF EXISTS public.claim_unambiguous_account();
-DROP FUNCTION IF EXISTS public.claim_user_account(TEXT);
-DROP FUNCTION IF EXISTS public.claim_user_account();
-
--- Targeted Revoke & Grant per specific audited security function (Preserves other app functions intact)
+-- Targeted REVOKE & GRANT per specific audited security function (Preserves other app functions intact)
 REVOKE EXECUTE ON FUNCTION public.is_superadmin() FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.bootstrap_platform_superadmin() FROM PUBLIC, anon;
 REVOKE EXECUTE ON FUNCTION public.get_user_tenant_role(TEXT) FROM PUBLIC, anon;
 REVOKE EXECUTE ON FUNCTION public.user_has_tenant_access(TEXT) FROM PUBLIC, anon;
 REVOKE EXECUTE ON FUNCTION public.get_coach_id_for_user(TEXT) FROM PUBLIC, anon;
@@ -629,6 +662,7 @@ REVOKE EXECUTE ON FUNCTION public.revoke_staff_invitation(UUID) FROM PUBLIC, ano
 REVOKE EXECUTE ON FUNCTION public.get_invitation_info(TEXT) FROM PUBLIC;
 
 GRANT EXECUTE ON FUNCTION public.is_superadmin() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.bootstrap_platform_superadmin() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_user_tenant_role(TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.user_has_tenant_access(TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_coach_id_for_user(TEXT) TO authenticated;
@@ -637,10 +671,9 @@ GRANT EXECUTE ON FUNCTION public.claim_staff_invitation(TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.revoke_staff_invitation(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_invitation_info(TEXT) TO anon, authenticated;
 
--- Hak Akses Tabel & Kolom: Cabut SELECT token_hash dari authenticated dan anon
+-- Sealed Column Grants on invitations
 REVOKE ALL ON TABLE public.invitations FROM PUBLIC, anon, authenticated;
 
--- Berikan SELECT kolom terbatas (EXCLUDING token_hash) kepada authenticated
 GRANT SELECT (
     id, tenant_id, invite_email, email, invite_role, role, status,
     created_by_uid, expires_at, accepted_at, accepted_by_uid,
@@ -648,7 +681,7 @@ GRANT SELECT (
 ) ON public.invitations TO authenticated;
 
 -- =========================================================================
--- 3. TRIGGER PROTECTION ON SENSITIVE COLUMNS (NULL-SAFE IS DISTINCT FROM)
+-- 5. TRIGGER PROTECTION ON SENSITIVE COLUMNS
 -- =========================================================================
 
 -- 1. Trigger pada users_staff
@@ -667,18 +700,27 @@ BEGIN
 
     caller_tenant_role := public.get_user_tenant_role(OLD.tenant_id::text);
 
-    IF NOT public.is_superadmin() AND COALESCE(caller_tenant_role, '') NOT IN ('owner', 'admin') THEN
-        IF OLD.role IS DISTINCT FROM NEW.role THEN
-            RAISE EXCEPTION 'Perubahan role staf hanya diizinkan untuk Owner/Admin.';
+    IF NOT public.is_superadmin() THEN
+        IF COALESCE(caller_tenant_role, '') NOT IN ('owner', 'admin') THEN
+            IF OLD.role IS DISTINCT FROM NEW.role THEN
+                RAISE EXCEPTION 'Perubahan role staf hanya diizinkan untuk Owner/Admin.';
+            END IF;
+            IF OLD.status IS DISTINCT FROM NEW.status THEN
+                RAISE EXCEPTION 'Perubahan status staf hanya diizinkan untuk Owner/Admin.';
+            END IF;
+            IF OLD.is_active IS DISTINCT FROM NEW.is_active THEN
+                RAISE EXCEPTION 'Perubahan status aktif staf hanya diizinkan untuk Owner/Admin.';
+            END IF;
         END IF;
-        IF OLD.status IS DISTINCT FROM NEW.status THEN
-            RAISE EXCEPTION 'Perubahan status staf hanya diizinkan untuk Owner/Admin.';
-        END IF;
+
+        -- Direct mutation of bound UID dilarang
         IF OLD.uid IS NOT NULL AND OLD.uid IS DISTINCT FROM NEW.uid THEN
             RAISE EXCEPTION 'Auth UID staf yang sudah terikat tidak dapat diubah.';
         END IF;
+
+        -- Direct binding of UID via UPDATE dilarang untuk UID pengguna lain
         IF OLD.uid IS NULL AND NEW.uid IS NOT NULL AND NEW.uid <> auth.uid()::text THEN
-            RAISE EXCEPTION 'Pengikatan Auth UID hanya diizinkan untuk akun sendiri.';
+            RAISE EXCEPTION 'Pengikatan Auth UID staf lain secara langsung dilarang. Gunakan mekanisme klaim undangan.';
         END IF;
     END IF;
 
@@ -705,6 +747,12 @@ SET search_path = public, extensions, pg_temp
 AS $$
 BEGIN
     IF NOT public.is_superadmin() THEN
+        IF OLD.id::text IS DISTINCT FROM NEW.id::text THEN
+            RAISE EXCEPTION 'Perubahan primary key tenant (id) dilarang.';
+        END IF;
+        IF OLD.tenant_id::text IS DISTINCT FROM NEW.tenant_id::text THEN
+            RAISE EXCEPTION 'Perubahan tenant_id dilarang.';
+        END IF;
         IF OLD.owner_uid IS DISTINCT FROM NEW.owner_uid THEN
             RAISE EXCEPTION 'Pemindahan kepemilikan tenant (owner_uid) dilarang via UPDATE biasa.';
         END IF;
@@ -723,8 +771,9 @@ FOR EACH ROW
 EXECUTE FUNCTION public.protect_tenants_columns();
 
 -- =========================================================================
--- 4. PEMBERSIHAN POLICY PERMISSIVE RESIDU (tenant_isolation_policy)
+-- 6. PEMBERSIHAN POLICY RESIDU & HARDENED RLS PER TABEL (25+ TABLES)
 -- =========================================================================
+
 DO $$
 DECLARE
     tbl text;
@@ -745,13 +794,7 @@ BEGIN
     END LOOP;
 END $$;
 
--- =========================================================================
--- 5. PENEGAKAN KEBIJAKAN RLS GRANULAR PER TABEL (FULL CRUD MATRIX)
--- =========================================================================
-
--- -------------------------------------------------------------------------
--- A. TABEL: invitations (Token Hash Sealed from Direct SELECT via Column Grants + RLS)
--- -------------------------------------------------------------------------
+-- 1. invitations
 DROP POLICY IF EXISTS "invitations_select_hardened" ON public.invitations;
 CREATE POLICY "invitations_select_hardened" ON public.invitations
 FOR SELECT USING (
@@ -761,27 +804,17 @@ FOR SELECT USING (
 
 DROP POLICY IF EXISTS "invitations_insert_hardened" ON public.invitations;
 CREATE POLICY "invitations_insert_hardened" ON public.invitations
-FOR INSERT WITH CHECK (
-    public.is_superadmin()
-);
+FOR INSERT WITH CHECK (public.is_superadmin());
 
 DROP POLICY IF EXISTS "invitations_update_hardened" ON public.invitations;
 CREATE POLICY "invitations_update_hardened" ON public.invitations
-FOR UPDATE USING (
-    public.is_superadmin()
-) WITH CHECK (
-    public.is_superadmin()
-);
+FOR UPDATE USING (public.is_superadmin()) WITH CHECK (public.is_superadmin());
 
 DROP POLICY IF EXISTS "invitations_delete_hardened" ON public.invitations;
 CREATE POLICY "invitations_delete_hardened" ON public.invitations
-FOR DELETE USING (
-    public.is_superadmin()
-);
+FOR DELETE USING (public.is_superadmin());
 
--- -------------------------------------------------------------------------
--- B. TABEL: tenants
--- -------------------------------------------------------------------------
+-- 2. tenants
 ALTER TABLE public.tenants ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "tenants_select_hardened" ON public.tenants;
@@ -793,7 +826,7 @@ FOR SELECT USING (
       LOWER(COALESCE(owner_email, '')) = LOWER(COALESCE(auth.jwt() ->> 'email', ''))
       AND EXISTS (SELECT 1 FROM auth.users u WHERE u.id = auth.uid() AND u.email_confirmed_at IS NOT NULL)
     )
-    OR public.get_user_tenant_role(tenant_id::text) IS NOT NULL
+    OR public.get_user_tenant_role(COALESCE(tenant_id::text, id::text)) IS NOT NULL
 );
 
 DROP POLICY IF EXISTS "tenants_insert_hardened" ON public.tenants;
@@ -806,22 +839,16 @@ FOR INSERT WITH CHECK (
 DROP POLICY IF EXISTS "tenants_update_hardened" ON public.tenants;
 CREATE POLICY "tenants_update_hardened" ON public.tenants
 FOR UPDATE USING (
-    public.is_superadmin()
-    OR owner_uid::text = auth.uid()::text
+    public.is_superadmin() OR owner_uid::text = auth.uid()::text
 ) WITH CHECK (
-    public.is_superadmin()
-    OR owner_uid::text = auth.uid()::text
+    public.is_superadmin() OR owner_uid::text = auth.uid()::text
 );
 
 DROP POLICY IF EXISTS "tenants_delete_hardened" ON public.tenants;
 CREATE POLICY "tenants_delete_hardened" ON public.tenants
-FOR DELETE USING (
-    public.is_superadmin()
-);
+FOR DELETE USING (public.is_superadmin());
 
--- -------------------------------------------------------------------------
--- C. TABEL: users_staff
--- -------------------------------------------------------------------------
+-- 3. users_staff
 ALTER TABLE public.users_staff ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "users_staff_select_hardened" ON public.users_staff;
@@ -868,3 +895,46 @@ FOR DELETE USING (
     public.is_superadmin()
     OR public.get_user_tenant_role(tenant_id::text) IN ('owner', 'admin')
 );
+
+-- =========================================================================
+-- 7. READ-ONLY VERIFICATION QUERIES (RUN AFTER MIGRATION IN STAGING)
+-- =========================================================================
+
+-- Query 1: Verify Column Privileges on invitations (token_hash must be false)
+SELECT 
+    grantee, 
+    table_name, 
+    column_name, 
+    privilege_type
+FROM information_schema.column_privileges
+WHERE table_name = 'invitations'
+ORDER BY grantee, column_name;
+
+-- Query 2: Verify RLS status on core tenant tables
+SELECT 
+    schemaname, 
+    tablename, 
+    rowsecurity 
+FROM pg_tables 
+WHERE schemaname = 'public' 
+  AND tablename IN ('tenants', 'invitations', 'users_staff', 'coaches', 'transactions');
+
+-- Query 3: Verify Superadmin Auth UID binding status
+SELECT 
+    id, 
+    email, 
+    auth_uid, 
+    (auth_uid IS NOT NULL) AS is_bound,
+    created_at 
+FROM public.platform_superadmins;
+
+-- Query 4: Verify Functions SECURITY DEFINER and search_path
+SELECT 
+    p.proname AS function_name,
+    pg_get_userbyid(p.proowner) AS owner,
+    p.prosecdef AS is_security_definer,
+    p.proconfig AS search_path_config
+FROM pg_proc p
+JOIN pg_namespace n ON p.pronamespace = n.oid
+WHERE n.nspname = 'public'
+  AND p.proname IN ('is_superadmin', 'get_user_tenant_role', 'create_staff_invitation', 'claim_staff_invitation', 'revoke_staff_invitation');
