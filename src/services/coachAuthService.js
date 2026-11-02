@@ -1,7 +1,15 @@
 import { supabase } from '../config/supabase';
+import { createStaffInvitation } from './staffService';
 
 /**
- * Mendaftarkan pelatih baru di akademi sekaligus membuatkan akun login Auth, Users Staff, & Invitations
+ * Mendaftarkan pelatih baru di akademi (tabel public.coaches)
+ * sekaligus mengundang pelatih melalui sistem undangan resmi database (create_staff_invitation RPC).
+ *
+ * Catatan Arsitektur & Keamanan:
+ * - Data profil pelatih tetap disimpan pada tabel kanonis `coaches`.
+ * - Pembuatan akun login TIDAK melakukan direct signUp atau direct upsert ke users_staff/invitations.
+ * - Akun pelatih diundang melalui sistem RPC resmi, menghasilkan token aman & tautan undangan yang dapat disalin.
+ * - Binding Auth UID dilakukan secara atomik saat pelatih mengklaim undangan via RPC claim_staff_invitation.
  */
 export async function createCoachWithAccount({
   tenantId,
@@ -9,123 +17,24 @@ export async function createCoachWithAccount({
   name,
   phone,
   email,
-  password,
   specialty,
   sportSpecialty,
   photoUrl,
   nickname,
   nik,
   license,
-  address
+  address,
 }) {
-  let authUid = null;
   const cleanEmail = email ? email.trim().toLowerCase() : null;
   const cleanName = name ? name.trim() : '';
   const chosenSpecialty = sportSpecialty || specialty || 'Pelatih Utama';
-
-  // 1. TANGANI SIGN UP SUPABASE AUTH
-  if (cleanEmail && password) {
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email: cleanEmail,
-      password: password,
-      options: {
-        data: {
-          tenant_id: tenantId,
-          role: 'coach',
-          full_name: cleanName
-        }
-      }
-    });
-
-    if (authError) {
-      console.warn('[coachAuthService] Auth SignUp note:', authError.message);
-      const msg = (authError.message || '').toLowerCase();
-      if (
-        msg.includes('already registered') ||
-        msg.includes('already exists') ||
-        authError.status === 422 ||
-        authError.code === 'user_already_exists'
-      ) {
-        // User sudah terdaftar di Supabase Auth -> Jangan gagalkan seluruh proses,
-        // lanjutkan upsert data undangan dan penyambungan pengguna ke tenant.
-        console.info(`[coachAuthService] User email "${cleanEmail}" sudah terdaftar di Auth. Melanjutkan penyambungan tenant & undangan.`);
-        try {
-          const { data: existingStaff } = await supabase
-            .from('users_staff')
-            .select('uid')
-            .eq('email', cleanEmail)
-            .maybeSingle();
-          if (existingStaff?.uid) {
-            authUid = existingStaff.uid;
-          }
-        } catch (e) {
-          console.warn('[coachAuthService] Fetch existing staff UID note:', e);
-        }
-      }
-    } else {
-      authUid = authData.user?.id || null;
-    }
-  }
-
-  // 2. SINKRONISASI OTOMATIS: Insert / Upsert ke public.users_staff & public.invitations
-  if (cleanEmail) {
-    // Sinkronisasi ke public.users_staff
-    try {
-      const staffRecord = {
-        uid: authUid || null,
-        tenant_id: tenantId,
-        email: cleanEmail,
-        name: cleanName,
-        full_name: cleanName,
-        role: 'coach',
-        status: 'active',
-        is_active: true,
-        created_at: new Date().toISOString()
-      };
-
-      const { error: staffErr } = await supabase
-        .from('users_staff')
-        .upsert([staffRecord], { onConflict: 'email,tenant_id' });
-
-      if (staffErr) {
-        console.warn('[coachAuthService] Warning upserting users_staff:', staffErr.message);
-        await supabase
-          .from('users_staff')
-          .update(staffRecord)
-          .eq('email', cleanEmail);
-      }
-    } catch (staffCatch) {
-      console.warn('[coachAuthService] Catch upserting users_staff:', staffCatch);
-    }
-
-    // Sinkronisasi ke public.invitations (HANYA MENGGUNAKAN KOLOM SKEMA STANDAR: tenant_id, email, role, status, created_at)
-    try {
-      const invRecord = {
-        tenant_id: tenantId,
-        email: cleanEmail,
-        role: 'coach',
-        status: 'accepted',
-        created_at: new Date().toISOString()
-      };
-
-      const { error: invErr } = await supabase
-        .from('invitations')
-        .upsert([invRecord], { onConflict: 'email,tenant_id' });
-
-      if (invErr) {
-        console.warn('[coachAuthService] Warning upserting invitations:', invErr.message);
-        await supabase
-          .from('invitations')
-          .update(invRecord)
-          .eq('email', cleanEmail);
-      }
-    } catch (invCatch) {
-      console.warn('[coachAuthService] Catch upserting invitations:', invCatch);
-    }
-  }
-
-  // 3. INSERT / UPSERT KE TABEL public.coaches
   const cleanAcademyId = academyId ? String(academyId).trim() : null;
+
+  if (!cleanName || !tenantId) {
+    throw new Error('Nama pelatih dan ID Tenant wajib diisi.');
+  }
+
+  // 1. Simpan data pelatih ke tabel kanonis `coaches`
   const coachPayload = {
     tenant_id: tenantId,
     academy_id: cleanAcademyId,
@@ -134,7 +43,7 @@ export async function createCoachWithAccount({
     email: cleanEmail,
     sport_specialty: chosenSpecialty,
     status: 'Aktif',
-    created_at: new Date().toISOString()
+    created_at: new Date().toISOString(),
   };
 
   if (nickname) coachPayload.nickname = nickname.trim();
@@ -161,7 +70,7 @@ export async function createCoachWithAccount({
       email: cleanEmail,
       sport_specialty: chosenSpecialty,
       status: 'Aktif',
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
     };
     if (license !== undefined) corePayload.license = license ? String(license).trim() : null;
     if (address !== undefined) corePayload.address = address || null;
@@ -171,6 +80,7 @@ export async function createCoachWithAccount({
       .insert([corePayload])
       .select()
       .single();
+
     if (!retryRes.error) {
       insertedCoach = retryRes.data;
       coachError = null;
@@ -189,23 +99,6 @@ export async function createCoachWithAccount({
 
       if (existingCoach) {
         coachData = existingCoach;
-        const updatePayload = {
-          name: cleanName,
-          sport_specialty: chosenSpecialty,
-          updated_at: new Date().toISOString()
-        };
-        if (cleanAcademyId) updatePayload.academy_id = cleanAcademyId;
-        if (phone) updatePayload.phone = phone.trim();
-        if (photoUrl) updatePayload.photo_url = photoUrl;
-        if (nickname) updatePayload.nickname = nickname.trim();
-        if (nik) updatePayload.nik = nik.trim();
-        if (license !== undefined) updatePayload.license = license ? String(license).trim() : null;
-        if (address !== undefined) updatePayload.address = address || null;
-
-        await supabase
-          .from('coaches')
-          .update(updatePayload)
-          .eq('id', existingCoach.id);
       } else {
         throw new Error(`Gagal menyimpan data pelatih: ${coachError.message}`);
       }
@@ -216,7 +109,32 @@ export async function createCoachWithAccount({
     coachData = insertedCoach;
   }
 
-  return { success: true, coach: coachData };
+  // 2. Jika email disediakan, buat undangan resmi staf dengan peran 'coach'
+  let invitationResult = null;
+  if (cleanEmail) {
+    try {
+      invitationResult = await createStaffInvitation({
+        tenantId,
+        email: cleanEmail,
+        role: 'coach',
+        fullName: cleanName,
+      });
+    } catch (invErr) {
+      console.warn('[coachAuthService] Warning creating coach staff invitation:', invErr.message);
+      // Jangan gagalkan pembuatan record pelatih jika RPC melempar duplikasi undangan aktif
+      invitationResult = {
+        success: false,
+        warning: invErr.message,
+      };
+    }
+  }
+
+  return {
+    success: true,
+    coach: coachData,
+    invitation: invitationResult,
+    inviteUrl: invitationResult?.inviteUrl || null,
+  };
 }
 
 /**
@@ -224,7 +142,7 @@ export async function createCoachWithAccount({
  */
 export async function updateCoachPassword(newPassword) {
   const { data, error } = await supabase.auth.updateUser({
-    password: newPassword
+    password: newPassword,
   });
 
   if (error) {
@@ -235,5 +153,5 @@ export async function updateCoachPassword(newPassword) {
 
 export default {
   createCoachWithAccount,
-  updateCoachPassword
+  updateCoachPassword,
 };

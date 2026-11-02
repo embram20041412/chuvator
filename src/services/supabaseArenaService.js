@@ -904,11 +904,13 @@ export async function getStaff(tenantId) {
 export async function createStaff(payload) {
   const dbPayload = {
     tenant_id: payload.tenantId,
-    uid: payload.uid,
+    uid: payload.uid || null,
     display_name: payload.displayName || payload.name,
     name: payload.name || payload.displayName,
     email: (payload.email || '').toLowerCase().trim(),
-    role: payload.role,
+    role: payload.role || 'kasir',
+    status: 'active',
+    is_active: true,
     created_at: new Date().toISOString()
   };
 

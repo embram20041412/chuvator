@@ -43,7 +43,7 @@ export async function verifyUserRoleAndTenant(user) {
       const { data: staffByUid } = await supabase
         .from('users_staff')
         .select('*')
-        .eq('id', userId)
+        .or(`uid.eq.${userId},id.eq.${userId}`)
         .maybeSingle();
       if (staffByUid) staffData = staffByUid;
     }
@@ -52,7 +52,7 @@ export async function verifyUserRoleAndTenant(user) {
       const { data: staffByEmail } = await supabase
         .from('users_staff')
         .select('*')
-        .eq('email', normalizedEmail)
+        .ilike('email', normalizedEmail)
         .maybeSingle();
       if (staffByEmail) staffData = staffByEmail;
     }
@@ -167,7 +167,27 @@ export async function verifyUserRoleAndTenant(user) {
     };
   }
 
-  // 5. IF NOT IN invitations, NOT IN tenants, AND NOT IN users_staff: STRICT FAIL-CLOSED ACCESS DENIED!
+  // 5. IF NOT IN invitations, NOT IN tenants, AND NOT IN users_staff:
+  // Jika pengguna sedang berada pada rute penerimaan undangan, jangan sign-out paksa
+  const isAcceptingInvite = typeof window !== 'undefined' && 
+    (window.location.pathname.includes('/accept-invitation') || window.location.pathname.includes('/invite'));
+
+  if (isAcceptingInvite) {
+    return {
+      uid: userId,
+      id: userId,
+      displayName: displayName || 'Calon Anggota',
+      email: user.email,
+      photoURL,
+      role: 'guest',
+      tenant: null,
+      tenantId: null,
+      isStaff: false,
+      isPendingClaim: true,
+    };
+  }
+
+  // STRICT FAIL-CLOSED ACCESS DENIED!
   await supabase.auth.signOut({ scope: 'local' });
   const uninvitedErr = new Error(
     `Akses Ditolak: Email Anda (${user.email || 'tanpa email'}) belum terdaftar dalam daftar undangan resmi CHUA SPORT CORE. Silakan hubungi Administrator Sistem untuk mendapatkan akses.`

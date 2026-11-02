@@ -22,6 +22,8 @@ const EventDetailPage = lazy(() => import('./pages/EventDetailPage'));
 const FinancePage = lazy(() => import('./pages/FinancePage'));
 const IntelligencePage = lazy(() => import('./pages/IntelligencePage'));
 const PengaturanPage = lazy(() => import('./pages/PengaturanPage'));
+const StaffManagementPage = lazy(() => import('./pages/StaffManagementPage'));
+const AcceptInvitationPage = lazy(() => import('./pages/AcceptInvitationPage'));
 const PortalDashboard = lazy(() => import('./pages/Portal/PortalDashboard'));
 
 function PageLoadingSkeleton() {
@@ -151,6 +153,10 @@ export default function App() {
               }
             />
 
+            {/* Public Staff & Coach Invitation Claiming */}
+            <Route path="/accept-invitation" element={<AcceptInvitationPage />} />
+            <Route path="/invite" element={<AcceptInvitationPage />} />
+
             {/* Portal Wali Murid (Isolated Mobile-First Unified Routing) */}
             <Route element={<PortalLayout />}>
               <Route path="/portal" element={<PortalLogin />} />
@@ -260,6 +266,14 @@ export default function App() {
                       userProfile={userProfile}
                       onTenantUpdated={handleTenantUpdated}
                     />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/staff"
+                element={
+                  <ProtectedRoute userProfile={userProfile} allowedRoles={['owner', 'superadmin', 'admin']}>
+                    <StaffManagementPage userProfile={userProfile} />
                   </ProtectedRoute>
                 }
               />

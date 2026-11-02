@@ -222,23 +222,30 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
     setStaffErrorMsg(null);
 
     try {
-      await registerNewStaff({
+      const res = await registerNewStaff({
         fullName: newStaffName,
         name: newStaffName,
         email: newStaffEmail,
-        password: newStaffPassword,
         role: newStaffRole,
         tenantId: tenant.id
       });
 
-      setStaffSuccessMsg(`Berhasil mendaftarkan ${newStaffRole === 'admin' ? 'Admin Staf' : 'Pelatih Akademi'} (${newStaffEmail})!`);
+      if (res?.inviteUrl) {
+        setStaffSuccessMsg(`Tautan undangan untuk ${newStaffEmail} berhasil diterbitkan & disalin ke clipboard: ${res.inviteUrl}`);
+        try {
+          navigator.clipboard?.writeText(res.inviteUrl);
+        } catch (_) {}
+      } else {
+        setStaffSuccessMsg(`Berhasil menerbitkan undangan untuk ${newStaffEmail}!`);
+      }
+
       setNewStaffName('');
       setNewStaffEmail('');
       setNewStaffPassword('');
       setNewStaffRole('admin');
 
       fetchStaffList();
-      setTimeout(() => setStaffSuccessMsg(null), 5000);
+      setTimeout(() => setStaffSuccessMsg(null), 8000);
     } catch (err) {
       console.error('Error registering staff:', err);
       setStaffErrorMsg(err.message || 'Gagal mendaftarkan akun staf.');
@@ -251,13 +258,20 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
     if (!staffEmail) return;
     setResendingStaffEmail(staffEmail);
     try {
-      await resendStaffInvitation(staffEmail);
-      setStaffSuccessMsg(`Email konfirmasi/undangan berhasil dikirim ulang ke ${staffEmail}`);
-      setTimeout(() => setStaffSuccessMsg(null), 4000);
+      const res = await resendStaffInvitation(staffEmail, tenant?.id);
+      if (res?.inviteUrl) {
+        setStaffSuccessMsg(`Tautan undangan untuk ${staffEmail} berhasil disalin ke clipboard: ${res.inviteUrl}`);
+        try {
+          navigator.clipboard?.writeText(res.inviteUrl);
+        } catch (_) {}
+      } else {
+        setStaffSuccessMsg(`Tautan undangan untuk ${staffEmail} berhasil diproses.`);
+      }
+      setTimeout(() => setStaffSuccessMsg(null), 8000);
     } catch (err) {
       console.error('Error resending invite in PengaturanPage:', err);
-      setStaffErrorMsg(`Gagal mengirim ulang email konfirmasi: ${err.message || 'Terjadi kesalahan sistem'}`);
-      setTimeout(() => setStaffErrorMsg(null), 4000);
+      setStaffErrorMsg(`Gagal memproses undangan: ${err.message || 'Terjadi kesalahan sistem'}`);
+      setTimeout(() => setStaffErrorMsg(null), 5000);
     } finally {
       setResendingStaffEmail(null);
     }

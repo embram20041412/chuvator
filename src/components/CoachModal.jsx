@@ -352,15 +352,13 @@ export default function CoachModal({
         if (onCoachUpdated) {
           onCoachUpdated(updatedCoach || { id: coachToEdit.id, ...coachData });
         }
-      } else {
-        if (coachEmail && coachPassword) {
+        if (coachEmail) {
           const res = await createCoachWithAccount({
             tenantId,
             academyId: resolvedAcademyId,
             name: coachName.trim(),
             phone: coachPhone.trim(),
             email: coachEmail.trim(),
-            password: coachPassword,
             sportSpecialty: sportSpecialty || 'Pelatih Utama',
             license: license.trim() || null,
             photoUrl: finalPhotoUrl,
@@ -368,40 +366,20 @@ export default function CoachModal({
             nik: nik.trim(),
             address: coachData.address
           });
+
           if (onCoachAdded) {
             onCoachAdded(res.coach || { id: `coach_${Date.now()}`, ...coachData });
           }
-        } else {
-          const createdCoach = await supabaseAcademyService.createCoach(coachData);
-          
-          // Sinkronisasi otomatis ke users_staff & invitations jika email disertakan
-          if (coachEmail && tenantId) {
-            const cleanEmail = coachEmail.trim().toLowerCase();
-            const cleanName = coachName.trim();
-            try {
-              await supabase.from('users_staff').upsert([{
-                tenant_id: tenantId,
-                email: cleanEmail,
-                name: cleanName,
-                full_name: cleanName,
-                role: 'coach',
-                status: 'active',
-                is_active: true,
-                created_at: new Date().toISOString()
-              }], { onConflict: 'email,tenant_id' });
 
-              await supabase.from('invitations').upsert([{
-                tenant_id: tenantId,
-                email: cleanEmail,
-                role: 'coach',
-                status: 'accepted',
-                created_at: new Date().toISOString()
-              }], { onConflict: 'email,tenant_id' });
-            } catch (syncErr) {
-              console.warn('[CoachModal] Sync users_staff & invitations note:', syncErr);
+          if (res.inviteUrl) {
+            try {
+              navigator.clipboard?.writeText(res.inviteUrl);
+            } catch (clipErr) {
+              // Ignore clipboard write restrictions
             }
           }
-
+        } else {
+          const createdCoach = await supabaseAcademyService.createCoach(coachData);
           if (onCoachAdded) {
             onCoachAdded(createdCoach || { id: `coach_${Date.now()}`, ...coachData });
           }

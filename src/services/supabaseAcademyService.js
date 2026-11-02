@@ -590,6 +590,11 @@ export async function updateCoach(coachId, payload) {
   if (payload.license !== undefined) mapped.license = payload.license ? String(payload.license).trim() : null;
   if (payload.address !== undefined) mapped.address = payload.address || null;
   if (payload.status !== undefined) mapped.status = payload.status;
+  // Keamanan RLS & Integritas: Dilarang memutasi tenant_id atau auth_uid via updateCoach
+  delete mapped.tenant_id;
+  delete mapped.tenantId;
+  delete mapped.auth_uid;
+  delete mapped.authUid;
   mapped.updated_at = new Date().toISOString();
 
   try {
