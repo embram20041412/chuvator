@@ -112,12 +112,16 @@ BEGIN
         RAISE EXCEPTION '[FAIL] Test 2: Admin Tenant A dapat mengakses transaksi Tenant B.';
     END IF;
 
-    -- TEST 3: Coach menghapus transaksi keuangan (Harus Ditolak RLS / 0 rows deleted)
+    -- TEST 3: Coach membaca & menghapus transaksi keuangan (Harus Ditolak RLS / 0 rows)
     PERFORM set_config('request.jwt.claims', json_build_object('sub', coach_a_uid, 'email', 'coach_a@arena.com')::text, true);
+    SELECT COUNT(*) INTO res_count FROM public.transactions WHERE tenant_id = tenant_a::text;
+    IF res_count > 0 THEN
+        RAISE EXCEPTION '[FAIL] Test 3: Kebocoran Keuangan! Coach dapat membaca % baris transaksi.', res_count;
+    END IF;
     DELETE FROM public.transactions WHERE id = tx_a_id;
     GET DIAGNOSTICS res_count = ROW_COUNT;
     IF res_count = 0 THEN
-        RAISE NOTICE '[PASS] Test 3: Coach tidak dapat menghapus transaksi keuangan (0 rows deleted via RLS).';
+        RAISE NOTICE '[PASS] Test 3: Coach ditolak dari membaca & menghapus transaksi keuangan via RLS Least Privilege.';
     ELSE
         RAISE EXCEPTION '[FAIL] Test 3: Coach berhasil menghapus transaksi keuangan!';
     END IF;
@@ -223,31 +227,36 @@ BEGIN
         RAISE EXCEPTION '[FAIL] Test 10: Isolasi token_hash gagal! Authenticated user dapat membaca token_hash (Caught: %).', caught_sqlstate;
     END IF;
 
-    -- TEST 11: Kebocoran Policy Permissive Lama & Verifikasi Keberadaan Policy RBAC Baru
+    -- TEST 11: Kebocoran Policy Permissive Lama & Verifikasi Keberadaan Policy RBAC Baru pada 24 Tabel
     PERFORM set_config('request.jwt.claims', json_build_object('sub', owner_a_uid, 'email', 'owner_a@arena.com')::text, true);
     
-    -- Check 11.1: Permissive legacy policies must NOT exist on managed tables
     SELECT COUNT(*) INTO res_count 
     FROM pg_policies 
     WHERE schemaname = 'public' 
-      AND tablename IN ('tenants', 'invitations', 'users_staff', 'transactions', 'coaches', 'academies')
-      AND policyname IN ('tenant_isolation_policy', 'allow_read', 'allow_write');
+      AND tablename IN (
+        'platform_superadmins', 'tenants', 'invitations', 'users_staff',
+        'academies', 'academy_classes', 'coaches', 'students', 
+        'academy_evaluations', 'academy_attendance', 'spp_payments',
+        'courts', 'bookings', 'transactions', 'global_ledger', 
+        'pos_transactions', 'products', 'sponsors', 'events', 
+        'event_categories', 'event_registrations', 'event_expenses', 
+        'event_documents', 'event_matches'
+      )
+      AND policyname IN ('tenant_isolation_policy', 'allow_read', 'allow_write', 'tenant_select_policy');
       
     IF res_count > 0 THEN
         RAISE EXCEPTION '[FAIL] Test 11: Masih terdapat % policy permissive legacy pada tabel terkelola!', res_count;
     END IF;
 
-    -- Check 11.2: Required RBAC policies MUST exist on managed domain tables
-    SELECT COUNT(*) INTO res_count 
+    SELECT COUNT(DISTINCT tablename) INTO res_count 
     FROM pg_policies 
     WHERE schemaname = 'public' 
-      AND tablename = 'transactions'
       AND policyname LIKE '%_rbac';
 
-    IF res_count < 4 THEN
-        RAISE EXCEPTION '[FAIL] Test 11: Kebijakan RBAC baru pada tabel transactions belum lengkap (Ditemukan: % dari 4).', res_count;
+    IF res_count < 24 THEN
+        RAISE EXCEPTION '[FAIL] Test 11: Kebijakan RBAC baru belum terkonfigurasi di seluruh 24 tabel terkelola (Ditemukan pada % dari 24 tabel).', res_count;
     ELSE
-        RAISE NOTICE '[PASS] Test 11: Policy permissive legacy bersih (0) dan policy RBAC baru terverifikasi (% policy pada transactions).', res_count;
+        RAISE NOTICE '[PASS] Test 11: Katalog RLS 24 tabel terverifikasi lengkap (0 policy legacy, 24 tabel berkonfigurasi RBAC).';
     END IF;
 
     -- TEST 12: INSERT Data dengan tenant_id milik Tenant Lain (Harus Ditolak RLS / WITH CHECK)

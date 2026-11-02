@@ -1,5 +1,5 @@
 -- =========================================================================
--- CHUVATOR (CHUA SPORT CORE) — FINAL SUPABASE SECURITY HARDENING MIGRATION (FASE 1Y-FINAL)
+-- CHUVATOR (CHUA SPORT CORE) — FINAL SUPABASE SECURITY HARDENING MIGRATION (FASE 1Z-HARDENED)
 -- Target: Supabase PostgreSQL (SQL Editor / Migration Engine)
 -- Architecture: React Client SDK (Cloudflare Pages) -> Supabase PostgreSQL (RLS)
 -- Key Guarantees:
@@ -11,8 +11,9 @@
 --   6. Valid CTE Multi-Row Candidate Locking (WITH locked_candidates AS (...) SELECT array_agg(id) FOR UPDATE)
 --   7. Preflight Check & Safe Unique Index (idx_invitations_pending_unique) for Pending Invitations
 --   8. Sealed token_hash on invitations (Column-level SELECT Grant excluding token_hash)
---   9. Managed-Tables Targeted Policy Cleanup & Least-Privilege RBAC Matrix across ALL 24 managed tables
---  10. Explicit SECURITY DEFINER search_path = public, auth, extensions, pg_temp
+--   9. Strict 24-Tables Existence & Data Integrity Validation (Halts migration if any table or tenant_id mapping fails)
+--  10. Least-Privilege Role-Based Access Control (RBAC) RLS policies across ALL 24 tables (Financial access restricted to Superadmin/Owner/Admin/Kasir)
+--  11. Explicit SECURITY DEFINER search_path = public, auth, extensions, pg_temp
 -- =========================================================================
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto" WITH SCHEMA extensions;
@@ -808,10 +809,57 @@ FOR EACH ROW
 EXECUTE FUNCTION public.protect_tenants_columns();
 
 -- =========================================================================
--- 6. MANAGED-TABLES TARGETED POLICY CLEANUP & LEAST-PRIVILEGE RBAC MATRIX
+-- 6. STRICT 24-TABLES EXISTENCE VALIDATION & LEAST-PRIVILEGE RBAC MATRIX
 -- =========================================================================
 
--- A. Targeted Idempotent Cleanup of Legacy Policies ONLY on Managed Tables
+-- A. Strict Existence & Structure Validation across ALL 24 Mandatory Tables
+DO $$
+DECLARE
+    tbl text;
+    col_type text;
+    null_tenant_count int;
+    all_mandatory_tables text[] := ARRAY[
+        'platform_superadmins', 'tenants', 'invitations', 'users_staff',
+        'academies', 'academy_classes', 'coaches', 'students', 
+        'academy_evaluations', 'academy_attendance', 'spp_payments',
+        'courts', 'bookings', 'transactions', 'global_ledger', 
+        'pos_transactions', 'products', 'sponsors', 'events', 
+        'event_categories', 'event_registrations', 'event_expenses', 
+        'event_documents', 'event_matches'
+    ];
+BEGIN
+    -- 1. Validate Table Existence for ALL 24 Mandatory Tables
+    FOREACH tbl IN ARRAY all_mandatory_tables
+    LOOP
+        IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = tbl) THEN
+            RAISE EXCEPTION 'MIGRASI DIHENTIKAN: Tabel wajib "%" tidak ditemukan di schema public.', tbl USING ERRCODE = '42P01';
+        END IF;
+    END LOOP;
+
+    -- 2. Validate tenant_id Column & Existing Data Isolation on 20 Domain Tables
+    FOREACH tbl IN ARRAY unnest(all_mandatory_tables[5:24])
+    LOOP
+        SELECT data_type INTO col_type 
+        FROM information_schema.columns 
+        WHERE table_schema = 'public' AND table_name = tbl AND column_name = 'tenant_id';
+
+        IF col_type IS NULL THEN
+            EXECUTE format('ALTER TABLE public.%I ADD COLUMN tenant_id TEXT;', tbl);
+        ELSIF col_type NOT IN ('text', 'character varying', 'uuid') THEN
+            RAISE EXCEPTION 'MIGRASI DIHENTIKAN: Tabel "%" memiliki kolom tenant_id dengan tipe data "%" yang tidak valid (wajib TEXT/VARCHAR/UUID).', tbl, col_type USING ERRCODE = '42804';
+        END IF;
+
+        EXECUTE format('SELECT COUNT(*) FROM public.%I WHERE tenant_id IS NULL OR trim(tenant_id) = '''';', tbl) INTO null_tenant_count;
+        IF null_tenant_count > 0 THEN
+            RAISE EXCEPTION 'MIGRASI DIHENTIKAN: Terdeteksi % baris data pada tabel "%" yang belum memiliki tenant_id terisi.', null_tenant_count, tbl USING ERRCODE = '23502';
+        END IF;
+
+        EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', tbl);
+        EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY;', tbl);
+    END LOOP;
+END $$;
+
+-- B. Targeted Cleanup of Legacy Policies ONLY on Managed Tables
 DO $$
 DECLARE
     tbl text;
@@ -828,20 +876,17 @@ DECLARE
 BEGIN
     FOREACH tbl IN ARRAY managed_tables
     LOOP
-        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = tbl) THEN
-            -- Safely drop policies specifically on this managed table before recreating new RBAC policies
-            FOR pol IN 
-                SELECT policyname 
-                FROM pg_policies 
-                WHERE schemaname = 'public' AND tablename = tbl
-            LOOP
-                EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I;', pol.policyname, tbl);
-            END LOOP;
-        END IF;
+        FOR pol IN 
+            SELECT policyname 
+            FROM pg_policies 
+            WHERE schemaname = 'public' AND tablename = tbl
+        LOOP
+            EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I;', pol.policyname, tbl);
+        END LOOP;
     END LOOP;
 END $$;
 
--- B. CORE SYSTEM & IDENTITY TABLES RLS POLICIES
+-- C. CORE SYSTEM & IDENTITY TABLES RLS POLICIES
 
 -- 1. platform_superadmins
 ALTER TABLE public.platform_superadmins ENABLE ROW LEVEL SECURITY;
@@ -904,106 +949,55 @@ CREATE POLICY "users_staff_update_rbac" ON public.users_staff FOR UPDATE USING (
 );
 CREATE POLICY "users_staff_delete_rbac" ON public.users_staff FOR DELETE USING (public.is_superadmin() OR public.get_user_tenant_role(tenant_id::text) IN ('owner', 'admin'));
 
--- C. DOMAIN TABLES VALIDATION & LEAST-PRIVILEGE RBAC MATRIX (20 DOMAIN TABLES)
+-- D. DOMAIN TABLES LEAST-PRIVILEGE RBAC MATRIX (20 DOMAIN TABLES)
 DO $$
 DECLARE
     tbl text;
-    col_type text;
     fin_tables text[] := ARRAY['transactions', 'global_ledger', 'pos_transactions', 'spp_payments', 'event_expenses'];
     acad_tables text[] := ARRAY['academies', 'academy_classes', 'students', 'academy_evaluations', 'academy_attendance'];
     pos_tables text[] := ARRAY['products', 'courts', 'bookings'];
     event_tables text[] := ARRAY['events', 'event_categories', 'event_registrations', 'event_documents', 'event_matches', 'sponsors'];
 BEGIN
-    -- Financial Tables Group
+    -- Financial Tables Group (Restricted SELECT/INSERT/UPDATE/DELETE to Superadmin/Owner/Admin/Kasir)
     FOREACH tbl IN ARRAY fin_tables
     LOOP
-        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = tbl) THEN
-            SELECT data_type INTO col_type FROM information_schema.columns WHERE table_schema = 'public' AND table_name = tbl AND column_name = 'tenant_id';
-            IF col_type IS NULL THEN EXECUTE format('ALTER TABLE public.%I ADD COLUMN tenant_id TEXT;', tbl);
-            ELSIF col_type NOT IN ('text', 'character varying', 'uuid') THEN RAISE EXCEPTION 'Tabel % memilik tenant_id dengan tipe data % tak valid.', tbl, col_type;
-            END IF;
-
-            EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', tbl);
-            EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY;', tbl);
-
-            EXECUTE format('CREATE POLICY %I ON public.%I FOR SELECT USING (public.is_superadmin() OR public.user_has_tenant_access(tenant_id::text));', tbl || '_select_rbac', tbl);
-            EXECUTE format('CREATE POLICY %I ON public.%I FOR INSERT WITH CHECK (public.is_superadmin() OR public.user_can_manage_financials(tenant_id::text));', tbl || '_insert_rbac', tbl);
-            EXECUTE format('CREATE POLICY %I ON public.%I FOR UPDATE USING (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text)) WITH CHECK (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text));', tbl || '_update_rbac', tbl);
-            EXECUTE format('CREATE POLICY %I ON public.%I FOR DELETE USING (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text));', tbl || '_delete_rbac', tbl);
-        END IF;
+        EXECUTE format('CREATE POLICY %I ON public.%I FOR SELECT USING (public.is_superadmin() OR public.user_can_manage_financials(tenant_id::text));', tbl || '_select_rbac', tbl);
+        EXECUTE format('CREATE POLICY %I ON public.%I FOR INSERT WITH CHECK (public.is_superadmin() OR public.user_can_manage_financials(tenant_id::text));', tbl || '_insert_rbac', tbl);
+        EXECUTE format('CREATE POLICY %I ON public.%I FOR UPDATE USING (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text)) WITH CHECK (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text));', tbl || '_update_rbac', tbl);
+        EXECUTE format('CREATE POLICY %I ON public.%I FOR DELETE USING (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text));', tbl || '_delete_rbac', tbl);
     END LOOP;
 
     -- Academy Tables Group
     FOREACH tbl IN ARRAY acad_tables
     LOOP
-        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = tbl) THEN
-            SELECT data_type INTO col_type FROM information_schema.columns WHERE table_schema = 'public' AND table_name = tbl AND column_name = 'tenant_id';
-            IF col_type IS NULL THEN EXECUTE format('ALTER TABLE public.%I ADD COLUMN tenant_id TEXT;', tbl);
-            ELSIF col_type NOT IN ('text', 'character varying', 'uuid') THEN RAISE EXCEPTION 'Tabel % memilik tenant_id dengan tipe data % tak valid.', tbl, col_type;
-            END IF;
-
-            EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', tbl);
-            EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY;', tbl);
-
-            EXECUTE format('CREATE POLICY %I ON public.%I FOR SELECT USING (public.is_superadmin() OR public.user_has_tenant_access(tenant_id::text));', tbl || '_select_rbac', tbl);
-            EXECUTE format('CREATE POLICY %I ON public.%I FOR INSERT WITH CHECK (public.is_superadmin() OR public.user_can_manage_academy(tenant_id::text));', tbl || '_insert_rbac', tbl);
-            EXECUTE format('CREATE POLICY %I ON public.%I FOR UPDATE USING (public.is_superadmin() OR public.user_can_manage_academy(tenant_id::text)) WITH CHECK (public.is_superadmin() OR public.user_can_manage_academy(tenant_id::text));', tbl || '_update_rbac', tbl);
-            EXECUTE format('CREATE POLICY %I ON public.%I FOR DELETE USING (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text));', tbl || '_delete_rbac', tbl);
-        END IF;
+        EXECUTE format('CREATE POLICY %I ON public.%I FOR SELECT USING (public.is_superadmin() OR public.user_has_tenant_access(tenant_id::text));', tbl || '_select_rbac', tbl);
+        EXECUTE format('CREATE POLICY %I ON public.%I FOR INSERT WITH CHECK (public.is_superadmin() OR public.user_can_manage_academy(tenant_id::text));', tbl || '_insert_rbac', tbl);
+        EXECUTE format('CREATE POLICY %I ON public.%I FOR UPDATE USING (public.is_superadmin() OR public.user_can_manage_academy(tenant_id::text)) WITH CHECK (public.is_superadmin() OR public.user_can_manage_academy(tenant_id::text));', tbl || '_update_rbac', tbl);
+        EXECUTE format('CREATE POLICY %I ON public.%I FOR DELETE USING (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text));', tbl || '_delete_rbac', tbl);
     END LOOP;
 
     -- Coaches Table Group
-    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'coaches') THEN
-        SELECT data_type INTO col_type FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'coaches' AND column_name = 'tenant_id';
-        IF col_type IS NULL THEN ALTER TABLE public.coaches ADD COLUMN tenant_id TEXT;
-        ELSIF col_type NOT IN ('text', 'character varying', 'uuid') THEN RAISE EXCEPTION 'Tabel coaches memilik tenant_id dengan tipe data % tak valid.', col_type;
-        END IF;
-
-        ALTER TABLE public.coaches ENABLE ROW LEVEL SECURITY;
-        ALTER TABLE public.coaches FORCE ROW LEVEL SECURITY;
-
-        CREATE POLICY "coaches_select_rbac" ON public.coaches FOR SELECT USING (public.is_superadmin() OR public.user_has_tenant_access(tenant_id::text));
-        CREATE POLICY "coaches_insert_rbac" ON public.coaches FOR INSERT WITH CHECK (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text));
-        CREATE POLICY "coaches_update_rbac" ON public.coaches FOR UPDATE USING (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text) OR auth_uid::text = auth.uid()::text) WITH CHECK (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text) OR auth_uid::text = auth.uid()::text);
-        CREATE POLICY "coaches_delete_rbac" ON public.coaches FOR DELETE USING (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text));
-    END IF;
+    CREATE POLICY "coaches_select_rbac" ON public.coaches FOR SELECT USING (public.is_superadmin() OR public.user_has_tenant_access(tenant_id::text));
+    CREATE POLICY "coaches_insert_rbac" ON public.coaches FOR INSERT WITH CHECK (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text));
+    CREATE POLICY "coaches_update_rbac" ON public.coaches FOR UPDATE USING (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text) OR auth_uid::text = auth.uid()::text) WITH CHECK (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text) OR auth_uid::text = auth.uid()::text);
+    CREATE POLICY "coaches_delete_rbac" ON public.coaches FOR DELETE USING (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text));
 
     -- POS & Inventory Tables Group
     FOREACH tbl IN ARRAY pos_tables
     LOOP
-        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = tbl) THEN
-            SELECT data_type INTO col_type FROM information_schema.columns WHERE table_schema = 'public' AND table_name = tbl AND column_name = 'tenant_id';
-            IF col_type IS NULL THEN EXECUTE format('ALTER TABLE public.%I ADD COLUMN tenant_id TEXT;', tbl);
-            ELSIF col_type NOT IN ('text', 'character varying', 'uuid') THEN RAISE EXCEPTION 'Tabel % memilik tenant_id dengan tipe data % tak valid.', tbl, col_type;
-            END IF;
-
-            EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', tbl);
-            EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY;', tbl);
-
-            EXECUTE format('CREATE POLICY %I ON public.%I FOR SELECT USING (public.is_superadmin() OR public.user_has_tenant_access(tenant_id::text));', tbl || '_select_rbac', tbl);
-            EXECUTE format('CREATE POLICY %I ON public.%I FOR INSERT WITH CHECK (public.is_superadmin() OR public.user_can_manage_pos(tenant_id::text));', tbl || '_insert_rbac', tbl);
-            EXECUTE format('CREATE POLICY %I ON public.%I FOR UPDATE USING (public.is_superadmin() OR public.user_can_manage_pos(tenant_id::text)) WITH CHECK (public.is_superadmin() OR public.user_can_manage_pos(tenant_id::text));', tbl || '_update_rbac', tbl);
-            EXECUTE format('CREATE POLICY %I ON public.%I FOR DELETE USING (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text));', tbl || '_delete_rbac', tbl);
-        END IF;
+        EXECUTE format('CREATE POLICY %I ON public.%I FOR SELECT USING (public.is_superadmin() OR public.user_has_tenant_access(tenant_id::text));', tbl || '_select_rbac', tbl);
+        EXECUTE format('CREATE POLICY %I ON public.%I FOR INSERT WITH CHECK (public.is_superadmin() OR public.user_can_manage_pos(tenant_id::text));', tbl || '_insert_rbac', tbl);
+        EXECUTE format('CREATE POLICY %I ON public.%I FOR UPDATE USING (public.is_superadmin() OR public.user_can_manage_pos(tenant_id::text)) WITH CHECK (public.is_superadmin() OR public.user_can_manage_pos(tenant_id::text));', tbl || '_update_rbac', tbl);
+        EXECUTE format('CREATE POLICY %I ON public.%I FOR DELETE USING (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text));', tbl || '_delete_rbac', tbl);
     END LOOP;
 
     -- Event Management Tables Group
     FOREACH tbl IN ARRAY event_tables
     LOOP
-        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = tbl) THEN
-            SELECT data_type INTO col_type FROM information_schema.columns WHERE table_schema = 'public' AND table_name = tbl AND column_name = 'tenant_id';
-            IF col_type IS NULL THEN EXECUTE format('ALTER TABLE public.%I ADD COLUMN tenant_id TEXT;', tbl);
-            ELSIF col_type NOT IN ('text', 'character varying', 'uuid') THEN RAISE EXCEPTION 'Tabel % memilik tenant_id dengan tipe data % tak valid.', tbl, col_type;
-            END IF;
-
-            EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', tbl);
-            EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY;', tbl);
-
-            EXECUTE format('CREATE POLICY %I ON public.%I FOR SELECT USING (public.is_superadmin() OR public.user_has_tenant_access(tenant_id::text));', tbl || '_select_rbac', tbl);
-            EXECUTE format('CREATE POLICY %I ON public.%I FOR INSERT WITH CHECK (public.is_superadmin() OR public.user_can_manage_pos(tenant_id::text));', tbl || '_insert_rbac', tbl);
-            EXECUTE format('CREATE POLICY %I ON public.%I FOR UPDATE USING (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text)) WITH CHECK (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text));', tbl || '_update_rbac', tbl);
-            EXECUTE format('CREATE POLICY %I ON public.%I FOR DELETE USING (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text));', tbl || '_delete_rbac', tbl);
-        END IF;
+        EXECUTE format('CREATE POLICY %I ON public.%I FOR SELECT USING (public.is_superadmin() OR public.user_has_tenant_access(tenant_id::text));', tbl || '_select_rbac', tbl);
+        EXECUTE format('CREATE POLICY %I ON public.%I FOR INSERT WITH CHECK (public.is_superadmin() OR public.user_can_manage_pos(tenant_id::text));', tbl || '_insert_rbac', tbl);
+        EXECUTE format('CREATE POLICY %I ON public.%I FOR UPDATE USING (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text)) WITH CHECK (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text));', tbl || '_update_rbac', tbl);
+        EXECUTE format('CREATE POLICY %I ON public.%I FOR DELETE USING (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text));', tbl || '_delete_rbac', tbl);
     END LOOP;
 END $$;
 
