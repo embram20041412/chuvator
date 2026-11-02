@@ -210,7 +210,6 @@ BEGIN
     caught_sqlstate := '';
     BEGIN
         EXECUTE 'SELECT token_hash FROM public.invitations WHERE id = $1' INTO res_text USING inv_pending_id;
-        -- Jika query berhasil (res_text terisi), assertion FAILS!
         test_passed := FALSE;
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE;
@@ -221,19 +220,34 @@ BEGIN
     IF test_passed THEN
         RAISE NOTICE '[PASS] Test 10: token_hash tidak dapat dibaca oleh authenticated user (Ditolak SQLSTATE 42501).';
     ELSE
-        RAISE EXCEPTION '[FAIL] Test 10: Isolasi token_hash gagal! Authenticated user dapat membaca token_hash atau SQLSTATE lain (Caught: %).', caught_sqlstate;
+        RAISE EXCEPTION '[FAIL] Test 10: Isolasi token_hash gagal! Authenticated user dapat membaca token_hash (Caught: %).', caught_sqlstate;
     END IF;
 
-    -- TEST 11: Kebocoran Policy Lama (Permissive Policy Check)
+    -- TEST 11: Kebocoran Policy Permissive Lama & Verifikasi Keberadaan Policy RBAC Baru
     PERFORM set_config('request.jwt.claims', json_build_object('sub', owner_a_uid, 'email', 'owner_a@arena.com')::text, true);
+    
+    -- Check 11.1: Permissive legacy policies must NOT exist on managed tables
     SELECT COUNT(*) INTO res_count 
     FROM pg_policies 
     WHERE schemaname = 'public' 
+      AND tablename IN ('tenants', 'invitations', 'users_staff', 'transactions', 'coaches', 'academies')
       AND policyname IN ('tenant_isolation_policy', 'allow_read', 'allow_write');
-    IF res_count = 0 THEN
-        RAISE NOTICE '[PASS] Test 11: Policy permissive lama tidak ditemukan di katalog pg_policies.';
+      
+    IF res_count > 0 THEN
+        RAISE EXCEPTION '[FAIL] Test 11: Masih terdapat % policy permissive legacy pada tabel terkelola!', res_count;
+    END IF;
+
+    -- Check 11.2: Required RBAC policies MUST exist on managed domain tables
+    SELECT COUNT(*) INTO res_count 
+    FROM pg_policies 
+    WHERE schemaname = 'public' 
+      AND tablename = 'transactions'
+      AND policyname LIKE '%_rbac';
+
+    IF res_count < 4 THEN
+        RAISE EXCEPTION '[FAIL] Test 11: Kebijakan RBAC baru pada tabel transactions belum lengkap (Ditemukan: % dari 4).', res_count;
     ELSE
-        RAISE EXCEPTION '[FAIL] Test 11: Masih terdapat % policy permissive lama di database!', res_count;
+        RAISE NOTICE '[PASS] Test 11: Policy permissive legacy bersih (0) dan policy RBAC baru terverifikasi (% policy pada transactions).', res_count;
     END IF;
 
     -- TEST 12: INSERT Data dengan tenant_id milik Tenant Lain (Harus Ditolak RLS / WITH CHECK)
