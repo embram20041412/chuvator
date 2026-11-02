@@ -1,17 +1,17 @@
 -- =========================================================================
--- CHUVATOR (CHUA SPORT CORE) — FINAL SUPABASE SECURITY HARDENING MIGRATION (FASE 1U-HARDENED)
+-- CHUVATOR (CHUA SPORT CORE) — FINAL SUPABASE SECURITY HARDENING MIGRATION (FASE 1V-HARDENED)
 -- Target: Supabase PostgreSQL (SQL Editor)
 -- Architecture: React Client SDK (Cloudflare Pages) -> Supabase PostgreSQL (RLS)
 -- Key Guarantees:
 --   1. Strict Owner Role Boundary (Tenant ownership derived EXCLUSIVELY from tenants.owner_uid)
---   2. Complete Direct Staff UID Mutation Sealing (users_staff.uid MUST be bound via claim_staff_invitation)
+--   2. Complete Direct Staff UID Mutation Sealing + Safe RPC claim_staff_invitation Binding
 --   3. Prevention of Role Escalation (Owner/Admin CANNOT set role to 'owner' or 'superadmin' on users_staff)
 --   4. Safe Verified Platform Superadmin Bootstrap (bootstrap_platform_superadmin RPC)
 --   5. Hardened Tenant Column Protection Trigger (protect_tenants_columns) protecting id, tenant_id, owner_uid, owner_email
 --   6. Valid CTE Multi-Row Candidate Locking (WITH locked_candidates AS (...) SELECT array_agg(id) FOR UPDATE)
---   7. Engine Partial Unique Index (idx_invitations_pending_unique) on Immutable Predicate
+--   7. Preflight Check & Safe Unique Index (idx_invitations_pending_unique) for Pending Invitations
 --   8. Sealed token_hash on invitations (Column-level SELECT Grant excluding token_hash)
---   9. Full CRUD RLS Matrix policies across all 25+ tenant-scoped tables
+--   9. Full CRUD RLS Matrix policies across ALL 24 tenant-scoped tables
 --  10. Targeted SECURITY DEFINER search_path = public, extensions, pg_temp
 -- =========================================================================
 
@@ -64,6 +64,28 @@ ALTER TABLE public.invitations ENABLE ROW LEVEL SECURITY;
 -- D. Users Staff Columns
 ALTER TABLE public.users_staff ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
 ALTER TABLE public.users_staff ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+
+-- E. Preflight Check for Duplicate Pending Invitations
+DO $$
+DECLARE
+    v_dup_count INT := 0;
+    v_dup_details TEXT := '';
+BEGIN
+    SELECT COUNT(*), COALESCE(string_agg(tenant_id || ':' || invite_email, ', '), '')
+    INTO v_dup_count, v_dup_details
+    FROM (
+        SELECT tenant_id, LOWER(trim(invite_email)) AS invite_email
+        FROM public.invitations
+        WHERE status = 'pending' AND accepted_at IS NULL AND revoked_at IS NULL
+        GROUP BY tenant_id, LOWER(trim(invite_email))
+        HAVING COUNT(*) > 1
+    ) dups;
+
+    IF v_dup_count > 0 THEN
+        RAISE EXCEPTION 'MIGRASI DIHENTIKAN: Terdeteksi % duplikasi undangan pending pada tenant/email berikut: %. Silakan selesaikan duplikasi data secara manual sebelum melanjutkan migrasi.', v_dup_count, v_dup_details
+        USING ERRCODE = '23505';
+    END IF;
+END $$;
 
 -- Partial Unique Index on Invitations (Engine-level 1 pending invitation per tenant/email)
 DROP INDEX IF EXISTS public.idx_invitations_pending_unique;
@@ -561,6 +583,9 @@ BEGIN
 
     v_staff_id := v_candidate_staff_ids[1];
 
+    -- Set local session variable to authorize UID update inside protect_users_staff_columns trigger
+    PERFORM set_config('app.claiming_staff_invitation', 'true', true);
+
     UPDATE public.users_staff
     SET uid = v_caller_uid,
         updated_at = now()
@@ -696,7 +721,7 @@ DECLARE
     caller_tenant_role TEXT;
 BEGIN
     IF OLD.tenant_id::text IS DISTINCT FROM NEW.tenant_id::text THEN
-        RAISE EXCEPTION 'Mencoba memindahkan record staf ke tenant lain ditolak.';
+        RAISE EXCEPTION 'Mencoba memindahkan record staf ke tenant lain ditolak.' USING ERRCODE = '42501';
     END IF;
 
     caller_tenant_role := public.get_user_tenant_role(OLD.tenant_id::text);
@@ -704,25 +729,34 @@ BEGIN
     IF NOT public.is_superadmin() THEN
         IF COALESCE(caller_tenant_role, '') NOT IN ('owner', 'admin') THEN
             IF OLD.role IS DISTINCT FROM NEW.role THEN
-                RAISE EXCEPTION 'Perubahan role staf hanya diizinkan untuk Owner/Admin.';
+                RAISE EXCEPTION 'Perubahan role staf hanya diizinkan untuk Owner/Admin.' USING ERRCODE = '42501';
             END IF;
             IF OLD.status IS DISTINCT FROM NEW.status THEN
-                RAISE EXCEPTION 'Perubahan status staf hanya diizinkan untuk Owner/Admin.';
+                RAISE EXCEPTION 'Perubahan status staf hanya diizinkan untuk Owner/Admin.' USING ERRCODE = '42501';
             END IF;
             IF OLD.is_active IS DISTINCT FROM NEW.is_active THEN
-                RAISE EXCEPTION 'Perubahan status aktif staf hanya diizinkan untuk Owner/Admin.';
+                RAISE EXCEPTION 'Perubahan status aktif staf hanya diizinkan untuk Owner/Admin.' USING ERRCODE = '42501';
             END IF;
         END IF;
 
         -- Strictly block direct UID mutation via UPDATE statements on users_staff
         -- UID binding MUST be performed exclusively via claim_staff_invitation RPC
         IF OLD.uid IS DISTINCT FROM NEW.uid THEN
-            RAISE EXCEPTION 'Pengikatan atau pengubahan Auth UID staf secara langsung dilarang. Gunakan RPC claim_staff_invitation().';
+            IF current_setting('app.claiming_staff_invitation', true) = 'true' THEN
+                IF OLD.uid IS NOT NULL THEN
+                    RAISE EXCEPTION 'Auth UID staf yang sudah terikat tidak dapat diubah kembali.' USING ERRCODE = '42501';
+                END IF;
+                IF NEW.uid IS NULL OR NEW.uid <> auth.uid()::text THEN
+                    RAISE EXCEPTION 'UID yang diikat harus cocok dengan Auth UID pengguna yang mengklaim.' USING ERRCODE = '42501';
+                END IF;
+            ELSE
+                RAISE EXCEPTION 'Pengikatan atau pengubahan Auth UID staf secara langsung dilarang. Gunakan RPC claim_staff_invitation().' USING ERRCODE = '42501';
+            END IF;
         END IF;
 
         -- Prevent escalation to owner or superadmin role via users_staff UPDATE
         IF LOWER(COALESCE(NEW.role, '')) IN ('owner', 'superadmin') THEN
-            RAISE EXCEPTION 'Pengangkatan role Owner atau Superadmin via users_staff dilarang.';
+            RAISE EXCEPTION 'Pengangkatan role Owner atau Superadmin via users_staff dilarang.' USING ERRCODE = '42501';
         END IF;
     END IF;
 
@@ -746,16 +780,16 @@ AS $$
 BEGIN
     IF NOT public.is_superadmin() THEN
         IF OLD.id::text IS DISTINCT FROM NEW.id::text THEN
-            RAISE EXCEPTION 'Perubahan primary key tenant (id) dilarang.';
+            RAISE EXCEPTION 'Perubahan primary key tenant (id) dilarang.' USING ERRCODE = '42501';
         END IF;
         IF OLD.tenant_id::text IS DISTINCT FROM NEW.tenant_id::text THEN
-            RAISE EXCEPTION 'Perubahan tenant_id dilarang.';
+            RAISE EXCEPTION 'Perubahan tenant_id dilarang.' USING ERRCODE = '42501';
         END IF;
         IF OLD.owner_uid IS DISTINCT FROM NEW.owner_uid THEN
-            RAISE EXCEPTION 'Pemindahan kepemilikan tenant (owner_uid) dilarang via UPDATE biasa.';
+            RAISE EXCEPTION 'Pemindahan kepemilikan tenant (owner_uid) dilarang via UPDATE biasa.' USING ERRCODE = '42501';
         END IF;
         IF OLD.owner_email IS DISTINCT FROM NEW.owner_email THEN
-            RAISE EXCEPTION 'Perubahan owner_email dilarang via UPDATE biasa.';
+            RAISE EXCEPTION 'Perubahan owner_email dilarang via UPDATE biasa.' USING ERRCODE = '42501';
         END IF;
     END IF;
     RETURN NEW;
@@ -769,29 +803,10 @@ FOR EACH ROW
 EXECUTE FUNCTION public.protect_tenants_columns();
 
 -- =========================================================================
--- 6. PEMBERSIHAN POLICY RESIDU & HARDENED RLS PER TABEL (25+ TABLES)
+-- 6. AUDIT RLS & HARSHENING SEMUA TABEL TENANT (ALL 24 TABLES)
 -- =========================================================================
 
-DO $$
-DECLARE
-    tbl text;
-BEGIN
-    FOR tbl IN 
-        SELECT unnest(ARRAY[
-            'tenants', 'invitations', 'users_staff', 'academies', 'coaches', 'academy_classes', 
-            'students', 'academy_evaluations', 'academy_attendance', 'spp_payments',
-            'courts', 'bookings', 'transactions', 'products', 'pos_transactions', 
-            'global_ledger', 'events', 'sponsors', 'event_categories', 
-            'event_registrations', 'event_expenses', 'event_documents', 'event_matches',
-            'attendances', 'evaluations', 'audit_logs'
-        ])
-    LOOP
-        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = tbl) THEN
-            EXECUTE format('DROP POLICY IF EXISTS "tenant_isolation_policy" ON public.%I;', tbl);
-        END IF;
-    END LOOP;
-END $$;
-
+-- Core System & Auth Tables
 -- 1. invitations
 DROP POLICY IF EXISTS "invitations_select_hardened" ON public.invitations;
 CREATE POLICY "invitations_select_hardened" ON public.invitations
@@ -893,6 +908,68 @@ FOR DELETE USING (
     public.is_superadmin()
     OR public.get_user_tenant_role(tenant_id::text) IN ('owner', 'admin')
 );
+
+-- =========================================================================
+-- COMPLETE DOMAIN TABLES RLS POLICIES (20 DOMAIN TABLES)
+-- =========================================================================
+
+DO $$
+DECLARE
+    tbl text;
+    domain_tables text[] := ARRAY[
+        'academies', 'academy_classes', 'coaches', 'students', 
+        'academy_evaluations', 'academy_attendance', 'spp_payments',
+        'courts', 'bookings', 'transactions', 'global_ledger', 
+        'pos_transactions', 'products', 'sponsors', 'events', 
+        'event_categories', 'event_registrations', 'event_expenses', 
+        'event_documents', 'event_matches'
+    ];
+BEGIN
+    FOREACH tbl IN ARRAY domain_tables
+    LOOP
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = tbl) THEN
+            -- Ensure tenant_id column exists
+            EXECUTE format('ALTER TABLE public.%I ADD COLUMN IF NOT EXISTS tenant_id TEXT;', tbl);
+            
+            -- Enable RLS
+            EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', tbl);
+            
+            -- Drop legacy policies
+            EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I;', tbl || '_tenant_select', tbl);
+            EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I;', tbl || '_tenant_insert', tbl);
+            EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I;', tbl || '_tenant_update', tbl);
+            EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I;', tbl || '_tenant_delete', tbl);
+            EXECUTE format('DROP POLICY IF EXISTS "tenant_isolation_policy" ON public.%I;', tbl);
+
+            -- Create hardened CRUD policies
+            EXECUTE format('
+                CREATE POLICY %I ON public.%I
+                FOR SELECT USING (
+                    public.is_superadmin() OR public.user_has_tenant_access(tenant_id::text)
+                );', tbl || '_tenant_select', tbl);
+
+            EXECUTE format('
+                CREATE POLICY %I ON public.%I
+                FOR INSERT WITH CHECK (
+                    public.is_superadmin() OR public.user_has_tenant_access(tenant_id::text)
+                );', tbl || '_tenant_insert', tbl);
+
+            EXECUTE format('
+                CREATE POLICY %I ON public.%I
+                FOR UPDATE USING (
+                    public.is_superadmin() OR public.user_has_tenant_access(tenant_id::text)
+                ) WITH CHECK (
+                    public.is_superadmin() OR public.user_has_tenant_access(tenant_id::text)
+                );', tbl || '_tenant_update', tbl);
+
+            EXECUTE format('
+                CREATE POLICY %I ON public.%I
+                FOR DELETE USING (
+                    public.is_superadmin() OR public.user_has_tenant_access(tenant_id::text)
+                );', tbl || '_tenant_delete', tbl);
+        END IF;
+    END LOOP;
+END $$;
 
 -- =========================================================================
 -- 7. READ-ONLY VERIFICATION QUERIES (PREFLIGHT AUDIT & CATALOG INSPECTION)
