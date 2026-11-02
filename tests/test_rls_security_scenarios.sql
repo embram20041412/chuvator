@@ -1,9 +1,30 @@
 -- =========================================================================
--- CHUVATOR (CHUA SPORT CORE) — FINAL RLS & SECURITY TEST SUITE (FASE 1AI)
+-- CHUVATOR (CHUA SPORT CORE) — FINAL RLS & SECURITY TEST SUITE (FASE 1AJ)
 -- Target: Supabase PostgreSQL (SQL Editor / Staging Environment)
 -- Mode: Non-Destructive Transaction (BEGIN ... ROLLBACK)
 -- Classification: SIMULATED TEST / STATIC CODE REVIEW
--- Key Integrity Guarantees:
+-- Total Test Blocks: 16 Discrete Test Scenarios (Test 1 - Test 14, incl. 13B & 13C)
+--
+-- EXECUTION PREFLIGHT & ROLE PREREQUISITES:
+--   1. Connecting Role: The test script MUST be executed by a PostgreSQL session user
+--      possessing superuser privileges or role-switching authorization (specifically
+--      the default 'postgres' role in Supabase SQL Editor / Staging database).
+--   2. Dynamic Role Switching: The script dynamically executes:
+--        PERFORM set_config('role', 'authenticated', true);
+--        PERFORM set_config('role', 'postgres', true);
+--   3. Execution Failure Risk: If executed by an unprivileged or restricted database role
+--      (e.g., standard 'anon', 'authenticated', or a pooled client without superuser rights),
+--      PostgreSQL will immediately abort execution with:
+--        ERROR: permission denied to set role "postgres"
+--      or
+--        ERROR: permission denied to set parameter "role"
+--   4. RLS-Bypass Context Linkage: In Test 13B and Test 13C, the script inspects
+--      pg_roles (rolsuper = TRUE OR rolbypassrls = TRUE) to ensure RLS is truly bypassed.
+--      Only a session connected as or authorized to switch to 'postgres' satisfies this.
+--   5. Non-Destructive Sandbox: The entire suite executes inside BEGIN ... ROLLBACK,
+--      leaving zero persistent fixture data or state changes on the database.
+--
+-- Key Integrity Guarantees & Test Coverage (16 Scenarios):
 --   1. Full 6 Roles x 5 Financial Tables x 4 CRUD Operations Assertions (120 Assertions)
 --   2. SQLSTATE '42501' Error Classification for Denied INSERT Attempts
 --   3. Strict Row Availability & State Verification Before/After UPDATE & DELETE
@@ -80,7 +101,7 @@ DECLARE
     v_initial_val NUMERIC;
     v_verify_val NUMERIC;
 
-    -- State integrity verification variables for Test 13 & 13B (Fase 1AI)
+    -- State integrity verification variables for Test 13 & 13B (users_staff row state snapshots)
     v_pre_tenant_id text;
     v_pre_uid text;
     v_pre_role text;
@@ -90,7 +111,7 @@ DECLARE
     v_post_role text;
     v_post_status text;
 
-    -- State integrity verification variables for Test 13C (tenants table - Fase 1AI)
+    -- State integrity verification variables for Test 13C (tenants table row state snapshots)
     v_pre_t_id uuid;
     v_pre_t_tenant_id text;
     v_pre_t_owner_uid text;
@@ -103,7 +124,7 @@ DECLARE
     v_post_t_name text;
 BEGIN
     RAISE NOTICE '=======================================================';
-    RAISE NOTICE 'MEMULAI TEST SUITE KEAMANAN DATABASE CHUVATOR (FASE 1AI - FINAL VALIDATION: RLS-BYPASS CONTEXT, TRIGGER ERROR PROVENANCE & TEST DOCUMENTATION)';
+    RAISE NOTICE 'MEMULAI TEST SUITE KEAMANAN DATABASE CHUVATOR (FASE 1AJ - TEST SUITE DOCUMENTATION CONSISTENCY & EXECUTION PREFLIGHT)';
     RAISE NOTICE 'MODE: SIMULATED TEST / STATIC CODE REVIEW';
     RAISE NOTICE '=======================================================';
 
@@ -222,7 +243,7 @@ BEGIN
     INSERT INTO public.event_expenses (id, tenant_id, title, amount) VALUES (exp_a_id, tenant_a::text, 'Biaya Wasit Turnamen', 300000);
 
     -- =========================================================================
-    -- 14 TEST SCENARIOS WITH EXPLICIT ASSERTIONS
+    -- 16 TEST SCENARIOS WITH EXPLICIT ASSERTIONS (TEST 1 - TEST 14 TERMASUK 13B & 13C)
     -- =========================================================================
 
     -- TEST 1: Owner Tenant A membaca data Tenant A & tidak dapat membaca Tenant B
@@ -781,7 +802,7 @@ BEGIN
         END LOOP;
 
         -- =====================================================================
-        -- 14. AUDIT STATUS & KONFIGURASI TRIGGER PADA KATALOG POSTGRESQL (FASE 1AH)
+        -- 14. AUDIT STATUS & KONFIGURASI TRIGGER PADA KATALOG POSTGRESQL
         -- Memvalidasi tgenabled, tgtype (BEFORE UPDATE FOR EACH ROW = 19),
         -- fungsi terkait, is_internal, dan audit mendalam definisi fungsi
         -- =====================================================================
@@ -934,7 +955,13 @@ BEGIN
         RAISE EXCEPTION '[FAIL] Test 12: INSERT lintas tenant tidak diblokir dengan SQLSTATE 42501 (Caught: %).', caught_sqlstate;
     END IF;
 
-    -- TEST 13: UPDATE Memindahkan Record ke Tenant Lain (Harus Ditolak Trigger 42501 & State Row Tetap Utuh)
+    -- =========================================================================
+    -- TEST 13: UPDATE MEMINDAHKAN RECORD KE TENANT LAIN (ROLE AUTHENTICATED)
+    -- Menguji penolakan UPDATE lintas tenant pada alur akses pengguna normal
+    -- (role = authenticated, JWT Admin Tenant A non-superadmin).
+    -- Memverifikasi penolakan dengan SQLSTATE 42501 dan integritas state row
+    -- users_staff tetap 100% utuh tanpa perubahan nilai.
+    -- =========================================================================
     -- 1. Catat state awal record staf sasaran sebelum upaya mutasi
     PERFORM set_config('role', 'postgres', true);
     PERFORM set_config('request.jwt.claims', '', true);
@@ -990,9 +1017,10 @@ BEGIN
     RAISE NOTICE '[PASS] Test 13: UPDATE memindahkan record staf ke tenant lain ditolak (SQLSTATE 42501) dan integritas state row utuh tanpa perubahan (tenant_id, uid, role, status verified).';
 
     -- =========================================================================
-    -- TEST 13B: PENGUJIAN FUNGSIONAL TRIGGER users_staff DENGAN RLS BYPASS (FASE 1AI)
-    -- Membuktikan bahwa penolakan perpindahan tenant dieksekusi secara independen
-    -- oleh BEFORE UPDATE trigger, saat RLS dilewati (role = postgres).
+    -- TEST 13B: PENGUJIAN FUNGSIONAL TRIGGER users_staff DENGAN RLS BYPASS
+    -- Membuktikan pertahanan berlapis (defense-in-depth): penolakan pemindahan
+    -- tenant dieksekusi secara independen oleh trigger trg_protect_users_staff_columns,
+    -- bahkan saat RLS dilewati (role = postgres).
     -- Memverifikasi:
     --   a. Context aktif adalah postgres dengan rolsuper = TRUE atau rolbypassrls = TRUE
     --   b. Caller auth.uid() adalah admin_a_uid dan public.is_superadmin() adalah FALSE
@@ -1065,9 +1093,10 @@ BEGIN
     RAISE NOTICE '[PASS] Test 13B: Mutasi lintas tenant pada users_staff dalam konteks RLS-bypass berhasil diblokir secara independen oleh trigger trg_protect_users_staff_columns (SQLSTATE 42501, Message: "%", rolsuper/rolbypassrls verified, auth.uid() verified, is_superadmin() FALSE) dan state row 100%% utuh.', caught_msg;
 
     -- =========================================================================
-    -- TEST 13C: PENGUJIAN FUNGSIONAL TRIGGER tenants (KOLOM SENSITIF IMUTABEL - FASE 1AI)
+    -- TEST 13C: PENGUJIAN FUNGSIONAL TRIGGER tenants (KOLOM SENSITIF IMUTABEL DENGAN RLS BYPASS)
     -- Membuktikan bahwa trg_protect_tenants_columns menolak modifikasi id, tenant_id,
-    -- owner_uid, dan owner_email oleh pengguna non-superadmin secara independen dari RLS.
+    -- owner_uid, dan owner_email oleh pengguna non-superadmin secara otonom,
+    -- independen dari RLS (role = postgres dengan rolsuper = TRUE atau rolbypassrls = TRUE).
     -- Memverifikasi:
     --   a. Context aktif adalah postgres dengan rolsuper = TRUE atau rolbypassrls = TRUE
     --   b. Caller auth.uid() adalah owner_a_uid dan public.is_superadmin() adalah FALSE
@@ -1202,7 +1231,7 @@ BEGIN
     END IF;
 
     RAISE NOTICE '=======================================================';
-    RAISE NOTICE 'SELURUH 16 TEST SCENARIOS KEAMANAN FASE 1AI BERHASIL PASSED!';
+    RAISE NOTICE 'SELURUH 16 TEST SCENARIOS KEAMANAN FASE 1AJ BERHASIL PASSED!';
     RAISE NOTICE '=======================================================';
 
 END $$;
