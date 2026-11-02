@@ -1,17 +1,17 @@
 -- =========================================================================
--- CHUVATOR (CHUA SPORT CORE) — FINAL SUPABASE SECURITY HARDENING MIGRATION (FASE 1Z-FINAL)
+-- CHUVATOR (CHUA SPORT CORE) — FINAL SUPABASE SECURITY HARDENING MIGRATION (FASE 1AA-HARDENED)
 -- Target: Supabase PostgreSQL (SQL Editor / Migration Engine)
 -- Architecture: React Client SDK (Cloudflare Pages) -> Supabase PostgreSQL (RLS)
 -- Key Guarantees:
 --   1. Strict Owner Role Boundary (Tenant ownership derived EXCLUSIVELY from tenants.owner_uid)
---   2. Pure Engine-Level Direct UID Mutation Sealing (PostgreSQL Column Privileges + SECURITY DEFINER Isolation)
---   3. Prevention of Role Escalation (Owner/Admin CANNOT set role to 'owner' or 'superadmin' on users_staff)
---   4. Safe Verified Platform Superadmin Bootstrap (bootstrap_platform_superadmin RPC)
---   5. Hardened Tenant Column Protection Trigger (protect_tenants_columns) protecting id, tenant_id, owner_uid, owner_email
---   6. Valid CTE Multi-Row Candidate Locking (WITH locked_candidates AS (...) SELECT array_agg(id) FOR UPDATE)
---   7. Preflight Check & Safe Unique Index (idx_invitations_pending_unique) for Pending Invitations
+--   2. Atomic Tenant Ownership Claim RPC (claim_tenant_ownership) for verified onboarding
+--   3. Pure Engine-Level Direct UID Mutation Sealing (PostgreSQL Column Privileges + SECURITY DEFINER Isolation)
+--   4. Prevention of Role Escalation (Owner/Admin CANNOT set role to 'owner' or 'superadmin' on users_staff)
+--   5. Safe Verified Platform Superadmin Bootstrap (bootstrap_platform_superadmin RPC)
+--   6. Hardened Tenant Column Protection Trigger (protect_tenants_columns) protecting id, tenant_id, owner_uid, owner_email
+--   7. Canonical Tenant Identity Enforcement (tenants.tenant_id TEXT used everywhere consistently)
 --   8. Sealed token_hash on invitations (Column-level SELECT Grant excluding token_hash)
---   9. Strict 24-Tables Existence & Data Integrity Validation (Validates table existence, data types, NULLs, & real tenant references)
+--   9. Strict 24-Tables Existence & Data Integrity Validation (Halts migration if any table or tenant_id mapping fails)
 --  10. Least-Privilege Role-Based Access Control (RBAC) RLS policies across ALL 24 tables (Financial access restricted to Superadmin/Owner/Admin/Kasir)
 --  11. Explicit SECURITY DEFINER search_path = public, auth, extensions, pg_temp
 -- =========================================================================
@@ -39,7 +39,7 @@ ON CONFLICT (email) DO NOTHING;
 
 -- B. Canonical Tenant Identity Schema
 ALTER TABLE public.tenants ADD COLUMN IF NOT EXISTS tenant_id TEXT;
-UPDATE public.tenants SET tenant_id = id::text WHERE tenant_id IS NULL;
+UPDATE public.tenants SET tenant_id = id::text WHERE tenant_id IS NULL OR trim(tenant_id) = '';
 
 -- C. Invitations Table
 CREATE TABLE IF NOT EXISTS public.invitations (
@@ -98,7 +98,7 @@ CREATE INDEX IF NOT EXISTS idx_invitations_token_hash ON public.invitations(toke
 CREATE INDEX IF NOT EXISTS idx_invitations_tenant_invite_email ON public.invitations(tenant_id, invite_email);
 
 -- =========================================================================
--- 2. OTORISASI SUPERADMIN & BOOTSTRAP RPC
+-- 2. OTORISASI SUPERADMIN, BOOTSTRAP & TENANT OWNERSHIP CLAIM RPC
 -- =========================================================================
 
 -- 1. is_superadmin() - Pure UID-Based Read-Only Function
@@ -160,6 +160,65 @@ BEGIN
 END;
 $$;
 
+-- 3. claim_tenant_ownership(target_tenant_id TEXT) - Atomic Owner Binding RPC for Onboarding
+CREATE OR REPLACE FUNCTION public.claim_tenant_ownership(target_tenant_id TEXT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, extensions, pg_temp
+AS $$
+DECLARE
+    v_caller_uid TEXT;
+    v_auth_email TEXT;
+    v_email_confirmed TIMESTAMPTZ;
+    v_tenant_record RECORD;
+    v_updated INT := 0;
+BEGIN
+    v_caller_uid := auth.uid()::text;
+    IF v_caller_uid IS NULL OR trim(v_caller_uid) = '' THEN
+        RETURN FALSE;
+    END IF;
+
+    SELECT LOWER(trim(u.email)), u.email_confirmed_at
+    INTO v_auth_email, v_email_confirmed
+    FROM auth.users u
+    WHERE u.id::text = v_caller_uid;
+
+    IF v_auth_email IS NULL OR v_email_confirmed IS NULL THEN
+        RAISE EXCEPTION 'Klaim kepemilikan tenant gagal: Email belum diverifikasi.';
+    END IF;
+
+    SELECT t.id, t.tenant_id, t.owner_uid, LOWER(trim(t.owner_email)) AS owner_email
+    INTO v_tenant_record
+    FROM public.tenants t
+    WHERE t.tenant_id::text = target_tenant_id
+    FOR UPDATE;
+
+    IF v_tenant_record.id IS NULL THEN
+        RETURN FALSE;
+    END IF;
+
+    IF v_tenant_record.owner_uid IS NOT NULL AND trim(v_tenant_record.owner_uid) <> '' THEN
+        IF v_tenant_record.owner_uid = v_caller_uid THEN
+            RETURN TRUE;
+        ELSE
+            RAISE EXCEPTION 'Klaim kepemilikan ditolak: Tenant ini telah memiliki pemilik terikat.';
+        END IF;
+    END IF;
+
+    IF v_tenant_record.owner_email <> v_auth_email THEN
+        RETURN FALSE;
+    END IF;
+
+    UPDATE public.tenants
+    SET owner_uid = v_caller_uid
+    WHERE tenant_id::text = target_tenant_id AND (owner_uid IS NULL OR trim(owner_uid) = '');
+
+    GET DIAGNOSTICS v_updated = ROW_COUNT;
+    RETURN (v_updated = 1);
+END;
+$$;
+
 -- Platform Superadmins RLS Policies
 DROP POLICY IF EXISTS "platform_superadmins_select_policy" ON public.platform_superadmins;
 CREATE POLICY "platform_superadmins_select_policy" ON public.platform_superadmins
@@ -217,7 +276,7 @@ BEGIN
         RETURN NULL;
     END IF;
 
-    -- Owner Check EXCLUSIVELY on public.tenants table
+    -- Owner Check EXCLUSIVELY on public.tenants table using Canonical tenant_id
     IF EXISTS (
         SELECT 1 FROM public.tenants t
         WHERE t.tenant_id::text = check_tenant_id
@@ -675,6 +734,7 @@ $$;
 -- Targeted REVOKE & GRANT per specific audited security function
 REVOKE EXECUTE ON FUNCTION public.is_superadmin() FROM PUBLIC, anon;
 REVOKE EXECUTE ON FUNCTION public.bootstrap_platform_superadmin() FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.claim_tenant_ownership(TEXT) FROM PUBLIC, anon;
 REVOKE EXECUTE ON FUNCTION public.get_user_tenant_role(TEXT) FROM PUBLIC, anon;
 REVOKE EXECUTE ON FUNCTION public.user_has_tenant_access(TEXT) FROM PUBLIC, anon;
 REVOKE EXECUTE ON FUNCTION public.user_is_tenant_admin_or_owner(TEXT) FROM PUBLIC, anon;
@@ -689,6 +749,7 @@ REVOKE EXECUTE ON FUNCTION public.get_invitation_info(TEXT) FROM PUBLIC;
 
 GRANT EXECUTE ON FUNCTION public.is_superadmin() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.bootstrap_platform_superadmin() TO authenticated;
+GRANT EXECUTE ON FUNCTION public.claim_tenant_ownership(TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_user_tenant_role(TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.user_has_tenant_access(TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.user_is_tenant_admin_or_owner(TEXT) TO authenticated;
@@ -877,19 +938,18 @@ BEGIN
             RAISE EXCEPTION 'MIGRASI DIHENTIKAN: Terdeteksi % baris data pada tabel "%" yang belum memiliki tenant_id terisi.', null_tenant_count, tbl USING ERRCODE = '23502';
         END IF;
 
-        -- Check for orphaned records (tenant_id not matching any tenant in public.tenants)
+        -- Check for orphaned records (tenant_id not matching any tenant in public.tenants.tenant_id)
         EXECUTE format('
             SELECT COUNT(*) 
             FROM public.%I d 
             WHERE NOT EXISTS (
                 SELECT 1 
                 FROM public.tenants t 
-                WHERE t.tenant_id::text = d.tenant_id::text 
-                   OR t.id::text = d.tenant_id::text
+                WHERE t.tenant_id::text = d.tenant_id::text
             );', tbl) INTO orphaned_count;
 
         IF orphaned_count > 0 THEN
-            RAISE EXCEPTION 'MIGRASI DIHENTIKAN: Ditemukan % baris data orphaned pada tabel "%" dengan tenant_id yang tidak terdaftar di tabel tenants. Selesaikan inkonsistensi referensi tenant secara manual.', orphaned_count, tbl USING ERRCODE = '23503';
+            RAISE EXCEPTION 'MIGRASI DIHENTIKAN: Ditemukan % baris data orphaned pada tabel "%" dengan tenant_id yang tidak terdaftar di public.tenants.tenant_id. Selesaikan inkonsistensi referensi tenant secara manual.', orphaned_count, tbl USING ERRCODE = '23503';
         END IF;
 
         EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', tbl);
@@ -951,10 +1011,6 @@ ALTER TABLE public.tenants FORCE ROW LEVEL SECURITY;
 CREATE POLICY "tenants_select_rbac" ON public.tenants FOR SELECT USING (
     public.is_superadmin()
     OR owner_uid::text = auth.uid()::text
-    OR (
-      LOWER(COALESCE(owner_email, '')) = LOWER(COALESCE(auth.jwt() ->> 'email', ''))
-      AND EXISTS (SELECT 1 FROM auth.users u WHERE u.id = auth.uid() AND u.email_confirmed_at IS NOT NULL)
-    )
     OR public.get_user_tenant_role(tenant_id::text) IS NOT NULL
 );
 CREATE POLICY "tenants_insert_rbac" ON public.tenants FOR INSERT WITH CHECK (public.is_superadmin() OR (auth.uid() IS NOT NULL AND owner_uid::text = auth.uid()::text));
@@ -1067,4 +1123,4 @@ FROM public.platform_superadmins;
 SELECT p.proname AS function_name, pg_get_userbyid(p.proowner) AS owner, p.prosecdef AS is_security_definer, p.proconfig AS search_path_config
 FROM pg_proc p JOIN pg_namespace n ON p.pronamespace = n.oid
 WHERE n.nspname = 'public'
-  AND p.proname IN ('is_superadmin', 'get_user_tenant_role', 'create_staff_invitation', 'claim_staff_invitation', 'revoke_staff_invitation');
+  AND p.proname IN ('is_superadmin', 'get_user_tenant_role', 'create_staff_invitation', 'claim_staff_invitation', 'revoke_staff_invitation', 'claim_tenant_ownership');
