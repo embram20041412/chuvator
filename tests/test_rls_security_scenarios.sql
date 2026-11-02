@@ -68,6 +68,8 @@ DECLARE
     v_ins_success BOOLEAN;
     v_initial_count INT;
     v_verify_count INT;
+    v_initial_val NUMERIC;
+    v_verify_val NUMERIC;
 BEGIN
     RAISE NOTICE '=======================================================';
     RAISE NOTICE 'MEMULAI TEST SUITE KEAMANAN DATABASE CHUVATOR (FASE 1AD - FULL HARDENING)';
@@ -308,11 +310,17 @@ BEGIN
                 END IF;
             END IF;
 
-            -- Pre-UPDATE Verification: Target row must exist in tenant_a
+            -- Pre-UPDATE Verification: Target row must exist in tenant_a & capture initial amount/total value
             PERFORM set_config('role', 'postgres', true);
             EXECUTE format('SELECT COUNT(*) FROM public.%I WHERE id = %L AND tenant_id = %L', v_fin_tbl, v_target_row_id, tenant_a::text) INTO v_initial_count;
             IF v_initial_count <> 1 THEN
                 RAISE EXCEPTION '[FAIL] Test 3 Pre-UPDATE Error: Target row % pada tabel %I tidak ditemukan di tenant_a.', v_target_row_id, v_fin_tbl;
+            END IF;
+
+            IF v_fin_tbl = 'pos_transactions' THEN
+                EXECUTE format('SELECT total FROM public.%I WHERE id = %L AND tenant_id = %L', v_fin_tbl, v_target_row_id, tenant_a::text) INTO v_initial_val;
+            ELSE
+                EXECUTE format('SELECT amount FROM public.%I WHERE id = %L AND tenant_id = %L', v_fin_tbl, v_target_row_id, tenant_a::text) INTO v_initial_val;
             END IF;
 
             -- Switch back to tested role context
@@ -332,16 +340,41 @@ BEGIN
                 IF res_count <> 1 THEN
                     RAISE EXCEPTION '[FAIL] Test 3 (UPDATE): Role % gagal UPDATE baris % pada tabel %I (ROW_COUNT = %).', v_role_name, v_target_row_id, v_fin_tbl, res_count;
                 END IF;
+
+                -- Post-UPDATE Value Mutation Verification: Value must equal v_initial_val + 10
+                PERFORM set_config('role', 'postgres', true);
+                IF v_fin_tbl = 'pos_transactions' THEN
+                    EXECUTE format('SELECT total FROM public.%I WHERE id = %L AND tenant_id = %L', v_fin_tbl, v_target_row_id, tenant_a::text) INTO v_verify_val;
+                ELSE
+                    EXECUTE format('SELECT amount FROM public.%I WHERE id = %L AND tenant_id = %L', v_fin_tbl, v_target_row_id, tenant_a::text) INTO v_verify_val;
+                END IF;
+
+                IF v_verify_val IS DISTINCT FROM (v_initial_val + 10) THEN
+                    RAISE EXCEPTION '[FAIL] Test 3 Post-UPDATE Value Error: Role % UPDATE berhasil tetapi nilai kolom tidak berubah (Awal: %, Terkini: %).', v_role_name, v_initial_val, v_verify_val;
+                END IF;
+
+                PERFORM set_config('role', 'authenticated', true);
+                PERFORM set_config('request.jwt.claims', json_build_object('sub', v_cur_uid, 'email', v_cur_email)::text, true);
             ELSIF v_role_name IN ('kasir', 'coach', 'staff') THEN
                 IF res_count > 0 THEN
                     RAISE EXCEPTION '[FAIL] Test 3 (UPDATE): Role % berhasil UPDATE baris pada tabel %I (Seharusnya 0 rows affected, didapat: %).', v_role_name, v_fin_tbl, res_count;
                 END IF;
 
-                -- Post-UPDATE Verification: Target row must still exist and be untouched
+                -- Post-UPDATE Verification: Target row must still exist and value MUST be untouched
                 PERFORM set_config('role', 'postgres', true);
                 EXECUTE format('SELECT COUNT(*) FROM public.%I WHERE id = %L AND tenant_id = %L', v_fin_tbl, v_target_row_id, tenant_a::text) INTO v_verify_count;
                 IF v_verify_count <> 1 THEN
-                    RAISE EXCEPTION '[FAIL] Test 3 Post-UPDATE Error: Target row % pada tabel %I hilang atau terubah oleh role %!', v_target_row_id, v_fin_tbl, v_role_name;
+                    RAISE EXCEPTION '[FAIL] Test 3 Post-UPDATE Error: Target row % pada tabel %I hilang!', v_target_row_id, v_fin_tbl;
+                END IF;
+
+                IF v_fin_tbl = 'pos_transactions' THEN
+                    EXECUTE format('SELECT total FROM public.%I WHERE id = %L AND tenant_id = %L', v_fin_tbl, v_target_row_id, tenant_a::text) INTO v_verify_val;
+                ELSE
+                    EXECUTE format('SELECT amount FROM public.%I WHERE id = %L AND tenant_id = %L', v_fin_tbl, v_target_row_id, tenant_a::text) INTO v_verify_val;
+                END IF;
+
+                IF v_verify_val IS DISTINCT FROM v_initial_val THEN
+                    RAISE EXCEPTION '[FAIL] Test 3 Post-UPDATE Immutability Violation: Role % UPDATE ditolak (ROW_COUNT=0) tetapi nilai terubah (Awal: %, Terkini: %)!', v_role_name, v_initial_val, v_verify_val;
                 END IF;
 
                 PERFORM set_config('role', 'authenticated', true);
@@ -605,12 +638,18 @@ BEGIN
             IF v_cur_tbl = 'platform_superadmins' THEN
                 IF v_sel_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: platform_superadmins SELECT policy abnormal (%))', v_sel_qual; END IF;
                 IF v_ins_check NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: platform_superadmins INSERT policy abnormal (%))', v_ins_check; END IF;
+                IF v_upd_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: platform_superadmins UPDATE qual abnormal (%))', v_upd_qual; END IF;
+                IF v_del_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: platform_superadmins DELETE qual abnormal (%))', v_del_qual; END IF;
             ELSIF v_cur_tbl = 'tenants' THEN
-                IF v_sel_qual NOT LIKE '%user_has_tenant_access%' AND v_sel_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: tenants SELECT policy abnormal (%))', v_sel_qual; END IF;
-                IF v_upd_qual NOT LIKE '%user_is_tenant_admin_or_owner%' AND v_upd_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: tenants UPDATE policy abnormal (%))', v_upd_qual; END IF;
+                IF v_sel_qual NOT LIKE '%user_has_tenant_access%' AND v_sel_qual NOT LIKE '%is_superadmin%' AND v_sel_qual NOT LIKE '%owner_uid%' THEN RAISE EXCEPTION '[FAIL] Test 11: tenants SELECT policy abnormal (%))', v_sel_qual; END IF;
+                IF v_ins_check NOT LIKE '%owner_uid%' AND v_ins_check NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: tenants INSERT policy abnormal (%))', v_ins_check; END IF;
+                IF v_upd_qual NOT LIKE '%owner_uid%' AND v_upd_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: tenants UPDATE policy abnormal (%))', v_upd_qual; END IF;
+                IF v_del_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: tenants DELETE policy abnormal (%))', v_del_qual; END IF;
             ELSIF v_cur_tbl IN ('users_staff', 'invitations') THEN
-                IF v_sel_qual NOT LIKE '%user_has_tenant_access%' AND v_sel_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % SELECT policy abnormal (%))', v_cur_tbl, v_sel_qual; END IF;
-                IF v_ins_check NOT LIKE '%user_is_tenant_admin_or_owner%' AND v_ins_check NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % INSERT policy abnormal (%))', v_cur_tbl, v_ins_check; END IF;
+                IF v_sel_qual NOT LIKE '%get_user_tenant_role%' AND v_sel_qual NOT LIKE '%user_has_tenant_access%' AND v_sel_qual NOT LIKE '%is_superadmin%' AND v_sel_qual NOT LIKE '%uid%' THEN RAISE EXCEPTION '[FAIL] Test 11: % SELECT policy abnormal (%))', v_cur_tbl, v_sel_qual; END IF;
+                IF v_ins_check NOT LIKE '%get_user_tenant_role%' AND v_ins_check NOT LIKE '%user_is_tenant_admin_or_owner%' AND v_ins_check NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % INSERT policy abnormal (%))', v_cur_tbl, v_ins_check; END IF;
+                IF v_upd_qual NOT LIKE '%get_user_tenant_role%' AND v_upd_qual NOT LIKE '%is_superadmin%' AND v_upd_qual NOT LIKE '%uid%' THEN RAISE EXCEPTION '[FAIL] Test 11: % UPDATE policy abnormal (%))', v_cur_tbl, v_upd_qual; END IF;
+                IF v_del_qual NOT LIKE '%get_user_tenant_role%' AND v_del_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % DELETE policy abnormal (%))', v_cur_tbl, v_del_qual; END IF;
             ELSIF v_cur_tbl IN ('transactions', 'global_ledger', 'pos_transactions', 'spp_payments', 'event_expenses') THEN
                 IF v_sel_qual NOT LIKE '%user_can_manage_financials%' AND v_sel_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % SELECT policy abnormal (%))', v_cur_tbl, v_sel_qual; END IF;
                 IF v_ins_check NOT LIKE '%user_can_manage_financials%' AND v_ins_check NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % INSERT policy abnormal (%))', v_cur_tbl, v_ins_check; END IF;
@@ -619,18 +658,28 @@ BEGIN
             ELSIF v_cur_tbl IN ('academies', 'academy_classes', 'students', 'academy_evaluations', 'academy_attendance') THEN
                 IF v_sel_qual NOT LIKE '%user_has_tenant_access%' AND v_sel_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % SELECT policy abnormal (%))', v_cur_tbl, v_sel_qual; END IF;
                 IF v_ins_check NOT LIKE '%user_can_manage_academy%' AND v_ins_check NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % INSERT policy abnormal (%))', v_cur_tbl, v_ins_check; END IF;
+                IF v_upd_qual NOT LIKE '%user_can_manage_academy%' AND v_upd_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % UPDATE policy abnormal (%))', v_cur_tbl, v_upd_qual; END IF;
+                IF v_del_qual NOT LIKE '%user_is_tenant_admin_or_owner%' AND v_del_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % DELETE policy abnormal (%))', v_cur_tbl, v_del_qual; END IF;
             ELSIF v_cur_tbl = 'coaches' THEN
                 IF v_sel_qual NOT LIKE '%user_has_tenant_access%' AND v_sel_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: coaches SELECT policy abnormal (%))', v_sel_qual; END IF;
                 IF v_ins_check NOT LIKE '%user_is_tenant_admin_or_owner%' AND v_ins_check NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: coaches INSERT policy abnormal (%))', v_ins_check; END IF;
+                IF v_upd_qual NOT LIKE '%user_is_tenant_admin_or_owner%' AND v_upd_qual NOT LIKE '%auth_uid%' AND v_upd_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: coaches UPDATE policy abnormal (%))', v_upd_qual; END IF;
+                IF v_del_qual NOT LIKE '%user_is_tenant_admin_or_owner%' AND v_del_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: coaches DELETE policy abnormal (%))', v_del_qual; END IF;
             ELSIF v_cur_tbl IN ('products', 'courts', 'bookings') THEN
                 IF v_sel_qual NOT LIKE '%user_has_tenant_access%' AND v_sel_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % SELECT policy abnormal (%))', v_cur_tbl, v_sel_qual; END IF;
                 IF v_ins_check NOT LIKE '%user_can_manage_pos%' AND v_ins_check NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % INSERT policy abnormal (%))', v_cur_tbl, v_ins_check; END IF;
+                IF v_upd_qual NOT LIKE '%user_can_manage_pos%' AND v_upd_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % UPDATE policy abnormal (%))', v_cur_tbl, v_upd_qual; END IF;
+                IF v_del_qual NOT LIKE '%user_is_tenant_admin_or_owner%' AND v_del_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % DELETE policy abnormal (%))', v_cur_tbl, v_del_qual; END IF;
             ELSIF v_cur_tbl IN ('events', 'event_categories', 'event_documents', 'event_matches', 'sponsors') THEN
                 IF v_sel_qual NOT LIKE '%user_has_tenant_access%' AND v_sel_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % SELECT policy abnormal (%))', v_cur_tbl, v_sel_qual; END IF;
                 IF v_ins_check NOT LIKE '%user_is_tenant_admin_or_owner%' AND v_ins_check NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % INSERT policy abnormal (%))', v_cur_tbl, v_ins_check; END IF;
+                IF v_upd_qual NOT LIKE '%user_is_tenant_admin_or_owner%' AND v_upd_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % UPDATE policy abnormal (%))', v_cur_tbl, v_upd_qual; END IF;
+                IF v_del_qual NOT LIKE '%user_is_tenant_admin_or_owner%' AND v_del_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % DELETE policy abnormal (%))', v_cur_tbl, v_del_qual; END IF;
             ELSIF v_cur_tbl = 'event_registrations' THEN
                 IF v_sel_qual NOT LIKE '%user_has_tenant_access%' AND v_sel_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: event_registrations SELECT policy abnormal (%))', v_sel_qual; END IF;
                 IF v_ins_check NOT LIKE '%user_can_manage_pos%' AND v_ins_check NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: event_registrations INSERT policy abnormal (%))', v_ins_check; END IF;
+                IF v_upd_qual NOT LIKE '%user_is_tenant_admin_or_owner%' AND v_upd_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: event_registrations UPDATE policy abnormal (%))', v_upd_qual; END IF;
+                IF v_del_qual NOT LIKE '%user_is_tenant_admin_or_owner%' AND v_del_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: event_registrations DELETE policy abnormal (%))', v_del_qual; END IF;
             END IF;
 
             -- 13. Total policies on this table must be exactly 4
