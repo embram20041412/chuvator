@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
 import {
-  ResponsiveContainer,
   PieChart,
   Pie,
   Cell,
@@ -31,6 +30,7 @@ import {
   Akademi3DIcon,
   Keuangan3DIcon
 } from './icons/App3DIcons';
+import SafeChartContainer from './SafeChartContainer';
 
 // Helper format mata uang Rupiah
 function formatRupiah(amount) {
@@ -369,45 +369,48 @@ export default function AcademyDashboard({
           </div>
 
           {/* Donut Chart with Center Text */}
-          <div className="h-36 w-full relative flex items-center justify-center">
+          <div className="h-40 min-h-[160px] w-full relative flex items-center justify-center min-w-0">
             {totalStudents === 0 ? (
               <div className="text-center p-3">
                 <Users className="w-6 h-6 text-slate-300 mx-auto mb-1" />
                 <p className="text-xs text-slate-400">Belum ada siswa di akademi ini</p>
               </div>
             ) : (
-              <>
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={pieData}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={42}
-                      outerRadius={58}
-                      paddingAngle={3}
-                      dataKey="value"
-                    >
-                      {pieData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} stroke="#ffffff" strokeWidth={2} />
-                      ))}
-                    </Pie>
-                    <Tooltip content={<CustomPieTooltip />} />
-                  </PieChart>
-                </ResponsiveContainer>
-                {/* Center Circle Content */}
-                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                  <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">
-                    Pelunasan
-                  </span>
-                  <span className="text-base font-bold text-slate-900">
-                    {collectionRate}%
-                  </span>
-                  <span className="text-[8px] font-semibold text-slate-500">
-                    {paidStudentsCount}/{totalStudents} Siswa
-                  </span>
-                </div>
-              </>
+              <SafeChartContainer
+                minHeight={160}
+                minWidth={120}
+                className="w-full h-full relative flex items-center justify-center min-w-0"
+                centerContent={
+                  <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">
+                      Pelunasan
+                    </span>
+                    <span className="text-base font-bold text-slate-900">
+                      {collectionRate}%
+                    </span>
+                    <span className="text-[8px] font-semibold text-slate-500">
+                      {paidStudentsCount}/{totalStudents} Siswa
+                    </span>
+                  </div>
+                }
+              >
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={42}
+                    outerRadius={58}
+                    paddingAngle={3}
+                    dataKey="value"
+                  >
+                    {pieData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} stroke="#ffffff" strokeWidth={2} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomPieTooltip />} />
+                </PieChart>
+              </SafeChartContainer>
             )}
           </div>
 
@@ -454,7 +457,7 @@ export default function AcademyDashboard({
             </span>
           </div>
 
-          <div className="h-36 w-full pt-1">
+          <div className="h-44 min-h-[170px] w-full pt-1 min-w-0">
             {classDistributionData.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-xl p-3 text-center">
                 <BookOpen className="w-6 h-6 text-slate-300 mb-1" />
@@ -472,7 +475,7 @@ export default function AcademyDashboard({
                 )}
               </div>
             ) : (
-              <ResponsiveContainer width="100%" height="100%">
+              <SafeChartContainer minHeight={160} minWidth={180} className="w-full h-full min-w-0">
                 <BarChart data={classDistributionData} margin={{ top: 8, right: 10, left: -22, bottom: 15 }}>
                   <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                   <XAxis
@@ -499,7 +502,7 @@ export default function AcademyDashboard({
                     radius={[8, 8, 8, 8]}
                   />
                 </BarChart>
-              </ResponsiveContainer>
+              </SafeChartContainer>
             )}
           </div>
 

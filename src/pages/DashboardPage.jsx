@@ -38,8 +38,8 @@ import {
   DanaSponsor3DIcon
 } from '../components/icons/App3DIcons';
 import DateRangeFilter, { filterDataByTime } from '../components/DateRangeFilter';
+import SafeChartContainer from '../components/SafeChartContainer';
 import {
-  ResponsiveContainer,
   BarChart,
   Bar,
   AreaChart,
@@ -1018,8 +1018,8 @@ export default function DashboardPage({ userProfile }) {
           </div>
 
           {/* RECHARTS AREA / BAR CHART */}
-          <div className="w-full flex-1 h-44 sm:h-52 lg:h-60 pt-1">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="w-full flex-1 h-44 sm:h-52 lg:h-60 min-h-[180px] pt-1 min-w-0">
+            <SafeChartContainer minHeight={180} minWidth={200} className="w-full h-full">
               <AreaChart data={dailyTrendData} margin={{ top: 10, right: 10, left: -10, bottom: 0 }}>
                 <defs>
                   <linearGradient id="courtGrad" x1="0" y1="0" x2="0" y2="1">
@@ -1092,7 +1092,7 @@ export default function DashboardPage({ userProfile }) {
                   fill="url(#sponsorGrad)" 
                 />
               </AreaChart>
-            </ResponsiveContainer>
+            </SafeChartContainer>
           </div>
         </div>
 
@@ -1109,8 +1109,22 @@ export default function DashboardPage({ userProfile }) {
           </div>
 
           {/* DONUT PIE CHART */}
-          <div className="h-40 lg:h-48 w-full relative flex items-center justify-center">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-44 sm:h-48 lg:h-52 min-h-[176px] w-full relative flex items-center justify-center min-w-0">
+            <SafeChartContainer
+              minHeight={176}
+              minWidth={120}
+              className="w-full h-full relative flex items-center justify-center min-w-0"
+              centerContent={
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
+                    Omset Filtered
+                  </span>
+                  <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 font-mono tabular-nums truncate max-w-[120px]">
+                    {formatRupiah(financialSummary.filteredTotalRevenue)}
+                  </span>
+                </div>
+              }
+            >
               <PieChart>
                 <Pie
                   data={divisionPieData}
@@ -1127,17 +1141,7 @@ export default function DashboardPage({ userProfile }) {
                 </Pie>
                 <Tooltip content={<CustomPieTooltip />} />
               </PieChart>
-            </ResponsiveContainer>
-
-            {/* Center Summary Text */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-                Omset Filtered
-              </span>
-              <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 font-mono tabular-nums truncate max-w-[120px]">
-                {formatRupiah(financialSummary.filteredTotalRevenue)}
-              </span>
-            </div>
+            </SafeChartContainer>
           </div>
 
           {/* LEGEND / BREAKDOWN LIST */}

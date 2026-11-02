@@ -983,7 +983,7 @@ function FutsalAssessmentView({
                     </div>
 
                     {showMobileRadar && (
-                      <div className="h-44 sm:h-48 w-full flex items-center justify-center my-auto">
+                      <div className="h-44 sm:h-48 min-h-[180px] w-full flex items-center justify-center my-auto min-w-0">
                         <ResponsiveContainer width="100%" height={180}>
                           <RadarChart cx="50%" cy="50%" outerRadius="62%" data={radarData} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>
                             <PolarGrid stroke="#334155" />
@@ -2171,7 +2171,7 @@ function BadmintonAssessmentView({
                     </div>
 
                     {showMobileRadar && (
-                      <div className="h-44 sm:h-48 w-full flex items-center justify-center my-auto">
+                      <div className="h-44 sm:h-48 min-h-[180px] w-full flex items-center justify-center my-auto min-w-0">
                         <ResponsiveContainer width="100%" height={180}>
                           <RadarChart cx="50%" cy="50%" outerRadius="62%" data={radarData} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>
                             <PolarGrid stroke="#334155" />
@@ -3554,7 +3554,7 @@ function FootballAssessmentView({
               </div>
 
               {showMobileRadar && (
-                <div className="h-44 sm:h-48 w-full flex items-center justify-center my-auto">
+                <div className="h-44 sm:h-48 min-h-[180px] w-full flex items-center justify-center my-auto min-w-0">
                   <ResponsiveContainer width="100%" height={180}>
                     <RadarChart cx="50%" cy="50%" outerRadius="62%" data={radarData} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>
                       <PolarGrid stroke="#334155" />
@@ -4887,7 +4887,7 @@ function Standard4PillarView({
               <div className="space-y-3">
                 <div className="bg-slate-900 rounded-xl p-3 text-white space-y-2">
                   <span className="text-xs font-bold uppercase text-indigo-400">Scouting Radar</span>
-                  <div className="h-44 sm:h-48 w-full">
+                  <div className="h-44 sm:h-48 min-h-[180px] w-full min-w-0">
                     <ResponsiveContainer width="100%" height={180}>
                       <RadarChart data={radarData}>
                         <PolarGrid stroke="#334155" />

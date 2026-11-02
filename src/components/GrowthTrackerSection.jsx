@@ -441,7 +441,7 @@ export default function GrowthTrackerSection({ selectedStudent, students = [] })
                     Belum ada rekam data pertumbuhan. Isi form di sebelah kiri untuk mulai membuat grafik.
                   </div>
                 ) : (
-                  <div className="bg-slate-900 rounded-xl p-2.5 text-white shadow-inner">
+                  <div className="bg-slate-900 rounded-xl p-2.5 text-white shadow-inner min-h-[220px] min-w-0">
                     <ResponsiveContainer width="100%" height={210}>
                       <LineChart data={chartData} margin={{ top: 8, right: 15, left: -15, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#334155" />

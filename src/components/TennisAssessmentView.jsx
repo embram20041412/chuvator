@@ -37,9 +37,9 @@ import {
   RadarChart,
   PolarGrid,
   PolarAngleAxis,
-  PolarRadiusAxis,
-  ResponsiveContainer
+  PolarRadiusAxis
 } from 'recharts';
+import SafeChartContainer from './SafeChartContainer';
 
 import {
   TENNIS_AGE_LEVELS,
@@ -753,8 +753,8 @@ export default function TennisAssessmentView({
           </div>
 
           {/* RECHARTS RADAR CHART */}
-          <div className="h-44 sm:h-48 w-full flex items-center justify-center my-auto">
-            <ResponsiveContainer width="100%" height="100%">
+          <div className="h-44 sm:h-48 min-h-[176px] w-full flex items-center justify-center my-auto min-w-0">
+            <SafeChartContainer minHeight={176} minWidth={180} className="w-full h-full min-w-0">
               <RadarChart cx="50%" cy="50%" outerRadius="75%" data={radarData}>
                 <PolarGrid stroke="#334155" />
                 <PolarAngleAxis 
@@ -775,7 +775,7 @@ export default function TennisAssessmentView({
                   fillOpacity={0.45}
                 />
               </RadarChart>
-            </ResponsiveContainer>
+            </SafeChartContainer>
           </div>
 
           <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400">

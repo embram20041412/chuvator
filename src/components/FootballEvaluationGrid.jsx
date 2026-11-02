@@ -140,7 +140,7 @@ export default function FootballEvaluationGrid({
         </div>
 
         {/* Recharts Container */}
-        <div className="h-64 w-full flex items-center justify-center">
+        <div className="h-64 min-h-[250px] w-full flex items-center justify-center min-w-0">
           <ResponsiveContainer width="100%" height={250}>
             <RadarChart data={radarData} margin={{ top: 10, right: 25, bottom: 10, left: 25 }}>
               <PolarGrid stroke="#4A635D" />
