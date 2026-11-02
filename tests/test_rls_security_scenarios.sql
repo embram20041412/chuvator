@@ -204,20 +204,24 @@ BEGIN
         RAISE EXCEPTION '[FAIL] Test 9: Eskalasi role tidak diblokir dengan SQLSTATE 42501 (Caught: %).', caught_sqlstate;
     END IF;
 
-    -- TEST 10: Membaca token_hash pada invitations oleh Authenticated (Isolasi Kolom)
+    -- TEST 10: Membaca token_hash pada invitations oleh Authenticated (Isolasi Kolom Strict Assertion)
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', staff_a_uid, 'email', 'staff_a@arena.com')::text, true);
     test_passed := FALSE;
     caught_sqlstate := '';
     BEGIN
         EXECUTE 'SELECT token_hash FROM public.invitations WHERE id = $1' INTO res_text USING inv_pending_id;
+        -- Jika query berhasil (res_text terisi), assertion FAILS!
         test_passed := FALSE;
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE;
-        IF caught_sqlstate = '42501' THEN test_passed := TRUE; END IF;
+        IF caught_sqlstate = '42501' THEN 
+            test_passed := TRUE; 
+        END IF;
     END;
     IF test_passed THEN
-        RAISE NOTICE '[PASS] Test 10: token_hash tidak dapat dibaca oleh authenticated user (SQLSTATE 42501).';
+        RAISE NOTICE '[PASS] Test 10: token_hash tidak dapat dibaca oleh authenticated user (Ditolak SQLSTATE 42501).';
     ELSE
-        RAISE NOTICE '[INFO] Test 10: Column Grant token_hash terkonfigurasi (EXCLUDING token_hash pada GRANT SELECT).';
+        RAISE EXCEPTION '[FAIL] Test 10: Isolasi token_hash gagal! Authenticated user dapat membaca token_hash atau SQLSTATE lain (Caught: %).', caught_sqlstate;
     END IF;
 
     -- TEST 11: Kebocoran Policy Lama (Permissive Policy Check)
