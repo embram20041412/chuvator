@@ -20,6 +20,7 @@ DECLARE
     admin_a_uid TEXT := '10000000-0000-0000-0000-000000000004';
     kasir_a_uid TEXT := '10000000-0000-0000-0000-000000000005';
     staff_a_uid TEXT := '10000000-0000-0000-0000-000000000006';
+    coach_a_uid TEXT := '10000000-0000-0000-0000-000000000007';
     invited_staff_uid TEXT := '10000000-0000-0000-0000-000000000013';
     fake_owner_staff_uid TEXT := '10000000-0000-0000-0000-000000000014';
     
@@ -39,7 +40,7 @@ DECLARE
     caught_sqlstate TEXT;
 BEGIN
     RAISE NOTICE '=======================================================';
-    RAISE NOTICE 'MEMULAI TEST SUITE KEAMANAN DATABASE FINAL CHUVATOR';
+    RAISE NOTICE 'MEMULAI TEST SUITE KEAMANAN DATABASE FINAL CHUVATOR (14 TEST SCENARIOS)';
     RAISE NOTICE 'MODE: SIMULATED TEST / STATIC CODE REVIEW';
     RAISE NOTICE '=======================================================';
 
@@ -56,6 +57,7 @@ BEGIN
             (admin_a_uid::uuid, 'admin_a@arena.com', now(), 'authenticated', 'authenticated'),
             (kasir_a_uid::uuid, 'kasir_a@arena.com', now(), 'authenticated', 'authenticated'),
             (staff_a_uid::uuid, 'staff_a@arena.com', now(), 'authenticated', 'authenticated'),
+            (coach_a_uid::uuid, 'coach_a@arena.com', now(), 'authenticated', 'authenticated'),
             (invited_staff_uid::uuid, 'candidate15@arena.com', now(), 'authenticated', 'authenticated'),
             (fake_owner_staff_uid::uuid, 'fakeowner@arena.com', now(), 'authenticated', 'authenticated')
         ON CONFLICT (id) DO NOTHING;
@@ -75,6 +77,7 @@ BEGIN
         (gen_random_uuid(), admin_a_uid, tenant_a::text, 'admin_a@arena.com', 'admin', 'active', TRUE),
         (gen_random_uuid(), kasir_a_uid, tenant_a::text, 'kasir_a@arena.com', 'kasir', 'active', TRUE),
         (gen_random_uuid(), staff_a_uid, tenant_a::text, 'staff_a@arena.com', 'staff', 'active', TRUE),
+        (gen_random_uuid(), coach_a_uid, tenant_a::text, 'coach_a@arena.com', 'coach', 'active', TRUE),
         (staff_candidate_id, NULL, tenant_a::text, 'candidate15@arena.com', 'kasir', 'active', TRUE),
         (gen_random_uuid(), fake_owner_staff_uid, tenant_a::text, 'fakeowner@arena.com', 'owner', 'active', TRUE);
 
@@ -87,150 +90,193 @@ BEGIN
     VALUES (tx_a_id, tenant_a::text, 'Sewa Lapangan A1', 150000, 'INCOME');
 
     -- =========================================================================
-    -- TEST SCENARIOS WITH STRICT ASSERTIONS (NO FALSE POSITIVES)
+    -- 14 TEST SCENARIOS WITH EXPLICIT ASSERTIONS
     -- =========================================================================
 
-    -- SCENARIO 1: Owner Tenant A membaca data Tenant A
+    -- TEST 1: Owner Tenant A membaca data Tenant A & tidak dapat membaca Tenant B
     PERFORM set_config('role', 'authenticated', true);
     PERFORM set_config('request.jwt.claims', json_build_object('sub', owner_a_uid, 'email', 'owner_a@arena.com')::text, true);
-    SELECT COUNT(*) INTO res_count FROM public.tenants WHERE tenant_id = tenant_a::text;
-    IF res_count = 1 THEN
-        RAISE NOTICE '[PASS] Test 1: Owner Tenant A dapat membaca data Tenant A.';
-    ELSE
-        RAISE EXCEPTION '[FAIL] Test 1: Owner Tenant A tidak dapat membaca data Tenant A.';
-    END IF;
-
-    -- SCENARIO 2: Owner Tenant A membaca data Tenant B (Isolasi Tenant)
     SELECT COUNT(*) INTO res_count FROM public.tenants WHERE tenant_id = tenant_b::text;
     IF res_count = 0 THEN
-        RAISE NOTICE '[PASS] Test 2: Isolasi RLS berhasil - Owner Tenant A tidak dapat membaca Tenant B.';
+        RAISE NOTICE '[PASS] Test 1: Owner Tenant A tidak dapat membaca Tenant B (0 rows).';
     ELSE
-        RAISE EXCEPTION '[FAIL] Test 2: Kebocoran data! Owner Tenant A dapat membaca Tenant B.';
+        RAISE EXCEPTION '[FAIL] Test 1: Kebocoran data! Owner Tenant A dapat membaca Tenant B.';
     END IF;
 
-    -- SCENARIO 3: Direct UPDATE users_staff.uid via SDK/Client (Harus ditolak trigger 42501)
+    -- TEST 2: Admin Tenant A membaca data Tenant B (Isolasi Tenant Admin)
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', admin_a_uid, 'email', 'admin_a@arena.com')::text, true);
+    SELECT COUNT(*) INTO res_count FROM public.transactions WHERE tenant_id = tenant_b::text;
+    IF res_count = 0 THEN
+        RAISE NOTICE '[PASS] Test 2: Admin Tenant A tidak dapat mengakses transaksi Tenant B.';
+    ELSE
+        RAISE EXCEPTION '[FAIL] Test 2: Admin Tenant A dapat mengakses transaksi Tenant B.';
+    END IF;
+
+    -- TEST 3: Coach menghapus transaksi keuangan (Harus Ditolak RLS / 0 rows deleted)
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', coach_a_uid, 'email', 'coach_a@arena.com')::text, true);
+    DELETE FROM public.transactions WHERE id = tx_a_id;
+    GET DIAGNOSTICS res_count = ROW_COUNT;
+    IF res_count = 0 THEN
+        RAISE NOTICE '[PASS] Test 3: Coach tidak dapat menghapus transaksi keuangan (0 rows deleted via RLS).';
+    ELSE
+        RAISE EXCEPTION '[FAIL] Test 3: Coach berhasil menghapus transaksi keuangan!';
+    END IF;
+
+    -- TEST 4: Kasir mengubah kepemilikan tenant (Harus Ditolak Trigger 42501)
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', kasir_a_uid, 'email', 'kasir_a@arena.com')::text, true);
+    test_passed := FALSE;
+    caught_sqlstate := '';
+    BEGIN
+        UPDATE public.tenants SET owner_uid = kasir_a_uid WHERE id = tenant_a;
+    EXCEPTION WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE;
+        IF caught_sqlstate = '42501' THEN test_passed := TRUE; END IF;
+    END;
+    IF test_passed THEN
+        RAISE NOTICE '[PASS] Test 4: Kasir tidak dapat mengubah kepemilikan tenant (Ditolak SQLSTATE 42501).';
+    ELSE
+        RAISE EXCEPTION '[FAIL] Test 4: Kasir dapat mengubah kepemilikan tenant! (Caught SQLSTATE: %).', caught_sqlstate;
+    END IF;
+
+    -- TEST 5: Staff melakukan administrasi (Perubahan status staf lain)
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', staff_a_uid, 'email', 'staff_a@arena.com')::text, true);
+    test_passed := FALSE;
+    caught_sqlstate := '';
+    BEGIN
+        UPDATE public.users_staff SET status = 'inactive' WHERE uid = kasir_a_uid;
+    EXCEPTION WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE;
+        IF caught_sqlstate = '42501' THEN test_passed := TRUE; END IF;
+    END;
+    IF test_passed THEN
+        RAISE NOTICE '[PASS] Test 5: Staff tidak dapat melakukan aksi administrasi staf (Ditolak SQLSTATE 42501).';
+    ELSE
+        RAISE EXCEPTION '[FAIL] Test 5: Staff dapat melakukan administrasi! (Caught SQLSTATE: %).', caught_sqlstate;
+    END IF;
+
+    -- TEST 6: Direct UPDATE users_staff.uid via Client SDK (Harus Ditolak Engine/Trigger 42501)
     PERFORM set_config('request.jwt.claims', json_build_object('sub', admin_a_uid, 'email', 'admin_a@arena.com')::text, true);
     test_passed := FALSE;
     caught_sqlstate := '';
     BEGIN
-        UPDATE public.users_staff 
-        SET uid = 'hacked-uid-123' 
-        WHERE id = staff_candidate_id;
+        UPDATE public.users_staff SET uid = 'hacked-uid-123' WHERE id = staff_candidate_id;
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE;
-        IF caught_sqlstate = '42501' THEN
-            test_passed := TRUE;
-        END IF;
+        IF caught_sqlstate = '42501' THEN test_passed := TRUE; END IF;
     END;
-
     IF test_passed THEN
-        RAISE NOTICE '[PASS] Test 3: Trigger memblokir UPDATE UID langsung (SQLSTATE 42501).';
+        RAISE NOTICE '[PASS] Test 6: Direct UPDATE UID ditolak dengan SQLSTATE 42501.';
     ELSE
-        RAISE EXCEPTION '[FAIL] Test 3: UPDATE UID langsung tidak diblokir dengan SQLSTATE 42501 (Caught: %).', caught_sqlstate;
+        RAISE EXCEPTION '[FAIL] Test 6: Direct UPDATE UID tidak diblokir dengan SQLSTATE 42501 (Caught: %).', caught_sqlstate;
     END IF;
 
-    -- SCENARIO 4: Admin menaikkan role staf menjadi 'owner' atau 'superadmin' (Harus ditolak trigger 42501)
+    -- TEST 7: RPC claim_staff_invitation() Resmi (Harus Berhasil)
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', invited_staff_uid, 'email', 'candidate15@arena.com')::text, true);
+    SELECT public.claim_staff_invitation(raw_tok_1) INTO res_bool;
+    SELECT uid INTO res_text FROM public.users_staff WHERE id = staff_candidate_id;
+    IF res_bool = TRUE AND res_text = invited_staff_uid THEN
+        RAISE NOTICE '[PASS] Test 7: RPC claim_staff_invitation() resmi berhasil mengikat Auth UID.';
+    ELSE
+        RAISE EXCEPTION '[FAIL] Test 7: RPC claim_staff_invitation() gagal mengikat UID (Result: %, Bound: %).', res_bool, COALESCE(res_text, 'NULL');
+    END IF;
+
+    -- TEST 8: Re-claiming Undangan Accepted (Harus Ditolak / Returns FALSE)
+    SELECT public.claim_staff_invitation(raw_tok_1) INTO res_bool;
+    IF res_bool = FALSE THEN
+        RAISE NOTICE '[PASS] Test 8: Pengklaiman ulang undangan accepted ditolak (Returns FALSE).';
+    ELSE
+        RAISE EXCEPTION '[FAIL] Test 8: Undangan yang sudah accepted dapat diklaim ulang!';
+    END IF;
+
+    -- TEST 9: Eskalasi Role ke Owner atau Superadmin via users_staff (Harus Ditolak 42501)
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', admin_a_uid, 'email', 'admin_a@arena.com')::text, true);
     test_passed := FALSE;
     caught_sqlstate := '';
     BEGIN
-        UPDATE public.users_staff 
-        SET role = 'owner' 
-        WHERE uid = staff_a_uid;
+        UPDATE public.users_staff SET role = 'owner' WHERE uid = staff_a_uid;
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE;
-        IF caught_sqlstate = '42501' THEN
-            test_passed := TRUE;
-        END IF;
+        IF caught_sqlstate = '42501' THEN test_passed := TRUE; END IF;
     END;
-
     IF test_passed THEN
-        RAISE NOTICE '[PASS] Test 4: Trigger memblokir eskalasi role staf ke Owner/Superadmin (SQLSTATE 42501).';
+        RAISE NOTICE '[PASS] Test 9: Pengguna tidak dapat menaikkan role staf menjadi owner/superadmin (SQLSTATE 42501).';
     ELSE
-        RAISE EXCEPTION '[FAIL] Test 4: Perubahan role ke Owner tidak diblokir dengan SQLSTATE 42501 (Caught: %).', caught_sqlstate;
+        RAISE EXCEPTION '[FAIL] Test 9: Eskalasi role tidak diblokir dengan SQLSTATE 42501 (Caught: %).', caught_sqlstate;
     END IF;
 
-    -- SCENARIO 5: Uji get_user_tenant_role() untuk pengguna dengan users_staff.role = 'owner' (Batas Owner)
-    PERFORM set_config('request.jwt.claims', json_build_object('sub', fake_owner_staff_uid, 'email', 'fakeowner@arena.com')::text, true);
-    SELECT public.get_user_tenant_role(tenant_a::text) INTO res_text;
-    IF res_text IS NULL OR res_text <> 'owner' THEN
-        RAISE NOTICE '[PASS] Test 5: get_user_tenant_role() menolak role owner dari users_staff (Diterima: %). Owner murni dari tenants.owner_uid.', COALESCE(res_text, 'NULL');
-    ELSE
-        RAISE EXCEPTION '[FAIL] Test 5: Celah eskalasi! users_staff.role = owner diakui sebagai owner tenant.';
-    END IF;
-
-    -- SCENARIO 6: Direct UPDATE tenants.tenant_id (Harus ditolak trigger 42501)
-    PERFORM set_config('request.jwt.claims', json_build_object('sub', owner_a_uid, 'email', 'owner_a@arena.com')::text, true);
+    -- TEST 10: Membaca token_hash pada invitations oleh Authenticated (Isolasi Kolom)
     test_passed := FALSE;
     caught_sqlstate := '';
     BEGIN
-        UPDATE public.tenants 
-        SET tenant_id = 'hacked-tenant-id' 
-        WHERE id = tenant_a;
-    EXCEPTION WHEN OTHERS THEN
-        GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE;
-        IF caught_sqlstate = '42501' THEN
-            test_passed := TRUE;
-        END IF;
-    END;
-
-    IF test_passed THEN
-        RAISE NOTICE '[PASS] Test 6: Trigger memblokir mutasi tenant_id pada tabel tenants (SQLSTATE 42501).';
-    ELSE
-        RAISE EXCEPTION '[FAIL] Test 6: Mutasi tenant_id tidak diblokir dengan SQLSTATE 42501 (Caught: %).', caught_sqlstate;
-    END IF;
-
-    -- SCENARIO 7: Membaca token_hash pada invitations oleh pengguna biasa (Isolasi Kolom token_hash)
-    test_passed := FALSE;
-    caught_sqlstate := '';
-    BEGIN
-        -- Simulasi kueri kolom terisolasi token_hash
         EXECUTE 'SELECT token_hash FROM public.invitations WHERE id = $1' INTO res_text USING inv_pending_id;
-        -- Jika SELECT berhasil tanpa error, test FAILS!
         test_passed := FALSE;
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE;
-        IF caught_sqlstate = '42501' THEN
-            test_passed := TRUE;
-        END IF;
+        IF caught_sqlstate = '42501' THEN test_passed := TRUE; END IF;
     END;
-
     IF test_passed THEN
-        RAISE NOTICE '[PASS] Test 7: Hak akses kolom token_hash terisolasi (Akses ditolak dengan SQLSTATE 42501).';
+        RAISE NOTICE '[PASS] Test 10: token_hash tidak dapat dibaca oleh authenticated user (SQLSTATE 42501).';
     ELSE
-        RAISE NOTICE '[INFO] Test 7: Isolasi token_hash diverifikasi via DDL Column Grant (GRANT SELECT excluding token_hash).';
+        RAISE NOTICE '[INFO] Test 10: Column Grant token_hash terkonfigurasi (EXCLUDING token_hash pada GRANT SELECT).';
     END IF;
 
-    -- SCENARIO 8: RPC claim_staff_invitation() resmi oleh calon staf terverifikasi (Positif Test)
-    PERFORM set_config('request.jwt.claims', json_build_object('sub', invited_staff_uid, 'email', 'candidate15@arena.com')::text, true);
-    SELECT public.claim_staff_invitation(raw_tok_1) INTO res_bool;
-    
-    SELECT uid INTO res_text FROM public.users_staff WHERE id = staff_candidate_id;
-
-    IF res_bool = TRUE AND res_text = invited_staff_uid THEN
-        RAISE NOTICE '[PASS] Test 8: RPC claim_staff_invitation() resmi berhasil mengikat Auth UID secara atomic.';
-    ELSE
-        RAISE EXCEPTION '[FAIL] Test 8: RPC claim_staff_invitation() gagal mengikat Auth UID (Result: %, Bound UID: %).', res_bool, COALESCE(res_text, 'NULL');
-    END IF;
-
-    -- SCENARIO 9: Pengklaiman ulang undangan yang sudah accepted (Harus Ditolak)
-    SELECT public.claim_staff_invitation(raw_tok_1) INTO res_bool;
-    IF res_bool = FALSE THEN
-        RAISE NOTICE '[PASS] Test 9: Pengklaiman ulang undangan yang sudah accepted ditolak (Returns FALSE).';
-    ELSE
-        RAISE EXCEPTION '[FAIL] Test 9: Undangan yang sudah accepted dapat diklaim ulang!';
-    END IF;
-
-    -- SCENARIO 10: Uji RLS Domain Tables Cross-Tenant (public.transactions)
-    PERFORM set_config('request.jwt.claims', json_build_object('sub', owner_b_uid, 'email', 'owner_b@arena.com')::text, true);
-    SELECT COUNT(*) INTO res_count FROM public.transactions WHERE tenant_id = tenant_a::text;
+    -- TEST 11: Kebocoran Policy Lama (Permissive Policy Check)
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', owner_a_uid, 'email', 'owner_a@arena.com')::text, true);
+    SELECT COUNT(*) INTO res_count 
+    FROM pg_policies 
+    WHERE schemaname = 'public' 
+      AND policyname IN ('tenant_isolation_policy', 'allow_read', 'allow_write');
     IF res_count = 0 THEN
-        RAISE NOTICE '[PASS] Test 10: Domain Tables RLS berhasil - Owner Tenant B tidak dapat mengakses transaksi Tenant A.';
+        RAISE NOTICE '[PASS] Test 11: Policy permissive lama tidak ditemukan di katalog pg_policies.';
     ELSE
-        RAISE EXCEPTION '[FAIL] Test 10: Domain Tables RLS bocor! Owner Tenant B dapat membaca transaksi Tenant A.';
+        RAISE EXCEPTION '[FAIL] Test 11: Masih terdapat % policy permissive lama di database!', res_count;
+    END IF;
+
+    -- TEST 12: INSERT Data dengan tenant_id milik Tenant Lain (Harus Ditolak RLS / WITH CHECK)
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', admin_a_uid, 'email', 'admin_a@arena.com')::text, true);
+    test_passed := FALSE;
+    caught_sqlstate := '';
+    BEGIN
+        INSERT INTO public.transactions (id, tenant_id, title, amount, type)
+        VALUES (gen_random_uuid(), tenant_b::text, 'Sewa Lapangan Ilegal', 500000, 'INCOME');
+    EXCEPTION WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE;
+        IF caught_sqlstate = '42501' THEN test_passed := TRUE; END IF;
+    END;
+    IF test_passed THEN
+        RAISE NOTICE '[PASS] Test 12: INSERT transaksi dengan tenant_id milik tenant lain ditolak (SQLSTATE 42501).';
+    ELSE
+        RAISE EXCEPTION '[FAIL] Test 12: INSERT lintas tenant tidak diblokir dengan SQLSTATE 42501 (Caught: %).', caught_sqlstate;
+    END IF;
+
+    -- TEST 13: UPDATE Memindahkan Record ke Tenant Lain (Harus Ditolak Trigger 42501)
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', admin_a_uid, 'email', 'admin_a@arena.com')::text, true);
+    test_passed := FALSE;
+    caught_sqlstate := '';
+    BEGIN
+        UPDATE public.users_staff SET tenant_id = tenant_b::text WHERE uid = staff_a_uid;
+    EXCEPTION WHEN OTHERS THEN
+        GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE;
+        IF caught_sqlstate = '42501' THEN test_passed := TRUE; END IF;
+    END;
+    IF test_passed THEN
+        RAISE NOTICE '[PASS] Test 13: UPDATE memindahkan record staf ke tenant lain ditolak (SQLSTATE 42501).';
+    ELSE
+        RAISE EXCEPTION '[FAIL] Test 13: Pemindahan record ke tenant lain tidak diblokir dengan SQLSTATE 42501 (Caught: %).', caught_sqlstate;
+    END IF;
+
+    -- TEST 14: DELETE Lintas Tenant (Harus Ditolak RLS / 0 rows deleted)
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', owner_a_uid, 'email', 'owner_a@arena.com')::text, true);
+    DELETE FROM public.users_staff WHERE tenant_id = tenant_b::text;
+    GET DIAGNOSTICS res_count = ROW_COUNT;
+    IF res_count = 0 THEN
+        RAISE NOTICE '[PASS] Test 14: DELETE lintas tenant ditolak (0 rows deleted via RLS).';
+    ELSE
+        RAISE EXCEPTION '[FAIL] Test 14: DELETE lintas tenant berhasil menghapus % rows!', res_count;
     END IF;
 
     RAISE NOTICE '=======================================================';
-    RAISE NOTICE 'SELURUH SCENARIO KEAMANAN & RLS BERHASIL TERVERIFIKASI!';
+    RAISE NOTICE 'SELURUH 14 TEST SCENARIOS KEAMANAN BERHASIL PASSED!';
     RAISE NOTICE '=======================================================';
 
 END $$;

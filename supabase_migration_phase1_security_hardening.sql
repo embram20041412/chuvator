@@ -1,18 +1,18 @@
 -- =========================================================================
--- CHUVATOR (CHUA SPORT CORE) — FINAL SUPABASE SECURITY HARDENING MIGRATION (FASE 1V-HARDENED)
+-- CHUVATOR (CHUA SPORT CORE) — FINAL SUPABASE SECURITY HARDENING MIGRATION (FASE 1W-HARDENED)
 -- Target: Supabase PostgreSQL (SQL Editor)
 -- Architecture: React Client SDK (Cloudflare Pages) -> Supabase PostgreSQL (RLS)
 -- Key Guarantees:
 --   1. Strict Owner Role Boundary (Tenant ownership derived EXCLUSIVELY from tenants.owner_uid)
---   2. Complete Direct Staff UID Mutation Sealing + Safe RPC claim_staff_invitation Binding
+--   2. Tamper-Proof Direct Staff UID Mutation Sealing (PostgreSQL Column Privileges + SECURITY DEFINER Execution Context Detection)
 --   3. Prevention of Role Escalation (Owner/Admin CANNOT set role to 'owner' or 'superadmin' on users_staff)
 --   4. Safe Verified Platform Superadmin Bootstrap (bootstrap_platform_superadmin RPC)
 --   5. Hardened Tenant Column Protection Trigger (protect_tenants_columns) protecting id, tenant_id, owner_uid, owner_email
 --   6. Valid CTE Multi-Row Candidate Locking (WITH locked_candidates AS (...) SELECT array_agg(id) FOR UPDATE)
 --   7. Preflight Check & Safe Unique Index (idx_invitations_pending_unique) for Pending Invitations
 --   8. Sealed token_hash on invitations (Column-level SELECT Grant excluding token_hash)
---   9. Full CRUD RLS Matrix policies across ALL 24 tenant-scoped tables
---  10. Targeted SECURITY DEFINER search_path = public, extensions, pg_temp
+--   9. Least-Privilege Role-Based Access Control (RBAC) RLS policies across ALL 20 domain tables + 4 core tables
+--  10. Explicit SECURITY DEFINER search_path = public, auth, extensions, pg_temp
 -- =========================================================================
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto" WITH SCHEMA extensions;
@@ -248,44 +248,37 @@ BEGIN
 END;
 $$;
 
--- 2. user_has_tenant_access(check_tenant_id TEXT)
+-- 2. Role Access Helpers for Least Privilege RLS
 CREATE OR REPLACE FUNCTION public.user_has_tenant_access(check_tenant_id TEXT)
-RETURNS BOOLEAN
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public, extensions, pg_temp
-AS $$
-BEGIN
-    RETURN (public.get_user_tenant_role(check_tenant_id) IS NOT NULL);
-END;
-$$;
+RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions, pg_temp AS $$
+BEGIN RETURN (public.get_user_tenant_role(check_tenant_id) IS NOT NULL); END; $$;
 
--- 3. get_coach_id_for_user(check_tenant_id TEXT)
+CREATE OR REPLACE FUNCTION public.user_is_tenant_admin_or_owner(check_tenant_id TEXT)
+RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions, pg_temp AS $$
+BEGIN RETURN (public.get_user_tenant_role(check_tenant_id) IN ('superadmin', 'owner', 'admin')); END; $$;
+
+CREATE OR REPLACE FUNCTION public.user_can_manage_financials(check_tenant_id TEXT)
+RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions, pg_temp AS $$
+BEGIN RETURN (public.get_user_tenant_role(check_tenant_id) IN ('superadmin', 'owner', 'admin', 'kasir')); END; $$;
+
+CREATE OR REPLACE FUNCTION public.user_can_manage_academy(check_tenant_id TEXT)
+RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions, pg_temp AS $$
+BEGIN RETURN (public.get_user_tenant_role(check_tenant_id) IN ('superadmin', 'owner', 'admin', 'coach')); END; $$;
+
+CREATE OR REPLACE FUNCTION public.user_can_manage_pos(check_tenant_id TEXT)
+RETURNS BOOLEAN LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions, pg_temp AS $$
+BEGIN RETURN (public.get_user_tenant_role(check_tenant_id) IN ('superadmin', 'owner', 'admin', 'kasir', 'staff')); END; $$;
+
 CREATE OR REPLACE FUNCTION public.get_coach_id_for_user(check_tenant_id TEXT)
-RETURNS TEXT
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public, extensions, pg_temp
-AS $$
+RETURNS TEXT LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, extensions, pg_temp AS $$
 DECLARE
     found_coach_id TEXT;
     caller_uid TEXT;
 BEGIN
-    IF check_tenant_id IS NULL OR trim(check_tenant_id) = '' THEN
-        RETURN NULL;
-    END IF;
-
+    IF check_tenant_id IS NULL OR trim(check_tenant_id) = '' THEN RETURN NULL; END IF;
     caller_uid := auth.uid()::text;
-    IF caller_uid IS NULL OR trim(caller_uid) = '' THEN
-        RETURN NULL;
-    END IF;
-
-    SELECT c.id::text INTO found_coach_id
-    FROM public.coaches c
-    WHERE c.tenant_id::text = check_tenant_id
-      AND c.auth_uid::text = caller_uid
-    LIMIT 1;
-
+    IF caller_uid IS NULL OR trim(caller_uid) = '' THEN RETURN NULL; END IF;
+    SELECT c.id::text INTO found_coach_id FROM public.coaches c WHERE c.tenant_id::text = check_tenant_id AND c.auth_uid::text = caller_uid LIMIT 1;
     RETURN found_coach_id;
 END;
 $$;
@@ -502,7 +495,7 @@ BEGIN
 END;
 $$;
 
--- 3. claim_staff_invitation()
+-- 3. claim_staff_invitation() - Atomic & Verified Claim RPC
 CREATE OR REPLACE FUNCTION public.claim_staff_invitation(raw_invite_token TEXT)
 RETURNS BOOLEAN
 LANGUAGE plpgsql
@@ -530,6 +523,7 @@ BEGIN
         RETURN FALSE;
     END IF;
 
+    -- Strict email verification check directly against auth.users
     SELECT LOWER(trim(u.email)), u.email_confirmed_at
     INTO v_auth_email, v_email_confirmed
     FROM auth.users u
@@ -541,6 +535,7 @@ BEGIN
 
     v_computed_hash := encode(digest(raw_invite_token, 'sha256'), 'hex');
 
+    -- Lock invitation row FOR UPDATE
     SELECT i.id, i.tenant_id, LOWER(trim(COALESCE(i.invite_email, i.email))) AS invite_email, LOWER(trim(COALESCE(i.invite_role, i.role))) AS invite_role, i.expires_at, i.accepted_at, i.revoked_at, i.status
     INTO v_inv
     FROM public.invitations i
@@ -555,10 +550,12 @@ BEGIN
         RETURN FALSE;
     END IF;
 
+    -- Enforce exact email match
     IF v_inv.invite_email <> v_auth_email THEN
         RETURN FALSE;
     END IF;
 
+    -- CTE Multi-Row Candidate Lock
     WITH locked_candidates AS (
         SELECT s.id
         FROM public.users_staff s
@@ -583,9 +580,7 @@ BEGIN
 
     v_staff_id := v_candidate_staff_ids[1];
 
-    -- Set local session variable to authorize UID update inside protect_users_staff_columns trigger
-    PERFORM set_config('app.claiming_staff_invitation', 'true', true);
-
+    -- Atomic UPDATE on staff row (Bypasses column GRANTs via SECURITY DEFINER owner context)
     UPDATE public.users_staff
     SET uid = v_caller_uid,
         updated_at = now()
@@ -681,6 +676,10 @@ REVOKE EXECUTE ON FUNCTION public.is_superadmin() FROM PUBLIC, anon;
 REVOKE EXECUTE ON FUNCTION public.bootstrap_platform_superadmin() FROM PUBLIC, anon;
 REVOKE EXECUTE ON FUNCTION public.get_user_tenant_role(TEXT) FROM PUBLIC, anon;
 REVOKE EXECUTE ON FUNCTION public.user_has_tenant_access(TEXT) FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.user_is_tenant_admin_or_owner(TEXT) FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.user_can_manage_financials(TEXT) FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.user_can_manage_academy(TEXT) FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.user_can_manage_pos(TEXT) FROM PUBLIC, anon;
 REVOKE EXECUTE ON FUNCTION public.get_coach_id_for_user(TEXT) FROM PUBLIC, anon;
 REVOKE EXECUTE ON FUNCTION public.create_staff_invitation(TEXT, TEXT, TEXT) FROM PUBLIC, anon;
 REVOKE EXECUTE ON FUNCTION public.claim_staff_invitation(TEXT) FROM PUBLIC, anon;
@@ -691,20 +690,29 @@ GRANT EXECUTE ON FUNCTION public.is_superadmin() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.bootstrap_platform_superadmin() TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_user_tenant_role(TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.user_has_tenant_access(TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.user_is_tenant_admin_or_owner(TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.user_can_manage_financials(TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.user_can_manage_academy(TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.user_can_manage_pos(TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_coach_id_for_user(TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.create_staff_invitation(TEXT, TEXT, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.claim_staff_invitation(TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.revoke_staff_invitation(UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.get_invitation_info(TEXT) TO anon, authenticated;
 
--- Sealed Column Grants on invitations
+-- Column Grants on invitations (Sealed token_hash)
 REVOKE ALL ON TABLE public.invitations FROM PUBLIC, anon, authenticated;
-
 GRANT SELECT (
     id, tenant_id, invite_email, email, invite_role, role, status,
     created_by_uid, expires_at, accepted_at, accepted_by_uid,
     revoked_at, revoked_by_uid, created_at
 ) ON public.invitations TO authenticated;
+
+-- Column Grants on users_staff (Sealed direct UID mutation)
+REVOKE UPDATE ON public.users_staff FROM PUBLIC, anon, authenticated;
+GRANT UPDATE (
+    email, name, nickname, phone, photo_url, address, updated_at
+) ON public.users_staff TO authenticated;
 
 -- =========================================================================
 -- 5. TRIGGER PROTECTION ON SENSITIVE COLUMNS
@@ -742,15 +750,17 @@ BEGIN
         -- Strictly block direct UID mutation via UPDATE statements on users_staff
         -- UID binding MUST be performed exclusively via claim_staff_invitation RPC
         IF OLD.uid IS DISTINCT FROM NEW.uid THEN
-            IF current_setting('app.claiming_staff_invitation', true) = 'true' THEN
-                IF OLD.uid IS NOT NULL THEN
-                    RAISE EXCEPTION 'Auth UID staf yang sudah terikat tidak dapat diubah kembali.' USING ERRCODE = '42501';
-                END IF;
-                IF NEW.uid IS NULL OR NEW.uid <> auth.uid()::text THEN
-                    RAISE EXCEPTION 'UID yang diikat harus cocok dengan Auth UID pengguna yang mengklaim.' USING ERRCODE = '42501';
-                END IF;
-            ELSE
-                RAISE EXCEPTION 'Pengikatan atau pengubahan Auth UID staf secara langsung dilarang. Gunakan RPC claim_staff_invitation().' USING ERRCODE = '42501';
+            -- Check SECURITY DEFINER Execution Context (session_user != current_user)
+            IF session_user = current_user THEN
+                RAISE EXCEPTION 'Pengikatan atau pengubahan Auth UID staf secara langsung dilarang. Pengikatan wajib melalui RPC claim_staff_invitation().' USING ERRCODE = '42501';
+            END IF;
+
+            IF OLD.uid IS NOT NULL THEN
+                RAISE EXCEPTION 'Auth UID staf yang sudah terikat tidak dapat diubah kembali.' USING ERRCODE = '42501';
+            END IF;
+
+            IF NEW.uid IS NULL OR NEW.uid <> auth.uid()::text THEN
+                RAISE EXCEPTION 'UID yang diikat harus cocok dengan Auth UID pengguna yang mengklaim.' USING ERRCODE = '42501';
             END IF;
         END IF;
 
@@ -803,35 +813,67 @@ FOR EACH ROW
 EXECUTE FUNCTION public.protect_tenants_columns();
 
 -- =========================================================================
--- 6. AUDIT RLS & HARSHENING SEMUA TABEL TENANT (ALL 24 TABLES)
+-- 6. LEAST-PRIVILEGE ROLE-BASED ACCESS CONTROL (RBAC) RLS MATRIX
 -- =========================================================================
 
--- Core System & Auth Tables
+-- A. Cleanup Legacy Permissive Policies Across All Tables
+DO $$
+DECLARE
+    tbl text;
+    legacy_policy text;
+    all_tables text[] := ARRAY[
+        'tenants', 'invitations', 'users_staff', 'platform_superadmins',
+        'academies', 'academy_classes', 'coaches', 'students', 
+        'academy_evaluations', 'academy_attendance', 'spp_payments',
+        'courts', 'bookings', 'transactions', 'global_ledger', 
+        'pos_transactions', 'products', 'sponsors', 'events', 
+        'event_categories', 'event_registrations', 'event_expenses', 
+        'event_documents', 'event_matches'
+    ];
+BEGIN
+    FOREACH tbl IN ARRAY all_tables
+    LOOP
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = tbl) THEN
+            FOREACH legacy_policy IN ARRAY ARRAY[
+                'tenant_isolation_policy', 'tenant_select_policy', 'tenant_insert_policy',
+                'tenant_update_policy', 'tenant_delete_policy', 'allow_read', 'allow_write',
+                tbl || '_tenant_select', tbl || '_tenant_insert', tbl || '_tenant_update', tbl || '_tenant_delete'
+            ]
+            LOOP
+                EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I;', legacy_policy, tbl);
+            END LOOP;
+        END IF;
+    END LOOP;
+END $$;
+
+-- B. CORE IDENTITY TABLES RLS POLICIES
+
 -- 1. invitations
-DROP POLICY IF EXISTS "invitations_select_hardened" ON public.invitations;
-CREATE POLICY "invitations_select_hardened" ON public.invitations
+DROP POLICY IF EXISTS "invitations_select_rbac" ON public.invitations;
+CREATE POLICY "invitations_select_rbac" ON public.invitations
 FOR SELECT USING (
     public.is_superadmin()
     OR public.get_user_tenant_role(tenant_id::text) IN ('owner', 'admin')
 );
 
-DROP POLICY IF EXISTS "invitations_insert_hardened" ON public.invitations;
-CREATE POLICY "invitations_insert_hardened" ON public.invitations
+DROP POLICY IF EXISTS "invitations_insert_rbac" ON public.invitations;
+CREATE POLICY "invitations_insert_rbac" ON public.invitations
 FOR INSERT WITH CHECK (public.is_superadmin());
 
-DROP POLICY IF EXISTS "invitations_update_hardened" ON public.invitations;
-CREATE POLICY "invitations_update_hardened" ON public.invitations
+DROP POLICY IF EXISTS "invitations_update_rbac" ON public.invitations;
+CREATE POLICY "invitations_update_rbac" ON public.invitations
 FOR UPDATE USING (public.is_superadmin()) WITH CHECK (public.is_superadmin());
 
-DROP POLICY IF EXISTS "invitations_delete_hardened" ON public.invitations;
-CREATE POLICY "invitations_delete_hardened" ON public.invitations
+DROP POLICY IF EXISTS "invitations_delete_rbac" ON public.invitations;
+CREATE POLICY "invitations_delete_rbac" ON public.invitations
 FOR DELETE USING (public.is_superadmin());
 
 -- 2. tenants
 ALTER TABLE public.tenants ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.tenants FORCE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "tenants_select_hardened" ON public.tenants;
-CREATE POLICY "tenants_select_hardened" ON public.tenants
+DROP POLICY IF EXISTS "tenants_select_rbac" ON public.tenants;
+CREATE POLICY "tenants_select_rbac" ON public.tenants
 FOR SELECT USING (
     public.is_superadmin()
     OR owner_uid::text = auth.uid()::text
@@ -842,30 +884,31 @@ FOR SELECT USING (
     OR public.get_user_tenant_role(tenant_id::text) IS NOT NULL
 );
 
-DROP POLICY IF EXISTS "tenants_insert_hardened" ON public.tenants;
-CREATE POLICY "tenants_insert_hardened" ON public.tenants
+DROP POLICY IF EXISTS "tenants_insert_rbac" ON public.tenants;
+CREATE POLICY "tenants_insert_rbac" ON public.tenants
 FOR INSERT WITH CHECK (
     public.is_superadmin()
     OR (auth.uid() IS NOT NULL AND owner_uid::text = auth.uid()::text)
 );
 
-DROP POLICY IF EXISTS "tenants_update_hardened" ON public.tenants;
-CREATE POLICY "tenants_update_hardened" ON public.tenants
+DROP POLICY IF EXISTS "tenants_update_rbac" ON public.tenants;
+CREATE POLICY "tenants_update_rbac" ON public.tenants
 FOR UPDATE USING (
     public.is_superadmin() OR owner_uid::text = auth.uid()::text
 ) WITH CHECK (
     public.is_superadmin() OR owner_uid::text = auth.uid()::text
 );
 
-DROP POLICY IF EXISTS "tenants_delete_hardened" ON public.tenants;
-CREATE POLICY "tenants_delete_hardened" ON public.tenants
+DROP POLICY IF EXISTS "tenants_delete_rbac" ON public.tenants;
+CREATE POLICY "tenants_delete_rbac" ON public.tenants
 FOR DELETE USING (public.is_superadmin());
 
 -- 3. users_staff
 ALTER TABLE public.users_staff ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.users_staff FORCE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "users_staff_select_hardened" ON public.users_staff;
-CREATE POLICY "users_staff_select_hardened" ON public.users_staff
+DROP POLICY IF EXISTS "users_staff_select_rbac" ON public.users_staff;
+CREATE POLICY "users_staff_select_rbac" ON public.users_staff
 FOR SELECT USING (
     public.is_superadmin()
     OR uid::text = auth.uid()::text
@@ -877,15 +920,15 @@ FOR SELECT USING (
     OR public.get_user_tenant_role(tenant_id::text) IN ('owner', 'admin')
 );
 
-DROP POLICY IF EXISTS "users_staff_insert_hardened" ON public.users_staff;
-CREATE POLICY "users_staff_insert_hardened" ON public.users_staff
+DROP POLICY IF EXISTS "users_staff_insert_rbac" ON public.users_staff;
+CREATE POLICY "users_staff_insert_rbac" ON public.users_staff
 FOR INSERT WITH CHECK (
     public.is_superadmin()
     OR public.get_user_tenant_role(tenant_id::text) IN ('owner', 'admin')
 );
 
-DROP POLICY IF EXISTS "users_staff_update_hardened" ON public.users_staff;
-CREATE POLICY "users_staff_update_hardened" ON public.users_staff
+DROP POLICY IF EXISTS "users_staff_update_rbac" ON public.users_staff;
+CREATE POLICY "users_staff_update_rbac" ON public.users_staff
 FOR UPDATE USING (
     public.is_superadmin()
     OR public.get_user_tenant_role(tenant_id::text) IN ('owner', 'admin')
@@ -902,71 +945,211 @@ FOR UPDATE USING (
     )
 );
 
-DROP POLICY IF EXISTS "users_staff_delete_hardened" ON public.users_staff;
-CREATE POLICY "users_staff_delete_hardened" ON public.users_staff
+DROP POLICY IF EXISTS "users_staff_delete_rbac" ON public.users_staff;
+CREATE POLICY "users_staff_delete_rbac" ON public.users_staff
 FOR DELETE USING (
     public.is_superadmin()
     OR public.get_user_tenant_role(tenant_id::text) IN ('owner', 'admin')
 );
 
--- =========================================================================
--- COMPLETE DOMAIN TABLES RLS POLICIES (20 DOMAIN TABLES)
--- =========================================================================
+-- C. DOMAIN TABLES LEAST-PRIVILEGE RBAC POLICIES (20 TABLES)
 
+-- Group 1: Financial Tables (transactions, global_ledger, pos_transactions, spp_payments, event_expenses)
 DO $$
 DECLARE
     tbl text;
-    domain_tables text[] := ARRAY[
-        'academies', 'academy_classes', 'coaches', 'students', 
-        'academy_evaluations', 'academy_attendance', 'spp_payments',
-        'courts', 'bookings', 'transactions', 'global_ledger', 
-        'pos_transactions', 'products', 'sponsors', 'events', 
-        'event_categories', 'event_registrations', 'event_expenses', 
-        'event_documents', 'event_matches'
-    ];
+    fin_tables text[] := ARRAY['transactions', 'global_ledger', 'pos_transactions', 'spp_payments', 'event_expenses'];
 BEGIN
-    FOREACH tbl IN ARRAY domain_tables
+    FOREACH tbl IN ARRAY fin_tables
     LOOP
         IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = tbl) THEN
-            -- Ensure tenant_id column exists
             EXECUTE format('ALTER TABLE public.%I ADD COLUMN IF NOT EXISTS tenant_id TEXT;', tbl);
-            
-            -- Enable RLS
             EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', tbl);
-            
-            -- Drop legacy policies
-            EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I;', tbl || '_tenant_select', tbl);
-            EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I;', tbl || '_tenant_insert', tbl);
-            EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I;', tbl || '_tenant_update', tbl);
-            EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I;', tbl || '_tenant_delete', tbl);
-            EXECUTE format('DROP POLICY IF EXISTS "tenant_isolation_policy" ON public.%I;', tbl);
+            EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY;', tbl);
 
-            -- Create hardened CRUD policies
+            -- SELECT: All Active Tenant Members
             EXECUTE format('
-                CREATE POLICY %I ON public.%I
-                FOR SELECT USING (
+                CREATE POLICY %I ON public.%I FOR SELECT USING (
                     public.is_superadmin() OR public.user_has_tenant_access(tenant_id::text)
-                );', tbl || '_tenant_select', tbl);
+                );', tbl || '_select_rbac', tbl);
 
+            -- INSERT: Owner, Admin, Kasir
             EXECUTE format('
-                CREATE POLICY %I ON public.%I
-                FOR INSERT WITH CHECK (
-                    public.is_superadmin() OR public.user_has_tenant_access(tenant_id::text)
-                );', tbl || '_tenant_insert', tbl);
+                CREATE POLICY %I ON public.%I FOR INSERT WITH CHECK (
+                    public.is_superadmin() OR public.user_can_manage_financials(tenant_id::text)
+                );', tbl || '_insert_rbac', tbl);
 
+            -- UPDATE: Owner, Admin ONLY (Kasir/Coach/Staff CANNOT update financial records)
             EXECUTE format('
-                CREATE POLICY %I ON public.%I
-                FOR UPDATE USING (
-                    public.is_superadmin() OR public.user_has_tenant_access(tenant_id::text)
+                CREATE POLICY %I ON public.%I FOR UPDATE USING (
+                    public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text)
                 ) WITH CHECK (
-                    public.is_superadmin() OR public.user_has_tenant_access(tenant_id::text)
-                );', tbl || '_tenant_update', tbl);
+                    public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text)
+                );', tbl || '_update_rbac', tbl);
 
+            -- DELETE: Owner, Admin ONLY (Kasir/Coach/Staff CANNOT delete financial records)
             EXECUTE format('
-                CREATE POLICY %I ON public.%I
-                FOR DELETE USING (
+                CREATE POLICY %I ON public.%I FOR DELETE USING (
+                    public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text)
+                );', tbl || '_delete_rbac', tbl);
+        END IF;
+    END LOOP;
+END $$;
+
+-- Group 2: Academy Tables (academies, academy_classes, students, academy_evaluations, academy_attendance)
+DO $$
+DECLARE
+    tbl text;
+    acad_tables text[] := ARRAY['academies', 'academy_classes', 'students', 'academy_evaluations', 'academy_attendance'];
+BEGIN
+    FOREACH tbl IN ARRAY acad_tables
+    LOOP
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = tbl) THEN
+            EXECUTE format('ALTER TABLE public.%I ADD COLUMN IF NOT EXISTS tenant_id TEXT;', tbl);
+            EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', tbl);
+            EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY;', tbl);
+
+            -- SELECT: All Active Tenant Members
+            EXECUTE format('
+                CREATE POLICY %I ON public.%I FOR SELECT USING (
                     public.is_superadmin() OR public.user_has_tenant_access(tenant_id::text)
-                );', tbl || '_tenant_delete', tbl);
+                );', tbl || '_select_rbac', tbl);
+
+            -- INSERT: Owner, Admin, Coach
+            EXECUTE format('
+                CREATE POLICY %I ON public.%I FOR INSERT WITH CHECK (
+                    public.is_superadmin() OR public.user_can_manage_academy(tenant_id::text)
+                );', tbl || '_insert_rbac', tbl);
+
+            -- UPDATE: Owner, Admin, Coach
+            EXECUTE format('
+                CREATE POLICY %I ON public.%I FOR UPDATE USING (
+                    public.is_superadmin() OR public.user_can_manage_academy(tenant_id::text)
+                ) WITH CHECK (
+                    public.is_superadmin() OR public.user_can_manage_academy(tenant_id::text)
+                );', tbl || '_update_rbac', tbl);
+
+            -- DELETE: Owner, Admin ONLY
+            EXECUTE format('
+                CREATE POLICY %I ON public.%I FOR DELETE USING (
+                    public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text)
+                );', tbl || '_delete_rbac', tbl);
+        END IF;
+    END LOOP;
+END $$;
+
+-- Group 3: Coaches Table (coaches)
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'coaches') THEN
+        ALTER TABLE public.coaches ADD COLUMN IF NOT EXISTS tenant_id TEXT;
+        ALTER TABLE public.coaches ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE public.coaches FORCE ROW LEVEL SECURITY;
+
+        -- SELECT: All Active Tenant Members
+        CREATE POLICY "coaches_select_rbac" ON public.coaches FOR SELECT USING (
+            public.is_superadmin() OR public.user_has_tenant_access(tenant_id::text)
+        );
+
+        -- INSERT: Owner, Admin
+        CREATE POLICY "coaches_insert_rbac" ON public.coaches FOR INSERT WITH CHECK (
+            public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text)
+        );
+
+        -- UPDATE: Owner, Admin OR Self Coach
+        CREATE POLICY "coaches_update_rbac" ON public.coaches FOR UPDATE USING (
+            public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text) OR auth_uid::text = auth.uid()::text
+        ) WITH CHECK (
+            public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text) OR auth_uid::text = auth.uid()::text
+        );
+
+        -- DELETE: Owner, Admin ONLY
+        CREATE POLICY "coaches_delete_rbac" ON public.coaches FOR DELETE USING (
+            public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text)
+        );
+    END IF;
+END $$;
+
+-- Group 4: POS & Inventory Tables (products, courts, bookings)
+DO $$
+DECLARE
+    tbl text;
+    pos_tables text[] := ARRAY['products', 'courts', 'bookings'];
+BEGIN
+    FOREACH tbl IN ARRAY pos_tables
+    LOOP
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = tbl) THEN
+            EXECUTE format('ALTER TABLE public.%I ADD COLUMN IF NOT EXISTS tenant_id TEXT;', tbl);
+            EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', tbl);
+            EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY;', tbl);
+
+            -- SELECT: All Active Tenant Members
+            EXECUTE format('
+                CREATE POLICY %I ON public.%I FOR SELECT USING (
+                    public.is_superadmin() OR public.user_has_tenant_access(tenant_id::text)
+                );', tbl || '_select_rbac', tbl);
+
+            -- INSERT: Owner, Admin, Kasir, Staff
+            EXECUTE format('
+                CREATE POLICY %I ON public.%I FOR INSERT WITH CHECK (
+                    public.is_superadmin() OR public.user_can_manage_pos(tenant_id::text)
+                );', tbl || '_insert_rbac', tbl);
+
+            -- UPDATE: Owner, Admin, Kasir, Staff
+            EXECUTE format('
+                CREATE POLICY %I ON public.%I FOR UPDATE USING (
+                    public.is_superadmin() OR public.user_can_manage_pos(tenant_id::text)
+                ) WITH CHECK (
+                    public.is_superadmin() OR public.user_can_manage_pos(tenant_id::text)
+                );', tbl || '_update_rbac', tbl);
+
+            -- DELETE: Owner, Admin ONLY
+            EXECUTE format('
+                CREATE POLICY %I ON public.%I FOR DELETE USING (
+                    public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text)
+                );', tbl || '_delete_rbac', tbl);
+        END IF;
+    END LOOP;
+END $$;
+
+-- Group 5: Event Management Tables (events, event_categories, event_registrations, event_documents, event_matches, sponsors)
+DO $$
+DECLARE
+    tbl text;
+    event_tables text[] := ARRAY['events', 'event_categories', 'event_registrations', 'event_documents', 'event_matches', 'sponsors'];
+BEGIN
+    FOREACH tbl IN ARRAY event_tables
+    LOOP
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = tbl) THEN
+            EXECUTE format('ALTER TABLE public.%I ADD COLUMN IF NOT EXISTS tenant_id TEXT;', tbl);
+            EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', tbl);
+            EXECUTE format('ALTER TABLE public.%I FORCE ROW LEVEL SECURITY;', tbl);
+
+            -- SELECT: All Active Tenant Members
+            EXECUTE format('
+                CREATE POLICY %I ON public.%I FOR SELECT USING (
+                    public.is_superadmin() OR public.user_has_tenant_access(tenant_id::text)
+                );', tbl || '_select_rbac', tbl);
+
+            -- INSERT: Owner, Admin, Kasir, Staff
+            EXECUTE format('
+                CREATE POLICY %I ON public.%I FOR INSERT WITH CHECK (
+                    public.is_superadmin() OR public.user_can_manage_pos(tenant_id::text)
+                );', tbl || '_insert_rbac', tbl);
+
+            -- UPDATE: Owner, Admin ONLY
+            EXECUTE format('
+                CREATE POLICY %I ON public.%I FOR UPDATE USING (
+                    public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text)
+                ) WITH CHECK (
+                    public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text)
+                );', tbl || '_update_rbac', tbl);
+
+            -- DELETE: Owner, Admin ONLY
+            EXECUTE format('
+                CREATE POLICY %I ON public.%I FOR DELETE USING (
+                    public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text)
+                );', tbl || '_delete_rbac', tbl);
         END IF;
     END LOOP;
 END $$;
@@ -985,21 +1168,22 @@ WHERE status = 'pending' AND accepted_at IS NULL AND revoked_at IS NULL
 GROUP BY tenant_id, LOWER(trim(invite_email))
 HAVING COUNT(*) > 1;
 
--- Query 1: Verify Column Privileges on invitations (token_hash must be false)
+-- Query 1: Verify Column Privileges on invitations & users_staff
 SELECT 
     grantee, 
     table_name, 
     column_name, 
     privilege_type
 FROM information_schema.column_privileges
-WHERE table_name = 'invitations'
-ORDER BY grantee, column_name;
+WHERE table_name IN ('invitations', 'users_staff')
+ORDER BY table_name, grantee, column_name;
 
--- Query 2: Verify RLS status on core tenant tables
+-- Query 2: Verify RLS & FORCE RLS status on core tenant tables
 SELECT 
     schemaname, 
     tablename, 
-    rowsecurity 
+    rowsecurity,
+    forcerowsecurity
 FROM pg_tables 
 WHERE schemaname = 'public' 
   AND tablename IN ('tenants', 'invitations', 'users_staff', 'coaches', 'transactions');
