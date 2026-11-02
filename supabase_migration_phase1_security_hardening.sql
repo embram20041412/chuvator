@@ -1,5 +1,5 @@
 -- =========================================================================
--- CHUVATOR (CHUA SPORT CORE) — FINAL SUPABASE SECURITY HARDENING MIGRATION (FASE 1Z-HARDENED)
+-- CHUVATOR (CHUA SPORT CORE) — FINAL SUPABASE SECURITY HARDENING MIGRATION (FASE 1Z-FINAL)
 -- Target: Supabase PostgreSQL (SQL Editor / Migration Engine)
 -- Architecture: React Client SDK (Cloudflare Pages) -> Supabase PostgreSQL (RLS)
 -- Key Guarantees:
@@ -11,7 +11,7 @@
 --   6. Valid CTE Multi-Row Candidate Locking (WITH locked_candidates AS (...) SELECT array_agg(id) FOR UPDATE)
 --   7. Preflight Check & Safe Unique Index (idx_invitations_pending_unique) for Pending Invitations
 --   8. Sealed token_hash on invitations (Column-level SELECT Grant excluding token_hash)
---   9. Strict 24-Tables Existence & Data Integrity Validation (Halts migration if any table or tenant_id mapping fails)
+--   9. Strict 24-Tables Existence & Data Integrity Validation (Validates table existence, data types, NULLs, & real tenant references)
 --  10. Least-Privilege Role-Based Access Control (RBAC) RLS policies across ALL 24 tables (Financial access restricted to Superadmin/Owner/Admin/Kasir)
 --  11. Explicit SECURITY DEFINER search_path = public, auth, extensions, pg_temp
 -- =========================================================================
@@ -817,9 +817,19 @@ DO $$
 DECLARE
     tbl text;
     col_type text;
+    table_row_count int;
     null_tenant_count int;
+    orphaned_count int;
     all_mandatory_tables text[] := ARRAY[
         'platform_superadmins', 'tenants', 'invitations', 'users_staff',
+        'academies', 'academy_classes', 'coaches', 'students', 
+        'academy_evaluations', 'academy_attendance', 'spp_payments',
+        'courts', 'bookings', 'transactions', 'global_ledger', 
+        'pos_transactions', 'products', 'sponsors', 'events', 
+        'event_categories', 'event_registrations', 'event_expenses', 
+        'event_documents', 'event_matches'
+    ];
+    domain_tables text[] := ARRAY[
         'academies', 'academy_classes', 'coaches', 'students', 
         'academy_evaluations', 'academy_attendance', 'spp_payments',
         'courts', 'bookings', 'transactions', 'global_ledger', 
@@ -836,22 +846,50 @@ BEGIN
         END IF;
     END LOOP;
 
-    -- 2. Validate tenant_id Column & Existing Data Isolation on 20 Domain Tables
-    FOREACH tbl IN ARRAY unnest(all_mandatory_tables[5:24])
+    -- 2. Validate tenant_id Column, Data Type, and Existing Data Isolation on 20 Domain Tables
+    FOREACH tbl IN ARRAY domain_tables
     LOOP
         SELECT data_type INTO col_type 
         FROM information_schema.columns 
         WHERE table_schema = 'public' AND table_name = tbl AND column_name = 'tenant_id';
 
         IF col_type IS NULL THEN
-            EXECUTE format('ALTER TABLE public.%I ADD COLUMN tenant_id TEXT;', tbl);
+            -- Check if table has data before altering
+            EXECUTE format('SELECT COUNT(*) FROM public.%I;', tbl) INTO table_row_count;
+            IF table_row_count > 0 THEN
+                RAISE EXCEPTION 'MIGRASI DIHENTIKAN: Tabel "%" belum memiliki kolom tenant_id dan sudah berisi % baris data. Pemetaan tenant pemilik data harus dilakukan secara manual sebelum migrasi dapat dilanjutkan.', tbl, table_row_count USING ERRCODE = '23502';
+            ELSE
+                EXECUTE format('ALTER TABLE public.%I ADD COLUMN tenant_id TEXT;', tbl);
+                col_type := 'text';
+            END IF;
         ELSIF col_type NOT IN ('text', 'character varying', 'uuid') THEN
-            RAISE EXCEPTION 'MIGRASI DIHENTIKAN: Tabel "%" memiliki kolom tenant_id dengan tipe data "%" yang tidak valid (wajib TEXT/VARCHAR/UUID).', tbl, col_type USING ERRCODE = '42804';
+            RAISE EXCEPTION 'MIGRASI DIHENTIKAN: Tabel "%" memiliki kolom tenant_id dengan tipe data "%" yang tidak valid (wajib TEXT, VARCHAR, atau UUID).', tbl, col_type USING ERRCODE = '42804';
         END IF;
 
-        EXECUTE format('SELECT COUNT(*) FROM public.%I WHERE tenant_id IS NULL OR trim(tenant_id) = '''';', tbl) INTO null_tenant_count;
+        -- Validate null or empty string depending on type (never use trim on uuid)
+        IF col_type = 'uuid' THEN
+            EXECUTE format('SELECT COUNT(*) FROM public.%I WHERE tenant_id IS NULL;', tbl) INTO null_tenant_count;
+        ELSE
+            EXECUTE format('SELECT COUNT(*) FROM public.%I WHERE tenant_id IS NULL OR trim(tenant_id) = '''';', tbl) INTO null_tenant_count;
+        END IF;
+
         IF null_tenant_count > 0 THEN
             RAISE EXCEPTION 'MIGRASI DIHENTIKAN: Terdeteksi % baris data pada tabel "%" yang belum memiliki tenant_id terisi.', null_tenant_count, tbl USING ERRCODE = '23502';
+        END IF;
+
+        -- Check for orphaned records (tenant_id not matching any tenant in public.tenants)
+        EXECUTE format('
+            SELECT COUNT(*) 
+            FROM public.%I d 
+            WHERE NOT EXISTS (
+                SELECT 1 
+                FROM public.tenants t 
+                WHERE t.tenant_id::text = d.tenant_id::text 
+                   OR t.id::text = d.tenant_id::text
+            );', tbl) INTO orphaned_count;
+
+        IF orphaned_count > 0 THEN
+            RAISE EXCEPTION 'MIGRASI DIHENTIKAN: Ditemukan % baris data orphaned pada tabel "%" dengan tenant_id yang tidak terdaftar di tabel tenants. Selesaikan inkonsistensi referensi tenant secara manual.', orphaned_count, tbl USING ERRCODE = '23503';
         END IF;
 
         EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', tbl);
