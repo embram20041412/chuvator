@@ -1,5 +1,5 @@
 -- =========================================================================
--- CHUVATOR (CHUA SPORT CORE) — FINAL RLS & SECURITY TEST SUITE (FASE 1AF)
+-- CHUVATOR (CHUA SPORT CORE) — FINAL RLS & SECURITY TEST SUITE (FASE 1AG)
 -- Target: Supabase PostgreSQL (SQL Editor / Staging Environment)
 -- Mode: Non-Destructive Transaction (BEGIN ... ROLLBACK)
 -- Classification: SIMULATED TEST / STATIC CODE REVIEW
@@ -8,8 +8,11 @@
 --   2. SQLSTATE '42501' Error Classification for Denied INSERT Attempts
 --   3. Strict Row Availability & State Verification Before/After UPDATE & DELETE
 --   4. Deep Policy Expression Catalog Inspection across ALL 24 Canonical Tables & CRUD commands
---   5. Strict Fixture Safety Pre-checks (No ON CONFLICT DO UPDATE / DO NOTHING workarounds)
---   6. Authenticated Role Context Verification with non-superuser RLS enforcement
+--   5. Normalized Overly Permissive Expression Detection (Whitespace, Parens, Casts, Tautologies)
+--   6. Strict Trigger Catalog & Function Integrity Verification (users_staff & tenants)
+--   7. Full Pre/Post Row State Immutability Verification on Cross-Tenant UPDATE Attempts
+--   8. Strict Fixture Safety Pre-checks (No ON CONFLICT DO UPDATE / DO NOTHING workarounds)
+--   9. Authenticated Role Context Verification with non-superuser RLS enforcement
 -- =========================================================================
 
 BEGIN;
@@ -70,9 +73,19 @@ DECLARE
     v_verify_count INT;
     v_initial_val NUMERIC;
     v_verify_val NUMERIC;
+
+    -- State integrity verification variables for Test 13 (Fase 1AG)
+    v_pre_tenant_id text;
+    v_pre_uid text;
+    v_pre_role text;
+    v_pre_status text;
+    v_post_tenant_id text;
+    v_post_uid text;
+    v_post_role text;
+    v_post_status text;
 BEGIN
     RAISE NOTICE '=======================================================';
-    RAISE NOTICE 'MEMULAI TEST SUITE KEAMANAN DATABASE CHUVATOR (FASE 1AD - FULL HARDENING)';
+    RAISE NOTICE 'MEMULAI TEST SUITE KEAMANAN DATABASE CHUVATOR (FASE 1AG - TENANT BOUNDARY & TRIGGER INTEGRITY)';
     RAISE NOTICE 'MODE: SIMULATED TEST / STATIC CODE REVIEW';
     RAISE NOTICE '=======================================================';
 
@@ -565,6 +578,11 @@ BEGIN
         v_upd_qual text;
         v_upd_check text;
         v_del_qual text;
+        v_expr_list text[];
+        v_cur_expr text;
+        v_norm_stripped text;
+        v_trg_count int;
+        v_func_src text;
     BEGIN
         FOREACH v_cur_tbl IN ARRAY v_check_tables
         LOOP
@@ -629,20 +647,28 @@ BEGIN
             SELECT qual, with_check INTO v_upd_qual, v_upd_check FROM pg_policies WHERE schemaname = 'public' AND tablename = v_cur_tbl AND cmd = 'UPDATE';
             SELECT qual INTO v_del_qual FROM pg_policies WHERE schemaname = 'public' AND tablename = v_cur_tbl AND cmd = 'DELETE';
 
-            -- Overly Permissive Detection Check across all 5 expressions (SELECT, INSERT, UPDATE USING, UPDATE WITH CHECK, DELETE)
-            IF trim(lower(replace(v_sel_qual, ' ', ''))) IN ('true', '1=1', 'true::boolean')
-               OR trim(lower(replace(v_ins_check, ' ', ''))) IN ('true', '1=1', 'true::boolean')
-               OR trim(lower(replace(v_upd_qual, ' ', ''))) IN ('true', '1=1', 'true::boolean')
-               OR trim(lower(replace(v_upd_check, ' ', ''))) IN ('true', '1=1', 'true::boolean')
-               OR trim(lower(replace(v_del_qual, ' ', ''))) IN ('true', '1=1', 'true::boolean')
-               OR trim(lower(v_sel_qual)) IN ('true', '1=1', '1 = 1', 'true::boolean')
-               OR trim(lower(v_ins_check)) IN ('true', '1=1', '1 = 1', 'true::boolean')
-               OR trim(lower(v_upd_qual)) IN ('true', '1=1', '1 = 1', 'true::boolean')
-               OR trim(lower(v_upd_check)) IN ('true', '1=1', '1 = 1', 'true::boolean')
-               OR trim(lower(v_del_qual)) IN ('true', '1=1', '1 = 1', 'true::boolean')
-            THEN
-                RAISE EXCEPTION '[FAIL] Test 11 (Vulnerability): Policy pada tabel "%" mengandung klausa terlalu permisif (true / 1=1 / true::boolean)!', v_cur_tbl;
-            END IF;
+            -- Normalized Overly Permissive Detection Check across all 5 expressions (SELECT qual, INSERT check, UPDATE qual, UPDATE check, DELETE qual)
+            -- Normalizes whitespace, tabs, carriage returns, newlines, case, and nested parentheses
+            v_expr_list := ARRAY[v_sel_qual, v_ins_check, v_upd_qual, v_upd_check, v_del_qual];
+            FOREACH v_cur_expr IN ARRAY v_expr_list
+            LOOP
+                IF v_cur_expr IS NOT NULL THEN
+                    v_norm_stripped := regexp_replace(lower(v_cur_expr), '[\s\t\r\n\(\)]+', '', 'g');
+
+                    IF v_norm_stripped IN (
+                        'true', 't', '''t''', '1=1', '0=0', 'true::boolean', 'true::bool', 
+                        '''true''::boolean', '''true''::bool', '''t''::boolean', '''t''::bool', 
+                        'notfalse', '''1''=''1''', 'nullisnull', '''true''=''true'''
+                    )
+                    OR v_norm_stripped ~ '^(''t''|true)(::(boolean|bool))?$'
+                    OR v_norm_stripped ~ '^([0-9]+)=\1$'
+                    OR v_norm_stripped ~ '^''([^'']+)''=''\1''$'
+                    OR v_norm_stripped ~ '^(notfalse|nullisnull)$'
+                    THEN
+                        RAISE EXCEPTION '[FAIL] Test 11 (Vulnerability): Policy pada tabel "%" mengandung klausa terlalu permisif (raw: %, normalized: %)!', v_cur_tbl, v_cur_expr, v_norm_stripped;
+                    END IF;
+                END IF;
+            END LOOP;
 
             -- Table Group Specific Expression Verification (Validating SELECT, INSERT, UPDATE USING, UPDATE WITH CHECK, DELETE)
             IF v_cur_tbl = 'platform_superadmins' THEN
@@ -664,11 +690,29 @@ BEGIN
                 IF v_upd_check NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: invitations UPDATE check abnormal (%))', v_upd_check; END IF;
                 IF v_del_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: invitations DELETE policy abnormal (%))', v_del_qual; END IF;
             ELSIF v_cur_tbl = 'users_staff' THEN
-                IF v_sel_qual NOT LIKE '%get_user_tenant_role%' AND v_sel_qual NOT LIKE '%is_superadmin%' AND v_sel_qual NOT LIKE '%uid%' THEN RAISE EXCEPTION '[FAIL] Test 11: users_staff SELECT policy abnormal (%))', v_sel_qual; END IF;
-                IF v_ins_check NOT LIKE '%get_user_tenant_role%' AND v_ins_check NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: users_staff INSERT policy abnormal (%))', v_ins_check; END IF;
-                IF v_upd_qual NOT LIKE '%get_user_tenant_role%' AND v_upd_qual NOT LIKE '%is_superadmin%' AND v_upd_qual NOT LIKE '%uid%' THEN RAISE EXCEPTION '[FAIL] Test 11: users_staff UPDATE qual abnormal (%))', v_upd_qual; END IF;
-                IF v_upd_check NOT LIKE '%get_user_tenant_role%' AND v_upd_check NOT LIKE '%is_superadmin%' AND v_upd_check NOT LIKE '%uid%' THEN RAISE EXCEPTION '[FAIL] Test 11: users_staff UPDATE check abnormal (%))', v_upd_check; END IF;
-                IF v_del_qual NOT LIKE '%get_user_tenant_role%' AND v_del_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: users_staff DELETE policy abnormal (%))', v_del_qual; END IF;
+                -- Verifikasi SELECT memeriksa peran tenant, superadmin, atau kepemilikan UID
+                IF v_sel_qual NOT LIKE '%get_user_tenant_role%' AND v_sel_qual NOT LIKE '%is_superadmin%' AND v_sel_qual NOT LIKE '%uid%' THEN 
+                    RAISE EXCEPTION '[FAIL] Test 11: users_staff SELECT policy abnormal (%))', v_sel_qual; 
+                END IF;
+                -- Verifikasi INSERT memeriksa wewenang admin/owner tenant atau superadmin
+                IF v_ins_check NOT LIKE '%get_user_tenant_role%' AND v_ins_check NOT LIKE '%is_superadmin%' THEN 
+                    RAISE EXCEPTION '[FAIL] Test 11: users_staff INSERT policy abnormal (%))', v_ins_check; 
+                END IF;
+                -- Verifikasi UPDATE USING memeriksa otorisasi pemanggil (owner/admin/superadmin/self)
+                IF v_upd_qual NOT LIKE '%get_user_tenant_role%' AND v_upd_qual NOT LIKE '%is_superadmin%' AND v_upd_qual NOT LIKE '%uid%' THEN 
+                    RAISE EXCEPTION '[FAIL] Test 11: users_staff UPDATE qual abnormal (%))', v_upd_qual; 
+                END IF;
+                -- Verifikasi UPDATE WITH CHECK memeriksa otorisasi pemanggil (owner/admin/superadmin/self)
+                -- CATATAN: Klausa 'tenant_id = users_staff.tenant_id' dalam WITH CHECK menunjuk ke baris kandidat yang sama
+                -- sehingga tidak dapat dijadikan bukti isolasi batas perpindahan tenant; isolasi tersebut dipastikan
+                -- secara definitif oleh trigger trg_protect_users_staff_columns.
+                IF v_upd_check NOT LIKE '%get_user_tenant_role%' AND v_upd_check NOT LIKE '%is_superadmin%' AND v_upd_check NOT LIKE '%uid%' THEN 
+                    RAISE EXCEPTION '[FAIL] Test 11: users_staff UPDATE check abnormal (%))', v_upd_check; 
+                END IF;
+                -- Verifikasi DELETE memeriksa wewenang admin/owner tenant atau superadmin
+                IF v_del_qual NOT LIKE '%get_user_tenant_role%' AND v_del_qual NOT LIKE '%is_superadmin%' THEN 
+                    RAISE EXCEPTION '[FAIL] Test 11: users_staff DELETE policy abnormal (%))', v_del_qual; 
+                END IF;
             ELSIF v_cur_tbl IN ('transactions', 'global_ledger', 'pos_transactions', 'spp_payments', 'event_expenses') THEN
                 IF v_sel_qual NOT LIKE '%user_can_manage_financials%' AND v_sel_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % SELECT policy abnormal (%))', v_cur_tbl, v_sel_qual; END IF;
                 IF v_ins_check NOT LIKE '%user_can_manage_financials%' AND v_ins_check NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % INSERT policy abnormal (%))', v_cur_tbl, v_ins_check; END IF;
@@ -680,7 +724,7 @@ BEGIN
                 IF v_ins_check NOT LIKE '%user_can_manage_academy%' AND v_ins_check NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % INSERT policy abnormal (%))', v_cur_tbl, v_ins_check; END IF;
                 IF v_upd_qual NOT LIKE '%user_can_manage_academy%' AND v_upd_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % UPDATE qual abnormal (%))', v_cur_tbl, v_upd_qual; END IF;
                 IF v_upd_check NOT LIKE '%user_can_manage_academy%' AND v_upd_check NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % UPDATE check abnormal (%))', v_cur_tbl, v_upd_check; END IF;
-                IF v_del_qual NOT LIKE '%user_is_tenant_admin_or_owner%' AND v_del_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % DELETE policy abnormal (%))', v_cur_tbl, v_del_qual; END IF;
+                IF v_del_qual NOT LIKE '%user_is_tenant_admin_or_owner%' AND v_del_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % DELETE policy abnormal (%))', v_del_qual; END IF;
             ELSIF v_cur_tbl = 'coaches' THEN
                 IF v_sel_qual NOT LIKE '%user_has_tenant_access%' AND v_sel_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: coaches SELECT policy abnormal (%))', v_sel_qual; END IF;
                 IF v_ins_check NOT LIKE '%user_is_tenant_admin_or_owner%' AND v_ins_check NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: coaches INSERT policy abnormal (%))', v_ins_check; END IF;
@@ -692,13 +736,13 @@ BEGIN
                 IF v_ins_check NOT LIKE '%user_can_manage_pos%' AND v_ins_check NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % INSERT policy abnormal (%))', v_cur_tbl, v_ins_check; END IF;
                 IF v_upd_qual NOT LIKE '%user_can_manage_pos%' AND v_upd_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % UPDATE qual abnormal (%))', v_cur_tbl, v_upd_qual; END IF;
                 IF v_upd_check NOT LIKE '%user_can_manage_pos%' AND v_upd_check NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % UPDATE check abnormal (%))', v_cur_tbl, v_upd_check; END IF;
-                IF v_del_qual NOT LIKE '%user_is_tenant_admin_or_owner%' AND v_del_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % DELETE policy abnormal (%))', v_cur_tbl, v_del_qual; END IF;
+                IF v_del_qual NOT LIKE '%user_is_tenant_admin_or_owner%' AND v_del_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % DELETE policy abnormal (%))', v_del_qual; END IF;
             ELSIF v_cur_tbl IN ('events', 'event_categories', 'event_documents', 'event_matches', 'sponsors') THEN
                 IF v_sel_qual NOT LIKE '%user_has_tenant_access%' AND v_sel_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % SELECT policy abnormal (%))', v_cur_tbl, v_sel_qual; END IF;
                 IF v_ins_check NOT LIKE '%user_is_tenant_admin_or_owner%' AND v_ins_check NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % INSERT policy abnormal (%))', v_cur_tbl, v_ins_check; END IF;
                 IF v_upd_qual NOT LIKE '%user_is_tenant_admin_or_owner%' AND v_upd_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % UPDATE qual abnormal (%))', v_cur_tbl, v_upd_qual; END IF;
                 IF v_upd_check NOT LIKE '%user_is_tenant_admin_or_owner%' AND v_upd_check NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % UPDATE check abnormal (%))', v_cur_tbl, v_upd_check; END IF;
-                IF v_del_qual NOT LIKE '%user_is_tenant_admin_or_owner%' AND v_del_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % DELETE policy abnormal (%))', v_cur_tbl, v_del_qual; END IF;
+                IF v_del_qual NOT LIKE '%user_is_tenant_admin_or_owner%' AND v_del_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: % DELETE policy abnormal (%))', v_del_qual; END IF;
             ELSIF v_cur_tbl = 'event_registrations' THEN
                 IF v_sel_qual NOT LIKE '%user_has_tenant_access%' AND v_sel_qual NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: event_registrations SELECT policy abnormal (%))', v_sel_qual; END IF;
                 IF v_ins_check NOT LIKE '%user_can_manage_pos%' AND v_ins_check NOT LIKE '%is_superadmin%' THEN RAISE EXCEPTION '[FAIL] Test 11: event_registrations INSERT policy abnormal (%))', v_ins_check; END IF;
@@ -714,7 +758,76 @@ BEGIN
             END IF;
         END LOOP;
 
-        RAISE NOTICE '[PASS] Test 11: Seluruh 24 tabel canonical terkelola tervalidasi individual (RLS aktif, FORCE RLS aktif, 4 RBAC CRUD policies per tabel, ekspresi RBAC akurat pada 4 operasi CRUD, 0 legacy permissive).';
+        -- =====================================================================
+        -- 14. AUDIT INTEGRITAS TRIGGER PADA KATALOG POSTGRESQL (FASE 1AG)
+        -- Memvalidasi pendaftaran trigger dan integritas fungsi proteksi kolom
+        -- =====================================================================
+
+        -- A. Verifikasi trigger trg_protect_users_staff_columns pada tabel users_staff
+        SELECT COUNT(*) INTO v_trg_count
+        FROM pg_trigger t
+        JOIN pg_class c ON t.tgrelid = c.oid
+        JOIN pg_proc p ON t.tgfoid = p.oid
+        JOIN pg_namespace n ON c.relnamespace = n.oid
+        WHERE n.nspname = 'public'
+          AND c.relname = 'users_staff'
+          AND t.tgname = 'trg_protect_users_staff_columns'
+          AND p.proname = 'protect_users_staff_columns'
+          AND NOT t.tgisinternal;
+
+        IF v_trg_count <> 1 THEN
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Audit): Trigger trg_protect_users_staff_columns tidak terdaftar pada tabel users_staff atau tidak terikat ke protect_users_staff_columns() (Ditemukan: %).', v_trg_count;
+        END IF;
+
+        -- Verifikasi definisi fungsi protect_users_staff_columns() memvalidasi OLD.tenant_id vs NEW.tenant_id dan melempar 42501
+        SELECT p.prosrc INTO v_func_src
+        FROM pg_proc p
+        JOIN pg_namespace n ON p.pronamespace = n.oid
+        WHERE n.nspname = 'public' AND p.proname = 'protect_users_staff_columns';
+
+        IF v_func_src IS NULL OR (
+            v_func_src NOT LIKE '%OLD.tenant_id%' OR v_func_src NOT LIKE '%NEW.tenant_id%'
+        ) THEN
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Audit): Fungsi protect_users_staff_columns() tidak membandingkan OLD.tenant_id dan NEW.tenant_id!';
+        END IF;
+
+        IF v_func_src NOT LIKE '%42501%' THEN
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Audit): Fungsi protect_users_staff_columns() tidak mendefinisikan penolakan dengan ERRCODE 42501!';
+        END IF;
+
+        -- B. Verifikasi trigger trg_protect_tenants_columns pada tabel tenants
+        SELECT COUNT(*) INTO v_trg_count
+        FROM pg_trigger t
+        JOIN pg_class c ON t.tgrelid = c.oid
+        JOIN pg_proc p ON t.tgfoid = p.oid
+        JOIN pg_namespace n ON c.relnamespace = n.oid
+        WHERE n.nspname = 'public'
+          AND c.relname = 'tenants'
+          AND t.tgname = 'trg_protect_tenants_columns'
+          AND p.proname = 'protect_tenants_columns'
+          AND NOT t.tgisinternal;
+
+        IF v_trg_count <> 1 THEN
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Audit): Trigger trg_protect_tenants_columns tidak terdaftar pada tabel tenants atau tidak terikat ke protect_tenants_columns() (Ditemukan: %).', v_trg_count;
+        END IF;
+
+        -- Verifikasi definisi fungsi protect_tenants_columns() memvalidasi perpindahan tenant_id dan melempar 42501
+        SELECT p.prosrc INTO v_func_src
+        FROM pg_proc p
+        JOIN pg_namespace n ON p.pronamespace = n.oid
+        WHERE n.nspname = 'public' AND p.proname = 'protect_tenants_columns';
+
+        IF v_func_src IS NULL OR (
+            v_func_src NOT LIKE '%OLD.tenant_id%' OR v_func_src NOT LIKE '%NEW.tenant_id%'
+        ) THEN
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Audit): Fungsi protect_tenants_columns() tidak membandingkan OLD.tenant_id dan NEW.tenant_id!';
+        END IF;
+
+        IF v_func_src NOT LIKE '%42501%' THEN
+            RAISE EXCEPTION '[FAIL] Test 11 (Trigger Audit): Fungsi protect_tenants_columns() tidak mendefinisikan penolakan dengan ERRCODE 42501!';
+        END IF;
+
+        RAISE NOTICE '[PASS] Test 11: Seluruh 24 tabel canonical terkelola tervalidasi individual (RLS aktif, FORCE RLS aktif, 4 RBAC CRUD policies per tabel, ekspresi RBAC akurat pada 4 operasi CRUD, 0 legacy permissive, deteksi normalisasi ekspresi permisif lulus, katalog trigger & integritas fungsi trigger diverifikasi).';
     END;
 
     -- TEST 12: INSERT Data dengan tenant_id milik Tenant Lain (Harus Ditolak RLS / WITH CHECK)
@@ -734,21 +847,60 @@ BEGIN
         RAISE EXCEPTION '[FAIL] Test 12: INSERT lintas tenant tidak diblokir dengan SQLSTATE 42501 (Caught: %).', caught_sqlstate;
     END IF;
 
-    -- TEST 13: UPDATE Memindahkan Record ke Tenant Lain (Harus Ditolak Trigger 42501)
+    -- TEST 13: UPDATE Memindahkan Record ke Tenant Lain (Harus Ditolak Trigger 42501 & State Row Tetap Utuh)
+    -- 1. Catat state awal record staf sasaran sebelum upaya mutasi
+    PERFORM set_config('role', 'postgres', true);
+    PERFORM set_config('request.jwt.claims', '', true);
+    SELECT tenant_id::text, uid, role, status
+    INTO v_pre_tenant_id, v_pre_uid, v_pre_role, v_pre_status
+    FROM public.users_staff
+    WHERE id = staff_staff_id;
+
+    IF v_pre_tenant_id IS NULL OR v_pre_uid IS NULL THEN
+        RAISE EXCEPTION '[FAIL] Test 13: Fixture record staff tidak ditemukan sebelum test dijalankan.';
+    END IF;
+
+    -- 2. Upayakan mutasi pemindahan tenant ilegal sebagai Admin Tenant A
+    PERFORM set_config('role', 'authenticated', true);
     PERFORM set_config('request.jwt.claims', json_build_object('sub', admin_a_uid, 'email', 'admin_a@arena.com')::text, true);
     test_passed := FALSE;
     caught_sqlstate := '';
     BEGIN
-        UPDATE public.users_staff SET tenant_id = tenant_b::text WHERE uid = staff_a_uid;
+        UPDATE public.users_staff SET tenant_id = tenant_b::text WHERE id = staff_staff_id;
     EXCEPTION WHEN OTHERS THEN
         GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE;
         IF caught_sqlstate = '42501' THEN test_passed := TRUE; END IF;
     END;
-    IF test_passed THEN
-        RAISE NOTICE '[PASS] Test 13: UPDATE memindahkan record staf ke tenant lain ditolak (SQLSTATE 42501).';
-    ELSE
+
+    IF NOT test_passed THEN
         RAISE EXCEPTION '[FAIL] Test 13: Pemindahan record ke tenant lain tidak diblokir dengan SQLSTATE 42501 (Caught: %).', caught_sqlstate;
     END IF;
+
+    -- 3. Verifikasi state row tetap utuh (tenant_id, uid, role, status) via postgres context
+    PERFORM set_config('role', 'postgres', true);
+    PERFORM set_config('request.jwt.claims', '', true);
+    SELECT tenant_id::text, uid, role, status
+    INTO v_post_tenant_id, v_post_uid, v_post_role, v_post_status
+    FROM public.users_staff
+    WHERE id = staff_staff_id;
+
+    IF v_post_tenant_id IS DISTINCT FROM v_pre_tenant_id THEN
+        RAISE EXCEPTION '[FAIL] Test 13: Integritas bocor! tenant_id berubah dari % menjadi %.', v_pre_tenant_id, v_post_tenant_id;
+    END IF;
+    IF v_post_uid IS DISTINCT FROM v_pre_uid THEN
+        RAISE EXCEPTION '[FAIL] Test 13: Integritas bocor! uid berubah dari % menjadi %.', v_pre_uid, v_post_uid;
+    END IF;
+    IF v_post_role IS DISTINCT FROM v_pre_role THEN
+        RAISE EXCEPTION '[FAIL] Test 13: Integritas bocor! role berubah dari % menjadi %.', v_pre_role, v_post_role;
+    END IF;
+    IF v_post_status IS DISTINCT FROM v_pre_status THEN
+        RAISE EXCEPTION '[FAIL] Test 13: Integritas bocor! status berubah dari % menjadi %.', v_pre_status, v_post_status;
+    END IF;
+
+    -- Kembalikan role authenticated
+    PERFORM set_config('role', 'authenticated', true);
+
+    RAISE NOTICE '[PASS] Test 13: UPDATE memindahkan record staf ke tenant lain ditolak (SQLSTATE 42501) dan integritas state row utuh tanpa perubahan (tenant_id, uid, role, status verified).';
 
     -- TEST 14: DELETE Lintas Tenant (Harus Ditolak RLS / 0 rows deleted)
     PERFORM set_config('request.jwt.claims', json_build_object('sub', owner_a_uid, 'email', 'owner_a@arena.com')::text, true);
@@ -761,7 +913,7 @@ BEGIN
     END IF;
 
     RAISE NOTICE '=======================================================';
-    RAISE NOTICE 'SELURUH 14 TEST SCENARIOS KEAMANAN FASE 1AF BERHASIL PASSED!';
+    RAISE NOTICE 'SELURUH 14 TEST SCENARIOS KEAMANAN FASE 1AG BERHASIL PASSED!';
     RAISE NOTICE '=======================================================';
 
 END $$;
