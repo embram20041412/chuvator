@@ -15,6 +15,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { supabase } from '../config/supabase';
+import { logoutUser } from '../services/authService';
 import { getInvitationInfo, claimStaffInvitation } from '../services/staffService';
 
 export default function AcceptInvitationPage() {
@@ -172,7 +173,11 @@ export default function AcceptInvitationPage() {
   };
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut({ scope: 'local' });
+    try {
+      await logoutUser();
+    } catch (err) {
+      console.warn('Sign out warning:', err);
+    }
     setCurrentUser(null);
   };
 
@@ -378,13 +383,16 @@ export default function AcceptInvitationPage() {
 
                 <form onSubmit={authMode === 'login' ? handleLogin : handleSignUp} className="space-y-3">
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
+                    <label htmlFor="invite-auth-email" className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
                       Alamat Email
                     </label>
                     <div className="relative">
                       <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
                       <input
+                        id="invite-auth-email"
+                        name="email"
                         type="email"
+                        autoComplete="username"
                         required
                         value={emailInput}
                         onChange={(e) => setEmailInput(e.target.value)}
@@ -395,13 +403,16 @@ export default function AcceptInvitationPage() {
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
+                    <label htmlFor="invite-auth-password" className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
                       Kata Sandi
                     </label>
                     <div className="relative">
                       <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
                       <input
+                        id="invite-auth-password"
+                        name="password"
                         type="password"
+                        autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
                         required
                         minLength={6}
                         value={passwordInput}

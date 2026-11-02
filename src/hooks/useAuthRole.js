@@ -29,7 +29,7 @@ export default function useAuthRole(userProfile) {
     try {
       const callerUid = user.id;
 
-      // 1. Periksa apakah pengguna adalah Platform Superadmin via RPC tepercaya
+      // 1. Periksa apakah pengguna adalah Platform Superadmin via RPC tepercaya atau tabel platform_superadmins
       try {
         const { data: isSuper, error: superErr } = await supabase.rpc('is_superadmin');
         if (!superErr && isSuper === true) {
@@ -39,8 +39,22 @@ export default function useAuthRole(userProfile) {
           setLoading(false);
           return;
         }
+
+        const { data: superRow } = await supabase
+          .from('platform_superadmins')
+          .select('user_id')
+          .eq('user_id', callerUid)
+          .maybeSingle();
+
+        if (superRow) {
+          setRole('superadmin');
+          setTenantId(userProfile?.tenantId || null);
+          setVerifiedFromDb(true);
+          setLoading(false);
+          return;
+        }
       } catch (e) {
-        // Abaikan jika RPC tidak tersedia / anon
+        // Abaikan jika RPC/tabel tidak tersedia / anon
       }
 
       // 2. Periksa apakah pengguna adalah Owner dari tenant aktif di tabel `tenants`

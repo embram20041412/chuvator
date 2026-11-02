@@ -21,19 +21,44 @@ export async function verifyUserRoleAndTenant(user) {
   const photoURL = user.photoURL || meta.avatar_url || meta.picture || null;
   const displayName = user.displayName || meta.full_name || meta.name || user.email?.split('@')[0] || 'User';
 
-  // 1. Check if Super Admin
-  if (normalizedEmail === SUPER_ADMIN_EMAIL.toLowerCase()) {
-    return {
-      uid: userId,
-      id: userId,
-      displayName: displayName || 'Super Admin',
-      email: user.email,
-      photoURL,
-      role: 'superadmin',
-      tenant: null,
-      tenantId: null,
-      isStaff: false,
-    };
+  // 1. Check if Platform Superadmin via trusted PostgreSQL RPC or platform_superadmins table
+  try {
+    const { data: isSuper, error: superErr } = await supabase.rpc('is_superadmin');
+    if (!superErr && isSuper === true) {
+      return {
+        uid: userId,
+        id: userId,
+        displayName: displayName || 'Super Admin',
+        email: user.email,
+        photoURL,
+        role: 'superadmin',
+        tenant: null,
+        tenantId: null,
+        isStaff: false,
+      };
+    }
+
+    const { data: superadminRow } = await supabase
+      .from('platform_superadmins')
+      .select('user_id')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (superadminRow) {
+      return {
+        uid: userId,
+        id: userId,
+        displayName: displayName || 'Super Admin',
+        email: user.email,
+        photoURL,
+        role: 'superadmin',
+        tenant: null,
+        tenantId: null,
+        isStaff: false,
+      };
+    }
+  } catch (superCheckErr) {
+    console.warn('[verifyUserRoleAndTenant] Superadmin DB verification check warning:', superCheckErr);
   }
 
   // 2. Check if user exists in Supabase `users_staff` by UID/ID or email
@@ -187,8 +212,8 @@ export async function verifyUserRoleAndTenant(user) {
     };
   }
 
-  // STRICT FAIL-CLOSED ACCESS DENIED!
-  await supabase.auth.signOut({ scope: 'local' });
+  // STRICT FAIL-CLOSED ACCESS DENIED:
+  // Do NOT invoke supabase.auth.signOut() here to prevent triggering re-entrant onAuthStateChange events!
   const uninvitedErr = new Error(
     `Akses Ditolak: Email Anda (${user.email || 'tanpa email'}) belum terdaftar dalam daftar undangan resmi CHUA SPORT CORE. Silakan hubungi Administrator Sistem untuk mendapatkan akses.`
   );
@@ -197,23 +222,25 @@ export async function verifyUserRoleAndTenant(user) {
 }
 
 export const supabaseAuthService = {
+  /**
+   * Initiates Google Sign-In via Supabase OAuth using Authorization Code Flow with PKCE
+   */
   async loginWithGoogle() {
+    const redirectUrl = `${window.location.origin}/`;
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: window.location.origin,
-        skipBrowserRedirect: true, // Cegah redirect otomatis
-      }
+        redirectTo: redirectUrl,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent',
+        },
+      },
     });
 
-    if (error) throw error;
-
-    if (data?.url) {
-      const oauthUrl = new URL(data.url);
-      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || 'sb_publishable_vKzNAXC9V52eYH0-Gm9Rcg_23lCtz2P';
-      oauthUrl.searchParams.set('apikey', anonKey);
-
-      window.location.href = oauthUrl.toString();
+    if (error) {
+      console.error('[Supabase OAuth PKCE] Error initiating Google sign-in:', error);
+      throw error;
     }
 
     return data;
@@ -231,8 +258,14 @@ export const supabaseAuthService = {
       console.error('Supabase Email/Password Login error:', error);
       throw new Error('Email atau kata sandi tidak cocok.');
     }
-    const userProfile = await verifyUserRoleAndTenant(data.user);
-    return userProfile;
+    try {
+      const userProfile = await verifyUserRoleAndTenant(data.user);
+      return userProfile;
+    } catch (verifErr) {
+      // If user profile verification fails, cleanly sign out from local session
+      await supabase.auth.signOut({ scope: 'local' });
+      throw verifErr;
+    }
   },
 
   async getSession() {
@@ -243,8 +276,11 @@ export const supabaseAuthService = {
 
   async logout() {
     const { error } = await supabase.auth.signOut({ scope: 'local' });
-    if (error) throw error;
-  }
+    if (error) {
+      console.error('[Supabase Logout] SignOut error:', error);
+      throw error;
+    }
+  },
 };
 
 /**
@@ -262,53 +298,85 @@ export async function loginWithEmailAndPassword(email, password) {
 }
 
 /**
- * Sign out current user from Supabase
+ * Sign out current user from Supabase and clear application storage
  */
 export async function logoutUser() {
   try {
     localStorage.removeItem('demo_user_profile');
-  } catch (e) {}
+    localStorage.removeItem('activeStudent');
+    localStorage.removeItem('activeAcademyId');
+    sessionStorage.clear();
+  } catch (e) {
+    console.warn('[logoutUser] Storage cleanup warning:', e);
+  }
   await supabaseAuthService.logout();
 }
 
+// Sequence counter to discard stale async verification requests
+let authStateSequence = 0;
+
 /**
- * Subscribe to Supabase auth state changes and verify authorization
+ * Subscribe to Supabase auth state changes and verify authorization.
+ * Uses sequence counter to prevent race conditions and avoids re-entrant signOut calls.
  */
 export function subscribeToAuthChanges(onUserChanged) {
-  // First, check current session on init
-  supabase.auth.getSession().then(async ({ data: { session } }) => {
-    if (session?.user) {
-      try {
-        const userProfile = await verifyUserRoleAndTenant(session.user);
-        onUserChanged(session.user, userProfile);
-      } catch (err) {
-        console.warn('Initial session user verification failed:', err.message);
+  let isSubscribed = true;
+
+  const handleSessionChange = async (session) => {
+    const seq = ++authStateSequence;
+
+    if (!session?.user) {
+      if (isSubscribed && seq === authStateSequence) {
+        onUserChanged(null, null, null);
+      }
+      return;
+    }
+
+    try {
+      const userProfile = await verifyUserRoleAndTenant(session.user);
+      if (isSubscribed && seq === authStateSequence) {
+        onUserChanged(session.user, userProfile, null);
+      }
+    } catch (err) {
+      console.warn('[subscribeToAuthChanges] Authorization check rejected:', err.message);
+      if (isSubscribed && seq === authStateSequence) {
+        // Report error cleanly without triggering re-entrant signOut loop
+        onUserChanged(null, null, err.message || 'Akses ditolak. Hubungi Super Admin.');
+      }
+    }
+  };
+
+  // 1. Initial session check on mount
+  supabase.auth
+    .getSession()
+    .then(({ data: { session } }) => {
+      handleSessionChange(session);
+    })
+    .catch((err) => {
+      console.error('[subscribeToAuthChanges] Initial session check error:', err);
+      if (isSubscribed) {
         onUserChanged(null, null, err.message);
       }
-    } else {
-      onUserChanged(null, null);
-    }
-  }).catch((err) => {
-    console.error('Error fetching initial Supabase auth session:', err);
-    onUserChanged(null, null);
-  });
+    });
 
-  // Listen for auth state changes (SIGN_IN, SIGN_OUT, TOKEN_REFRESHED)
-  const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-    if (session?.user) {
-      try {
-        const userProfile = await verifyUserRoleAndTenant(session.user);
-        onUserChanged(session.user, userProfile);
-      } catch (error) {
-        console.error('Auth verification failed during auth state change:', error.message);
-        onUserChanged(null, null, error.message || 'Akses ditolak. Hubungi Super Admin.');
+  // 2. Listen for auth state changes (SIGNED_IN, SIGNED_OUT, TOKEN_REFRESHED)
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_OUT') {
+      ++authStateSequence;
+      if (isSubscribed) {
+        onUserChanged(null, null, null);
       }
-    } else {
-      onUserChanged(null, null);
+      return;
     }
+
+    handleSessionChange(session);
   });
 
   return () => {
+    isSubscribed = false;
     subscription.unsubscribe();
   };
 }
+

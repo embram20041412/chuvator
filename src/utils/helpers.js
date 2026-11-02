@@ -103,5 +103,5 @@ export const parseScheduleItems = (clsOrString) => {
   return items;
 };
 
-export { getClassAgeGroupWeight, sortClassesByAgeGroup } from '../config/tierCurriculumConfig';
+export { getClassAgeGroupWeight, sortClassesByAgeGroup } from '../config/tierCurriculumConfig.js';
 

@@ -122,13 +122,16 @@ export default function LoginPage({ onLoginSuccess }) {
           {activeTab === 'email' && (
             <form onSubmit={handleEmailSignIn} className="w-full space-y-4">
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                <label htmlFor="login-email" className="block text-xs font-bold text-slate-700 uppercase mb-1">
                   Email Staf / Pelatih
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                   <input
+                    id="login-email"
+                    name="email"
                     type="email"
+                    autoComplete="username"
                     required
                     placeholder="nama@chuasport.com"
                     value={email}
@@ -139,13 +142,16 @@ export default function LoginPage({ onLoginSuccess }) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase mb-1">
+                <label htmlFor="login-password" className="block text-xs font-bold text-slate-700 uppercase mb-1">
                   Kata Sandi
                 </label>
                 <div className="relative">
                   <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                   <input
+                    id="login-password"
+                    name="password"
                     type="password"
+                    autoComplete="current-password"
                     required
                     placeholder="••••••••"
                     value={password}

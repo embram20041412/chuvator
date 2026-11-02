@@ -15,5 +15,13 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Kredensial Supabase (URL atau Anon Key) hilang. Pastikan .env sudah dikonfigurasi.');
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    flowType: 'pkce',
+    detectSessionInUrl: true,
+    persistSession: true,
+    autoRefreshToken: true,
+    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
+  },
+});
 export default supabase;

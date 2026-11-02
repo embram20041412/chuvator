@@ -99,6 +99,11 @@ export default function App() {
       } else {
         setAuthUser(null);
         setUserProfile(null);
+        try {
+          queryClient.clear();
+        } catch (qcErr) {
+          console.warn('Error clearing query client cache on logout:', qcErr);
+        }
       }
       setIsAuthLoading(false);
     });

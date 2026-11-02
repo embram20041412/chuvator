@@ -88,7 +88,7 @@ export default function PortalLogin() {
         <form onSubmit={handleLogin} className="space-y-4">
           {/* Input ID Siswa */}
           <div className="space-y-1.5 text-left">
-            <label className="block text-xs font-bold text-slate-700">
+            <label htmlFor="portal-student-id" className="block text-xs font-bold text-slate-700">
               ID Siswa (Firestore Doc ID) <span className="text-red-500">*</span>
             </label>
             <div className="relative">
@@ -96,7 +96,10 @@ export default function PortalLogin() {
                 <Hash className="w-4 h-4" />
               </div>
               <input
+                id="portal-student-id"
+                name="studentId"
                 type="text"
+                autoComplete="off"
                 required
                 disabled={loading}
                 value={studentId}
@@ -112,7 +115,7 @@ export default function PortalLogin() {
 
           {/* Input Nomor HP Wali */}
           <div className="space-y-1.5 text-left">
-            <label className="block text-xs font-bold text-slate-700">
+            <label htmlFor="portal-parent-phone" className="block text-xs font-bold text-slate-700">
               Nomor WhatsApp / HP Wali <span className="text-red-500">*</span>
             </label>
             <div className="relative">
@@ -120,7 +123,10 @@ export default function PortalLogin() {
                 <Phone className="w-4 h-4" />
               </div>
               <input
+                id="portal-parent-phone"
+                name="parentPhone"
                 type="tel"
+                autoComplete="tel"
                 required
                 disabled={loading}
                 value={parentPhone}
@@ -149,11 +155,14 @@ export default function PortalLogin() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
               {/* PIN Akses Wali 6-Digit */}
               <div>
-                <label className="block text-[10px] font-bold text-slate-600 mb-1">
+                <label htmlFor="portal-parent-pin" className="block text-[10px] font-bold text-slate-600 mb-1">
                   PIN Akses Wali (6 Digit)
                 </label>
                 <input
+                  id="portal-parent-pin"
+                  name="parentPin"
                   type="password"
+                  autoComplete="one-time-code"
                   maxLength={6}
                   disabled={loading}
                   value={parentPin}
@@ -165,11 +174,14 @@ export default function PortalLogin() {
 
               {/* Tanggal Lahir Siswa */}
               <div>
-                <label className="block text-[10px] font-bold text-slate-600 mb-1">
+                <label htmlFor="portal-birth-date" className="block text-[10px] font-bold text-slate-600 mb-1">
                   Atau Tanggal Lahir Siswa
                 </label>
                 <input
+                  id="portal-birth-date"
+                  name="birthDate"
                   type="date"
+                  autoComplete="bday"
                   disabled={loading}
                   value={birthDate}
                   onChange={(e) => setBirthDate(e.target.value)}
@@ -177,6 +189,7 @@ export default function PortalLogin() {
                 />
               </div>
             </div>
+
             <p className="text-[10px] text-slate-500 italic">
               Portal memverifikasi PIN 6-Digit atau Tanggal Lahir Siswa untuk mencegah akses tidak sah.
             </p>

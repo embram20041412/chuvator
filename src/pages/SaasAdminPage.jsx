@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../config/supabase';
 import { logoutUser } from '../services/authService';
 import { 
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 
 export default function SaasAdminPage({ userProfile }) {
+  const navigate = useNavigate();
   const [invitations, setInvitations] = useState([]);
   const [tenants, setTenants] = useState([]);
   const [loadingInvitations, setLoadingInvitations] = useState(true);
@@ -25,6 +27,15 @@ export default function SaasAdminPage({ userProfile }) {
   const [newRole, setNewRole] = useState('owner');
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState(null);
+
+  const handleLogout = async () => {
+    try {
+      await logoutUser();
+      navigate('/login', { replace: true });
+    } catch (err) {
+      console.error('Logout error:', err);
+    }
+  };
 
   // Fetch Invitations from Supabase
   const fetchInvitations = async () => {
@@ -143,7 +154,7 @@ export default function SaasAdminPage({ userProfile }) {
               <RefreshCw className="w-5 h-5" />
             </button>
             <button
-              onClick={logoutUser}
+              onClick={handleLogout}
               className="flex items-center justify-center space-x-2 px-4 py-2 bg-slate-100 text-slate-700 border border-slate-200 hover:bg-slate-200 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
             >
               <LogOut className="w-4 h-4" />
@@ -177,11 +188,16 @@ export default function SaasAdminPage({ userProfile }) {
 
               <form onSubmit={handleAddInvitation} className="space-y-4">
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">Email Pengguna</label>
+                  <label htmlFor="invite-admin-email" className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
+                    Email Pengguna
+                  </label>
                   <div className="relative">
                     <Mail className="w-4 h-4 text-gray-400 absolute left-3.5 top-3.5" />
                     <input
+                      id="invite-admin-email"
+                      name="email"
                       type="email"
+                      autoComplete="email"
                       required
                       value={newEmail}
                       onChange={(e) => setNewEmail(e.target.value)}
@@ -192,8 +208,12 @@ export default function SaasAdminPage({ userProfile }) {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-700 uppercase mb-1.5">Role Akses</label>
+                  <label htmlFor="invite-admin-role" className="block text-xs font-bold text-gray-700 uppercase mb-1.5">
+                    Role Akses
+                  </label>
                   <select
+                    id="invite-admin-role"
+                    name="role"
                     value={newRole}
                     onChange={(e) => setNewRole(e.target.value)}
                     className="w-full px-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:border-blue-500"

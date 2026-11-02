@@ -1,16 +1,27 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 
-export default function ProtectedRoute({ userProfile, allowedRoles, requireTenant = true, children }) {
+export default function ProtectedRoute({
+  userProfile,
+  allowedRoles,
+  requireTenant = true,
+  isLoading = false,
+  children,
+}) {
   const location = useLocation();
 
-  // 1. Unauthenticated -> Fallback / Redirect
-  if (!userProfile) {
+  // 0. Loading state fallback
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-50">
-        <p className="text-red-500 font-medium">Sesi tidak valid atau hak akses tidak ditemukan.</p>
+        <div className="w-8 h-8 border-4 border-[#354944] border-t-[#C89D32] rounded-full animate-spin" />
       </div>
     );
+  }
+
+  // 1. Unauthenticated -> Redirect to /login
+  if (!userProfile) {
+    return <Navigate to="/login" replace state={{ from: location }} />;
   }
 
   const userRole = (userProfile.role || '').toLowerCase();
