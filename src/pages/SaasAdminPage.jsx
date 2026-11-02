@@ -316,10 +316,10 @@ export default function SaasAdminPage({ userProfile }) {
                           {t.status || 'Aktif'}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-500">Pemilik: {t.ownerEmail}</p>
+                      <p className="text-xs text-gray-500">Pemilik: {t.owner_email || t.ownerEmail || '-'}</p>
                       <p className="text-xs text-gray-500">Alamat: {t.address || '-'}</p>
                       <p className="text-[11px] text-gray-400 pt-1 border-t border-gray-200/60">
-                        Cabang: {t.branchesCount || 1} | Lapangan: {t.courtsCount || 0}
+                        Cabang: {t.branchesCount || 1} | Lapangan: {t.courts_count ?? t.courtsCount ?? 0}
                       </p>
                     </div>
                   ))}

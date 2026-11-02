@@ -97,8 +97,17 @@ function createMockSupabaseClient({
             return { data: match || null, error: null };
           }
           if (tableName === 'tenants') {
+            // Kontrak database: tabel tenants TIDAK memiliki kolom is_active!
+            if (eqFilters.is_active !== undefined || (selectedCols && selectedCols.includes('is_active'))) {
+              return { data: null, error: new Error('column "is_active" does not exist in table "tenants"') };
+            }
             const match = tenantsTable.find((row) => {
               if (eqFilters.id && row.id === eqFilters.id) return true;
+              if (eqFilters.owner_uid && row.owner_uid === eqFilters.owner_uid) return true;
+              if (orFilter) {
+                if (row.owner_email && orFilter.includes(row.owner_email)) return true;
+                if (row.owner_uid && orFilter.includes(row.owner_uid)) return true;
+              }
               return false;
             });
             return { data: match || null, error: null };
@@ -486,3 +495,32 @@ test('Wajib 12 (Audit Kolom): Query platform_superadmins hanya menggunakan auth_
     assert.ok(!q.columns.includes('user_id'), 'DILARANG query user_id');
   });
 });
+
+test('Wajib 13 (Audit Kontrak Tenants): Query tabel tenants tidak menggunakan is_active dan menggunakan status valid', async () => {
+  const ownerUser = {
+    id: 'uid-owner-contract',
+    email: 'owner@arenatennis.com',
+  };
+
+  const client = createMockSupabaseClient({
+    isSuperadminResponses: [false, false],
+    bootstrapResponse: { data: false, error: null },
+    tenantsTable: [
+      { id: 't-contract-1', tenant_id: 't-contract-1', name: 'Arena Tenis Jaya', owner_uid: 'uid-owner-contract', status: 'active' },
+    ],
+  });
+
+  const profile = await verifyUserRoleAndTenant(ownerUser, client);
+  assert.ok(profile);
+  assert.equal(profile.role, 'owner');
+  assert.equal(profile.tenantId, 't-contract-1');
+
+  // Periksa bahwa semua query ke tenants tidak pernah memanggil kolom is_active
+  const queries = client.getStats().queriedColumns;
+  const tenantQueries = queries.filter((q) => q.table === 'tenants');
+  assert.ok(tenantQueries.length > 0);
+  tenantQueries.forEach((q) => {
+    assert.ok(!q.columns.includes('is_active'), 'Query tenants DILARANG mengandung is_active');
+  });
+});
+
