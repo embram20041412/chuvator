@@ -1085,14 +1085,18 @@ BEGIN
         EXECUTE format('CREATE POLICY %I ON public.%I FOR DELETE USING (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text));', tbl || '_delete_rbac', tbl);
     END LOOP;
 
-    -- Event Management Tables Group
+    -- Event Management Master Tables Group
     FOREACH tbl IN ARRAY event_tables
     LOOP
         EXECUTE format('CREATE POLICY %I ON public.%I FOR SELECT USING (public.is_superadmin() OR public.user_has_tenant_access(tenant_id::text));', tbl || '_select_rbac', tbl);
-        EXECUTE format('CREATE POLICY %I ON public.%I FOR INSERT WITH CHECK (public.is_superadmin() OR public.user_can_manage_pos(tenant_id::text));', tbl || '_insert_rbac', tbl);
+        EXECUTE format('CREATE POLICY %I ON public.%I FOR INSERT WITH CHECK (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text));', tbl || '_insert_rbac', tbl);
         EXECUTE format('CREATE POLICY %I ON public.%I FOR UPDATE USING (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text)) WITH CHECK (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text));', tbl || '_update_rbac', tbl);
         EXECUTE format('CREATE POLICY %I ON public.%I FOR DELETE USING (public.is_superadmin() OR public.user_is_tenant_admin_or_owner(tenant_id::text));', tbl || '_delete_rbac', tbl);
     END LOOP;
+
+    -- Special RBAC Exception: event_registrations INSERT is allowed for Kasir/Staff at POS counter
+    EXECUTE 'DROP POLICY IF EXISTS event_registrations_insert_rbac ON public.event_registrations;';
+    EXECUTE 'CREATE POLICY event_registrations_insert_rbac ON public.event_registrations FOR INSERT WITH CHECK (public.is_superadmin() OR public.user_can_manage_pos(tenant_id::text));';
 END $$;
 
 -- =========================================================================

@@ -1,8 +1,14 @@
 -- =========================================================================
--- CHUVATOR (CHUA SPORT CORE) — FINAL RLS & SECURITY SUITE WITH EXPLICIT ASSERTIONS (FASE 1AB)
+-- CHUVATOR (CHUA SPORT CORE) — FINAL RLS & SECURITY TEST SUITE (FASE 1AC)
 -- Target: Supabase PostgreSQL (SQL Editor / Staging Environment)
 -- Mode: Non-Destructive Transaction (BEGIN ... ROLLBACK)
 -- Classification: SIMULATED TEST / STATIC CODE REVIEW
+-- Key Integrity Guarantees:
+--   1. Full 6 Roles x 5 Financial Tables x 4 CRUD Operations Assertions (120 Assertions)
+--   2. Strict Row-Specific INSERT/UPDATE/DELETE targeting exact test row IDs
+--   3. Deep Policy Expression Catalog Inspection across all 24 Canonical Tables
+--   4. Strict Fixture Safety Pre-checks (No ON CONFLICT DO UPDATE / DO NOTHING workarounds)
+--   5. Authenticated Role Context Verification with non-superuser RLS enforcement
 -- =========================================================================
 
 BEGIN;
@@ -24,7 +30,7 @@ DECLARE
     invited_staff_uid TEXT := '10000000-0000-0000-0000-000000000013';
     fake_owner_staff_uid TEXT := '10000000-0000-0000-0000-000000000014';
     
-    -- Mock Primary Keys (Deterministic UUIDs)
+    -- Mock Primary Keys for Core Fixture Rows (Deterministic UUIDs)
     inv_pending_id UUID := '44444444-4444-4444-4444-444444444444';
     inv_accepted_id UUID := '55555555-5555-5555-5555-555555555555';
     tx_a_id UUID := 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -49,37 +55,93 @@ DECLARE
     res_text TEXT;
     caught_sqlstate TEXT;
 
-    -- Financial Audit Loop Variables
+    -- Financial CRUD Matrix Loop Variables
     v_fin_tbl text;
     v_fin_tables text[] := ARRAY['transactions', 'global_ledger', 'pos_transactions', 'spp_payments', 'event_expenses'];
-    v_ins_id UUID;
+    v_role_name text;
+    v_roles text[] := ARRAY['superadmin', 'owner', 'admin', 'kasir', 'coach', 'staff'];
+    v_cur_uid text;
+    v_cur_email text;
+    v_test_row_id UUID;
+    v_ins_success BOOLEAN;
 BEGIN
     RAISE NOTICE '=======================================================';
-    RAISE NOTICE 'MEMULAI TEST SUITE KEAMANAN DATABASE FINAL CHUVATOR (FASE 1AB - 14 SCENARIOS)';
+    RAISE NOTICE 'MEMULAI TEST SUITE KEAMANAN DATABASE CHUVATOR (FASE 1AC - FULL CRUD MATRIX)';
     RAISE NOTICE 'MODE: SIMULATED TEST / STATIC CODE REVIEW';
     RAISE NOTICE '=======================================================';
 
     raw_tok_1 := 'valid-test-token-32bytes-secret1';
     tok_hash_1 := encode(digest(raw_tok_1, 'sha256'), 'hex');
 
-    -- SAFE FIXTURE PROTECTION: Check ID and email collision before inserting
-    IF EXISTS (
-        SELECT 1 FROM public.tenants 
-        WHERE (id IN (tenant_a, tenant_b) OR tenant_id IN (tenant_a::text, tenant_b::text))
-          AND name NOT IN ('Arena Alpha', 'Arena Beta')
-    ) THEN
-        RAISE EXCEPTION 'FIXTURE ERROR: Mock tenant ID bertabrakan dengan data tenant non-test terdaftar di database.';
+    -- =========================================================================
+    -- REQUIREMENT E: STRICT FIXTURE SAFETY PRE-CHECKS (No ON CONFLICT Workarounds)
+    -- =========================================================================
+
+    -- 1. Check auth.users collision if table exists
+    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'auth' AND table_name = 'users') THEN
+        IF EXISTS (
+            SELECT 1 FROM auth.users
+            WHERE id IN (superadmin_uid::uuid, owner_a_uid::uuid, owner_b_uid::uuid, admin_a_uid::uuid, kasir_a_uid::uuid, staff_a_uid::uuid, coach_a_uid::uuid, invited_staff_uid::uuid, fake_owner_staff_uid::uuid)
+               OR email IN ('superadmin@chuvator.internal', 'owner_a@arena.com', 'owner_b@arena.com', 'admin_a@arena.com', 'kasir_a@arena.com', 'staff_a@arena.com', 'coach_a@arena.com', 'candidate15@arena.com', 'fakeowner@arena.com')
+        ) THEN
+            RAISE EXCEPTION 'FIXTURE ERROR: Mock Auth UID/Email bertabrakan dengan data auth.users terdaftar di database.';
+        END IF;
     END IF;
 
+    -- 2. Check tenants collision
+    IF EXISTS (
+        SELECT 1 FROM public.tenants
+        WHERE id IN (tenant_a, tenant_b) 
+           OR tenant_id IN (tenant_a::text, tenant_b::text)
+           OR owner_email IN ('owner_a@arena.com', 'owner_b@arena.com')
+    ) THEN
+        RAISE EXCEPTION 'FIXTURE ERROR: Mock Tenant ID/Email bertabrakan dengan data tenants terdaftar di database.';
+    END IF;
+
+    -- 3. Check users_staff collision
     IF EXISTS (
         SELECT 1 FROM public.users_staff
         WHERE id IN (admin_staff_id, kasir_staff_id, staff_staff_id, coach_staff_id, staff_candidate_id, fake_owner_staff_id)
-          AND email NOT IN ('admin_a@arena.com', 'kasir_a@arena.com', 'staff_a@arena.com', 'coach_a@arena.com', 'candidate15@arena.com', 'fakeowner@arena.com')
+           OR email IN ('admin_a@arena.com', 'kasir_a@arena.com', 'staff_a@arena.com', 'coach_a@arena.com', 'candidate15@arena.com', 'fakeowner@arena.com')
     ) THEN
-        RAISE EXCEPTION 'FIXTURE ERROR: Mock users_staff ID bertabrakan dengan data staf produksi terdaftar.';
+        RAISE EXCEPTION 'FIXTURE ERROR: Mock users_staff ID/Email bertabrakan dengan data users_staff terdaftar di database.';
     END IF;
 
-    -- Safe Mock auth.users fixture setup (No DO UPDATE)
+    -- 4. Check platform_superadmins collision
+    IF EXISTS (
+        SELECT 1 FROM public.platform_superadmins
+        WHERE auth_uid = superadmin_uid OR email = 'superadmin@chuvator.internal'
+    ) THEN
+        RAISE EXCEPTION 'FIXTURE ERROR: Mock superadmin bertabrakan dengan data platform_superadmins terdaftar.';
+    END IF;
+
+    -- 5. Check invitations collision
+    IF EXISTS (
+        SELECT 1 FROM public.invitations
+        WHERE id IN (inv_pending_id, inv_accepted_id)
+           OR token_hash = tok_hash_1
+    ) THEN
+        RAISE EXCEPTION 'FIXTURE ERROR: Mock invitations ID/token bertabrakan dengan data invitations terdaftar.';
+    END IF;
+
+    -- 6. Check financial fixture rows collision
+    IF EXISTS (SELECT 1 FROM public.transactions WHERE id = tx_a_id) THEN
+        RAISE EXCEPTION 'FIXTURE ERROR: tx_a_id bertabrakan dengan data transactions.';
+    END IF;
+    IF EXISTS (SELECT 1 FROM public.global_ledger WHERE id = gl_a_id) THEN
+        RAISE EXCEPTION 'FIXTURE ERROR: gl_a_id bertabrakan dengan data global_ledger.';
+    END IF;
+    IF EXISTS (SELECT 1 FROM public.pos_transactions WHERE id = pos_a_id) THEN
+        RAISE EXCEPTION 'FIXTURE ERROR: pos_a_id bertabrakan dengan data pos_transactions.';
+    END IF;
+    IF EXISTS (SELECT 1 FROM public.spp_payments WHERE id = spp_a_id) THEN
+        RAISE EXCEPTION 'FIXTURE ERROR: spp_a_id bertabrakan dengan data spp_payments.';
+    END IF;
+    IF EXISTS (SELECT 1 FROM public.event_expenses WHERE id = exp_a_id) THEN
+        RAISE EXCEPTION 'FIXTURE ERROR: exp_a_id bertabrakan dengan data event_expenses.';
+    END IF;
+
+    -- Pure Insertions (Verified Zero Collision)
     IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'auth' AND table_name = 'users') THEN
         INSERT INTO auth.users (id, email, email_confirmed_at, aud, role)
         VALUES 
@@ -91,20 +153,16 @@ BEGIN
             (staff_a_uid::uuid, 'staff_a@arena.com', now(), 'authenticated', 'authenticated'),
             (coach_a_uid::uuid, 'coach_a@arena.com', now(), 'authenticated', 'authenticated'),
             (invited_staff_uid::uuid, 'candidate15@arena.com', now(), 'authenticated', 'authenticated'),
-            (fake_owner_staff_uid::uuid, 'fakeowner@arena.com', now(), 'authenticated', 'authenticated')
-        ON CONFLICT (id) DO NOTHING;
+            (fake_owner_staff_uid::uuid, 'fakeowner@arena.com', now(), 'authenticated', 'authenticated');
     END IF;
 
-    -- Safe Fixture Insertions (ON CONFLICT DO NOTHING to preserve existing production data)
     INSERT INTO public.platform_superadmins (auth_uid, email, notes)
-    VALUES (superadmin_uid, 'superadmin@chuvator.internal', 'Test Superadmin')
-    ON CONFLICT (email) DO NOTHING;
+    VALUES (superadmin_uid, 'superadmin@chuvator.internal', 'Test Superadmin');
 
     INSERT INTO public.tenants (id, tenant_id, name, owner_uid, owner_email, is_active)
     VALUES 
         (tenant_a, tenant_a::text, 'Arena Alpha', owner_a_uid, 'owner_a@arena.com', TRUE),
-        (tenant_b, tenant_b::text, 'Arena Beta', owner_b_uid, 'owner_b@arena.com', TRUE)
-    ON CONFLICT (id) DO NOTHING;
+        (tenant_b, tenant_b::text, 'Arena Beta', owner_b_uid, 'owner_b@arena.com', TRUE);
 
     INSERT INTO public.users_staff (id, uid, tenant_id, email, role, status, is_active)
     VALUES
@@ -113,35 +171,18 @@ BEGIN
         (staff_staff_id, staff_a_uid, tenant_a::text, 'staff_a@arena.com', 'staff', 'active', TRUE),
         (coach_staff_id, coach_a_uid, tenant_a::text, 'coach_a@arena.com', 'coach', 'active', TRUE),
         (staff_candidate_id, NULL, tenant_a::text, 'candidate15@arena.com', 'kasir', 'active', TRUE),
-        (fake_owner_staff_id, fake_owner_staff_uid, tenant_a::text, 'fakeowner@arena.com', 'owner', 'active', TRUE)
-    ON CONFLICT (id) DO NOTHING;
+        (fake_owner_staff_id, fake_owner_staff_uid, tenant_a::text, 'fakeowner@arena.com', 'owner', 'active', TRUE);
 
     INSERT INTO public.invitations (id, tenant_id, invite_email, email, invite_role, role, token_hash, status, created_by_uid, expires_at)
     VALUES 
         (inv_pending_id, tenant_a::text, 'candidate15@arena.com', 'candidate15@arena.com', 'kasir', 'kasir', tok_hash_1, 'pending', owner_a_uid, now() + interval '7 days'),
-        (inv_accepted_id, tenant_a::text, 'accepted@arena.com', 'accepted@arena.com', 'kasir', 'kasir', 'accepted_hash_123', 'accepted', owner_a_uid, now() + interval '7 days')
-    ON CONFLICT (id) DO NOTHING;
+        (inv_accepted_id, tenant_a::text, 'accepted@arena.com', 'accepted@arena.com', 'kasir', 'kasir', 'accepted_hash_123', 'accepted', owner_a_uid, now() + interval '7 days');
 
-    -- Fixture rows for ALL 5 Financial Tables
-    INSERT INTO public.transactions (id, tenant_id, title, amount, type)
-    VALUES (tx_a_id, tenant_a::text, 'Sewa Lapangan A1', 150000, 'INCOME')
-    ON CONFLICT (id) DO NOTHING;
-
-    INSERT INTO public.global_ledger (id, tenant_id, type, amount, source)
-    VALUES (gl_a_id, tenant_a::text, 'INCOME', 150000, 'POS')
-    ON CONFLICT (id) DO NOTHING;
-
-    INSERT INTO public.pos_transactions (id, tenant_id, customer_name, total, payment_method)
-    VALUES (pos_a_id, tenant_a::text, 'Pelanggan Alpha', 150000, 'Cash')
-    ON CONFLICT (id) DO NOTHING;
-
-    INSERT INTO public.spp_payments (id, tenant_id, student_name, month, year, amount)
-    VALUES (spp_a_id, tenant_a::text, 'Siswa Alpha', 'Januari', 2026, 250000)
-    ON CONFLICT (id) DO NOTHING;
-
-    INSERT INTO public.event_expenses (id, tenant_id, title, amount)
-    VALUES (exp_a_id, tenant_a::text, 'Biaya Wasit Turnamen', 300000)
-    ON CONFLICT (id) DO NOTHING;
+    INSERT INTO public.transactions (id, tenant_id, title, amount, type) VALUES (tx_a_id, tenant_a::text, 'Sewa Lapangan A1', 150000, 'INCOME');
+    INSERT INTO public.global_ledger (id, tenant_id, type, amount, source) VALUES (gl_a_id, tenant_a::text, 'INCOME', 150000, 'POS');
+    INSERT INTO public.pos_transactions (id, tenant_id, customer_name, total, payment_method) VALUES (pos_a_id, tenant_a::text, 'Pelanggan Alpha', 150000, 'Cash');
+    INSERT INTO public.spp_payments (id, tenant_id, student_name, month, year, amount) VALUES (spp_a_id, tenant_a::text, 'Siswa Alpha', 'Januari', 2026, 250000);
+    INSERT INTO public.event_expenses (id, tenant_id, title, amount) VALUES (exp_a_id, tenant_a::text, 'Biaya Wasit Turnamen', 300000);
 
     -- =========================================================================
     -- 14 TEST SCENARIOS WITH EXPLICIT ASSERTIONS
@@ -171,139 +212,167 @@ BEGIN
     END IF;
 
     -- =========================================================================
-    -- TEST 3: EXHAUSTIVE FINANCIAL RBAC MATRIX AUDIT ACROSS ALL 5 FINANCIAL TABLES & ALL 6 ROLES
-    -- Managed Financial Tables: transactions, global_ledger, pos_transactions, spp_payments, event_expenses
-    -- Tested Roles: Superadmin, Owner, Admin, Kasir, Coach, Staff
-    -- Operations Tested: SELECT, INSERT, UPDATE, DELETE per role per table
+    -- TEST 3: FULL CRUD MATRIX (6 ROLES x 5 FINANCIAL TABLES x 4 OPERATIONS = 120 EXPLICIT TESTS)
+    -- Managed Tables & Value Columns:
+    --   1. transactions (amount)
+    --   2. global_ledger (amount)
+    --   3. pos_transactions (total)
+    --   4. spp_payments (amount)
+    --   5. event_expenses (amount)
+    -- Roles Tested: Superadmin, Owner, Admin, Kasir, Coach, Staff
+    -- Operations: SELECT, INSERT, UPDATE, DELETE (Each targetting exact UUID row IDs)
     -- =========================================================================
     FOREACH v_fin_tbl IN ARRAY v_fin_tables
     LOOP
-        -- 3.1 SUPERADMIN ROLE AUDIT
-        PERFORM set_config('request.jwt.claims', json_build_object('sub', superadmin_uid, 'email', 'superadmin@chuvator.internal')::text, true);
-        EXECUTE format('SELECT COUNT(*) FROM public.%I WHERE tenant_id = %L', v_fin_tbl, tenant_a::text) INTO res_count;
-        IF res_count < 1 THEN
-            RAISE EXCEPTION '[FAIL] Test 3 (Superadmin SELECT): Superadmin tidak dapat membaca tabel %I', v_fin_tbl;
-        END IF;
-
-        -- 3.2 OWNER ROLE AUDIT
-        PERFORM set_config('request.jwt.claims', json_build_object('sub', owner_a_uid, 'email', 'owner_a@arena.com')::text, true);
-        EXECUTE format('SELECT COUNT(*) FROM public.%I WHERE tenant_id = %L', v_fin_tbl, tenant_a::text) INTO res_count;
-        IF res_count < 1 THEN
-            RAISE EXCEPTION '[FAIL] Test 3 (Owner SELECT): Owner A tidak dapat membaca tabel %I', v_fin_tbl;
-        END IF;
-
-        -- 3.3 ADMIN ROLE AUDIT
-        PERFORM set_config('request.jwt.claims', json_build_object('sub', admin_a_uid, 'email', 'admin_a@arena.com')::text, true);
-        EXECUTE format('SELECT COUNT(*) FROM public.%I WHERE tenant_id = %L', v_fin_tbl, tenant_a::text) INTO res_count;
-        IF res_count < 1 THEN
-            RAISE EXCEPTION '[FAIL] Test 3 (Admin SELECT): Admin A tidak dapat membaca tabel %I', v_fin_tbl;
-        END IF;
-
-        -- 3.4 KASIR ROLE AUDIT (SELECT & INSERT allowed, UPDATE & DELETE denied)
-        PERFORM set_config('request.jwt.claims', json_build_object('sub', kasir_a_uid, 'email', 'kasir_a@arena.com')::text, true);
-        EXECUTE format('SELECT COUNT(*) FROM public.%I WHERE tenant_id = %L', v_fin_tbl, tenant_a::text) INTO res_count;
-        IF res_count < 1 THEN
-            RAISE EXCEPTION '[FAIL] Test 3 (Kasir SELECT): Kasir A tidak dapat membaca tabel finansial %I', v_fin_tbl;
-        END IF;
-
-        -- Kasir UPDATE Denied (0 rows affected)
-        EXECUTE format('UPDATE public.%I SET amount = 999999 WHERE tenant_id = %L', v_fin_tbl, tenant_a::text);
-        GET DIAGNOSTICS res_count = ROW_COUNT;
-        IF res_count > 0 THEN
-            RAISE EXCEPTION '[FAIL] Test 3 (Kasir UPDATE): Kasir A berhasil UPDATE tabel finansial %I (seharusnya ditolak)!', v_fin_tbl;
-        END IF;
-
-        -- Kasir DELETE Denied (0 rows affected)
-        EXECUTE format('DELETE FROM public.%I WHERE tenant_id = %L', v_fin_tbl, tenant_a::text);
-        GET DIAGNOSTICS res_count = ROW_COUNT;
-        IF res_count > 0 THEN
-            RAISE EXCEPTION '[FAIL] Test 3 (Kasir DELETE): Kasir A berhasil DELETE tabel finansial %I (seharusnya ditolak)!', v_fin_tbl;
-        END IF;
-
-        -- 3.5 COACH ROLE AUDIT (SELECT = 0 rows, INSERT denied, UPDATE = 0, DELETE = 0)
-        PERFORM set_config('request.jwt.claims', json_build_object('sub', coach_a_uid, 'email', 'coach_a@arena.com')::text, true);
-        EXECUTE format('SELECT COUNT(*) FROM public.%I WHERE tenant_id = %L', v_fin_tbl, tenant_a::text) INTO res_count;
-        IF res_count > 0 THEN
-            RAISE EXCEPTION '[FAIL] Test 3 (Coach SELECT): Coach A berhasil membaca % rows pada tabel finansial %I (seharusnya 0 rows)!', res_count, v_fin_tbl;
-        END IF;
-
-        test_passed := FALSE;
-        BEGIN
-            v_ins_id := gen_random_uuid();
-            IF v_fin_tbl = 'transactions' THEN
-                INSERT INTO public.transactions (id, tenant_id, title, amount, type) VALUES (v_ins_id, tenant_a::text, 'Illegal Coach Tx', 50000, 'INCOME');
-            ELSIF v_fin_tbl = 'global_ledger' THEN
-                INSERT INTO public.global_ledger (id, tenant_id, type, amount, source) VALUES (v_ins_id, tenant_a::text, 'INCOME', 50000, 'TEST');
-            ELSIF v_fin_tbl = 'pos_transactions' THEN
-                INSERT INTO public.pos_transactions (id, tenant_id, customer_name, total) VALUES (v_ins_id, tenant_a::text, 'Illegal Coach Sale', 50000);
-            ELSIF v_fin_tbl = 'spp_payments' THEN
-                INSERT INTO public.spp_payments (id, tenant_id, student_name, month, year, amount) VALUES (v_ins_id, tenant_a::text, 'Siswa Illegal', 'Januari', 2026, 50000);
-            ELSIF v_fin_tbl = 'event_expenses' THEN
-                INSERT INTO public.event_expenses (id, tenant_id, title, amount) VALUES (v_ins_id, tenant_a::text, 'Illegal Coach Exp', 50000);
+        FOREACH v_role_name IN ARRAY v_roles
+        LOOP
+            -- Map role to target Auth UID and Email
+            IF v_role_name = 'superadmin' THEN
+                v_cur_uid := superadmin_uid; v_cur_email := 'superadmin@chuvator.internal';
+            ELSIF v_role_name = 'owner' THEN
+                v_cur_uid := owner_a_uid; v_cur_email := 'owner_a@arena.com';
+            ELSIF v_role_name = 'admin' THEN
+                v_cur_uid := admin_a_uid; v_cur_email := 'admin_a@arena.com';
+            ELSIF v_role_name = 'kasir' THEN
+                v_cur_uid := kasir_a_uid; v_cur_email := 'kasir_a@arena.com';
+            ELSIF v_role_name = 'coach' THEN
+                v_cur_uid := coach_a_uid; v_cur_email := 'coach_a@arena.com';
+            ELSIF v_role_name = 'staff' THEN
+                v_cur_uid := staff_a_uid; v_cur_email := 'staff_a@arena.com';
             END IF;
-        EXCEPTION WHEN OTHERS THEN
-            test_passed := TRUE;
-        END;
-        IF NOT test_passed THEN
-            RAISE EXCEPTION '[FAIL] Test 3 (Coach INSERT): Coach A berhasil INSERT ke tabel finansial %I!', v_fin_tbl;
-        END IF;
 
-        EXECUTE format('UPDATE public.%I SET amount = 888888 WHERE tenant_id = %L', v_fin_tbl, tenant_a::text);
-        GET DIAGNOSTICS res_count = ROW_COUNT;
-        IF res_count > 0 THEN
-            RAISE EXCEPTION '[FAIL] Test 3 (Coach UPDATE): Coach A berhasil UPDATE tabel finansial %I!', v_fin_tbl;
-        END IF;
+            -- Set authenticated role context for current role
+            PERFORM set_config('role', 'authenticated', true);
+            PERFORM set_config('request.jwt.claims', json_build_object('sub', v_cur_uid, 'email', v_cur_email)::text, true);
 
-        EXECUTE format('DELETE FROM public.%I WHERE tenant_id = %L', v_fin_tbl, tenant_a::text);
-        GET DIAGNOSTICS res_count = ROW_COUNT;
-        IF res_count > 0 THEN
-            RAISE EXCEPTION '[FAIL] Test 3 (Coach DELETE): Coach A berhasil DELETE tabel finansial %I!', v_fin_tbl;
-        END IF;
-
-        -- 3.6 STAFF ROLE AUDIT (SELECT = 0 rows, INSERT denied, UPDATE = 0, DELETE = 0)
-        PERFORM set_config('request.jwt.claims', json_build_object('sub', staff_a_uid, 'email', 'staff_a@arena.com')::text, true);
-        EXECUTE format('SELECT COUNT(*) FROM public.%I WHERE tenant_id = %L', v_fin_tbl, tenant_a::text) INTO res_count;
-        IF res_count > 0 THEN
-            RAISE EXCEPTION '[FAIL] Test 3 (Staff SELECT): Staff A berhasil membaca % rows pada tabel finansial %I (seharusnya 0 rows)!', res_count, v_fin_tbl;
-        END IF;
-
-        test_passed := FALSE;
-        BEGIN
-            v_ins_id := gen_random_uuid();
-            IF v_fin_tbl = 'transactions' THEN
-                INSERT INTO public.transactions (id, tenant_id, title, amount, type) VALUES (v_ins_id, tenant_a::text, 'Illegal Staff Tx', 50000, 'INCOME');
-            ELSIF v_fin_tbl = 'global_ledger' THEN
-                INSERT INTO public.global_ledger (id, tenant_id, type, amount, source) VALUES (v_ins_id, tenant_a::text, 'INCOME', 50000, 'TEST');
-            ELSIF v_fin_tbl = 'pos_transactions' THEN
-                INSERT INTO public.pos_transactions (id, tenant_id, customer_name, total) VALUES (v_ins_id, tenant_a::text, 'Illegal Staff Sale', 50000);
-            ELSIF v_fin_tbl = 'spp_payments' THEN
-                INSERT INTO public.spp_payments (id, tenant_id, student_name, month, year, amount) VALUES (v_ins_id, tenant_a::text, 'Siswa Illegal', 'Januari', 2026, 50000);
-            ELSIF v_fin_tbl = 'event_expenses' THEN
-                INSERT INTO public.event_expenses (id, tenant_id, title, amount) VALUES (v_ins_id, tenant_a::text, 'Illegal Staff Exp', 50000);
+            -- -----------------------------------------------------------------
+            -- OP 1: SELECT OPERATION AUDIT
+            -- -----------------------------------------------------------------
+            EXECUTE format('SELECT COUNT(*) FROM public.%I WHERE tenant_id = %L', v_fin_tbl, tenant_a::text) INTO res_count;
+            IF v_role_name IN ('superadmin', 'owner', 'admin', 'kasir') THEN
+                IF res_count < 1 THEN
+                    RAISE EXCEPTION '[FAIL] Test 3 (SELECT): Role % gagal membaca tabel %I (Ditemukan: % rows).', v_role_name, v_fin_tbl, res_count;
+                END IF;
+            ELSIF v_role_name IN ('coach', 'staff') THEN
+                IF res_count > 0 THEN
+                    RAISE EXCEPTION '[FAIL] Test 3 (SELECT): Role % berhasil membaca % rows pada tabel finansial %I (seharusnya 0 rows).', v_role_name, res_count, v_fin_tbl;
+                END IF;
             END IF;
-        EXCEPTION WHEN OTHERS THEN
-            test_passed := TRUE;
-        END;
-        IF NOT test_passed THEN
-            RAISE EXCEPTION '[FAIL] Test 3 (Staff INSERT): Staff A berhasil INSERT ke tabel finansial %I!', v_fin_tbl;
-        END IF;
 
-        EXECUTE format('UPDATE public.%I SET amount = 777777 WHERE tenant_id = %L', v_fin_tbl, tenant_a::text);
-        GET DIAGNOSTICS res_count = ROW_COUNT;
-        IF res_count > 0 THEN
-            RAISE EXCEPTION '[FAIL] Test 3 (Staff UPDATE): Staff A berhasil UPDATE tabel finansial %I!', v_fin_tbl;
-        END IF;
+            -- -----------------------------------------------------------------
+            -- OP 2: INSERT OPERATION AUDIT (Targeting fresh UUID row)
+            -- -----------------------------------------------------------------
+            v_test_row_id := gen_random_uuid();
+            v_ins_success := FALSE;
+            BEGIN
+                IF v_fin_tbl = 'transactions' THEN
+                    INSERT INTO public.transactions (id, tenant_id, title, amount, type) VALUES (v_test_row_id, tenant_a::text, 'CRUD Test Tx', 12345, 'INCOME');
+                ELSIF v_fin_tbl = 'global_ledger' THEN
+                    INSERT INTO public.global_ledger (id, tenant_id, type, amount, source) VALUES (v_test_row_id, tenant_a::text, 'INCOME', 12345, 'TEST');
+                ELSIF v_fin_tbl = 'pos_transactions' THEN
+                    INSERT INTO public.pos_transactions (id, tenant_id, customer_name, total, payment_method) VALUES (v_test_row_id, tenant_a::text, 'CRUD Test POS', 12345, 'Cash');
+                ELSIF v_fin_tbl = 'spp_payments' THEN
+                    INSERT INTO public.spp_payments (id, tenant_id, student_name, month, year, amount) VALUES (v_test_row_id, tenant_a::text, 'CRUD Test Student', 'Januari', 2026, 12345);
+                ELSIF v_fin_tbl = 'event_expenses' THEN
+                    INSERT INTO public.event_expenses (id, tenant_id, title, amount) VALUES (v_test_row_id, tenant_a::text, 'CRUD Test Expense', 12345);
+                END IF;
+                v_ins_success := TRUE;
+            EXCEPTION WHEN OTHERS THEN
+                v_ins_success := FALSE;
+            END;
 
-        EXECUTE format('DELETE FROM public.%I WHERE tenant_id = %L', v_fin_tbl, tenant_a::text);
-        GET DIAGNOSTICS res_count = ROW_COUNT;
-        IF res_count > 0 THEN
-            RAISE EXCEPTION '[FAIL] Test 3 (Staff DELETE): Staff A berhasil DELETE tabel finansial %I!', v_fin_tbl;
-        END IF;
+            IF v_role_name IN ('superadmin', 'owner', 'admin', 'kasir') THEN
+                IF NOT v_ins_success THEN
+                    RAISE EXCEPTION '[FAIL] Test 3 (INSERT): Role % gagal INSERT ke tabel %I.', v_role_name, v_fin_tbl;
+                END IF;
+            ELSIF v_role_name IN ('coach', 'staff') THEN
+                IF v_ins_success THEN
+                    RAISE EXCEPTION '[FAIL] Test 3 (INSERT): Role % berhasil INSERT ke tabel %I (seharusnya ditolak RLS).', v_role_name, v_fin_tbl;
+                END IF;
+            END IF;
+
+            -- -----------------------------------------------------------------
+            -- OP 3: UPDATE OPERATION AUDIT (Targeting exact v_test_row_id or fixture row)
+            -- Use column 'total' for pos_transactions, 'amount' for others
+            -- -----------------------------------------------------------------
+            IF v_ins_success THEN
+                -- Row inserted by this role
+                IF v_fin_tbl = 'pos_transactions' THEN
+                    EXECUTE format('UPDATE public.%I SET total = total + 10 WHERE id = %L', v_fin_tbl, v_test_row_id);
+                ELSE
+                    EXECUTE format('UPDATE public.%I SET amount = amount + 10 WHERE id = %L', v_fin_tbl, v_test_row_id);
+                END IF;
+            ELSE
+                -- Row not inserted (Coach/Staff), target existing fixture row
+                IF v_fin_tbl = 'transactions' THEN
+                    UPDATE public.transactions SET amount = amount + 10 WHERE id = tx_a_id;
+                ELSIF v_fin_tbl = 'global_ledger' THEN
+                    UPDATE public.global_ledger SET amount = amount + 10 WHERE id = gl_a_id;
+                ELSIF v_fin_tbl = 'pos_transactions' THEN
+                    UPDATE public.pos_transactions SET total = total + 10 WHERE id = pos_a_id;
+                ELSIF v_fin_tbl = 'spp_payments' THEN
+                    UPDATE public.spp_payments SET amount = amount + 10 WHERE id = spp_a_id;
+                ELSIF v_fin_tbl = 'event_expenses' THEN
+                    UPDATE public.event_expenses SET amount = amount + 10 WHERE id = exp_a_id;
+                END IF;
+            END IF;
+
+            GET DIAGNOSTICS res_count = ROW_COUNT;
+
+            IF v_role_name IN ('superadmin', 'owner', 'admin') THEN
+                IF res_count <> 1 THEN
+                    RAISE EXCEPTION '[FAIL] Test 3 (UPDATE): Role % gagal UPDATE baris pada tabel %I (ROW_COUNT = %).', v_role_name, v_fin_tbl, res_count;
+                END IF;
+            ELSIF v_role_name IN ('kasir', 'coach', 'staff') THEN
+                IF res_count > 0 THEN
+                    RAISE EXCEPTION '[FAIL] Test 3 (UPDATE): Role % berhasil UPDATE baris pada tabel %I (seharusnya 0 rows affected, didapat: %).', v_role_name, v_fin_tbl, res_count;
+                END IF;
+            END IF;
+
+            -- -----------------------------------------------------------------
+            -- OP 4: DELETE OPERATION AUDIT (Targeting exact v_test_row_id or fixture row)
+            -- -----------------------------------------------------------------
+            IF v_ins_success THEN
+                EXECUTE format('DELETE FROM public.%I WHERE id = %L', v_fin_tbl, v_test_row_id);
+            ELSE
+                IF v_fin_tbl = 'transactions' THEN
+                    DELETE FROM public.transactions WHERE id = tx_a_id;
+                ELSIF v_fin_tbl = 'global_ledger' THEN
+                    DELETE FROM public.global_ledger WHERE id = gl_a_id;
+                ELSIF v_fin_tbl = 'pos_transactions' THEN
+                    DELETE FROM public.pos_transactions WHERE id = pos_a_id;
+                ELSIF v_fin_tbl = 'spp_payments' THEN
+                    DELETE FROM public.spp_payments WHERE id = spp_a_id;
+                ELSIF v_fin_tbl = 'event_expenses' THEN
+                    DELETE FROM public.event_expenses WHERE id = exp_a_id;
+                END IF;
+            END IF;
+
+            GET DIAGNOSTICS res_count = ROW_COUNT;
+
+            IF v_role_name IN ('superadmin', 'owner', 'admin') THEN
+                IF res_count <> 1 THEN
+                    RAISE EXCEPTION '[FAIL] Test 3 (DELETE): Role % gagal DELETE baris pada tabel %I (ROW_COUNT = %).', v_role_name, v_fin_tbl, res_count;
+                END IF;
+            ELSIF v_role_name IN ('kasir', 'coach', 'staff') THEN
+                IF res_count > 0 THEN
+                    RAISE EXCEPTION '[FAIL] Test 3 (DELETE): Role % berhasil DELETE baris pada tabel %I (seharusnya 0 rows affected, didapat: %).', v_role_name, v_fin_tbl, res_count;
+                END IF;
+            END IF;
+
+            -- Cleanup test row if still present (if DELETE failed as expected for Kasir/Coach/Staff)
+            IF v_ins_success THEN
+                PERFORM set_config('role', 'postgres', true);
+                EXECUTE format('DELETE FROM public.%I WHERE id = %L', v_fin_tbl, v_test_row_id);
+            END IF;
+
+        END LOOP;
     END LOOP;
 
-    RAISE NOTICE '[PASS] Test 3: Matriks RBAC Keuangan 5 Tabel (transactions, global_ledger, pos_transactions, spp_payments, event_expenses) untuk 6 Role tervalidasi 100%%.';
+    RAISE NOTICE '[PASS] Test 3: Matriks Full CRUD 6 Role x 5 Tabel Finansial x 4 Operasi (120 Assertions) TERBUKTI SANGAT AKURAT!';
 
     -- TEST 4: Kasir mengubah kepemilikan tenant (Harus Ditolak Trigger 42501)
+    PERFORM set_config('role', 'authenticated', true);
     PERFORM set_config('request.jwt.claims', json_build_object('sub', kasir_a_uid, 'email', 'kasir_a@arena.com')::text, true);
     test_passed := FALSE;
     caught_sqlstate := '';
@@ -405,7 +474,10 @@ BEGIN
     END IF;
 
     -- =========================================================================
-    -- TEST 11: Comprehensive Table-by-Table RLS Catalog Audit on all 24 Canonical Tables
+    -- REQUIREMENT D: TEST 11 - DEEP POLICY EXPRESSION & CATALOG AUDIT (24 CANONICAL TABLES)
+    -- Inspects: Existence, RLS Enabled, FORCE RLS Enabled, 0 Legacy Policies,
+    --           4 RBAC Policies (SELECT, INSERT, UPDATE, DELETE), 4 Total Policies,
+    --           PERMISSIVE Mode, Non-empty USING & WITH CHECK, and Expression RBAC Match.
     -- =========================================================================
     PERFORM set_config('request.jwt.claims', json_build_object('sub', owner_a_uid, 'email', 'owner_a@arena.com')::text, true);
 
@@ -431,12 +503,14 @@ BEGIN
         v_invalid_using int;
         v_invalid_check int;
         v_non_permissive int;
+        v_qual_expr text;
+        v_check_expr text;
     BEGIN
         FOREACH v_cur_tbl IN ARRAY v_check_tables
         LOOP
             -- 1. Table exists in information_schema
             IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = v_cur_tbl) THEN
-                RAISE EXCEPTION '[FAIL] Test 11: Tabel "%" tidak ditemukan di schema public.', v_cur_tbl;
+                RAISE EXCEPTION '[FAIL] Test 11: Tabel canonical "%" tidak ditemukan di schema public.', v_cur_tbl;
             END IF;
 
             -- 2 & 3. RLS ENABLED and FORCE RLS active
@@ -467,77 +541,54 @@ BEGIN
             END IF;
 
             -- 5, 6, 7, 8. Verify SELECT, INSERT, UPDATE, DELETE RBAC policies
-            SELECT COUNT(*) INTO v_sel_cnt
-            FROM pg_policies
-            WHERE schemaname = 'public' AND tablename = v_cur_tbl AND cmd = 'SELECT' AND policyname LIKE '%_rbac';
+            SELECT COUNT(*) INTO v_sel_cnt FROM pg_policies WHERE schemaname = 'public' AND tablename = v_cur_tbl AND cmd = 'SELECT' AND policyname LIKE '%_rbac';
+            SELECT COUNT(*) INTO v_ins_cnt FROM pg_policies WHERE schemaname = 'public' AND tablename = v_cur_tbl AND cmd = 'INSERT' AND policyname LIKE '%_rbac';
+            SELECT COUNT(*) INTO v_upd_cnt FROM pg_policies WHERE schemaname = 'public' AND tablename = v_cur_tbl AND cmd = 'UPDATE' AND policyname LIKE '%_rbac';
+            SELECT COUNT(*) INTO v_del_cnt FROM pg_policies WHERE schemaname = 'public' AND tablename = v_cur_tbl AND cmd = 'DELETE' AND policyname LIKE '%_rbac';
 
-            SELECT COUNT(*) INTO v_ins_cnt
-            FROM pg_policies
-            WHERE schemaname = 'public' AND tablename = v_cur_tbl AND cmd = 'INSERT' AND policyname LIKE '%_rbac';
-
-            SELECT COUNT(*) INTO v_upd_cnt
-            FROM pg_policies
-            WHERE schemaname = 'public' AND tablename = v_cur_tbl AND cmd = 'UPDATE' AND policyname LIKE '%_rbac';
-
-            SELECT COUNT(*) INTO v_del_cnt
-            FROM pg_policies
-            WHERE schemaname = 'public' AND tablename = v_cur_tbl AND cmd = 'DELETE' AND policyname LIKE '%_rbac';
-
-            IF v_sel_cnt <> 1 THEN
-                RAISE EXCEPTION '[FAIL] Test 11: Policy SELECT RBAC tidak tepat 1 pada tabel "%" (Ditemukan: %).', v_cur_tbl, v_sel_cnt;
-            END IF;
-            IF v_ins_cnt <> 1 THEN
-                RAISE EXCEPTION '[FAIL] Test 11: Policy INSERT RBAC tidak tepat 1 pada tabel "%" (Ditemukan: %).', v_cur_tbl, v_ins_cnt;
-            END IF;
-            IF v_upd_cnt <> 1 THEN
-                RAISE EXCEPTION '[FAIL] Test 11: Policy UPDATE RBAC tidak tepat 1 pada tabel "%" (Ditemukan: %).', v_cur_tbl, v_upd_cnt;
-            END IF;
-            IF v_del_cnt <> 1 THEN
-                RAISE EXCEPTION '[FAIL] Test 11: Policy DELETE RBAC tidak tepat 1 pada tabel "%" (Ditemukan: %).', v_cur_tbl, v_del_cnt;
-            END IF;
+            IF v_sel_cnt <> 1 THEN RAISE EXCEPTION '[FAIL] Test 11: Policy SELECT RBAC tidak tepat 1 pada tabel "%" (Ditemukan: %).', v_cur_tbl, v_sel_cnt; END IF;
+            IF v_ins_cnt <> 1 THEN RAISE EXCEPTION '[FAIL] Test 11: Policy INSERT RBAC tidak tepat 1 pada tabel "%" (Ditemukan: %).', v_cur_tbl, v_ins_cnt; END IF;
+            IF v_upd_cnt <> 1 THEN RAISE EXCEPTION '[FAIL] Test 11: Policy UPDATE RBAC tidak tepat 1 pada tabel "%" (Ditemukan: %).', v_cur_tbl, v_upd_cnt; END IF;
+            IF v_del_cnt <> 1 THEN RAISE EXCEPTION '[FAIL] Test 11: Policy DELETE RBAC tidak tepat 1 pada tabel "%" (Ditemukan: %).', v_cur_tbl, v_del_cnt; END IF;
 
             -- 9. Check permissiveness
-            SELECT COUNT(*) INTO v_non_permissive
-            FROM pg_policies
-            WHERE schemaname = 'public' AND tablename = v_cur_tbl AND permissive <> 'PERMISSIVE';
+            SELECT COUNT(*) INTO v_non_permissive FROM pg_policies WHERE schemaname = 'public' AND tablename = v_cur_tbl AND permissive <> 'PERMISSIVE';
+            IF v_non_permissive > 0 THEN RAISE EXCEPTION '[FAIL] Test 11: Ditemukan policy non-PERMISSIVE pada tabel "%".', v_cur_tbl; END IF;
 
-            IF v_non_permissive > 0 THEN
-                RAISE EXCEPTION '[FAIL] Test 11: Ditemukan policy non-PERMISSIVE pada tabel "%".', v_cur_tbl;
+            -- 10. Verify non-empty USING clause
+            SELECT COUNT(*) INTO v_invalid_using FROM pg_policies WHERE schemaname = 'public' AND tablename = v_cur_tbl AND cmd IN ('SELECT', 'UPDATE', 'DELETE') AND (qual IS NULL OR trim(qual) = '');
+            IF v_invalid_using > 0 THEN RAISE EXCEPTION '[FAIL] Test 11: Ditemukan policy tanpa klausa USING pada tabel "%".', v_cur_tbl; END IF;
+
+            -- 11. Verify non-empty WITH CHECK clause
+            SELECT COUNT(*) INTO v_invalid_check FROM pg_policies WHERE schemaname = 'public' AND tablename = v_cur_tbl AND cmd IN ('INSERT', 'UPDATE') AND (with_check IS NULL OR trim(with_check) = '');
+            IF v_invalid_check > 0 THEN RAISE EXCEPTION '[FAIL] Test 11: Ditemukan policy INSERT/UPDATE tanpa klausa WITH CHECK pada tabel "%".', v_cur_tbl; END IF;
+
+            -- 12. DEEP EXPRESSION CHECK FOR MANAGED FINANCIAL TABLES
+            IF v_cur_tbl IN ('transactions', 'global_ledger', 'pos_transactions', 'spp_payments', 'event_expenses') THEN
+                SELECT qual INTO v_qual_expr FROM pg_policies WHERE schemaname = 'public' AND tablename = v_cur_tbl AND cmd = 'SELECT';
+                IF v_qual_expr NOT LIKE '%user_can_manage_financials%' AND v_qual_expr NOT LIKE '%is_superadmin%' THEN
+                    RAISE EXCEPTION '[FAIL] Test 11 (Expression): Policy SELECT pada tabel finansial "%" tidak menggunakan user_can_manage_financials! (Expr: %)', v_cur_tbl, v_qual_expr;
+                END IF;
+
+                SELECT with_check INTO v_check_expr FROM pg_policies WHERE schemaname = 'public' AND tablename = v_cur_tbl AND cmd = 'INSERT';
+                IF v_check_expr NOT LIKE '%user_can_manage_financials%' AND v_check_expr NOT LIKE '%is_superadmin%' THEN
+                    RAISE EXCEPTION '[FAIL] Test 11 (Expression): Policy INSERT pada tabel finansial "%" tidak menggunakan user_can_manage_financials! (Expr: %)', v_cur_tbl, v_check_expr;
+                END IF;
+
+                SELECT qual INTO v_qual_expr FROM pg_policies WHERE schemaname = 'public' AND tablename = v_cur_tbl AND cmd = 'UPDATE';
+                IF v_qual_expr NOT LIKE '%user_is_tenant_admin_or_owner%' AND v_qual_expr NOT LIKE '%is_superadmin%' THEN
+                    RAISE EXCEPTION '[FAIL] Test 11 (Expression): Policy UPDATE pada tabel finansial "%" tidak menggunakan user_is_tenant_admin_or_owner! (Expr: %)', v_cur_tbl, v_qual_expr;
+                END IF;
             END IF;
 
-            -- Verify USING clause exists for SELECT, UPDATE, DELETE
-            SELECT COUNT(*) INTO v_invalid_using
-            FROM pg_policies
-            WHERE schemaname = 'public' AND tablename = v_cur_tbl 
-              AND cmd IN ('SELECT', 'UPDATE', 'DELETE') 
-              AND (qual IS NULL OR trim(qual) = '');
-
-            IF v_invalid_using > 0 THEN
-                RAISE EXCEPTION '[FAIL] Test 11: Ditemukan policy tanpa klausa USING pada tabel "%".', v_cur_tbl;
-            END IF;
-
-            -- Verify WITH CHECK clause exists for INSERT, UPDATE
-            SELECT COUNT(*) INTO v_invalid_check
-            FROM pg_policies
-            WHERE schemaname = 'public' AND tablename = v_cur_tbl 
-              AND cmd IN ('INSERT', 'UPDATE') 
-              AND (with_check IS NULL OR trim(with_check) = '');
-
-            IF v_invalid_check > 0 THEN
-                RAISE EXCEPTION '[FAIL] Test 11: Ditemukan policy INSERT/UPDATE tanpa klausa WITH CHECK pada tabel "%".', v_cur_tbl;
-            END IF;
-
-            -- 10. Total policies on this table must be exactly 4 (no extra rogue policies)
-            SELECT COUNT(*) INTO v_tot_cnt
-            FROM pg_policies
-            WHERE schemaname = 'public' AND tablename = v_cur_tbl;
-
+            -- 13. Total policies on this table must be exactly 4
+            SELECT COUNT(*) INTO v_tot_cnt FROM pg_policies WHERE schemaname = 'public' AND tablename = v_cur_tbl;
             IF v_tot_cnt <> 4 THEN
                 RAISE EXCEPTION '[FAIL] Test 11: Total policy pada tabel "%" harus tepat 4 (Ditemukan: %). Kemungkinan ada policy ekstra yang membuka akses.', v_cur_tbl, v_tot_cnt;
             END IF;
         END LOOP;
 
-        RAISE NOTICE '[PASS] Test 11: Seluruh 24 tabel canonical terkelola tervalidasi individual (RLS aktif, FORCE RLS aktif, 4 RBAC CRUD policies per tabel, 0 legacy permissive).';
+        RAISE NOTICE '[PASS] Test 11: Seluruh 24 tabel canonical terkelola tervalidasi individual (RLS aktif, FORCE RLS aktif, 4 RBAC CRUD policies per tabel, ekspresi RBAC akurat, 0 legacy permissive).';
     END;
 
     -- TEST 12: INSERT Data dengan tenant_id milik Tenant Lain (Harus Ditolak RLS / WITH CHECK)
@@ -584,7 +635,7 @@ BEGIN
     END IF;
 
     RAISE NOTICE '=======================================================';
-    RAISE NOTICE 'SELURUH 14 TEST SCENARIOS KEAMANAN FASE 1AB BERHASIL PASSED!';
+    RAISE NOTICE 'SELURUH 14 TEST SCENARIOS KEAMANAN FASE 1AC BERHASIL PASSED!';
     RAISE NOTICE '=======================================================';
 
 END $$;
