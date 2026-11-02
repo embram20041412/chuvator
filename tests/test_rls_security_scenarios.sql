@@ -1,5 +1,5 @@
 -- =========================================================================
--- CHUVATOR (CHUA SPORT CORE) — FINAL RLS & SECURITY TEST SUITE (FASE 1AG)
+-- CHUVATOR (CHUA SPORT CORE) — FINAL RLS & SECURITY TEST SUITE (FASE 1AI)
 -- Target: Supabase PostgreSQL (SQL Editor / Staging Environment)
 -- Mode: Non-Destructive Transaction (BEGIN ... ROLLBACK)
 -- Classification: SIMULATED TEST / STATIC CODE REVIEW
@@ -13,6 +13,9 @@
 --   7. Full Pre/Post Row State Immutability Verification on Cross-Tenant UPDATE Attempts
 --   8. Strict Fixture Safety Pre-checks (No ON CONFLICT DO UPDATE / DO NOTHING workarounds)
 --   9. Authenticated Role Context Verification with non-superuser RLS enforcement
+--  10. PostgreSQL RLS-bypass Context Verification via pg_roles (rolsuper OR rolbypassrls)
+--  11. Trigger Error Provenance & Exact MESSAGE_TEXT Assertions
+--  12. Caller Identity Verification (auth.uid() & public.is_superadmin() = FALSE)
 -- =========================================================================
 
 BEGIN;
@@ -58,6 +61,9 @@ DECLARE
     res_bool BOOLEAN;
     res_text TEXT;
     caught_sqlstate TEXT;
+    caught_msg TEXT;
+    v_rolsuper BOOLEAN;
+    v_rolbypassrls BOOLEAN;
 
     -- Financial CRUD Matrix Loop Variables
     v_fin_tbl text;
@@ -74,7 +80,7 @@ DECLARE
     v_initial_val NUMERIC;
     v_verify_val NUMERIC;
 
-    -- State integrity verification variables for Test 13 & 13B (Fase 1AG/1AH)
+    -- State integrity verification variables for Test 13 & 13B (Fase 1AI)
     v_pre_tenant_id text;
     v_pre_uid text;
     v_pre_role text;
@@ -84,7 +90,7 @@ DECLARE
     v_post_role text;
     v_post_status text;
 
-    -- State integrity verification variables for Test 13C (tenants table - Fase 1AH)
+    -- State integrity verification variables for Test 13C (tenants table - Fase 1AI)
     v_pre_t_id uuid;
     v_pre_t_tenant_id text;
     v_pre_t_owner_uid text;
@@ -97,7 +103,7 @@ DECLARE
     v_post_t_name text;
 BEGIN
     RAISE NOTICE '=======================================================';
-    RAISE NOTICE 'MEMULAI TEST SUITE KEAMANAN DATABASE CHUVATOR (FASE 1AH - HARDENING TRIGGER EXECUTION PROOF & RLS TEST INTEGRITY)';
+    RAISE NOTICE 'MEMULAI TEST SUITE KEAMANAN DATABASE CHUVATOR (FASE 1AI - FINAL VALIDATION: RLS-BYPASS CONTEXT, TRIGGER ERROR PROVENANCE & TEST DOCUMENTATION)';
     RAISE NOTICE 'MODE: SIMULATED TEST / STATIC CODE REVIEW';
     RAISE NOTICE '=======================================================';
 
@@ -984,13 +990,26 @@ BEGIN
     RAISE NOTICE '[PASS] Test 13: UPDATE memindahkan record staf ke tenant lain ditolak (SQLSTATE 42501) dan integritas state row utuh tanpa perubahan (tenant_id, uid, role, status verified).';
 
     -- =========================================================================
-    -- TEST 13B: PENGUJIAN FUNGSIONAL TRIGGER users_staff DENGAN RLS BYPASS (FASE 1AH)
+    -- TEST 13B: PENGUJIAN FUNGSIONAL TRIGGER users_staff DENGAN RLS BYPASS (FASE 1AI)
     -- Membuktikan bahwa penolakan perpindahan tenant dieksekusi secara independen
-    -- oleh BEFORE UPDATE trigger, bahkan saat RLS tidak membatasi operasi (role = postgres).
+    -- oleh BEFORE UPDATE trigger, saat RLS dilewati (role = postgres).
+    -- Memverifikasi:
+    --   a. Context aktif adalah postgres dengan rolsuper = TRUE atau rolbypassrls = TRUE
+    --   b. Caller auth.uid() adalah admin_a_uid dan public.is_superadmin() adalah FALSE
+    --   c. Penolakan berasal dari trigger dengan SQLSTATE 42501 dan MESSAGE_TEXT persis
+    --   d. State row users_staff tetap utuh tanpa mutasi
     -- =========================================================================
     -- 1. Snapshot state sebelum mutasi
     PERFORM set_config('role', 'postgres', true);
     PERFORM set_config('request.jwt.claims', '', true);
+
+    -- 1.a. Verifikasi RLS-bypass context via pg_roles
+    SELECT rolsuper, rolbypassrls INTO v_rolsuper, v_rolbypassrls
+    FROM pg_roles WHERE rolname = current_user;
+    IF current_user <> 'postgres' OR (COALESCE(v_rolsuper, false) = false AND COALESCE(v_rolbypassrls, false) = false) THEN
+        RAISE EXCEPTION '[FAIL] Test 13B: Context bukan RLS-bypass valid (current_user=%, rolsuper=%, rolbypassrls=%)', current_user, v_rolsuper, v_rolbypassrls;
+    END IF;
+
     SELECT tenant_id::text, uid, role, status
     INTO v_pre_tenant_id, v_pre_uid, v_pre_role, v_pre_status
     FROM public.users_staff
@@ -998,22 +1017,34 @@ BEGIN
 
     -- 2. Jalankan UPDATE dalam konteks role = postgres (RLS Bypassed),
     --    namun dengan JWT claims Admin Tenant A (non-superadmin).
-    --    Di sini RLS tabel tidak aktif memfilter, tetapi trigger BEFORE UPDATE
+    --    Di sini RLS tabel tidak memfilter, tetapi trigger BEFORE UPDATE
     --    terpanggil dan mengevaluasi is_superadmin() = FALSE, sehingga mendeteksi
-    --    perpindahan tenant_id dan melempar SQLSTATE 42501!
+    --    perpindahan tenant_id dan melempar SQLSTATE 42501 dengan pesan spesifik!
     PERFORM set_config('role', 'postgres', true);
     PERFORM set_config('request.jwt.claims', json_build_object('sub', admin_a_uid, 'email', 'admin_a@arena.com')::text, true);
+
+    -- 2.a. Verifikasi identitas pemanggil dan public.is_superadmin() = FALSE
+    IF auth.uid()::text IS DISTINCT FROM admin_a_uid THEN
+        RAISE EXCEPTION '[FAIL] Test 13B: auth.uid() tidak sesuai (expected: %, got: %)', admin_a_uid, auth.uid();
+    END IF;
+    IF public.is_superadmin() IS NOT FALSE THEN
+        RAISE EXCEPTION '[FAIL] Test 13B: public.is_superadmin() harus FALSE untuk pemanggil uji non-superadmin';
+    END IF;
+
     test_passed := FALSE;
     caught_sqlstate := '';
+    caught_msg := '';
     BEGIN
         UPDATE public.users_staff SET tenant_id = tenant_b::text WHERE id = staff_staff_id;
     EXCEPTION WHEN OTHERS THEN
-        GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE;
-        IF caught_sqlstate = '42501' THEN test_passed := TRUE; END IF;
+        GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE, caught_msg = MESSAGE_TEXT;
+        IF caught_sqlstate = '42501' AND caught_msg = 'Mencoba memindahkan record staf ke tenant lain ditolak.' THEN
+            test_passed := TRUE;
+        END IF;
     END;
 
     IF NOT test_passed THEN
-        RAISE EXCEPTION '[FAIL] Test 13B: Mutasi lintas tenant pada users_staff dalam konteks RLS-bypass tidak diblokir oleh trigger dengan SQLSTATE 42501 (Caught: %).', caught_sqlstate;
+        RAISE EXCEPTION '[FAIL] Test 13B: Mutasi lintas tenant pada users_staff dalam konteks RLS-bypass tidak diblokir oleh trigger dengan pesan/state yang tepat (Caught SQLSTATE: %, Message: %)', caught_sqlstate, caught_msg;
     END IF;
 
     -- 3. Verifikasi snapshot integritas state row tetap utuh
@@ -1031,16 +1062,29 @@ BEGIN
         RAISE EXCEPTION '[FAIL] Test 13B: Integritas record users_staff rusak setelah penolakan trigger!';
     END IF;
 
-    RAISE NOTICE '[PASS] Test 13B: Mutasi lintas tenant pada users_staff dalam konteks RLS-bypass berhasil diblokir secara independen oleh trigger trg_protect_users_staff_columns (SQLSTATE 42501) dan state row 100%% utuh.';
+    RAISE NOTICE '[PASS] Test 13B: Mutasi lintas tenant pada users_staff dalam konteks RLS-bypass berhasil diblokir secara independen oleh trigger trg_protect_users_staff_columns (SQLSTATE 42501, Message: "%", rolsuper/rolbypassrls verified, auth.uid() verified, is_superadmin() FALSE) dan state row 100%% utuh.', caught_msg;
 
     -- =========================================================================
-    -- TEST 13C: PENGUJIAN FUNGSIONAL TRIGGER tenants (KOLOM SENSITIF IMUTABEL - FASE 1AH)
+    -- TEST 13C: PENGUJIAN FUNGSIONAL TRIGGER tenants (KOLOM SENSITIF IMUTABEL - FASE 1AI)
     -- Membuktikan bahwa trg_protect_tenants_columns menolak modifikasi id, tenant_id,
     -- owner_uid, dan owner_email oleh pengguna non-superadmin secara independen dari RLS.
+    -- Memverifikasi:
+    --   a. Context aktif adalah postgres dengan rolsuper = TRUE atau rolbypassrls = TRUE
+    --   b. Caller auth.uid() adalah owner_a_uid dan public.is_superadmin() adalah FALSE
+    --   c. Penolakan berasal dari trigger dengan SQLSTATE 42501 dan MESSAGE_TEXT persis per kolom
+    --   d. State row tenants tetap utuh tanpa mutasi
     -- =========================================================================
     -- 1. Snapshot state awal baris tenants (tenant_a)
     PERFORM set_config('role', 'postgres', true);
     PERFORM set_config('request.jwt.claims', '', true);
+
+    -- 1.a. Verifikasi RLS-bypass context via pg_roles
+    SELECT rolsuper, rolbypassrls INTO v_rolsuper, v_rolbypassrls
+    FROM pg_roles WHERE rolname = current_user;
+    IF current_user <> 'postgres' OR (COALESCE(v_rolsuper, false) = false AND COALESCE(v_rolbypassrls, false) = false) THEN
+        RAISE EXCEPTION '[FAIL] Test 13C: Context bukan RLS-bypass valid (current_user=%, rolsuper=%, rolbypassrls=%)', current_user, v_rolsuper, v_rolbypassrls;
+    END IF;
+
     SELECT id, tenant_id::text, owner_uid, owner_email, name
     INTO v_pre_t_id, v_pre_t_tenant_id, v_pre_t_owner_uid, v_pre_t_owner_email, v_pre_t_name
     FROM public.tenants
@@ -1050,58 +1094,80 @@ BEGIN
         RAISE EXCEPTION '[FAIL] Test 13C: Fixture record tenant_a tidak ditemukan.';
     END IF;
 
-    -- Skenario C.1: Percobaan mengubah tenant_id oleh non-superadmin (RLS Bypassed via postgres role)
+    -- Pasang konteks identitas Owner A (non-superadmin) dengan RLS Bypassed via postgres role
     PERFORM set_config('role', 'postgres', true);
     PERFORM set_config('request.jwt.claims', json_build_object('sub', owner_a_uid, 'email', 'owner_a@arena.com')::text, true);
+
+    -- Verifikasi identitas pemanggil dan public.is_superadmin() = FALSE
+    IF auth.uid()::text IS DISTINCT FROM owner_a_uid THEN
+        RAISE EXCEPTION '[FAIL] Test 13C: auth.uid() tidak sesuai (expected: %, got: %)', owner_a_uid, auth.uid();
+    END IF;
+    IF public.is_superadmin() IS NOT FALSE THEN
+        RAISE EXCEPTION '[FAIL] Test 13C: public.is_superadmin() harus FALSE untuk pemanggil uji non-superadmin';
+    END IF;
+
+    -- Skenario C.1: Percobaan mengubah tenant_id oleh non-superadmin (RLS Bypassed via postgres role)
     test_passed := FALSE;
     caught_sqlstate := '';
+    caught_msg := '';
     BEGIN
         UPDATE public.tenants SET tenant_id = 'tenant-hijacked' WHERE id = tenant_a;
     EXCEPTION WHEN OTHERS THEN
-        GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE;
-        IF caught_sqlstate = '42501' THEN test_passed := TRUE; END IF;
+        GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE, caught_msg = MESSAGE_TEXT;
+        IF caught_sqlstate = '42501' AND caught_msg = 'Perubahan tenant_id dilarang.' THEN
+            test_passed := TRUE;
+        END IF;
     END;
     IF NOT test_passed THEN
-        RAISE EXCEPTION '[FAIL] Test 13C.1: Mutasi tenant_id pada tabel tenants tidak diblokir trigger dengan SQLSTATE 42501 (Caught: %).', caught_sqlstate;
+        RAISE EXCEPTION '[FAIL] Test 13C.1: Mutasi tenant_id pada tabel tenants tidak diblokir trigger dengan pesan/state yang tepat (Caught SQLSTATE: %, Message: %).', caught_sqlstate, caught_msg;
     END IF;
 
     -- Skenario C.2: Percobaan mengubah primary key id oleh non-superadmin
     test_passed := FALSE;
     caught_sqlstate := '';
+    caught_msg := '';
     BEGIN
         UPDATE public.tenants SET id = gen_random_uuid() WHERE id = tenant_a;
     EXCEPTION WHEN OTHERS THEN
-        GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE;
-        IF caught_sqlstate = '42501' THEN test_passed := TRUE; END IF;
+        GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE, caught_msg = MESSAGE_TEXT;
+        IF caught_sqlstate = '42501' AND caught_msg = 'Perubahan primary key tenant (id) dilarang.' THEN
+            test_passed := TRUE;
+        END IF;
     END;
     IF NOT test_passed THEN
-        RAISE EXCEPTION '[FAIL] Test 13C.2: Mutasi id primary key pada tabel tenants tidak diblokir trigger dengan SQLSTATE 42501 (Caught: %).', caught_sqlstate;
+        RAISE EXCEPTION '[FAIL] Test 13C.2: Mutasi id primary key pada tabel tenants tidak diblokir trigger dengan pesan/state yang tepat (Caught SQLSTATE: %, Message: %).', caught_sqlstate, caught_msg;
     END IF;
 
     -- Skenario C.3: Percobaan memindahkan kepemilikan owner_uid via UPDATE langsung oleh non-superadmin
     test_passed := FALSE;
     caught_sqlstate := '';
+    caught_msg := '';
     BEGIN
         UPDATE public.tenants SET owner_uid = owner_b_uid WHERE id = tenant_a;
     EXCEPTION WHEN OTHERS THEN
-        GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE;
-        IF caught_sqlstate = '42501' THEN test_passed := TRUE; END IF;
+        GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE, caught_msg = MESSAGE_TEXT;
+        IF caught_sqlstate = '42501' AND caught_msg = 'Pemindahan kepemilikan tenant (owner_uid) dilarang via UPDATE biasa.' THEN
+            test_passed := TRUE;
+        END IF;
     END;
     IF NOT test_passed THEN
-        RAISE EXCEPTION '[FAIL] Test 13C.3: Mutasi owner_uid pada tabel tenants tidak diblokir trigger dengan SQLSTATE 42501 (Caught: %).', caught_sqlstate;
+        RAISE EXCEPTION '[FAIL] Test 13C.3: Mutasi owner_uid pada tabel tenants tidak diblokir trigger dengan pesan/state yang tepat (Caught SQLSTATE: %, Message: %).', caught_sqlstate, caught_msg;
     END IF;
 
     -- Skenario C.4: Percobaan mengubah owner_email via UPDATE langsung oleh non-superadmin
     test_passed := FALSE;
     caught_sqlstate := '';
+    caught_msg := '';
     BEGIN
         UPDATE public.tenants SET owner_email = 'attacker@arena.com' WHERE id = tenant_a;
     EXCEPTION WHEN OTHERS THEN
-        GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE;
-        IF caught_sqlstate = '42501' THEN test_passed := TRUE; END IF;
+        GET STACKED DIAGNOSTICS caught_sqlstate = RETURNED_SQLSTATE, caught_msg = MESSAGE_TEXT;
+        IF caught_sqlstate = '42501' AND caught_msg = 'Perubahan owner_email dilarang via UPDATE biasa.' THEN
+            test_passed := TRUE;
+        END IF;
     END;
     IF NOT test_passed THEN
-        RAISE EXCEPTION '[FAIL] Test 13C.4: Mutasi owner_email pada tabel tenants tidak diblokir trigger dengan SQLSTATE 42501 (Caught: %).', caught_sqlstate;
+        RAISE EXCEPTION '[FAIL] Test 13C.4: Mutasi owner_email pada tabel tenants tidak diblokir trigger dengan pesan/state yang tepat (Caught SQLSTATE: %, Message: %).', caught_sqlstate, caught_msg;
     END IF;
 
     -- 3. Verifikasi snapshot integritas baris tenants tetap 100% utuh
@@ -1123,7 +1189,7 @@ BEGIN
     -- Kembalikan role authenticated
     PERFORM set_config('role', 'authenticated', true);
 
-    RAISE NOTICE '[PASS] Test 13C: Seluruh upaya mutasi kolom sensitif pada tabel tenants (tenant_id, id, owner_uid, owner_email) berhasil ditolak oleh trigger trg_protect_tenants_columns (SQLSTATE 42501) dan state baris tetap utuh.';
+    RAISE NOTICE '[PASS] Test 13C: Seluruh 4 upaya mutasi kolom sensitif pada tabel tenants (tenant_id, id, owner_uid, owner_email) berhasil ditolak oleh trigger trg_protect_tenants_columns (SQLSTATE 42501, proven trigger MESSAGE_TEXT, rolsuper/rolbypassrls verified, auth.uid() verified, is_superadmin() FALSE) dan state baris tetap utuh.';
 
     -- TEST 14: DELETE Lintas Tenant (Harus Ditolak RLS / 0 rows deleted)
     PERFORM set_config('request.jwt.claims', json_build_object('sub', owner_a_uid, 'email', 'owner_a@arena.com')::text, true);
@@ -1136,7 +1202,7 @@ BEGIN
     END IF;
 
     RAISE NOTICE '=======================================================';
-    RAISE NOTICE 'SELURUH 16 TEST SCENARIOS KEAMANAN FASE 1AH BERHASIL PASSED!';
+    RAISE NOTICE 'SELURUH 16 TEST SCENARIOS KEAMANAN FASE 1AI BERHASIL PASSED!';
     RAISE NOTICE '=======================================================';
 
 END $$;
