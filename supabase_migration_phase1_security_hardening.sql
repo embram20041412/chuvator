@@ -1,17 +1,18 @@
 -- =========================================================================
--- CHUVATOR (CHUA SPORT CORE) — FINAL SUPABASE SECURITY HARDENING MIGRATION
+-- CHUVATOR (CHUA SPORT CORE) — FINAL SUPABASE SECURITY HARDENING MIGRATION (FASE 1U-HARDENED)
 -- Target: Supabase PostgreSQL (SQL Editor)
 -- Architecture: React Client SDK (Cloudflare Pages) -> Supabase PostgreSQL (RLS)
 -- Key Guarantees:
---   1. Safe Verified Platform Superadmin Bootstrap (bootstrap_platform_superadmin RPC)
---   2. Hardened Tenant Column Protection Trigger (protect_tenants_columns) protecting id, tenant_id, owner_uid, owner_email
---   3. Hardened Staff Column Protection Trigger (protect_users_staff_columns) preventing direct uid mutation
---   4. Valid CTE Multi-Row Candidate Locking (WITH locked_candidates AS (...) SELECT array_agg(id) FOR UPDATE)
---   5. Engine Partial Unique Index (idx_invitations_pending_unique) on Immutable Predicate
---   6. Sealed token_hash on invitations (Column-level SELECT Grant excluding token_hash)
---   7. Full CRUD RLS Matrix policies across all 25+ tenant-scoped tables
---   8. Targeted SECURITY DEFINER search_path = public, extensions, pg_temp
---   9. Read-only PostgreSQL Catalog Verification Queries appended at end
+--   1. Strict Owner Role Boundary (Tenant ownership derived EXCLUSIVELY from tenants.owner_uid)
+--   2. Complete Direct Staff UID Mutation Sealing (users_staff.uid MUST be bound via claim_staff_invitation)
+--   3. Prevention of Role Escalation (Owner/Admin CANNOT set role to 'owner' or 'superadmin' on users_staff)
+--   4. Safe Verified Platform Superadmin Bootstrap (bootstrap_platform_superadmin RPC)
+--   5. Hardened Tenant Column Protection Trigger (protect_tenants_columns) protecting id, tenant_id, owner_uid, owner_email
+--   6. Valid CTE Multi-Row Candidate Locking (WITH locked_candidates AS (...) SELECT array_agg(id) FOR UPDATE)
+--   7. Engine Partial Unique Index (idx_invitations_pending_unique) on Immutable Predicate
+--   8. Sealed token_hash on invitations (Column-level SELECT Grant excluding token_hash)
+--   9. Full CRUD RLS Matrix policies across all 25+ tenant-scoped tables
+--  10. Targeted SECURITY DEFINER search_path = public, extensions, pg_temp
 -- =========================================================================
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto" WITH SCHEMA extensions;
@@ -50,8 +51,8 @@ CREATE TABLE IF NOT EXISTS public.invitations (
     token_hash TEXT UNIQUE NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending', -- 'pending', 'accepted', 'revoked', 'expired'
     created_by_uid TEXT NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '7 days'),
+    created_at TIMESTAMPTZ DEFAULT now(),
+    expires_at TIMESTAMPTZ DEFAULT (now() + interval '7 days'),
     accepted_at TIMESTAMPTZ,
     accepted_by_uid TEXT,
     revoked_at TIMESTAMPTZ,
@@ -169,6 +170,7 @@ FOR DELETE USING (
 -- =========================================================================
 
 -- 1. get_user_tenant_role(check_tenant_id TEXT)
+-- Strict Role Hierarchy: Ownership derived EXCLUSIVELY from tenants.owner_uid
 CREATE OR REPLACE FUNCTION public.get_user_tenant_role(check_tenant_id TEXT)
 RETURNS TEXT
 LANGUAGE plpgsql
@@ -192,17 +194,17 @@ BEGIN
         RETURN NULL;
     END IF;
 
-    -- Owner Check on tenants (Fail-Closed: is_active MUST be TRUE)
+    -- Owner Check EXCLUSIVELY on public.tenants table
     IF EXISTS (
         SELECT 1 FROM public.tenants t
-        WHERE (t.tenant_id::text = check_tenant_id OR t.id::text = check_tenant_id)
+        WHERE t.tenant_id::text = check_tenant_id
           AND t.owner_uid::text = caller_uid
           AND COALESCE(t.is_active, FALSE) = TRUE
     ) THEN
         RETURN 'owner';
     END IF;
 
-    -- Staff Check on users_staff (Fail-Closed: is_active MUST be TRUE)
+    -- Staff Check on public.users_staff table
     SELECT LOWER(s.role) INTO staff_role
     FROM public.users_staff s
     WHERE s.tenant_id::text = check_tenant_id
@@ -216,8 +218,7 @@ BEGIN
         ELSIF staff_role IN ('coach', 'pelatih') THEN RETURN 'coach';
         ELSIF staff_role IN ('admin', 'administrator') THEN RETURN 'admin';
         ELSIF staff_role IN ('staff', 'staf') THEN RETURN 'staff';
-        ELSIF staff_role IN ('owner') THEN RETURN 'owner';
-        ELSE RETURN NULL;
+        ELSE RETURN NULL; -- Excludes 'owner' or 'superadmin' from users_staff
         END IF;
     END IF;
 
@@ -306,7 +307,7 @@ BEGIN
 
     SELECT COALESCE(is_active, FALSE) INTO v_tenant_active
     FROM public.tenants
-    WHERE tenant_id::text = target_tenant_id OR id::text = target_tenant_id;
+    WHERE tenant_id::text = target_tenant_id;
 
     IF v_tenant_active IS NULL OR v_tenant_active = FALSE THEN
         RAISE EXCEPTION 'Tenant % tidak aktif atau tidak ditemukan.', target_tenant_id;
@@ -466,7 +467,7 @@ BEGIN
 
     SELECT name INTO v_tenant_name
     FROM public.tenants
-    WHERE tenant_id::text = v_inv.tenant_id OR id::text = v_inv.tenant_id;
+    WHERE tenant_id::text = v_inv.tenant_id;
 
     RETURN jsonb_build_object(
         'is_valid', true,
@@ -650,7 +651,7 @@ BEGIN
 END;
 $$;
 
--- Targeted REVOKE & GRANT per specific audited security function (Preserves other app functions intact)
+-- Targeted REVOKE & GRANT per specific audited security function
 REVOKE EXECUTE ON FUNCTION public.is_superadmin() FROM PUBLIC, anon;
 REVOKE EXECUTE ON FUNCTION public.bootstrap_platform_superadmin() FROM PUBLIC, anon;
 REVOKE EXECUTE ON FUNCTION public.get_user_tenant_role(TEXT) FROM PUBLIC, anon;
@@ -684,7 +685,7 @@ GRANT SELECT (
 -- 5. TRIGGER PROTECTION ON SENSITIVE COLUMNS
 -- =========================================================================
 
--- 1. Trigger pada users_staff
+-- 1. Trigger pada users_staff (Strict UID mutation sealing + Owner/Superadmin escalation blocking)
 CREATE OR REPLACE FUNCTION public.protect_users_staff_columns()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -713,19 +714,16 @@ BEGIN
             END IF;
         END IF;
 
-        -- Direct mutation of bound UID dilarang
-        IF OLD.uid IS NOT NULL AND OLD.uid IS DISTINCT FROM NEW.uid THEN
-            RAISE EXCEPTION 'Auth UID staf yang sudah terikat tidak dapat diubah.';
+        -- Strictly block direct UID mutation via UPDATE statements on users_staff
+        -- UID binding MUST be performed exclusively via claim_staff_invitation RPC
+        IF OLD.uid IS DISTINCT FROM NEW.uid THEN
+            RAISE EXCEPTION 'Pengikatan atau pengubahan Auth UID staf secara langsung dilarang. Gunakan RPC claim_staff_invitation().';
         END IF;
 
-        -- Direct binding of UID via UPDATE dilarang untuk UID pengguna lain
-        IF OLD.uid IS NULL AND NEW.uid IS NOT NULL AND NEW.uid <> auth.uid()::text THEN
-            RAISE EXCEPTION 'Pengikatan Auth UID staf lain secara langsung dilarang. Gunakan mekanisme klaim undangan.';
+        -- Prevent escalation to owner or superadmin role via users_staff UPDATE
+        IF LOWER(COALESCE(NEW.role, '')) IN ('owner', 'superadmin') THEN
+            RAISE EXCEPTION 'Pengangkatan role Owner atau Superadmin via users_staff dilarang.';
         END IF;
-    END IF;
-
-    IF LOWER(COALESCE(NEW.role, '')) = 'superadmin' AND NOT public.is_superadmin() THEN
-        RAISE EXCEPTION 'Pengangkatan role superadmin dilarang.';
     END IF;
 
     RETURN NEW;
@@ -826,7 +824,7 @@ FOR SELECT USING (
       LOWER(COALESCE(owner_email, '')) = LOWER(COALESCE(auth.jwt() ->> 'email', ''))
       AND EXISTS (SELECT 1 FROM auth.users u WHERE u.id = auth.uid() AND u.email_confirmed_at IS NOT NULL)
     )
-    OR public.get_user_tenant_role(COALESCE(tenant_id::text, id::text)) IS NOT NULL
+    OR public.get_user_tenant_role(tenant_id::text) IS NOT NULL
 );
 
 DROP POLICY IF EXISTS "tenants_insert_hardened" ON public.tenants;
@@ -897,8 +895,18 @@ FOR DELETE USING (
 );
 
 -- =========================================================================
--- 7. READ-ONLY VERIFICATION QUERIES (RUN AFTER MIGRATION IN STAGING)
+-- 7. READ-ONLY VERIFICATION QUERIES (PREFLIGHT AUDIT & CATALOG INSPECTION)
 -- =========================================================================
+
+-- Preflight Query 0: Preflight audit for potential duplicate pending invitations before index creation
+SELECT 
+    tenant_id, 
+    LOWER(trim(invite_email)) AS clean_email, 
+    COUNT(*) AS pending_count
+FROM public.invitations
+WHERE status = 'pending' AND accepted_at IS NULL AND revoked_at IS NULL
+GROUP BY tenant_id, LOWER(trim(invite_email))
+HAVING COUNT(*) > 1;
 
 -- Query 1: Verify Column Privileges on invitations (token_hash must be false)
 SELECT 
