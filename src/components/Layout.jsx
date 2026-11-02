@@ -150,12 +150,16 @@ export default function Layout({ userProfile }) {
     { id: 'staf', label: 'Kelola Staf & Pelatih', path: '/pengaturan?tab=staf' },
   ];
 
+  const [logoutError, setLogoutError] = useState(null);
+
   const handleLogout = async () => {
+    setLogoutError(null);
     try {
       await logoutUser();
       navigate('/login', { replace: true });
     } catch (err) {
       console.error('Logout error:', err);
+      setLogoutError(err?.message || 'Gagal keluar dari sesi. Silakan coba kembali.');
     }
   };
 
@@ -183,6 +187,22 @@ export default function Layout({ userProfile }) {
 
   return (
     <div className="h-screen w-screen overflow-hidden flex flex-col lg:flex-row font-sans text-slate-800 dark:text-slate-100 text-sm bg-[#EBF0EE] dark:bg-[#0C1412]">
+      {logoutError && (
+        <div 
+          role="alert"
+          className="fixed top-4 right-4 z-50 bg-red-600 text-white px-4 py-3 rounded-2xl shadow-xl flex items-center space-x-3 text-xs font-semibold"
+        >
+          <span>{logoutError}</span>
+          <button 
+            type="button" 
+            onClick={() => setLogoutError(null)} 
+            className="text-white hover:text-red-200 font-bold px-1 ml-2"
+            aria-label="Tutup pesan error logout"
+          >
+            &times;
+          </button>
+        </div>
+      )}
       
       {/* DESKTOP SIDEBAR (>= 1024px) */}
       <aside className={`hidden lg:flex flex-col ${isSidebarCollapsed ? 'w-20' : 'w-64'} bg-[#354944] dark:bg-[#14211E] fixed top-3 bottom-3 left-3 z-30 rounded-3xl transition-all duration-300 select-none text-slate-200 border-l border-t border-b border-r-0 border-[#425953] dark:border-[#233531] shadow-none`}>

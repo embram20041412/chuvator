@@ -23,6 +23,11 @@ export async function verifySuperadminStatus(user, client = supabase) {
   try {
     // Langkah 1: Cek langsung via RPC is_superadmin()
     const { data: isSuper, error: superErr } = await client.rpc('is_superadmin');
+    
+    if (superErr) {
+      console.warn('[verifySuperadminStatus] is_superadmin RPC error:', superErr.message || superErr);
+    }
+
     if (!superErr && isSuper === true) {
       return {
         uid: userId,
@@ -37,11 +42,15 @@ export async function verifySuperadminStatus(user, client = supabase) {
       };
     }
 
-    // Langkah 2: Jika belum terikat (auth_uid masih NULL), panggil bootstrap_platform_superadmin()
-    if (!isSuper) {
+    // Langkah 2: Jalankan bootstrap HANYA jika is_superadmin() TIDAK error dan bernilai eksplisit FALSE
+    // Sesuai prinsip ketat: !superErr && isSuper === false
+    // Jika superErr terjadi atau isSuper bernilai null/undefined, bootstrap DILARANG dijalankan
+    if (!superErr && isSuper === false) {
       try {
         const { data: bootResult, error: bootErr } = await client.rpc('bootstrap_platform_superadmin');
-        if (!bootErr && (bootResult === true || bootResult?.success === true)) {
+        if (bootErr) {
+          console.warn('[verifySuperadminStatus] bootstrap_platform_superadmin RPC error:', bootErr.message || bootErr);
+        } else if (bootResult === true || bootResult?.success === true) {
           // Langkah 3: Re-verifikasi dengan is_superadmin() untuk memastikan baris database telah terikat
           const { data: recheckSuper, error: recheckErr } = await client.rpc('is_superadmin');
           if (!recheckErr && recheckSuper === true) {
@@ -63,8 +72,9 @@ export async function verifySuperadminStatus(user, client = supabase) {
       }
     }
 
-    // Langkah 4: Fallback opsional ke tabel platform_superadmins hanya dengan kolom kanonis 'auth_uid'
-    // CATATAN KEAMANAN: Tabel platform_superadmins TIDAK MEMILIKI kolom user_id. Gunakan auth_uid.
+    // Langkah 4: Fallback opsional ke tabel platform_superadmins HANYA jika terdapat verifikasi database
+    // independen yang benar-benar berhasil dengan kolom kanonis 'auth_uid' yang sedang aktif.
+    // DILARANG KERAS MENGGUNAKAN user_id ATAU PENCOCOKAN EMAIL FRONTEND TANPA BINDING DATABASE.
     try {
       const { data: superadminRow, error: rowErr } = await client
         .from('platform_superadmins')
@@ -357,18 +367,29 @@ export async function loginWithEmailAndPassword(email, password) {
 }
 
 /**
- * Sign out current user from Supabase and clear application storage
+ * Sign out current user from Supabase and clear application storage & caches
+ * Menggunakan scope: 'local' dan fail-closed: jika sign out gagal, throw error ke UI
+ * dan jangan bersihkan cache seolah-olah pengguna sudah logout.
  */
 export async function logoutUser() {
+  // 1. Eksekusi sign-out Supabase terlebih dahulu dengan scope 'local'
+  await supabaseAuthService.logout();
+
+  // 2. Bersihkan storage aplikasi, cache tenant, dan finansial hanya jika sign-out berhasil
   try {
-    localStorage.removeItem('demo_user_profile');
-    localStorage.removeItem('activeStudent');
-    localStorage.removeItem('activeAcademyId');
-    sessionStorage.clear();
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('demo_user_profile');
+      localStorage.removeItem('activeStudent');
+      localStorage.removeItem('activeAcademyId');
+      localStorage.removeItem('chuvator_tenant_cache');
+      localStorage.removeItem('chuvator_finance_cache');
+    }
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.clear();
+    }
   } catch (e) {
     console.warn('[logoutUser] Storage cleanup warning:', e);
   }
-  await supabaseAuthService.logout();
 }
 
 // Sequence counter to discard stale async verification requests

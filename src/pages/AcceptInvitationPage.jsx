@@ -175,10 +175,11 @@ export default function AcceptInvitationPage() {
   const handleSignOut = async () => {
     try {
       await logoutUser();
+      setCurrentUser(null);
     } catch (err) {
-      console.warn('Sign out warning:', err);
+      console.error('Sign out error:', err);
+      setErrorMsg('Gagal keluar dari sesi: ' + (err.message || 'Terjadi kesalahan jaringan'));
     }
-    setCurrentUser(null);
   };
 
   const roleLabels = {

@@ -1,13 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../config/supabase';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { supabase } from '../config/supabase.js';
 
 /**
  * Custom Hook untuk membaca dan memverifikasi peran pengguna (Role) serta Tenant ID
  * secara langsung dari SUMBER DATABASE RESMI SUPABASE (PostgreSQL Tables & RPC).
  *
- * ATURAN KEAMANAN:
- * - DILARANG menggunakan `user_metadata` atau `localStorage` untuk otorisasi keamanan atau tenant isolation.
- * - Peran diverifikasi via RPC `is_superadmin()`, tabel `tenants`, tabel `users_staff`, dan RPC `get_user_tenant_role()`.
+ * JAMINAN KEAMANAN & LIFECYCLE:
+ * 1. Epoch / Sequence Counter: Setiap event auth atau verifikasi menyimpan sequence. Hasil async
+ *    dari verifikasi lama (stale) otomatis dibuang jika session telah berubah.
+ * 2. Fail-Closed: Error RPC atau ketiadaan data selalu menghasilkan role null dan tidak ada eskalasi.
+ * 3. Immediate Reset: Ketika SIGNED_OUT terjadi, state segera direset tanpa menunggu DB query.
+ * 4. Superadmin Binding: Bootstrap hanya dipanggil jika !superErr && isSuper === false.
+ * 5. Kolom Kanonis: Hanya menggunakan auth_uid pada platform_superadmins (BUKAN user_id).
  */
 export default function useAuthRole(userProfile) {
   const [role, setRole] = useState(userProfile?.role || null);
@@ -17,41 +21,70 @@ export default function useAuthRole(userProfile) {
   const [verifiedFromDb, setVerifiedFromDb] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const verifyRoleFromDatabase = useCallback(async (user) => {
+  // Epoch / Sequence Counter untuk membatalkan hasil verifikasi kedaluwarsa & race conditions
+  const sequenceRef = useRef(0);
+  const isMountedRef = useRef(true);
+
+  const resetAuthState = useCallback((isVerified = true) => {
+    setRole(null);
+    setTenantId(null);
+    setVerifiedFromDb(isVerified);
+    setLoading(false);
+  }, []);
+
+  const verifyRoleFromDatabase = useCallback(async (user, expectedSeq) => {
+    // 0. Jika pengguna kosong (misal setelah SIGNED_OUT atau sesi anon)
     if (!user) {
-      setRole(null);
-      setTenantId(null);
-      setVerifiedFromDb(false);
-      setLoading(false);
+      if (isMountedRef.current && expectedSeq === sequenceRef.current) {
+        resetAuthState(true);
+      }
       return;
     }
 
     try {
       const callerUid = user.id || user.uid;
+      if (!callerUid) {
+        if (isMountedRef.current && expectedSeq === sequenceRef.current) {
+          resetAuthState(true);
+        }
+        return;
+      }
 
-      // 1. Periksa apakah pengguna adalah Platform Superadmin via RPC tepercaya atau tabel platform_superadmins
+      // 1. Periksa apakah pengguna adalah Platform Superadmin via RPC tepercaya
       try {
         const { data: isSuper, error: superErr } = await supabase.rpc('is_superadmin');
+        
+        if (superErr) {
+          console.warn('[useAuthRole] is_superadmin RPC error:', superErr.message || superErr);
+        }
+
         if (!superErr && isSuper === true) {
-          setRole('superadmin');
-          setTenantId(userProfile?.tenantId || null);
-          setVerifiedFromDb(true);
-          setLoading(false);
+          if (isMountedRef.current && expectedSeq === sequenceRef.current) {
+            setRole('superadmin');
+            setTenantId(userProfile?.tenantId || null);
+            setVerifiedFromDb(true);
+            setLoading(false);
+          }
           return;
         }
 
-        // Jika belum terikat (auth_uid masih NULL), panggil bootstrap_platform_superadmin()
-        if (!isSuper) {
+        // Jalankan bootstrap HANYA jika is_superadmin() TIDAK error dan bernilai eksplisit FALSE
+        // Prinsip ketat: !superErr && isSuper === false
+        if (!superErr && isSuper === false) {
           try {
             const { data: bootResult, error: bootErr } = await supabase.rpc('bootstrap_platform_superadmin');
-            if (!bootErr && (bootResult === true || bootResult?.success === true)) {
+            if (bootErr) {
+              console.warn('[useAuthRole] bootstrap_platform_superadmin RPC error:', bootErr.message || bootErr);
+            } else if (bootResult === true || bootResult?.success === true) {
               // Re-verifikasi dengan is_superadmin() untuk memastikan baris terikat
               const { data: recheckSuper, error: recheckErr } = await supabase.rpc('is_superadmin');
               if (!recheckErr && recheckSuper === true) {
-                setRole('superadmin');
-                setTenantId(userProfile?.tenantId || null);
-                setVerifiedFromDb(true);
-                setLoading(false);
+                if (isMountedRef.current && expectedSeq === sequenceRef.current) {
+                  setRole('superadmin');
+                  setTenantId(userProfile?.tenantId || null);
+                  setVerifiedFromDb(true);
+                  setLoading(false);
+                }
                 return;
               }
             }
@@ -68,10 +101,12 @@ export default function useAuthRole(userProfile) {
           .maybeSingle();
 
         if (!superRowErr && superRow && superRow.auth_uid === callerUid) {
-          setRole('superadmin');
-          setTenantId(userProfile?.tenantId || null);
-          setVerifiedFromDb(true);
-          setLoading(false);
+          if (isMountedRef.current && expectedSeq === sequenceRef.current) {
+            setRole('superadmin');
+            setTenantId(userProfile?.tenantId || null);
+            setVerifiedFromDb(true);
+            setLoading(false);
+          }
           return;
         }
       } catch (e) {
@@ -90,10 +125,12 @@ export default function useAuthRole(userProfile) {
 
         if (!ownerErr && ownerTenant) {
           const resolvedTid = ownerTenant.tenant_id || ownerTenant.id;
-          setRole('owner');
-          setTenantId(resolvedTid);
-          setVerifiedFromDb(true);
-          setLoading(false);
+          if (isMountedRef.current && expectedSeq === sequenceRef.current) {
+            setRole('owner');
+            setTenantId(resolvedTid);
+            setVerifiedFromDb(true);
+            setLoading(false);
+          }
           return;
         }
       } catch (e) {
@@ -121,20 +158,24 @@ export default function useAuthRole(userProfile) {
               check_tenant_id: String(resolvedTid),
             });
             if (rpcRole) {
-              setRole(rpcRole.toLowerCase());
-              setTenantId(resolvedTid);
-              setVerifiedFromDb(true);
-              setLoading(false);
+              if (isMountedRef.current && expectedSeq === sequenceRef.current) {
+                setRole(rpcRole.toLowerCase());
+                setTenantId(resolvedTid);
+                setVerifiedFromDb(true);
+                setLoading(false);
+              }
               return;
             }
           } catch (rErr) {
             // Fallback ke kolom users_staff yang diverifikasi
           }
 
-          setRole(cleanRole);
-          setTenantId(resolvedTid);
-          setVerifiedFromDb(true);
-          setLoading(false);
+          if (isMountedRef.current && expectedSeq === sequenceRef.current) {
+            setRole(cleanRole);
+            setTenantId(resolvedTid);
+            setVerifiedFromDb(true);
+            setLoading(false);
+          }
           return;
         }
       } catch (e) {
@@ -149,10 +190,12 @@ export default function useAuthRole(userProfile) {
             check_tenant_id: String(fallbackTenantId),
           });
           if (!rpcErr && rpcRole) {
-            setRole(rpcRole.toLowerCase());
-            setTenantId(fallbackTenantId);
-            setVerifiedFromDb(true);
-            setLoading(false);
+            if (isMountedRef.current && expectedSeq === sequenceRef.current) {
+              setRole(rpcRole.toLowerCase());
+              setTenantId(fallbackTenantId);
+              setVerifiedFromDb(true);
+              setLoading(false);
+            }
             return;
           }
         } catch (e) {
@@ -161,38 +204,49 @@ export default function useAuthRole(userProfile) {
       }
 
       // Jika tidak terdaftar di database, set role null (fail-closed)
-      setRole(null);
-      setTenantId(fallbackTenantId || null);
-      setVerifiedFromDb(true);
+      if (isMountedRef.current && expectedSeq === sequenceRef.current) {
+        setRole(null);
+        setTenantId(fallbackTenantId || null);
+        setVerifiedFromDb(true);
+      }
     } catch (err) {
       console.error('[useAuthRole] Verification error:', err);
-      setRole(null);
-      setTenantId(null);
+      if (isMountedRef.current && expectedSeq === sequenceRef.current) {
+        setRole(null);
+        setTenantId(null);
+        setVerifiedFromDb(true);
+      }
     } finally {
-      setLoading(false);
+      if (isMountedRef.current && expectedSeq === sequenceRef.current) {
+        setLoading(false);
+      }
     }
-  }, [userProfile]);
+  }, [userProfile, resetAuthState]);
 
   useEffect(() => {
-    let isMounted = true;
+    isMountedRef.current = true;
 
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      if (isMounted) {
-        verifyRoleFromDatabase(user);
-      }
-    });
+    // Supabase Auth Listener: Satu sumber kebenaran untuk siklus hidup autentikasi.
+    // Menghindari duplikasi eksekusi paralel getUser() dan onAuthStateChange().
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const currentSeq = ++sequenceRef.current;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (isMounted) {
-        verifyRoleFromDatabase(session?.user || null);
+      if (event === 'SIGNED_OUT' || !session?.user) {
+        if (isMountedRef.current && currentSeq === sequenceRef.current) {
+          resetAuthState(true);
+        }
+        return;
       }
+
+      verifyRoleFromDatabase(session.user, currentSeq);
     });
 
     return () => {
-      isMounted = false;
+      isMountedRef.current = false;
+      ++sequenceRef.current;
       subscription?.unsubscribe();
     };
-  }, [verifyRoleFromDatabase]);
+  }, [verifyRoleFromDatabase, resetAuthState]);
 
   const normalizedRole = (role || '').toLowerCase();
 
@@ -223,8 +277,9 @@ export default function useAuthRole(userProfile) {
     canInviteAdmins,
     loading,
     refreshClaims: async () => {
+      const currentSeq = ++sequenceRef.current;
       const { data: { user } } = await supabase.auth.getUser();
-      await verifyRoleFromDatabase(user);
+      await verifyRoleFromDatabase(user, currentSeq);
     },
   };
 }

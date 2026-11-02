@@ -34,6 +34,7 @@ export default function SaasAdminPage({ userProfile }) {
       navigate('/login', { replace: true });
     } catch (err) {
       console.error('Logout error:', err);
+      setMessage({ type: 'error', text: 'Gagal keluar sistem: ' + (err.message || 'Terjadi kesalahan jaringan') });
     }
   };
 

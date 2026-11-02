@@ -102,12 +102,16 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
     userProfile?.role === 'admin' ? 'Admin Staf' :
     userProfile?.role === 'pelatih' ? 'Pelatih Akademi' : 'Owner / Pengelola';
 
+  const [logoutError, setLogoutError] = useState(null);
+
   const handleLogout = async () => {
+    setLogoutError(null);
     try {
       await logoutUser();
       navigate('/login', { replace: true });
     } catch (err) {
       console.error('Logout error:', err);
+      setLogoutError(err?.message || 'Gagal keluar dari sistem. Silakan coba kembali.');
     }
   };
 
@@ -679,6 +683,16 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
           </button>
         </div>
       </div>
+
+      {logoutError && (
+        <div role="alert" className="p-2.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 text-rose-800 dark:text-rose-300 text-xs rounded-xl font-semibold flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <AlertCircle className="w-4 h-4 text-rose-600 dark:text-rose-400 shrink-0" />
+            <span>{logoutError}</span>
+          </div>
+          <button type="button" onClick={() => setLogoutError(null)} className="font-bold px-1 hover:text-rose-600">&times;</button>
+        </div>
+      )}
 
       {tenantSuccessMsg && (
         <div className="p-2.5 bg-green-50 dark:bg-green-950/40 border border-green-200 dark:border-green-800/60 text-green-800 dark:text-green-300 text-xs rounded-xl font-semibold flex items-center space-x-2">

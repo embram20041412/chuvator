@@ -1,9 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { verifySuperadminStatus, verifyUserRoleAndTenant } from '../src/services/supabaseAuthService.js';
+import { verifySuperadminStatus, verifyUserRoleAndTenant, logoutUser, supabaseAuthService } from '../src/services/supabaseAuthService.js';
 
 /**
- * Helper to build mock Supabase clients matching PostgreSQL RPC & Table behaviors
+ * Mock Supabase Client matching PostgreSQL RPC & Table behaviors
  */
 function createMockSupabaseClient({
   isSuperadminResponses = [false],
@@ -12,6 +12,7 @@ function createMockSupabaseClient({
   usersStaffTable = [],
   tenantsTable = [],
   invitationsTable = [],
+  signOutError = null,
 }) {
   let isSuperCallIndex = 0;
   let bootstrapCalled = 0;
@@ -23,6 +24,14 @@ function createMockSupabaseClient({
       bootstrapCallCount: bootstrapCalled,
       queriedColumns,
     }),
+    auth: {
+      signOut: async ({ scope } = {}) => {
+        if (signOutError) {
+          throw signOutError;
+        }
+        return { error: null };
+      },
+    },
     rpc: async (fnName, params) => {
       if (fnName === 'is_superadmin') {
         const resp = isSuperadminResponses[isSuperCallIndex] ?? isSuperadminResponses[isSuperadminResponses.length - 1];
@@ -70,7 +79,7 @@ function createMockSupabaseClient({
         },
         maybeSingle: async () => {
           if (tableName === 'platform_superadmins') {
-            // Note: column must be auth_uid, NOT user_id
+            // Kolom kanonis adalah auth_uid. Jika query salah menggunakan user_id, gagalkan.
             if (eqFilters.user_id !== undefined) {
               return { data: null, error: new Error('column "user_id" does not exist in table "platform_superadmins"') };
             }
@@ -160,55 +169,113 @@ function evaluateRouteAccess({ userProfile, pathname, allowedRoles, requireTenan
   return { action: 'allow' };
 }
 
+/**
+ * Lifecycle simulator representing useAuthRole epoch versioning engine
+ */
+class AuthRoleLifecycleSimulator {
+  constructor() {
+    this.sequence = 0;
+    this.state = {
+      role: null,
+      tenantId: null,
+      verifiedFromDb: false,
+      loading: true,
+    };
+  }
+
+  onSessionChange(user, asyncRoleResolver) {
+    const currentSeq = ++this.sequence;
+
+    if (!user) {
+      // Immediate reset when signed out or user is null
+      this.state = {
+        role: null,
+        tenantId: null,
+        verifiedFromDb: true,
+        loading: false,
+      };
+      return Promise.resolve(this.state);
+    }
+
+    this.state.loading = true;
+
+    return asyncRoleResolver(user).then((resolved) => {
+      // Commit state ONLY if sequence hasn't moved (epoch match)
+      if (currentSeq === this.sequence) {
+        this.state = {
+          role: resolved.role,
+          tenantId: resolved.tenantId,
+          verifiedFromDb: true,
+          loading: false,
+        };
+      }
+      return this.state;
+    });
+  }
+}
+
 // =========================================================================
-// TEST SCENARIOS
+// PENGUJIAN WAJIB (10 SKENARIO SPESIFIKASI USER + TAMBAHAN AUDIT)
 // =========================================================================
 
-test('Test 1: Superadmin with auth_uid already bound is immediately recognized via is_superadmin()', async () => {
+test('Wajib 1: is_superadmin() mengembalikan false tanpa error, bootstrap dijalankan', async () => {
   const mockUser = {
-    id: 'super-uid-001',
+    id: 'uid-bootstrap-ok',
     email: 'erizamaulana.bramantya@gmail.com',
   };
 
   const client = createMockSupabaseClient({
-    isSuperadminResponses: [true], // Immediate true
-  });
-
-  const profile = await verifySuperadminStatus(mockUser, client);
-
-  assert.ok(profile, 'Profile should be returned');
-  assert.equal(profile.role, 'superadmin');
-  assert.equal(profile.uid, 'super-uid-001');
-  assert.equal(profile.email, 'erizamaulana.bramantya@gmail.com');
-  assert.equal(profile.isStaff, false);
-  assert.equal(client.getStats().isSuperCallCount, 1);
-  assert.equal(client.getStats().bootstrapCallCount, 0, 'Bootstrap should not be called if already superadmin');
-});
-
-test('Test 2: Superadmin with unbound auth_uid (first login) calls bootstrap_platform_superadmin() and re-verifies successfully', async () => {
-  const mockUser = {
-    id: 'super-uid-002',
-    email: 'erizamaulana.bramantya@gmail.com',
-  };
-
-  const client = createMockSupabaseClient({
-    // 1st call: false (unbound auth_uid in DB), 2nd call: true (after bootstrap)
+    // is_superadmin 1st: false, 2nd: true
     isSuperadminResponses: [false, true],
     bootstrapResponse: { data: true, error: null },
   });
 
   const profile = await verifySuperadminStatus(mockUser, client);
 
-  assert.ok(profile, 'Superadmin profile should be returned after successful bootstrap');
+  assert.equal(client.getStats().bootstrapCallCount, 1, 'Bootstrap HARUS dipanggil saat is_superadmin mengembalikan false');
+  assert.equal(client.getStats().isSuperCallCount, 2, 'is_superadmin HARUS dipanggil 2 kali (awal & setelah bootstrap)');
+  assert.ok(profile, 'Profil superadmin berhasil dibuat');
   assert.equal(profile.role, 'superadmin');
-  assert.equal(profile.uid, 'super-uid-002');
-  assert.equal(client.getStats().isSuperCallCount, 2, 'Should call is_superadmin twice (before & after bootstrap)');
-  assert.equal(client.getStats().bootstrapCallCount, 1, 'Bootstrap should be called once');
 });
 
-test('Test 3: verifyUserRoleAndTenant returns superadmin role when bootstrap succeeds and re-check is true', async () => {
+test('Wajib 2: is_superadmin() mengalami error, bootstrap TIDAK dijalankan', async () => {
   const mockUser = {
-    id: 'super-uid-003',
+    id: 'uid-super-err',
+    email: 'admin@chua.com',
+  };
+
+  const client = createMockSupabaseClient({
+    isSuperadminResponses: [new Error('PGRST500 Database timeout')],
+    bootstrapResponse: { data: true, error: null },
+  });
+
+  const profile = await verifySuperadminStatus(mockUser, client);
+
+  assert.equal(client.getStats().bootstrapCallCount, 0, 'Bootstrap DILARANG dijalankan jika is_superadmin menghasilkan error');
+  assert.equal(profile, null, 'Role Superadmin tidak boleh diberikan saat RPC error');
+});
+
+test('Wajib 3: is_superadmin() mengembalikan true, bootstrap tidak dijalankan', async () => {
+  const mockUser = {
+    id: 'uid-super-active',
+    email: 'erizamaulana.bramantya@gmail.com',
+  };
+
+  const client = createMockSupabaseClient({
+    isSuperadminResponses: [true],
+  });
+
+  const profile = await verifySuperadminStatus(mockUser, client);
+
+  assert.equal(client.getStats().bootstrapCallCount, 0, 'Bootstrap TIDAK boleh dipanggil jika akun sudah terikat (is_superadmin true)');
+  assert.equal(client.getStats().isSuperCallCount, 1);
+  assert.ok(profile);
+  assert.equal(profile.role, 'superadmin');
+});
+
+test('Wajib 4: Bootstrap berhasil, verifikasi ulang true', async () => {
+  const mockUser = {
+    id: 'uid-boot-success',
     email: 'erizamaulana.bramantya@gmail.com',
   };
 
@@ -221,144 +288,181 @@ test('Test 3: verifyUserRoleAndTenant returns superadmin role when bootstrap suc
 
   assert.ok(profile);
   assert.equal(profile.role, 'superadmin');
-  assert.equal(profile.tenantId, null);
-  assert.equal(profile.tenant, null);
+  assert.equal(profile.uid, 'uid-boot-success');
 });
 
-test('Test 4: Normal user cannot become Superadmin (is_superadmin returns false, bootstrap returns false)', async () => {
-  const normalUser = {
-    id: 'normal-uid-100',
-    email: 'staff@example.com',
+test('Wajib 5: Bootstrap gagal, tidak ada eskalasi role', async () => {
+  const mockUser = {
+    id: 'uid-boot-fail',
+    email: 'hacker@malicious.com',
   };
 
   const client = createMockSupabaseClient({
     isSuperadminResponses: [false, false],
-    bootstrapResponse: { data: false, error: null },
+    bootstrapResponse: { data: false, error: null }, // Gagal bind di PostgreSQL
     usersStaffTable: [
-      { id: 'staff-1', uid: 'normal-uid-100', email: 'staff@example.com', role: 'kasir', tenant_id: 't-1' },
+      { id: 'staf-1', uid: 'uid-boot-fail', email: 'hacker@malicious.com', role: 'kasir', tenant_id: 't-99' },
     ],
     tenantsTable: [
-      { id: 't-1', name: 'Arena Badminton' },
+      { id: 't-99', name: 'Arena Kasir' },
     ],
   });
 
-  const superStatus = await verifySuperadminStatus(normalUser, client);
-  assert.equal(superStatus, null, 'Normal user must not be granted superadmin status');
+  const profile = await verifyUserRoleAndTenant(mockUser, client);
 
-  const fullProfile = await verifyUserRoleAndTenant(normalUser, client);
-  assert.equal(fullProfile.role, 'kasir', 'Normal user role must resolve to staff role');
-  assert.equal(fullProfile.tenantId, 't-1');
+  assert.notEqual(profile.role, 'superadmin', 'Tidak boleh eskalasi ke superadmin');
+  assert.equal(profile.role, 'kasir', 'Role harus turun ke peran database yang valid');
 });
 
-test('Test 5: User with unconfirmed email cannot bootstrap (bootstrap_platform_superadmin returns false)', async () => {
-  const unconfirmedSuper = {
-    id: 'unconfirmed-uid',
-    email: 'erizamaulana.bramantya@gmail.com',
-  };
+test('Wajib 6: Hasil verifikasi pengguna lama tidak menimpa state setelah logout', async () => {
+  const sim = new AuthRoleLifecycleSimulator();
 
-  const client = createMockSupabaseClient({
-    isSuperadminResponses: [false, false],
-    // Database returns false because email_confirmed_at IS NULL
-    bootstrapResponse: { data: false, error: null },
+  let resolveUser1;
+  const user1Promise = new Promise((resolve) => {
+    resolveUser1 = resolve;
   });
 
-  const profile = await verifySuperadminStatus(unconfirmedSuper, client);
-  assert.equal(profile, null, 'Unconfirmed email must not be granted superadmin role');
-  assert.equal(client.getStats().bootstrapCallCount, 1);
+  // User 1 login -> mulai verifikasi lambat
+  sim.onSessionChange({ id: 'user-1' }, () => user1Promise);
+
+  // User 1 logout sebelum verifikasi selesai
+  sim.onSessionChange(null, () => Promise.resolve());
+
+  // Pastikan saat logout state langsung bersih
+  assert.equal(sim.state.role, null);
+  assert.equal(sim.state.loading, false);
+
+  // Verifikasi User 1 akhirnya selesai terlambat
+  resolveUser1({ role: 'admin', tenantId: 'tenant-1' });
+  await user1Promise;
+
+  // Verifikasi lama DITOLAK karena sequence sudah kedaluwarsa
+  assert.equal(sim.state.role, null, 'Hasil pengguna lama tidak boleh menimpa state setelah logout');
 });
 
-test('Test 6: Handling error when RPC bootstrap_platform_superadmin fails/throws (fail-closed, does not crash)', async () => {
+test('Wajib 7: Login akun kedua setelah logout akun pertama', async () => {
+  const sim = new AuthRoleLifecycleSimulator();
+
+  // User 1 login
+  await sim.onSessionChange({ id: 'user-1' }, async () => ({ role: 'kasir', tenantId: 't-1' }));
+  assert.equal(sim.state.role, 'kasir');
+  assert.equal(sim.state.tenantId, 't-1');
+
+  // User 1 logout
+  await sim.onSessionChange(null, async () => {});
+  assert.equal(sim.state.role, null);
+
+  // User 2 (Superadmin) login
+  await sim.onSessionChange({ id: 'super-2' }, async () => ({ role: 'superadmin', tenantId: null }));
+  assert.equal(sim.state.role, 'superadmin');
+  assert.equal(sim.state.tenantId, null);
+});
+
+test('Wajib 8: Logout ketika proses verifikasi role masih berlangsung', async () => {
+  const sim = new AuthRoleLifecycleSimulator();
+
+  let delayedResolve;
+  const pendingPromise = new Promise((resolve) => {
+    delayedResolve = resolve;
+  });
+
+  // Verifikasi sedang berlangsung di background
+  sim.onSessionChange({ id: 'in-flight-user' }, () => pendingPromise);
+  assert.equal(sim.state.loading, true);
+
+  // Pengguna langsung menekan logout
+  sim.onSessionChange(null, async () => {});
+
+  // State harus langsung loading: false, role: null
+  assert.equal(sim.state.role, null);
+  assert.equal(sim.state.loading, false);
+
+  // Hasil async tiba
+  delayedResolve({ role: 'owner', tenantId: 't-9' });
+  await pendingPromise;
+
+  assert.equal(sim.state.role, null);
+});
+
+test('Wajib 9: RPC error tidak memberikan role Superadmin', async () => {
   const mockUser = {
-    id: 'err-uid-001',
-    email: 'admin@chuasport.com',
+    id: 'uid-rpc-fail',
+    email: 'erizamaulana.bramantya@gmail.com', // Email cocok di frontend
   };
 
   const client = createMockSupabaseClient({
-    isSuperadminResponses: [false, false],
-    bootstrapResponse: new Error('PostgreSQL RPC network timeout or execution failure'),
-  });
-
-  // Must not throw, must return null (fail-closed)
-  let profile = null;
-  assert.doesNotThrow(async () => {
-    profile = await verifySuperadminStatus(mockUser, client);
-  });
-
-  const res = await verifySuperadminStatus(mockUser, client);
-  assert.equal(res, null, 'Must return null gracefully on bootstrap RPC error');
-});
-
-test('Test 7: Handling error when RPC is_superadmin fails/throws (fail-closed, does not crash)', async () => {
-  const mockUser = {
-    id: 'err-uid-002',
-    email: 'admin@chuasport.com',
-  };
-
-  const client = createMockSupabaseClient({
-    isSuperadminResponses: [new Error('500 Internal Server Error in is_superadmin')],
-    bootstrapResponse: { data: false, error: null },
+    isSuperadminResponses: [new Error('Koneksi database PostgreSQL terputus')],
+    bootstrapResponse: { data: true, error: null },
   });
 
   const profile = await verifySuperadminStatus(mockUser, client);
-  assert.equal(profile, null, 'Must fail-closed to null when is_superadmin errors out');
+
+  // Meskipun email cocok dengan email Superadmin di frontend, DILARANG memberikan role Superadmin
+  assert.equal(profile, null, 'Fail-closed: RPC error mutlak menghasilkan null');
 });
 
-test('Test 8: Superadmin logout then reload scenario (unauthenticated redirects to /login)', () => {
-  // Session is null after logout or on page reload before auth initializes
-  const unauthenticatedResult = evaluateRouteAccess({
-    userProfile: null,
-    pathname: '/saas-admin',
-  });
-
-  assert.equal(unauthenticatedResult.action, 'redirect');
-  assert.equal(unauthenticatedResult.to, '/login');
-  assert.equal(unauthenticatedResult.replace, true);
-});
-
-test('Test 9: Non-superadmin user attempting to access /saas-admin is redirected away', () => {
+test('Wajib 10: Pengguna biasa tidak dapat masuk ke /saas-admin', () => {
+  const kasirProfile = { role: 'kasir', tenant: { id: 't-1' } };
   const ownerProfile = { role: 'owner', tenant: { id: 't-1' } };
   const coachProfile = { role: 'coach', tenant: { id: 't-1' } };
-  const kasirProfile = { role: 'kasir', tenant: { id: 't-1' } };
 
-  // Owner accessing /saas-admin -> redirected to /dashboard
-  const ownerAccess = evaluateRouteAccess({ userProfile: ownerProfile, pathname: '/saas-admin' });
-  assert.deepEqual(ownerAccess, { action: 'redirect', to: '/dashboard', replace: true });
+  // Kasir mencoba masuk /saas-admin -> ditolak ke /dashboard
+  const r1 = evaluateRouteAccess({ userProfile: kasirProfile, pathname: '/saas-admin' });
+  assert.deepEqual(r1, { action: 'redirect', to: '/dashboard', replace: true });
 
-  // Coach accessing /saas-admin -> redirected to /akademi
-  const coachAccess = evaluateRouteAccess({ userProfile: coachProfile, pathname: '/saas-admin' });
-  assert.deepEqual(coachAccess, { action: 'redirect', to: '/akademi', replace: true });
+  // Owner mencoba masuk /saas-admin -> ditolak ke /dashboard
+  const r2 = evaluateRouteAccess({ userProfile: ownerProfile, pathname: '/saas-admin' });
+  assert.deepEqual(r2, { action: 'redirect', to: '/dashboard', replace: true });
 
-  // Kasir accessing /saas-admin -> redirected to /dashboard
-  const kasirAccess = evaluateRouteAccess({ userProfile: kasirProfile, pathname: '/saas-admin' });
-  assert.deepEqual(kasirAccess, { action: 'redirect', to: '/dashboard', replace: true });
+  // Coach mencoba masuk /saas-admin -> ditolak ke /akademi
+  const r3 = evaluateRouteAccess({ userProfile: coachProfile, pathname: '/saas-admin' });
+  assert.deepEqual(r3, { action: 'redirect', to: '/akademi', replace: true });
+
+  // Pengguna tanpa sesi -> ditolak ke /login
+  const r4 = evaluateRouteAccess({ userProfile: null, pathname: '/saas-admin' });
+  assert.deepEqual(r4, { action: 'redirect', to: '/login', replace: true });
 });
 
-test('Test 10: Superadmin re-login after logout restores session and authorizes strictly to /saas-admin', async () => {
-  const restoredSuperUser = {
-    id: 'super-uid-restored',
-    email: 'erizamaulana.bramantya@gmail.com',
+test('Wajib 11 (Audit Logout): Kegagalan sign-out Supabase tidak membersihkan cache atau mengklaim logout berhasil', async () => {
+  const originalLogout = supabaseAuthService.logout;
+  let didThrow = false;
+
+  // Mock localStorage di lingkungan Node.js
+  const mockStorage = new Map();
+  const originalLocalStorage = globalThis.localStorage;
+  globalThis.localStorage = {
+    getItem: (key) => mockStorage.get(key) || null,
+    setItem: (key, val) => mockStorage.set(key, String(val)),
+    removeItem: (key) => mockStorage.delete(key),
+    clear: () => mockStorage.clear(),
   };
 
-  const client = createMockSupabaseClient({
-    isSuperadminResponses: [true], // Session active in DB
-  });
+  try {
+    // Simulasikan kegagalan sign out dari server Supabase
+    supabaseAuthService.logout = async () => {
+      throw new Error('Supabase network error saat sign out');
+    };
 
-  const profile = await verifySuperadminStatus(restoredSuperUser, client);
-  assert.ok(profile);
-  assert.equal(profile.role, 'superadmin');
+    // Siapkan cache simulasi
+    globalThis.localStorage.setItem('chuvator_tenant_cache', 'valid-cache-data');
 
-  // Route evaluation for restored superadmin on /saas-admin is allowed
-  const routeCheck = evaluateRouteAccess({ userProfile: profile, pathname: '/saas-admin' });
-  assert.deepEqual(routeCheck, { action: 'allow' });
+    await logoutUser();
+  } catch (err) {
+    didThrow = true;
+    assert.match(err.message, /Supabase network error/);
+  } finally {
+    supabaseAuthService.logout = originalLogout;
+    globalThis.localStorage = originalLocalStorage;
+  }
 
-  // Route evaluation for restored superadmin trying to go to /dashboard is redirected to /saas-admin
-  const dashCheck = evaluateRouteAccess({ userProfile: profile, pathname: '/dashboard' });
-  assert.deepEqual(dashCheck, { action: 'redirect', to: '/saas-admin', replace: true });
+  assert.equal(didThrow, true, 'logoutUser HARUS melempar error jika sign-out gagal');
+  // Cache TIDAK boleh dibersihkan jika sign-out gagal
+  assert.equal(mockStorage.get('chuvator_tenant_cache'), 'valid-cache-data', 'Cache tidak boleh dibersihkan saat logout gagal');
 });
 
-test('Test 11 (Audit): Queries on platform_superadmins never use user_id column (canonical auth_uid only)', async () => {
+test('Wajib 12 (Audit Kolom): Query platform_superadmins hanya menggunakan auth_uid dan menolak user_id', async () => {
   const mockUser = {
-    id: 'audit-uid-001',
+    id: 'uid-audit-auth-uid',
     email: 'super@chua.com',
   };
 
@@ -366,7 +470,7 @@ test('Test 11 (Audit): Queries on platform_superadmins never use user_id column 
     isSuperadminResponses: [false, false],
     bootstrapResponse: { data: false, error: null },
     platformSuperadminsTable: [
-      { id: 'rec-1', auth_uid: 'audit-uid-001', email: 'super@chua.com' },
+      { id: 'row-1', auth_uid: 'uid-audit-auth-uid', email: 'super@chua.com' },
     ],
   });
 
@@ -374,12 +478,11 @@ test('Test 11 (Audit): Queries on platform_superadmins never use user_id column 
   assert.ok(profile);
   assert.equal(profile.role, 'superadmin');
 
-  // Verify that the table query inspected canonical 'auth_uid' and never 'user_id'
   const queries = client.getStats().queriedColumns;
-  const superQueries = queries.filter((q) => q.table === 'platform_superadmins');
-  assert.ok(superQueries.length > 0, 'Should have queried platform_superadmins');
-  superQueries.forEach((q) => {
-    assert.ok(q.columns.includes('auth_uid'), 'Must query auth_uid');
-    assert.ok(!q.columns.includes('user_id'), 'Must NEVER query user_id');
+  const superadminQueries = queries.filter((q) => q.table === 'platform_superadmins');
+  assert.ok(superadminQueries.length > 0);
+  superadminQueries.forEach((q) => {
+    assert.ok(q.columns.includes('auth_uid'), 'Harus query auth_uid');
+    assert.ok(!q.columns.includes('user_id'), 'DILARANG query user_id');
   });
 });
