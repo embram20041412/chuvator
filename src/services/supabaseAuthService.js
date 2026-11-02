@@ -1,29 +1,28 @@
-import { supabase } from '../config/supabase';
+import { supabase } from '../config/supabase.js';
 
 export const SUPER_ADMIN_EMAIL = 'erizamaulana.bramantya@gmail.com';
 
 /**
- * Validates Supabase user email & ID against authorization rules (Strict Invite-Only Enforcement):
- * 1. Super Admin -> 'superadmin' (erizamaulana.bramantya@gmail.com)
- * 2. Check Supabase `users_staff` -> 'admin' / 'pelatih' / 'kasir'
- * 3. Check Supabase `tenants` -> Existing Tenant Owner (direct to Dashboard)
- * 4. Check Supabase `invitations` -> Invited user (allowed to access Onboarding)
- * 5. Uninvited user -> Blocked & auto sign-out
+ * Memverifikasi status Super Admin platform secara tepercaya melalui RPC PostgreSQL:
+ * 1. Panggil is_superadmin() -> jika true, langsung otorisasi.
+ * 2. Jika false (misal login pertama kali atau auth_uid belum terikat), panggil bootstrap_platform_superadmin()
+ * 3. Jika bootstrap mengembalikan true/sukses, panggil kembali is_superadmin() untuk mengonfirmasi database.
+ * 4. Fallback pencarian tabel hanya menggunakan kolom kanonis 'auth_uid', BUKAN 'user_id'.
+ * 5. Fail-closed: jika RPC error atau gagal, kembalikan null (tidak boleh eskalasi peran).
  */
-export async function verifyUserRoleAndTenant(user) {
-  if (!user) {
-    throw new Error('User tidak valid.');
-  }
+export async function verifySuperadminStatus(user, client = supabase) {
+  if (!user) return null;
 
   const userId = user.id || user.uid;
-  const normalizedEmail = user.email ? user.email.toLowerCase().trim() : '';
+  if (!userId) return null;
+
   const meta = user.user_metadata || {};
   const photoURL = user.photoURL || meta.avatar_url || meta.picture || null;
-  const displayName = user.displayName || meta.full_name || meta.name || user.email?.split('@')[0] || 'User';
+  const displayName = user.displayName || meta.full_name || meta.name || user.email?.split('@')[0] || 'Super Admin';
 
-  // 1. Check if Platform Superadmin via trusted PostgreSQL RPC or platform_superadmins table
   try {
-    const { data: isSuper, error: superErr } = await supabase.rpc('is_superadmin');
+    // Langkah 1: Cek langsung via RPC is_superadmin()
+    const { data: isSuper, error: superErr } = await client.rpc('is_superadmin');
     if (!superErr && isSuper === true) {
       return {
         uid: userId,
@@ -38,34 +37,94 @@ export async function verifyUserRoleAndTenant(user) {
       };
     }
 
-    const { data: superadminRow } = await supabase
-      .from('platform_superadmins')
-      .select('user_id')
-      .eq('user_id', userId)
-      .maybeSingle();
+    // Langkah 2: Jika belum terikat (auth_uid masih NULL), panggil bootstrap_platform_superadmin()
+    if (!isSuper) {
+      try {
+        const { data: bootResult, error: bootErr } = await client.rpc('bootstrap_platform_superadmin');
+        if (!bootErr && (bootResult === true || bootResult?.success === true)) {
+          // Langkah 3: Re-verifikasi dengan is_superadmin() untuk memastikan baris database telah terikat
+          const { data: recheckSuper, error: recheckErr } = await client.rpc('is_superadmin');
+          if (!recheckErr && recheckSuper === true) {
+            return {
+              uid: userId,
+              id: userId,
+              displayName: displayName || 'Super Admin',
+              email: user.email,
+              photoURL,
+              role: 'superadmin',
+              tenant: null,
+              tenantId: null,
+              isStaff: false,
+            };
+          }
+        }
+      } catch (bootEx) {
+        console.warn('[verifySuperadminStatus] Exception during bootstrap_platform_superadmin:', bootEx);
+      }
+    }
 
-    if (superadminRow) {
-      return {
-        uid: userId,
-        id: userId,
-        displayName: displayName || 'Super Admin',
-        email: user.email,
-        photoURL,
-        role: 'superadmin',
-        tenant: null,
-        tenantId: null,
-        isStaff: false,
-      };
+    // Langkah 4: Fallback opsional ke tabel platform_superadmins hanya dengan kolom kanonis 'auth_uid'
+    // CATATAN KEAMANAN: Tabel platform_superadmins TIDAK MEMILIKI kolom user_id. Gunakan auth_uid.
+    try {
+      const { data: superadminRow, error: rowErr } = await client
+        .from('platform_superadmins')
+        .select('id, auth_uid, email')
+        .eq('auth_uid', userId)
+        .maybeSingle();
+
+      if (!rowErr && superadminRow && superadminRow.auth_uid === userId) {
+        return {
+          uid: userId,
+          id: userId,
+          displayName: displayName || 'Super Admin',
+          email: user.email,
+          photoURL,
+          role: 'superadmin',
+          tenant: null,
+          tenantId: null,
+          isStaff: false,
+        };
+      }
+    } catch (tableCheckErr) {
+      console.warn('[verifySuperadminStatus] platform_superadmins table check warning:', tableCheckErr);
     }
   } catch (superCheckErr) {
-    console.warn('[verifyUserRoleAndTenant] Superadmin DB verification check warning:', superCheckErr);
+    console.warn('[verifySuperadminStatus] Superadmin DB verification check warning:', superCheckErr);
+  }
+
+  return null;
+}
+
+/**
+ * Validates Supabase user email & ID against authorization rules (Strict Invite-Only Enforcement):
+ * 1. Super Admin -> 'superadmin' via verified RPC & platform_superadmins binding
+ * 2. Check Supabase `users_staff` -> 'admin' / 'pelatih' / 'kasir'
+ * 3. Check Supabase `tenants` -> Existing Tenant Owner (direct to Dashboard)
+ * 4. Check Supabase `invitations` -> Invited user (allowed to access Onboarding)
+ * 5. Uninvited user -> Blocked & auto sign-out
+ */
+export async function verifyUserRoleAndTenant(user, client = supabase) {
+  if (!user) {
+    throw new Error('User tidak valid.');
+  }
+
+  const userId = user.id || user.uid;
+  const normalizedEmail = user.email ? user.email.toLowerCase().trim() : '';
+  const meta = user.user_metadata || {};
+  const photoURL = user.photoURL || meta.avatar_url || meta.picture || null;
+  const displayName = user.displayName || meta.full_name || meta.name || user.email?.split('@')[0] || 'User';
+
+  // 1. Check if Platform Superadmin via trusted PostgreSQL RPC and verified bootstrap
+  const superAdminProfile = await verifySuperadminStatus(user, client);
+  if (superAdminProfile) {
+    return superAdminProfile;
   }
 
   // 2. Check if user exists in Supabase `users_staff` by UID/ID or email
   try {
     let staffData = null;
     if (userId) {
-      const { data: staffByUid } = await supabase
+      const { data: staffByUid } = await client
         .from('users_staff')
         .select('*')
         .or(`uid.eq.${userId},id.eq.${userId}`)
@@ -74,7 +133,7 @@ export async function verifyUserRoleAndTenant(user) {
     }
 
     if (!staffData && normalizedEmail) {
-      const { data: staffByEmail } = await supabase
+      const { data: staffByEmail } = await client
         .from('users_staff')
         .select('*')
         .ilike('email', normalizedEmail)
@@ -86,7 +145,7 @@ export async function verifyUserRoleAndTenant(user) {
       let tenantData = null;
       if (staffData.tenant_id) {
         try {
-          const { data: tRow } = await supabase
+          const { data: tRow } = await client
             .from('tenants')
             .select('*')
             .eq('id', staffData.tenant_id)
@@ -118,7 +177,7 @@ export async function verifyUserRoleAndTenant(user) {
   let tenantId = null;
 
   try {
-    const { data: directTenant } = await supabase
+    const { data: directTenant } = await client
       .from('tenants')
       .select('*')
       .eq('id', userId)
@@ -128,7 +187,7 @@ export async function verifyUserRoleAndTenant(user) {
       tenantData = directTenant;
       tenantId = directTenant.id;
     } else if (normalizedEmail) {
-      const { data: tenantByEmail } = await supabase
+      const { data: tenantByEmail } = await client
         .from('tenants')
         .select('*')
         .or(`owner_email.eq.${normalizedEmail},owner_uid.eq.${userId}`)
@@ -162,7 +221,7 @@ export async function verifyUserRoleAndTenant(user) {
   let invitationInfo = null;
   if (normalizedEmail) {
     try {
-      const { data: invRow } = await supabase
+      const { data: invRow } = await client
         .from('invitations')
         .select('*')
         .eq('email', normalizedEmail)

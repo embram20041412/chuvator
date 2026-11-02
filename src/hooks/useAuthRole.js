@@ -27,7 +27,7 @@ export default function useAuthRole(userProfile) {
     }
 
     try {
-      const callerUid = user.id;
+      const callerUid = user.id || user.uid;
 
       // 1. Periksa apakah pengguna adalah Platform Superadmin via RPC tepercaya atau tabel platform_superadmins
       try {
@@ -40,13 +40,34 @@ export default function useAuthRole(userProfile) {
           return;
         }
 
-        const { data: superRow } = await supabase
+        // Jika belum terikat (auth_uid masih NULL), panggil bootstrap_platform_superadmin()
+        if (!isSuper) {
+          try {
+            const { data: bootResult, error: bootErr } = await supabase.rpc('bootstrap_platform_superadmin');
+            if (!bootErr && (bootResult === true || bootResult?.success === true)) {
+              // Re-verifikasi dengan is_superadmin() untuk memastikan baris terikat
+              const { data: recheckSuper, error: recheckErr } = await supabase.rpc('is_superadmin');
+              if (!recheckErr && recheckSuper === true) {
+                setRole('superadmin');
+                setTenantId(userProfile?.tenantId || null);
+                setVerifiedFromDb(true);
+                setLoading(false);
+                return;
+              }
+            }
+          } catch (bootEx) {
+            console.warn('[useAuthRole] Bootstrap superadmin RPC check warning:', bootEx);
+          }
+        }
+
+        // Fallback pencarian tabel hanya menggunakan kolom kanonis 'auth_uid' (BUKAN 'user_id')
+        const { data: superRow, error: superRowErr } = await supabase
           .from('platform_superadmins')
-          .select('user_id')
-          .eq('user_id', callerUid)
+          .select('id, auth_uid, email')
+          .eq('auth_uid', callerUid)
           .maybeSingle();
 
-        if (superRow) {
+        if (!superRowErr && superRow && superRow.auth_uid === callerUid) {
           setRole('superadmin');
           setTenantId(userProfile?.tenantId || null);
           setVerifiedFromDb(true);

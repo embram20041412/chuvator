@@ -2,6 +2,7 @@ import {
   supabaseAuthService,
   SUPER_ADMIN_EMAIL, 
   verifyUserRoleAndTenant, 
+  verifySuperadminStatus,
   loginWithGoogle, 
   loginWithEmailAndPassword, 
   logoutUser, 
@@ -12,8 +13,10 @@ export {
   supabaseAuthService,
   SUPER_ADMIN_EMAIL,
   verifyUserRoleAndTenant,
+  verifySuperadminStatus,
   loginWithGoogle,
   loginWithEmailAndPassword,
   logoutUser,
   subscribeToAuthChanges
 };
+
