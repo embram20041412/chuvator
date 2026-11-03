@@ -1,5 +1,6 @@
 import { supabase } from '../config/supabase';
 import { createStaffInvitation } from './staffService';
+import { toUuidOrNull } from './supabaseAcademyService';
 
 /**
  * Mendaftarkan pelatih baru di akademi (tabel public.coaches)
@@ -24,11 +25,12 @@ export async function createCoachWithAccount({
   nik,
   license,
   address,
+  sendInvite = true,
 }) {
   const cleanEmail = email ? email.trim().toLowerCase() : null;
   const cleanName = name ? name.trim() : '';
   const chosenSpecialty = sportSpecialty || specialty || 'Pelatih Utama';
-  const cleanAcademyId = academyId ? String(academyId).trim() : null;
+  const cleanAcademyId = toUuidOrNull(academyId);
 
   if (!cleanName || !tenantId) {
     throw new Error('Nama pelatih dan ID Tenant wajib diisi.');
@@ -109,22 +111,30 @@ export async function createCoachWithAccount({
     coachData = insertedCoach;
   }
 
-  // 2. Jika email disediakan, buat undangan resmi staf dengan peran 'coach'
+  // 2. Jika email disediakan dan Owner memilih untuk menerbitkan undangan (sendInvite === true),
+  // panggil sistem undangan resmi staff dengan peran 'coach' via createStaffInvitation()
   let invitationResult = null;
-  if (cleanEmail) {
+  let invitationError = null;
+
+  if (cleanEmail && sendInvite) {
     try {
       invitationResult = await createStaffInvitation({
         tenantId,
         email: cleanEmail,
         role: 'coach',
         fullName: cleanName,
+        name: cleanName,
       });
     } catch (invErr) {
       console.warn('[coachAuthService] Warning creating coach staff invitation:', invErr.message);
-      // Jangan gagalkan pembuatan record pelatih jika RPC melempar duplikasi undangan aktif
+      // PENTING: Profil pelatih yang sudah berhasil disimpan TIDAK DIBATALKAN.
+      // Laporkan error undangan secara eksplisit agar UI dapat menanganinya dengan aman.
+      invitationError = invErr.message || 'Gagal menerbitkan undangan staf.';
       invitationResult = {
         success: false,
         warning: invErr.message,
+        error: invErr.message,
+        code: invErr.code || 'INVITATION_FAILED',
       };
     }
   }
@@ -134,6 +144,7 @@ export async function createCoachWithAccount({
     coach: coachData,
     invitation: invitationResult,
     inviteUrl: invitationResult?.inviteUrl || null,
+    invitationError: invitationError,
   };
 }
 

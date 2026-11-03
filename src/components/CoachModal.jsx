@@ -2,8 +2,28 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import * as supabaseAcademyService from '../services/supabaseAcademyService';
 import { createCoachWithAccount } from '../services/coachAuthService';
+import { formatInvitationExpiry } from '../services/staffService';
 import { supabase } from '../config/supabase';
-import { X, User, Phone, Award, Dumbbell, MapPin, Loader2, FileText, Check, Camera, Upload, Trash2, Mail, Lock } from 'lucide-react';
+import { 
+  X, 
+  User, 
+  Phone, 
+  Award, 
+  Dumbbell, 
+  MapPin, 
+  Loader2, 
+  FileText, 
+  Check, 
+  Camera, 
+  Upload, 
+  Trash2, 
+  Mail, 
+  Clock, 
+  Info, 
+  Copy, 
+  CheckCircle2, 
+  AlertCircle 
+} from 'lucide-react';
 import { uploadToCloudinary } from '../services/uploadService';
 
 export default function CoachModal({
@@ -53,9 +73,14 @@ export default function CoachModal({
   const [nik, setNik] = useState('');
   const [coachPhone, setCoachPhone] = useState('');
   const [coachEmail, setCoachEmail] = useState('');
-  const [coachPassword, setCoachPassword] = useState('');
+  const [sendInvite, setSendInvite] = useState(true);
   const [sportSpecialty, setSportSpecialty] = useState(uniqueSports?.[0] || 'Badminton');
   const [license, setLicense] = useState('');
+
+  // Undangan Staff Modal & Warning State
+  const [inviteSuccessData, setInviteSuccessData] = useState(null);
+  const [inviteWarningMsg, setInviteWarningMsg] = useState(null);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   // Foto Profil Pelatih State (Opsional untuk ID Card & Barcode)
   const [photoFile, setPhotoFile] = useState(null);
@@ -94,6 +119,24 @@ export default function CoachModal({
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState(null);
 
+  const resetForm = () => {
+    setCoachName('');
+    setNickname('');
+    setNik('');
+    setCoachPhone('');
+    setCoachEmail('');
+    setSendInvite(true);
+    setLicense('');
+    setPhotoPreview('');
+    setPhotoFile(null);
+    setSelectedProvince(null);
+    setSelectedRegency(null);
+    setSelectedDistrict(null);
+    setSelectedVillage(null);
+    setAddressDetail('');
+    setErrorMsg(null);
+  };
+
   // Pre-fill form if editing coach, or reset if creating
   useEffect(() => {
     if (coachToEdit && isOpen) {
@@ -101,10 +144,14 @@ export default function CoachModal({
       setNickname(coachToEdit.nickname || '');
       setNik(coachToEdit.nik || '');
       setCoachPhone(coachToEdit.phone || '');
+      setCoachEmail(coachToEdit.email || '');
+      setSendInvite(false);
       setSportSpecialty(coachToEdit.sportSpecialty || coachToEdit.sport || uniqueSports?.[0] || 'Badminton');
       setLicense(coachToEdit.license || '');
       setPhotoPreview(coachToEdit.photoUrl || coachToEdit.photo_url || '');
       setPhotoFile(null);
+      setInviteSuccessData(null);
+      setInviteWarningMsg(null);
 
       // Hydration: Parsing objek JSON dari coach.address dan pecah kembali ke state masing-masing
       let parsedAddress = {};
@@ -131,20 +178,10 @@ export default function CoachModal({
       setAddressDetail(detailStr);
       setErrorMsg(null);
     } else if (!coachToEdit && isOpen) {
-      setCoachName('');
-      setNickname('');
-      setNik('');
-      setCoachPhone('');
+      resetForm();
       setSportSpecialty(uniqueSports?.[0] || 'Badminton');
-      setLicense('');
-      setPhotoPreview('');
-      setPhotoFile(null);
-      setSelectedProvince(null);
-      setSelectedRegency(null);
-      setSelectedDistrict(null);
-      setSelectedVillage(null);
-      setAddressDetail('');
-      setErrorMsg(null);
+      setInviteSuccessData(null);
+      setInviteWarningMsg(null);
     }
   }, [coachToEdit?.id, isOpen]);
 
@@ -280,8 +317,16 @@ export default function CoachModal({
 
   const handleSubmitCoach = async (e) => {
     e.preventDefault();
-    if (!coachName.trim() || !tenantId) {
+    if (submitting) return;
+
+    const cleanName = coachName.trim();
+    if (!cleanName) {
       setErrorMsg('Nama lengkap pelatih wajib diisi.');
+      return;
+    }
+
+    if (!tenantId) {
+      setErrorMsg('ID Tenant tidak ditemukan. Pastikan profil GOR Anda telah aktif.');
       return;
     }
 
@@ -290,11 +335,21 @@ export default function CoachModal({
       return;
     }
 
+    const cleanEmail = coachEmail.trim().toLowerCase();
+    if (cleanEmail) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(cleanEmail)) {
+        setErrorMsg('Format email pelatih tidak valid.');
+        return;
+      }
+    }
+
     setSubmitting(true);
     setErrorMsg(null);
+    setInviteWarningMsg(null);
 
     try {
-      let finalPhotoUrl = coachToEdit?.photoUrl || null;
+      let finalPhotoUrl = coachToEdit?.photoUrl || coachToEdit?.photo_url || null;
 
       if (photoFile) {
         const uploadRes = await uploadToCloudinary(photoFile, {
@@ -331,10 +386,11 @@ export default function CoachModal({
         tenantId,
         academyId: resolvedAcademyId,
         academyName: resolvedAcademyName,
-        name: coachName.trim(),
+        name: cleanName,
         nickname: nickname.trim(),
         nik: nik.trim(),
         phone: coachPhone.trim(),
+        email: cleanEmail || null,
         sportSpecialty,
         license: license.trim() || null,
         photoUrl: finalPhotoUrl,
@@ -348,63 +404,63 @@ export default function CoachModal({
       };
 
       if (isEditing) {
+        // --- PRIORITAS 1: MODE EDIT PELATIH ---
+        // Hanya update profil di tabel coaches, TIDAK melakukan insert dan TIDAK menerbitkan undangan baru
         const updatedCoach = await supabaseAcademyService.updateCoach(coachToEdit.id, coachData);
         if (onCoachUpdated) {
           onCoachUpdated(updatedCoach || { id: coachToEdit.id, ...coachData });
         }
-        if (coachEmail) {
-          const res = await createCoachWithAccount({
-            tenantId,
-            academyId: resolvedAcademyId,
-            name: coachName.trim(),
-            phone: coachPhone.trim(),
-            email: coachEmail.trim(),
-            sportSpecialty: sportSpecialty || 'Pelatih Utama',
-            license: license.trim() || null,
-            photoUrl: finalPhotoUrl,
-            nickname: nickname.trim(),
-            nik: nik.trim(),
-            address: coachData.address
+        onClose();
+        resetForm();
+      } else {
+        // --- PRIORITAS 1 & 2: MODE TAMBAH PELATIH BARU ---
+        // Simpan profil pelatih ke public.coaches, dan jika email diisi serta sendInvite aktif, terbitkan undangan staf
+        const shouldSendInvite = Boolean(cleanEmail && sendInvite);
+        const res = await createCoachWithAccount({
+          tenantId,
+          academyId: resolvedAcademyId,
+          name: cleanName,
+          phone: coachPhone.trim(),
+          email: cleanEmail,
+          sportSpecialty: sportSpecialty || 'Pelatih Utama',
+          license: license.trim() || null,
+          photoUrl: finalPhotoUrl,
+          nickname: nickname.trim(),
+          nik: nik.trim(),
+          address: coachData.address,
+          sendInvite: shouldSendInvite,
+        });
+
+        if (onCoachAdded) {
+          onCoachAdded(res.coach || { id: `coach_${Date.now()}`, ...coachData });
+        }
+
+        if (res.inviteUrl) {
+          // Skenario A: Profil berhasil & undangan berhasil -> Buka persistent modal sukses
+          setInviteSuccessData({
+            inviteUrl: res.inviteUrl,
+            email: cleanEmail,
+            role: 'coach',
+            tenantName: userProfile?.tenant?.name || 'Cabang Aktif',
+            expiresAt: res.invitation?.expiresAt || res.invitation?.expires_at,
+            createdAt: res.invitation?.createdAt || res.invitation?.created_at || new Date().toISOString(),
           });
-
-          if (onCoachAdded) {
-            onCoachAdded(res.coach || { id: `coach_${Date.now()}`, ...coachData });
-          }
-
-          if (res.inviteUrl) {
-            try {
-              navigator.clipboard?.writeText(res.inviteUrl);
-            } catch (clipErr) {
-              // Ignore clipboard write restrictions
-            }
-          }
+          resetForm();
+        } else if (res.invitationError) {
+          // Skenario B / D: Profil berhasil disimpan, tetapi undangan gagal atau sudah tersedia
+          setInviteWarningMsg(
+            `Profil pelatih berhasil disimpan ke Data Master, namun undangan akun login belum diterbitkan: ${res.invitationError}. Anda dapat memeriksa atau menerbitkan undangan melalui menu Pengaturan > Staf & Pelatih.`
+          );
+          resetForm();
         } else {
-          const createdCoach = await supabaseAcademyService.createCoach(coachData);
-          if (onCoachAdded) {
-            onCoachAdded(createdCoach || { id: `coach_${Date.now()}`, ...coachData });
-          }
+          // Profil berhasil disimpan tanpa undangan (email kosong atau checkbox tidak dicentang)
+          onClose();
+          resetForm();
         }
       }
-
-      onClose();
-      // Reset form
-      setCoachName('');
-      setNickname('');
-      setNik('');
-      setCoachPhone('');
-      setCoachEmail('');
-      setCoachPassword('');
-      setLicense('');
-      setPhotoPreview('');
-      setPhotoFile(null);
-      setSelectedProvince(null);
-      setSelectedRegency(null);
-      setSelectedDistrict(null);
-      setSelectedVillage(null);
-      setAddressDetail('');
     } catch (err) {
       console.error('Error saving coach:', err);
-      setErrorMsg(`Gagal ${isEditing ? 'mengupdate' : 'menambahkan'} pelatih. Silakan coba lagi.`);
+      setErrorMsg(`Gagal ${isEditing ? 'mengupdate' : 'menambahkan'} pelatih: ${err.message || 'Silakan coba lagi.'}`);
     } finally {
       setSubmitting(false);
     }
@@ -438,8 +494,33 @@ export default function CoachModal({
         </div>
 
         {errorMsg && (
-          <div className="mx-6 mt-4 p-3 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs rounded-xl font-medium shrink-0">
-            {errorMsg}
+          <div className="mx-6 mt-4 p-3 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs rounded-xl font-medium shrink-0 flex items-center justify-between">
+            <span>{errorMsg}</span>
+            <button type="button" onClick={() => setErrorMsg(null)} className="font-bold px-1 hover:text-red-900">&times;</button>
+          </div>
+        )}
+
+        {inviteWarningMsg && (
+          <div className="mx-6 mt-4 p-3.5 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs rounded-xl font-medium shrink-0 space-y-2">
+            <div className="flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <p className="font-bold">Profil Berhasil Disimpan (Status Undangan Diperhatikan)</p>
+                <p className="text-[11px] leading-relaxed">{inviteWarningMsg}</p>
+              </div>
+            </div>
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setInviteWarningMsg(null);
+                  onClose();
+                }}
+                className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs rounded-lg transition-colors cursor-pointer"
+              >
+                Tutup &amp; Selesai
+              </button>
+            </div>
           </div>
         )}
 
@@ -618,50 +699,49 @@ export default function CoachModal({
                   </div>
                 </div>
 
-                {!isEditing && (
-                  <div className="p-3 bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 rounded-2xl space-y-3">
-                    <p className="text-[11px] font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
-                      <Lock className="w-3.5 h-3.5 text-amber-600" />
-                      <span>Akun Login Pelatih (Opsional)</span>
+                <div className="p-3.5 bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/80 dark:border-amber-900/40 rounded-2xl space-y-3">
+                  <div>
+                    <label htmlFor="coachEmail" className="block text-[11px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                      Email Login Pelatih (Untuk Identitas &amp; Undangan Akun)
+                    </label>
+                    <div className="relative">
+                      <Mail className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                      <input
+                        id="coachEmail"
+                        name="coachEmail"
+                        type="email"
+                        value={coachEmail}
+                        onChange={(e) => setCoachEmail(e.target.value)}
+                        placeholder="pelatih@chuasport.com (Opsional)"
+                        className="w-full pl-9 pr-3.5 py-2 text-xs bg-white dark:bg-[#162320] border border-gray-200 dark:border-white/10 rounded-xl focus:outline-none focus:border-[#354944] font-mono text-slate-800 dark:text-slate-100"
+                      />
+                    </div>
+                    <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-1">
+                      Boleh dikosongkan jika Anda hanya ingin mencatat profil pelatih tanpa memberikan akses login sistem.
                     </p>
-                    <div>
-                      <label htmlFor="coachEmail" className="block text-[10px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
-                        Email Login Pelatih
-                      </label>
-                      <div className="relative">
-                        <Mail className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-2.5" />
-                        <input
-                          id="coachEmail"
-                          name="coachEmail"
-                          type="email"
-                          value={coachEmail}
-                          onChange={(e) => setCoachEmail(e.target.value)}
-                          placeholder="pelatih@chuasport.com"
-                          className="w-full pl-8 pr-3 py-1.5 text-xs bg-white dark:bg-[#162320] border border-gray-200 dark:border-white/10 rounded-xl focus:outline-none focus:border-[#354944]"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label htmlFor="coachPassword" className="block text-[10px] font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
-                        Kata Sandi Awal
-                      </label>
-                      <div className="relative">
-                        <Lock className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-2.5" />
-                        <input
-                          id="coachPassword"
-                          name="coachPassword"
-                          type="password"
-                          minLength={6}
-                          value={coachPassword}
-                          onChange={(e) => setCoachPassword(e.target.value)}
-                          placeholder="Minimal 6 Karakter"
-                          className="w-full pl-8 pr-3 py-1.5 text-xs bg-white dark:bg-[#162320] border border-gray-200 dark:border-white/10 rounded-xl focus:outline-none focus:border-[#354944]"
-                        />
-                      </div>
-                    </div>
                   </div>
-                )}
+
+                  {!isEditing && coachEmail.trim() && (
+                    <div className="pt-2 border-t border-amber-200/60 dark:border-amber-900/40">
+                      <label className="flex items-start gap-2.5 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={sendInvite}
+                          onChange={(e) => setSendInvite(e.target.checked)}
+                          className="mt-0.5 rounded border-gray-300 text-[#354944] focus:ring-[#354944] h-4 w-4"
+                        />
+                        <div className="text-left">
+                          <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
+                            Terbitkan undangan akun login sekarang
+                          </span>
+                          <span className="text-[10px] text-slate-500 dark:text-slate-400 block leading-relaxed">
+                            Sistem akan membuat token undangan resmi via PostgreSQL RPC (masa berlaku dinamis 7 hari). Pelatih akan mengatur kata sandinya sendiri saat mengklaim tautan.
+                          </span>
+                        </div>
+                      </label>
+                    </div>
+                  )}
+                </div>
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
@@ -841,6 +921,124 @@ export default function CoachModal({
         </form>
 
       </div>
+
+      {/* PERSISTENT SUCCESS MODAL UNTUK UNDANGAN PELATIH (TETAP TERBUKA SAMPAI DITUTUP OWNER) */}
+      {inviteSuccessData && (
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 text-left relative">
+            <button
+              type="button"
+              onClick={() => {
+                setInviteSuccessData(null);
+                onClose();
+              }}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              aria-label="Tutup Modal"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center space-x-3">
+              <div className="p-3 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-xl">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">
+                  Undangan Pelatih Berhasil Dibuat
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Profil pelatih tersimpan &amp; token undangan resmi telah diterbitkan via PostgreSQL RPC.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
+              <div className="flex justify-between py-1 border-b border-slate-200 dark:border-slate-700">
+                <span className="text-slate-500 font-medium">Email Penerima:</span>
+                <span className="font-bold text-slate-900 dark:text-slate-100 font-mono">{inviteSuccessData.email}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200 dark:border-slate-700">
+                <span className="text-slate-500 font-medium">Role yang Diberikan:</span>
+                <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 font-bold rounded uppercase text-[10px]">
+                  Pelatih / Coach Akademi
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200 dark:border-slate-700">
+                <span className="text-slate-500 font-medium">Nama Tenant / GOR:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">{inviteSuccessData.tenantName}</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span className="text-slate-500 font-medium">Masa Berlaku:</span>
+                <span className="font-semibold text-amber-700 dark:text-amber-400 flex items-center space-x-1">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>
+                    {formatInvitationExpiry(inviteSuccessData.expiresAt, inviteSuccessData.createdAt)}
+                  </span>
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="coach-modal-invite-url" className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase">
+                URL Undangan Lengkap
+              </label>
+              <div className="flex items-center space-x-2">
+                <input
+                  id="coach-modal-invite-url"
+                  name="modalInviteUrl"
+                  type="text"
+                  readOnly
+                  value={inviteSuccessData.inviteUrl}
+                  className="flex-1 px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl font-mono text-slate-800 dark:text-slate-200 select-all focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (inviteSuccessData.inviteUrl) {
+                      navigator.clipboard.writeText(inviteSuccessData.inviteUrl);
+                      setCopiedLink(true);
+                      setTimeout(() => setCopiedLink(false), 2500);
+                    }
+                  }}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition flex items-center space-x-1.5 cursor-pointer shadow-2xs shrink-0"
+                >
+                  {copiedLink ? (
+                    <>
+                      <Check className="w-4 h-4 text-emerald-300" />
+                      <span>Tersalin!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      <span>Salin Tautan</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl text-[11px] text-amber-900 dark:text-amber-300 flex items-start space-x-2">
+              <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <span>
+                <strong>Penting:</strong> Salin dan bagikan tautan ini ke pelatih. Tautan ini tetap tersedia selama dialog ini terbuka. Setelah dialog ditutup, tautan tidak dapat dimunculkan kembali demi alasan keamanan token.
+              </span>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setInviteSuccessData(null);
+                  onClose();
+                }}
+                className="px-6 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs rounded-xl transition cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 

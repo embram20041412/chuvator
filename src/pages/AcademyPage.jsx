@@ -56,7 +56,8 @@ import {
   ChevronDown,
   ChevronUp,
   Building2,
-  Clock
+  Clock,
+  Mail
 } from 'lucide-react';
 import { Dashboard3DIcon, Akademi3DIcon, Booking3DIcon, Kasir3DIcon, Event3DIcon, Keuangan3DIcon, AIInsight3DIcon, Pengaturan3DIcon } from '../components/icons/App3DIcons';
 
@@ -1685,6 +1686,12 @@ export default function AcademyPage({ userProfile }) {
                         <Phone className="w-3 h-3 text-green-600 shrink-0" />
                         <span>{c.phone || 'Tidak ada WhatsApp'}</span>
                       </p>
+                      {c.email && (
+                        <p className="text-[10px] text-slate-400 flex items-center space-x-1 mt-0.5 truncate font-mono">
+                          <Mail className="w-3 h-3 text-slate-400 shrink-0" />
+                          <span>{c.email}</span>
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
