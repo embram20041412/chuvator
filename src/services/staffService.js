@@ -95,15 +95,40 @@ export async function createStaffInvitation({ tenantId, email, role, fullName, d
     throw new Error(rpcErr.message || 'Gagal membuat undangan staf di database.');
   }
 
-  const rawToken = rpcResult?.raw_token;
-  const inviteUrl = rawToken ? buildInvitationUrl(rawToken) : null;
+  // Tangani respons RPC (RETURNS JSONB):
+  // PostgREST/Supabase RPC dapat mengembalikan object langsung, string JSON, atau array [object]
+  let rpcData = rpcResult;
+  if (typeof rpcData === 'string') {
+    try {
+      rpcData = JSON.parse(rpcData);
+    } catch (_) {}
+  }
+  if (Array.isArray(rpcData)) {
+    rpcData = rpcData[0] || {};
+  }
+  if (!rpcData || typeof rpcData !== 'object') {
+    rpcData = {};
+  }
+
+  const rawToken = rpcData.raw_token || rpcData.rawToken || rpcData.token;
+  const invitationId = rpcData.invitation_id || rpcData.id || rpcData.invitationId;
+  const expiresAt = rpcData.expires_at || rpcData.expiresAt;
+
+  // Task C: Pastikan raw_token benar-benar tersedia sebelum membentuk inviteUrl
+  if (!rawToken) {
+    console.error('[staffService] RPC returned missing raw_token. Raw RPC output:', rpcResult);
+    throw new Error('Gagal mendapatkan token mentah dari database RPC (raw_token kosong). Silakan coba lagi.');
+  }
+
+  const inviteUrl = buildInvitationUrl(rawToken);
 
   return {
     success: true,
-    invitation: rpcResult,
-    rawToken,
-    inviteUrl,
-    expiresAt: rpcResult?.expires_at,
+    invitation: rpcData,
+    invitationId: invitationId,
+    rawToken: rawToken,
+    inviteUrl: inviteUrl,
+    expiresAt: expiresAt,
     role: canonicalRole,
     email: cleanEmail,
   };

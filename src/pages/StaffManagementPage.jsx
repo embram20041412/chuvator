@@ -161,13 +161,14 @@ export default function StaffManagementPage({ userProfile }) {
         displayName: cleanDisplayName,
       });
 
-      const invId = result.invitation?.id || result.invitation?.invitation_id || result.invitation?.[0]?.invitation_id;
+      const invId = result.invitationId || result.invitation?.invitation_id || result.invitation?.id;
       
-      // Simpan raw link di session state aman untuk disalin di tabel selama halaman belum di-refresh
-      if (invId && result.inviteUrl) {
+      // Simpan raw link di session state aman (diindeks berdasarkan ID dan Email)
+      if (result.inviteUrl) {
         setSessionInviteLinks((prev) => ({
           ...prev,
-          [invId]: result.inviteUrl
+          ...(invId ? { [invId]: result.inviteUrl } : {}),
+          [cleanEmail]: result.inviteUrl,
         }));
       }
 
@@ -677,7 +678,7 @@ export default function StaffManagementPage({ userProfile }) {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {filteredInvitations.map((inv) => {
-                      const sessionUrl = sessionInviteLinks[inv.id];
+                      const sessionUrl = sessionInviteLinks[inv.id] || sessionInviteLinks[inv.email];
                       const isPending = inv.status === 'pending';
 
                       return (
