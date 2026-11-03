@@ -12,7 +12,9 @@ import {
   UserCheck, 
   LogOut,
   RefreshCw,
-  Sparkles
+  Sparkles,
+  KeyRound,
+  Info
 } from 'lucide-react';
 import { supabase } from '../config/supabase';
 import { logoutUser } from '../services/authService';
@@ -21,7 +23,7 @@ import { getInvitationInfo, claimStaffInvitation } from '../services/staffServic
 export default function AcceptInvitationPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const token = searchParams.get('token') || '';
+  const token = searchParams.get('token') || searchParams.get('t') || '';
 
   // Invitation info state
   const [loadingInfo, setLoadingInfo] = useState(true);
@@ -30,9 +32,13 @@ export default function AcceptInvitationPage() {
 
   // Current Auth User state
   const [currentUser, setCurrentUser] = useState(null);
-  const [authMode, setAuthMode] = useState('login'); // 'login' | 'signup'
+  
+  // Auth Modes: 'login' | 'signup' | 'forgot' | 'update_password'
+  const [authMode, setAuthMode] = useState('login');
   const [emailInput, setEmailInput] = useState('');
   const [passwordInput, setPasswordInput] = useState('');
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState(null);
   const [authSuccessNotice, setAuthSuccessNotice] = useState(null);
@@ -40,6 +46,14 @@ export default function AcceptInvitationPage() {
   // Claiming state
   const [claiming, setClaiming] = useState(false);
   const [claimSuccess, setClaimSuccess] = useState(false);
+
+  // Detect password reset flow from URL (?reset=1 or hash fragment)
+  useEffect(() => {
+    const isReset = searchParams.get('reset') === '1' || window.location.hash.includes('type=recovery');
+    if (isReset) {
+      setAuthMode('update_password');
+    }
+  }, [searchParams]);
 
   // 1. Fetch info undangan via RPC get_invitation_info
   useEffect(() => {
@@ -88,18 +102,38 @@ export default function AcceptInvitationPage() {
 
   // 3. Handler Sign In
   const handleLogin = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
+    const cleanEmail = emailInput.trim().toLowerCase();
+    
+    if (!cleanEmail || !passwordInput) {
+      setAuthError('Alamat email dan kata sandi wajib diisi.');
+      return;
+    }
+
     setAuthError(null);
+    setAuthSuccessNotice(null);
     setAuthLoading(true);
 
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: emailInput.trim().toLowerCase(),
+        email: cleanEmail,
         password: passwordInput,
       });
 
-      if (error) throw error;
+      if (error) {
+        // Task 3: Penanganan 'Invalid login credentials' secara spesifik
+        if (
+          error.message?.toLowerCase().includes('invalid login credentials') ||
+          error.status === 400
+        ) {
+          setAuthError('Email atau kata sandi tidak cocok. Jika Anda lupa kata sandi akun ini, silakan gunakan fitur "Lupa Password" di bawah.');
+          return;
+        }
+        throw error;
+      }
+
       setCurrentUser(data.user);
+      setAuthSuccessNotice(`Berhasil masuk sebagai ${data.user.email}! Silakan klik tombol "Klaim Undangan" di bawah untuk mengaktifkan akses.`);
     } catch (err) {
       console.error('[AcceptInvitationPage] Login error:', err);
       setAuthError(err.message || 'Gagal masuk. Periksa email dan kata sandi Anda.');
@@ -110,17 +144,30 @@ export default function AcceptInvitationPage() {
 
   // 4. Handler Sign Up
   const handleSignUp = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
+    const cleanEmail = emailInput.trim().toLowerCase();
+    
+    if (!cleanEmail || !passwordInput) {
+      setAuthError('Alamat email dan kata sandi wajib diisi.');
+      return;
+    }
+
+    if (passwordInput.length < 6) {
+      setAuthError('Kata sandi minimal 6 karakter.');
+      return;
+    }
+
     setAuthError(null);
     setAuthSuccessNotice(null);
     setAuthLoading(true);
 
     try {
-      const cleanEmail = emailInput.trim().toLowerCase();
+      const redirectUrl = `${window.location.origin}/accept-invitation?token=${encodeURIComponent(token)}`;
       const { data, error } = await supabase.auth.signUp({
         email: cleanEmail,
         password: passwordInput,
         options: {
+          emailRedirectTo: redirectUrl,
           data: {
             role: invitation?.invite_role || 'staff',
             invited_tenant_id: invitation?.tenant_id,
@@ -128,13 +175,28 @@ export default function AcceptInvitationPage() {
         },
       });
 
-      if (error) throw error;
+      if (error) {
+        // Task 4: Penanganan 'User already registered' / 422
+        if (
+          error.message?.toLowerCase().includes('already registered') ||
+          error.message?.toLowerCase().includes('already exists') ||
+          error.status === 422
+        ) {
+          setAuthMode('login');
+          setAuthError(
+            `Email "${cleanEmail}" sudah terdaftar di sistem. Silakan masuk menggunakan kata sandi Anda di bawah ini, atau gunakan tombol "Lupa Password" jika lupa kata sandi.`
+          );
+          return;
+        }
+        throw error;
+      }
 
       if (data.session) {
         setCurrentUser(data.user);
+        setAuthSuccessNotice('Pendaftaran akun berhasil! Anda telah masuk otomatis. Silakan klaim undangan di bawah.');
       } else {
         setAuthSuccessNotice(
-          'Pendaftaran akun berhasil! Silakan periksa kotak masuk email Anda dan klik tautan verifikasi sebelum mengklaim undangan.'
+          'Pendaftaran akun berhasil! Tautan konfirmasi telah dikirim ke email Anda. Silakan verifikasi email Anda, lalu buka kembali tautan undangan untuk mengklaim akun.'
         );
       }
     } catch (err) {
@@ -145,9 +207,81 @@ export default function AcceptInvitationPage() {
     }
   };
 
-  // 5. Handler Klaim Undangan via RPC claim_staff_invitation
+  // 5. Handler Forgot Password (resetPasswordForEmail)
+  const handleForgotPassword = async (e) => {
+    if (e) e.preventDefault();
+    const cleanEmail = emailInput.trim().toLowerCase();
+
+    if (!cleanEmail) {
+      setAuthError('Masukkan alamat email Anda terlebih dahulu.');
+      return;
+    }
+
+    setAuthError(null);
+    setAuthSuccessNotice(null);
+    setAuthLoading(true);
+
+    try {
+      const redirectUrl = `${window.location.origin}/accept-invitation?token=${encodeURIComponent(token)}&reset=1`;
+      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+        redirectTo: redirectUrl,
+      });
+
+      if (error) throw error;
+
+      setAuthSuccessNotice(
+        `Tautan pemulihan kata sandi telah dikirim ke email ${cleanEmail}. Silakan periksa kotak masuk (atau folder spam), buka tautan tersebut untuk memperbarui kata sandi, lalu klaim undangan Anda.`
+      );
+    } catch (err) {
+      console.error('[AcceptInvitationPage] Reset password error:', err);
+      setAuthError(err.message || 'Gagal mengirim email reset password.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // 6. Handler Update Password (after arriving from reset link)
+  const handleUpdatePassword = async (e) => {
+    if (e) e.preventDefault();
+    if (!newPasswordInput || newPasswordInput.length < 6) {
+      setAuthError('Kata sandi baru minimal 6 karakter.');
+      return;
+    }
+
+    setAuthError(null);
+    setAuthSuccessNotice(null);
+    setAuthLoading(true);
+
+    try {
+      const { data, error } = await supabase.auth.updateUser({
+        password: newPasswordInput,
+      });
+
+      if (error) throw error;
+
+      setCurrentUser(data.user);
+      setAuthMode('login');
+      setAuthSuccessNotice('Kata sandi Anda berhasil diperbarui! Silakan klik tombol "Klaim Undangan" di bawah.');
+    } catch (err) {
+      console.error('[AcceptInvitationPage] Update password error:', err);
+      setAuthError(err.message || 'Gagal memperbarui kata sandi.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  // 7. Handler Klaim Undangan via RPC claim_staff_invitation
   const handleClaim = async () => {
-    if (!token.trim()) return;
+    if (!token.trim()) {
+      setErrorMsg('Token undangan tidak valid atau kosong.');
+      return;
+    }
+
+    if (!currentUser) {
+      setErrorMsg('Anda harus masuk atau mendaftar akun terlebih dahulu sebelum mengklaim undangan.');
+      return;
+    }
+
     setClaiming(true);
     setErrorMsg(null);
 
@@ -155,13 +289,15 @@ export default function AcceptInvitationPage() {
       await claimStaffInvitation(token.trim());
       setClaimSuccess(true);
 
-      // Redirect setelah sukses
+      // Redirect berdasarkan role setelah klaim berhasil
       setTimeout(() => {
         const role = (invitation?.invite_role || '').toLowerCase();
         if (role === 'coach' || role === 'pelatih') {
-          navigate('/akademi');
+          navigate('/akademi', { replace: true });
+        } else if (role === 'kasir') {
+          navigate('/kasir', { replace: true });
         } else {
-          navigate('/dashboard');
+          navigate('/dashboard', { replace: true });
         }
       }, 2000);
     } catch (err) {
@@ -176,6 +312,7 @@ export default function AcceptInvitationPage() {
     try {
       await logoutUser();
       setCurrentUser(null);
+      setAuthSuccessNotice(null);
     } catch (err) {
       console.error('Sign out error:', err);
       setErrorMsg('Gagal keluar dari sesi: ' + (err.message || 'Terjadi kesalahan jaringan'));
@@ -192,6 +329,7 @@ export default function AcceptInvitationPage() {
   return (
     <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4 sm:p-6 lg:p-8">
       <div className="w-full max-w-lg space-y-6 text-left">
+        
         {/* Brand Header */}
         <div className="text-center space-y-1">
           <div className="inline-flex items-center space-x-2 px-3 py-1 bg-blue-500/10 border border-blue-500/20 rounded-full text-blue-400 text-xs font-semibold">
@@ -254,6 +392,7 @@ export default function AcceptInvitationPage() {
         {/* State 4: Undangan Valid & Siap Diklaim */}
         {!loadingInfo && invitation && !claimSuccess && (
           <div className="bg-slate-800/80 border border-slate-700/80 rounded-2xl p-6 sm:p-7 shadow-xl space-y-6">
+            
             {/* Info Tenant & Peran */}
             <div className="bg-slate-900/80 border border-slate-700/60 rounded-xl p-4 space-y-3">
               <div className="flex items-center justify-between border-b border-slate-800 pb-2.5">
@@ -311,6 +450,7 @@ export default function AcceptInvitationPage() {
                   <div className="flex items-center justify-between">
                     <span className="text-slate-400">Masuk sebagai:</span>
                     <button
+                      type="button"
                       onClick={handleSignOut}
                       className="text-red-400 hover:text-red-300 font-semibold flex items-center space-x-1 cursor-pointer"
                     >
@@ -341,107 +481,308 @@ export default function AcceptInvitationPage() {
                 </button>
               </div>
             ) : (
-              /* Bagian B: Pengguna Belum Login -> Form Otentikasi */
+              /* Bagian B: Form Otentikasi */
               <div className="space-y-4 pt-2">
-                <div className="flex border-b border-slate-700 text-xs">
-                  <button
-                    type="button"
-                    onClick={() => { setAuthMode('login'); setAuthError(null); }}
-                    className={`flex-1 py-2 font-bold transition border-b-2 cursor-pointer ${
-                      authMode === 'login'
-                        ? 'border-blue-500 text-blue-400'
-                        : 'border-transparent text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    1. Masuk Akun yang Ada
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { setAuthMode('signup'); setAuthError(null); }}
-                    className={`flex-1 py-2 font-bold transition border-b-2 cursor-pointer ${
-                      authMode === 'signup'
-                        ? 'border-blue-500 text-blue-400'
-                        : 'border-transparent text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    2. Buat Akun Baru
-                  </button>
-                </div>
+                
+                {/* Tab Switcher: Login | Signup | Forgot */}
+                {authMode !== 'update_password' && (
+                  <div className="flex border-b border-slate-700 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => { setAuthMode('login'); setAuthError(null); setAuthSuccessNotice(null); }}
+                      className={`flex-1 py-2 font-bold transition border-b-2 cursor-pointer ${
+                        authMode === 'login'
+                          ? 'border-blue-500 text-blue-400'
+                          : 'border-transparent text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      1. Masuk Akun
+                    </button>
 
+                    <button
+                      type="button"
+                      onClick={() => { setAuthMode('signup'); setAuthError(null); setAuthSuccessNotice(null); }}
+                      className={`flex-1 py-2 font-bold transition border-b-2 cursor-pointer ${
+                        authMode === 'signup'
+                          ? 'border-blue-500 text-blue-400'
+                          : 'border-transparent text-slate-400 hover:text-slate-200'
+                      }`}
+                    >
+                      2. Buat Akun Baru
+                    </button>
+                  </div>
+                )}
+
+                {/* Notifikasi Error Otentikasi */}
                 {authError && (
-                  <div className="p-3 bg-red-950/60 border border-red-800 text-red-200 rounded-xl text-xs flex items-center space-x-2">
-                    <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-                    <span>{authError}</span>
+                  <div className="p-3 bg-red-950/60 border border-red-800 text-red-200 rounded-xl text-xs flex items-start space-x-2">
+                    <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                    <span className="leading-relaxed">{authError}</span>
                   </div>
                 )}
 
+                {/* Notifikasi Sukses / Petunjuk */}
                 {authSuccessNotice && (
-                  <div className="p-3 bg-emerald-950/60 border border-emerald-800 text-emerald-200 rounded-xl text-xs flex items-center space-x-2">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                    <span>{authSuccessNotice}</span>
+                  <div className="p-3 bg-emerald-950/60 border border-emerald-800 text-emerald-200 rounded-xl text-xs flex items-start space-x-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <span className="leading-relaxed">{authSuccessNotice}</span>
                   </div>
                 )}
 
-                <form onSubmit={authMode === 'login' ? handleLogin : handleSignUp} className="space-y-3">
-                  <div>
-                    <label htmlFor="invite-auth-email" className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
-                      Alamat Email
-                    </label>
-                    <div className="relative">
-                      <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
-                      <input
-                        id="invite-auth-email"
-                        name="email"
-                        type="email"
-                        autoComplete="username"
-                        required
-                        value={emailInput}
-                        onChange={(e) => setEmailInput(e.target.value)}
-                        placeholder="staf@email.com"
-                        className="w-full pl-9 pr-3.5 py-2 text-xs bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-blue-500 font-mono"
-                      />
+                {/* MODE 1: LOGIN AKUN TERDAFTAR */}
+                {authMode === 'login' && (
+                  <form onSubmit={handleLogin} className="space-y-3">
+                    <div className="p-2.5 bg-blue-950/30 border border-blue-800/40 rounded-xl text-[11px] text-blue-200 flex items-start space-x-2">
+                      <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
+                      <span>Jika email Anda sudah pernah terdaftar di CHUVATOR, gunakan formulir ini untuk masuk.</span>
                     </div>
-                  </div>
 
-                  <div>
-                    <label htmlFor="invite-auth-password" className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
-                      Kata Sandi
-                    </label>
-                    <div className="relative">
-                      <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
-                      <input
-                        id="invite-auth-password"
-                        name="password"
-                        type="password"
-                        autoComplete={authMode === 'login' ? 'current-password' : 'new-password'}
-                        required
-                        minLength={6}
-                        value={passwordInput}
-                        onChange={(e) => setPasswordInput(e.target.value)}
-                        placeholder="Minimal 6 karakter"
-                        className="w-full pl-9 pr-3.5 py-2 text-xs bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-blue-500"
-                      />
+                    <div>
+                      <label htmlFor="invite-auth-email" className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
+                        Alamat Email
+                      </label>
+                      <div className="relative">
+                        <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                        <input
+                          id="invite-auth-email"
+                          name="email"
+                          type="email"
+                          autoComplete="username"
+                          required
+                          value={emailInput}
+                          onChange={(e) => setEmailInput(e.target.value)}
+                          placeholder="staf@email.com"
+                          className="w-full pl-9 pr-3.5 py-2 text-xs bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-blue-500 font-mono"
+                        />
+                      </div>
                     </div>
-                  </div>
 
-                  <button
-                    type="submit"
-                    disabled={authLoading}
-                    className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow transition flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50 mt-2"
-                  >
-                    {authLoading ? (
-                      <>
-                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                        <span>Memproses Otentikasi...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>{authMode === 'login' ? 'Masuk & Lanjutkan' : 'Daftar & Konfirmasi'}</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </>
-                    )}
-                  </button>
-                </form>
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label htmlFor="invite-auth-password" className="block text-[11px] font-bold text-slate-300 uppercase">
+                          Kata Sandi
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => { setAuthMode('forgot'); setAuthError(null); setAuthSuccessNotice(null); }}
+                          className="text-[11px] font-semibold text-blue-400 hover:text-blue-300 transition cursor-pointer"
+                        >
+                          Lupa Password?
+                        </button>
+                      </div>
+                      <div className="relative">
+                        <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                        <input
+                          id="invite-auth-password"
+                          name="password"
+                          type="password"
+                          autoComplete="current-password"
+                          required
+                          minLength={6}
+                          value={passwordInput}
+                          onChange={(e) => setPasswordInput(e.target.value)}
+                          placeholder="Kata sandi akun Anda"
+                          className="w-full pl-9 pr-3.5 py-2 text-xs bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={authLoading}
+                      className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow transition flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50 mt-2"
+                    >
+                      {authLoading ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Memproses Otentikasi...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Masuk &amp; Lanjutkan</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </>
+                      )}
+                    </button>
+                  </form>
+                )}
+
+                {/* MODE 2: BUAT AKUN BARU */}
+                {authMode === 'signup' && (
+                  <form onSubmit={handleSignUp} className="space-y-3">
+                    <div className="p-2.5 bg-slate-900/60 border border-slate-700/60 rounded-xl text-[11px] text-slate-300 flex items-start space-x-2">
+                      <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                      <span>Gunakan formulir ini hanya jika Anda belum pernah memiliki akun di sistem CHUVATOR.</span>
+                    </div>
+
+                    <div>
+                      <label htmlFor="invite-signup-email" className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
+                        Alamat Email
+                      </label>
+                      <div className="relative">
+                        <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                        <input
+                          id="invite-signup-email"
+                          name="email"
+                          type="email"
+                          autoComplete="email"
+                          required
+                          value={emailInput}
+                          onChange={(e) => setEmailInput(e.target.value)}
+                          placeholder="staf@email.com"
+                          className="w-full pl-9 pr-3.5 py-2 text-xs bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-blue-500 font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="invite-signup-password" className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
+                        Buat Kata Sandi Baru
+                      </label>
+                      <div className="relative">
+                        <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                        <input
+                          id="invite-signup-password"
+                          name="password"
+                          type="password"
+                          autoComplete="new-password"
+                          required
+                          minLength={6}
+                          value={passwordInput}
+                          onChange={(e) => setPasswordInput(e.target.value)}
+                          placeholder="Minimal 6 karakter"
+                          className="w-full pl-9 pr-3.5 py-2 text-xs bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={authLoading}
+                      className="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-xl shadow transition flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50 mt-2"
+                    >
+                      {authLoading ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Mendaftarkan Akun...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Daftar &amp; Konfirmasi</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </>
+                      )}
+                    </button>
+                  </form>
+                )}
+
+                {/* MODE 3: LUPA PASSWORD / RESET PASSWORD EMAIL */}
+                {authMode === 'forgot' && (
+                  <form onSubmit={handleForgotPassword} className="space-y-3">
+                    <div className="p-2.5 bg-amber-950/30 border border-amber-800/40 rounded-xl text-[11px] text-amber-200 flex items-start space-x-2">
+                      <KeyRound className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                      <span>Masukkan email terdaftar Anda untuk menerima tautan pemulihan kata sandi Supabase Auth.</span>
+                    </div>
+
+                    <div>
+                      <label htmlFor="invite-forgot-email" className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
+                        Alamat Email Akun
+                      </label>
+                      <div className="relative">
+                        <Mail className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                        <input
+                          id="invite-forgot-email"
+                          name="email"
+                          type="email"
+                          autoComplete="email"
+                          required
+                          value={emailInput}
+                          onChange={(e) => setEmailInput(e.target.value)}
+                          placeholder="staf@email.com"
+                          className="w-full pl-9 pr-3.5 py-2 text-xs bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-blue-500 font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-1">
+                      <button
+                        type="button"
+                        onClick={() => { setAuthMode('login'); setAuthError(null); }}
+                        className="text-xs text-slate-400 hover:text-slate-200 font-semibold cursor-pointer"
+                      >
+                        &larr; Kembali ke Masuk
+                      </button>
+
+                      <button
+                        type="submit"
+                        disabled={authLoading}
+                        className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl shadow transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+                      >
+                        {authLoading ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Mengirim...</span>
+                          </>
+                        ) : (
+                          <>
+                            <KeyRound className="w-3.5 h-3.5" />
+                            <span>Kirim Tautan Reset</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                {/* MODE 4: ATUR KATA SANDI BARU (SETELAH KLIK TAUTAN RESET PASSWORD) */}
+                {authMode === 'update_password' && (
+                  <form onSubmit={handleUpdatePassword} className="space-y-3">
+                    <div className="p-2.5 bg-emerald-950/30 border border-emerald-800/40 rounded-xl text-[11px] text-emerald-200 flex items-start space-x-2">
+                      <Lock className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                      <span>Anda membuka tautan pemulihan kata sandi. Silakan masukkan kata sandi baru Anda di bawah.</span>
+                    </div>
+
+                    <div>
+                      <label htmlFor="invite-new-password" className="block text-[11px] font-bold text-slate-300 uppercase mb-1">
+                        Kata Sandi Baru
+                      </label>
+                      <div className="relative">
+                        <Lock className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
+                        <input
+                          id="invite-new-password"
+                          name="newPassword"
+                          type="password"
+                          autoComplete="new-password"
+                          required
+                          minLength={6}
+                          value={newPasswordInput}
+                          onChange={(e) => setNewPasswordInput(e.target.value)}
+                          placeholder="Minimal 6 karakter"
+                          className="w-full pl-9 pr-3.5 py-2 text-xs bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={authLoading}
+                      className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow transition flex items-center justify-center space-x-2 cursor-pointer disabled:opacity-50 mt-2"
+                    >
+                      {authLoading ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Memperbarui Kata Sandi...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Simpan Kata Sandi Baru</span>
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </>
+                      )}
+                    </button>
+                  </form>
+                )}
+
               </div>
             )}
           </div>
