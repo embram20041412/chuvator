@@ -43,26 +43,52 @@ export async function createStaffInvitation({ tenantId, email, role, fullName, d
     throw new Error('Format email undangan staf tidak valid.');
   }
 
-  // 1. Cek atau siapkan calon akun staf di `users_staff` tanpa UID terikat (uid IS NULL)
-  // Ini adalah prasyarat integritas yang diperiksa oleh RPC create_staff_invitation
-  const { data: existingCandidates, error: fetchErr } = await supabase
+  // 1. D1: Pre-check apakah sudah ada undangan PENDING/AKTIF untuk tenant_id & email ini
+  const { data: existingInvites, error: inviteCheckErr } = await supabase
+    .from('invitations')
+    .select('id, status, expires_at')
+    .eq('tenant_id', String(tenantId))
+    .or(`invite_email.ilike.${cleanEmail},email.ilike.${cleanEmail}`)
+    .eq('status', 'pending');
+
+  if (!inviteCheckErr && existingInvites && existingInvites.length > 0) {
+    const hasActiveUnexpired = existingInvites.some(
+      (inv) => !inv.expires_at || new Date(inv.expires_at) > new Date()
+    );
+    if (hasActiveUnexpired) {
+      const err = new Error(`Undangan aktif untuk email ${cleanEmail} sudah tersedia. Silakan cek tab Undangan Staff atau batalkan undangan lama jika ingin menerbitkan yang baru.`);
+      err.code = 'INVITATION_ALREADY_EXISTS';
+      throw err;
+    }
+  }
+
+  // 2. D2: Pre-check apakah staf dengan email ini sudah terdaftar dan terikat Auth UID aktif
+  const { data: existingStaff, error: fetchErr } = await supabase
     .from('users_staff')
     .select('id, uid, is_active, status, role')
-    .eq('tenant_id', tenantId)
+    .eq('tenant_id', String(tenantId))
     .ilike('email', cleanEmail);
 
   if (fetchErr) {
     console.warn('[staffService] Pre-fetch candidate check warning:', fetchErr.message);
   }
 
-  // Jika calon staf belum ada sama sekali, buat record kandidat baru
-  const matchingUnbound = (existingCandidates || []).find(
+  const boundStaff = (existingStaff || []).find((s) => Boolean(s.uid));
+  if (boundStaff) {
+    const err = new Error(`Staf dengan email ${cleanEmail} sudah terdaftar dan aktif di cabang ini.`);
+    err.code = 'STAFF_ALREADY_BOUND';
+    throw err;
+  }
+
+  // 3. D3: Jika calon belum ada sama sekali, buat record kandidat baru di `users_staff` dan catat ID-nya untuk rollback jika RPC gagal
+  let createdCandidateId = null;
+  const matchingUnbound = (existingStaff || []).find(
     (c) => !c.uid && (c.role === canonicalRole || normalizeStaffRole(c.role) === canonicalRole)
   );
 
   if (!matchingUnbound) {
     const candidateRecord = {
-      tenant_id: tenantId,
+      tenant_id: String(tenantId),
       email: cleanEmail,
       name: cleanFullName || cleanEmail.split('@')[0],
       display_name: cleanFullName || cleanEmail.split('@')[0],
@@ -73,17 +99,20 @@ export async function createStaffInvitation({ tenantId, email, role, fullName, d
       created_at: new Date().toISOString(),
     };
 
-    const { error: insertErr } = await supabase
+    const { data: insertedData, error: insertErr } = await supabase
       .from('users_staff')
-      .insert([candidateRecord]);
+      .insert([candidateRecord])
+      .select('id')
+      .maybeSingle();
 
     if (insertErr) {
-      // Jika terjadi conflict / sudah ada, log dan lanjutkan
       console.warn('[staffService] Candidate insert warning (will proceed to RPC):', insertErr.message);
+    } else if (insertedData?.id) {
+      createdCandidateId = insertedData.id;
     }
   }
 
-  // 2. Panggil RPC resmi database create_staff_invitation
+  // 4. D4: Panggil RPC resmi database create_staff_invitation
   const { data: rpcResult, error: rpcErr } = await supabase.rpc('create_staff_invitation', {
     target_tenant_id: String(tenantId),
     invite_email: cleanEmail,
@@ -92,11 +121,29 @@ export async function createStaffInvitation({ tenantId, email, role, fullName, d
 
   if (rpcErr) {
     console.error('[staffService] create_staff_invitation RPC error:', rpcErr);
+
+    // D5: Jika RPC gagal setelah kandidat baru dibuat oleh proses ini, lakukan cleanup kandidat yatim
+    if (createdCandidateId) {
+      console.info('[staffService] Rolling back orphan candidate record ID:', createdCandidateId);
+      try {
+        await supabase
+          .from('users_staff')
+          .delete()
+          .eq('id', createdCandidateId)
+          .is('uid', null);
+      } catch (cleanupErr) {
+        console.warn('[staffService] Failed to cleanup orphan candidate:', cleanupErr);
+      }
+    }
+
+    if (rpcErr.message?.includes('Undangan aktif untuk email ini sudah tersedia')) {
+      throw new Error(`Undangan aktif untuk email ${cleanEmail} sudah tersedia. Silakan cek tab Undangan Staff.`);
+    }
+
     throw new Error(rpcErr.message || 'Gagal membuat undangan staf di database.');
   }
 
-  // Tangani respons RPC (RETURNS JSONB):
-  // PostgREST/Supabase RPC dapat mengembalikan object langsung, string JSON, atau array [object]
+  // 5. Tangani respons RPC (RETURNS JSONB)
   let rpcData = rpcResult;
   if (typeof rpcData === 'string') {
     try {
@@ -116,6 +163,11 @@ export async function createStaffInvitation({ tenantId, email, role, fullName, d
 
   // Task C: Pastikan raw_token benar-benar tersedia sebelum membentuk inviteUrl
   if (!rawToken) {
+    if (createdCandidateId) {
+      try {
+        await supabase.from('users_staff').delete().eq('id', createdCandidateId).is('uid', null);
+      } catch (_) {}
+    }
     console.error('[staffService] RPC returned missing raw_token. Raw RPC output:', rpcResult);
     throw new Error('Gagal mendapatkan token mentah dari database RPC (raw_token kosong). Silakan coba lagi.');
   }
