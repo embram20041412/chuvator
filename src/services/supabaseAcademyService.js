@@ -790,32 +790,111 @@ export async function updateStudent(studentId, updateFields) {
 }
 
 export async function updateStudentGrowth(studentId, { height, weight, growthEntry }) {
-  if (!studentId) return;
-  const { data: currentStudent } = await supabase
+  if (!studentId) {
+    throw new Error('Student ID wajib disertakan.');
+  }
+
+  // 1. Baca data siswa dan histori pertumbuhan saat ini dari database
+  const { data: currentStudent, error: readError } = await supabase
     .from('students')
-    .select('growth_history')
+    .select('*')
     .eq('id', studentId)
-    .maybeSingle();
+    .single();
 
-  const currentHistory = currentStudent?.growth_history || [];
-  const updatedHistory = growthEntry ? [...currentHistory, growthEntry] : currentHistory;
+  if (readError) {
+    console.error('[Supabase updateStudentGrowth read error]:', readError);
+    throw readError;
+  }
 
-  const { data, error } = await supabase
+  if (!currentStudent) {
+    throw new Error(`Data siswa dengan ID "${studentId}" tidak ditemukan.`);
+  }
+
+  // 2. Pastikan growth_history selalu diproses sebagai array dan tidak hilang
+  let currentHistory = [];
+  const rawHistory = currentStudent.growth_history;
+  if (Array.isArray(rawHistory)) {
+    currentHistory = [...rawHistory];
+  } else if (typeof rawHistory === 'string') {
+    try {
+      const parsed = JSON.parse(rawHistory);
+      if (Array.isArray(parsed)) currentHistory = parsed;
+    } catch {
+      currentHistory = [];
+    }
+  }
+
+  // 3. Tambahkan entri baru dengan tanggal, tinggi, berat, BMI, status, dan waktu pencatatan
+  let updatedHistory = currentHistory;
+  if (growthEntry) {
+    const entryHeight = Number(growthEntry.height !== undefined ? growthEntry.height : height);
+    const entryWeight = Number(growthEntry.weight !== undefined ? growthEntry.weight : weight);
+    let entryBmi = growthEntry.bmi !== undefined && growthEntry.bmi !== null ? Number(growthEntry.bmi) : null;
+    if ((entryBmi === null || isNaN(entryBmi) || entryBmi <= 0) && entryHeight > 0 && entryWeight > 0) {
+      const hM = entryHeight / 100;
+      entryBmi = Math.round((entryWeight / (hM * hM)) * 10) / 10;
+    }
+    const entryStatus = growthEntry.status || (
+      entryBmi ? (entryBmi < 18.5 ? 'Underweight' : entryBmi <= 24.9 ? 'Proporsional' : 'Overweight') : 'Belum Ada'
+    );
+    const formattedEntry = {
+      date: growthEntry.date || new Date().toISOString().split('T')[0],
+      height: entryHeight,
+      weight: entryWeight,
+      bmi: entryBmi,
+      status: entryStatus,
+      recordedAt: growthEntry.recordedAt || new Date().toISOString()
+    };
+    updatedHistory = [...currentHistory, formattedEntry];
+  } else if (height !== undefined && weight !== undefined && Number(height) > 0 && Number(weight) > 0) {
+    const entryHeight = Number(height);
+    const entryWeight = Number(weight);
+    const hM = entryHeight / 100;
+    const entryBmi = Math.round((entryWeight / (hM * hM)) * 10) / 10;
+    const entryStatus = entryBmi < 18.5 ? 'Underweight' : entryBmi <= 24.9 ? 'Proporsional' : 'Overweight';
+    const formattedEntry = {
+      date: new Date().toISOString().split('T')[0],
+      height: entryHeight,
+      weight: entryWeight,
+      bmi: entryBmi,
+      status: entryStatus,
+      recordedAt: new Date().toISOString()
+    };
+    updatedHistory = [...currentHistory, formattedEntry];
+  }
+
+  // 4. Pastikan tinggi dan berat badan terbaru tersimpan pada kolom utama siswa
+  const finalHeight = height !== undefined && height !== null && height !== ''
+    ? Number(height)
+    : (growthEntry?.height !== undefined ? Number(growthEntry.height) : (currentStudent.height ? Number(currentStudent.height) : null));
+
+  const finalWeight = weight !== undefined && weight !== null && weight !== ''
+    ? Number(weight)
+    : (growthEntry?.weight !== undefined ? Number(growthEntry.weight) : (currentStudent.weight ? Number(currentStudent.weight) : null));
+
+  // 5. Lakukan UPDATE ke database
+  const updatePayload = {
+    height: finalHeight,
+    weight: finalWeight,
+    growth_history: updatedHistory,
+    updated_at: new Date().toISOString()
+  };
+
+  const { data: updatedData, error: updateError } = await supabase
     .from('students')
-    .update({
-      height: height ? Number(height) : null,
-      weight: weight ? Number(weight) : null,
-      growth_history: updatedHistory,
-      updated_at: new Date().toISOString()
-    })
+    .update(updatePayload)
     .eq('id', studentId)
     .select()
-    .maybeSingle();
+    .single();
 
-  if (error) {
-    console.warn('[Supabase updateStudentGrowth warning]:', error);
+  // 6. Lemparkan kembali error UPDATE agar dapat ditangani UI
+  if (updateError) {
+    console.error('[Supabase updateStudentGrowth update error]:', updateError);
+    throw updateError;
   }
-  return data;
+
+  // 7. Gunakan data hasil UPDATE sebagai hasil fungsi
+  return mapStudentFromSupabase(updatedData);
 }
 
 export async function deleteStudent(studentId) {

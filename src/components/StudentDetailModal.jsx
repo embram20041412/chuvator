@@ -510,7 +510,13 @@ export default function StudentDetailModal({
           {/* TAB 1.5: ANTROPOMETRI (GROWTH TRACKER & AI GIZI) */}
           {activeTab === 'pertumbuhan' && (
             <div className="animate-fade-in">
-              <GrowthTrackerSection selectedStudent={currentStudent || student} />
+              <GrowthTrackerSection
+                selectedStudent={currentStudent || student}
+                onStudentUpdated={(updated) => {
+                  setCurrentStudent(updated);
+                  onStudentUpdated?.(updated);
+                }}
+              />
             </div>
           )}
 

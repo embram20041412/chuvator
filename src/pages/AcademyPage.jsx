@@ -2072,6 +2072,9 @@ export default function AcademyPage({ userProfile }) {
                       <div className={attendanceSubTab === 'perkembangan' || (attendanceSubTab !== 'presensi' && attendanceSubTab !== 'evaluasi') ? 'block' : 'hidden'}>
                         <GrowthTrackerSection
                           students={filteredStudents.filter((s) => s.classId === currentClass.id || s.className === currentClass.className)}
+                          onStudentUpdated={() => {
+                            fetchAcademyData();
+                          }}
                         />
                       </div>
                     </div>

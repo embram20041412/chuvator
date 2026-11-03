@@ -54,9 +54,10 @@ export function getBMIStatus(bmi) {
   return { status: 'Overweight', label: 'Kelebihan Massa (Overweight)', color: 'bg-rose-100 text-rose-800 border-rose-300' };
 }
 
-export default function GrowthTrackerSection({ selectedStudent, students = [] }) {
+export default function GrowthTrackerSection({ selectedStudent, students = [], onStudentUpdated }) {
   // If students array is passed and selectedStudent is not provided, allow choosing a student locally
   const [selectedStudentId, setSelectedStudentId] = useState(selectedStudent?.id || '');
+  const [localStudentData, setLocalStudentData] = useState(null);
 
   useEffect(() => {
     if (selectedStudent?.id) {
@@ -64,7 +65,12 @@ export default function GrowthTrackerSection({ selectedStudent, students = [] })
     }
   }, [selectedStudent?.id]);
 
-  const currentStudent = useMemo(() => {
+  // Reset local override when active student changes
+  useEffect(() => {
+    setLocalStudentData(null);
+  }, [selectedStudentId, selectedStudent?.id]);
+
+  const baseStudent = useMemo(() => {
     if (selectedStudent) return selectedStudent;
     if (students.length > 0) {
       return students.find((s) => s.id === selectedStudentId) || students[0];
@@ -72,16 +78,24 @@ export default function GrowthTrackerSection({ selectedStudent, students = [] })
     return null;
   }, [selectedStudent, students, selectedStudentId]);
 
+  // Use localStudentData (latest from DB update) if available for current student
+  const currentStudent = useMemo(() => {
+    if (localStudentData && baseStudent && localStudentData.id === baseStudent.id) {
+      return localStudentData;
+    }
+    return baseStudent;
+  }, [baseStudent, localStudentData]);
+
   // Form states
   const [newHeight, setNewHeight] = useState('');
   const [newWeight, setNewWeight] = useState('');
   const [recordDate, setRecordDate] = useState(() => new Date().toISOString().split('T')[0]);
 
-  // Sync form inputs when currentStudent changes
+  // Sync form inputs when currentStudent changes (only when not saving)
   useEffect(() => {
     if (currentStudent) {
-      setNewHeight(currentStudent.height ? String(currentStudent.height) : '');
-      setNewWeight(currentStudent.weight ? String(currentStudent.weight) : '');
+      setNewHeight(currentStudent.height !== null && currentStudent.height !== undefined ? String(currentStudent.height) : '');
+      setNewWeight(currentStudent.weight !== null && currentStudent.weight !== undefined ? String(currentStudent.weight) : '');
     }
   }, [currentStudent?.id, currentStudent?.height, currentStudent?.weight]);
 
@@ -95,19 +109,28 @@ export default function GrowthTrackerSection({ selectedStudent, students = [] })
   const liveBMI = useMemo(() => calculateBMI(newHeight, newWeight), [newHeight, newWeight]);
   const liveStatus = useMemo(() => getBMIStatus(liveBMI), [liveBMI]);
 
-  // Sorted Growth History for Line Chart Visualization
+  // Sorted Growth History for Line Chart Visualization and History Table
   const historyList = useMemo(() => {
-    if (!currentStudent?.growthHistory || !Array.isArray(currentStudent.growthHistory)) {
-      return [];
+    const raw = currentStudent?.growthHistory ?? currentStudent?.growth_history;
+    let list = [];
+    if (Array.isArray(raw)) {
+      list = [...raw];
+    } else if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) list = [...parsed];
+      } catch {
+        list = [];
+      }
     }
-    const list = [...currentStudent.growthHistory];
-    list.sort((a, b) => new Date(a.date || a.recordedAt || 0) - new Date(b.date || b.recordedAt || 0));
-    return list;
-  }, [currentStudent?.growthHistory]);
+    return list
+      .filter((item) => item && typeof item === 'object')
+      .sort((a, b) => new Date(a.date || a.recordedAt || 0) - new Date(b.date || b.recordedAt || 0));
+  }, [currentStudent?.growthHistory, currentStudent?.growth_history]);
 
   const chartData = useMemo(() => {
     if (historyList.length === 0) {
-      if (newHeight && newWeight) {
+      if (newHeight && newWeight && Number(newHeight) > 0 && Number(newWeight) > 0) {
         return [
           {
             dateFormatted: recordDate || 'Hari Ini',
@@ -127,15 +150,34 @@ export default function GrowthTrackerSection({ selectedStudent, students = [] })
     }));
   }, [historyList, newHeight, newWeight, recordDate, liveBMI]);
 
-  // Save new growth record to Firestore
+  // Save new growth record to Supabase
   const handleSaveGrowthRecord = async (e) => {
     e.preventDefault();
+
+    // Hindari penambahan histori ganda akibat satu kali klik Simpan
+    if (isSaving) return;
+
     if (!currentStudent?.id) {
       setErrorMsg('Pilih siswa atlet untuk mencatat data antropometri.');
       return;
     }
-    if (!newHeight || !newWeight || Number(newHeight) <= 0 || Number(newWeight) <= 0) {
+
+    const parsedH = Number(newHeight);
+    const parsedW = Number(newWeight);
+
+    // Pertahankan validasi tinggi dan berat badan
+    if (!newHeight || !newWeight || isNaN(parsedH) || isNaN(parsedW) || parsedH <= 0 || parsedW <= 0) {
       setErrorMsg('Masukkan tinggi badan (cm) dan berat badan (kg) yang valid.');
+      return;
+    }
+
+    if (parsedH < 50 || parsedH > 250) {
+      setErrorMsg('Tinggi badan harus di antara 50 cm dan 250 cm.');
+      return;
+    }
+
+    if (parsedW < 10 || parsedW > 250) {
+      setErrorMsg('Berat badan harus di antara 10 kg dan 250 kg.');
       return;
     }
 
@@ -143,30 +185,43 @@ export default function GrowthTrackerSection({ selectedStudent, students = [] })
     setErrorMsg(null);
     setSuccessMsg(null);
 
-    const bmiVal = calculateBMI(newHeight, newWeight);
+    const bmiVal = calculateBMI(parsedH, parsedW);
     const statusObj = getBMIStatus(bmiVal);
 
     const newEntry = {
       date: recordDate || new Date().toISOString().split('T')[0],
-      height: Number(newHeight),
-      weight: Number(newWeight),
+      height: parsedH,
+      weight: parsedW,
       bmi: Number(bmiVal),
       status: statusObj.status,
       recordedAt: new Date().toISOString()
     };
 
     try {
-      await updateStudentGrowth(currentStudent.id, {
-        height: Number(newHeight),
-        weight: Number(newWeight),
+      const updatedStudent = await updateStudentGrowth(currentStudent.id, {
+        height: parsedH,
+        weight: parsedW,
         growthEntry: newEntry
       });
 
-      setSuccessMsg(`Data antropometri (${newHeight} cm / ${newWeight} kg - ${statusObj.status}) berhasil dicatat!`);
+      if (!updatedStudent) {
+        throw new Error('Tidak ada data respon dari database.');
+      }
+
+      // Perbarui data siswa dan histori yang ditampilkan secara instan
+      setLocalStudentData(updatedStudent);
+
+      // Notifikasi ke parent component jika callback tersedia
+      if (typeof onStudentUpdated === 'function') {
+        onStudentUpdated(updatedStudent);
+      }
+
+      setSuccessMsg(`Data antropometri (${parsedH} cm / ${parsedW} kg - ${statusObj.status}) berhasil dicatat!`);
       setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err) {
       console.error('Failed to save growth record in Supabase:', err);
-      setErrorMsg('Gagal menyimpan rekam pertumbuhan antropometri: ' + (err.message || 'Silakan coba lagi.'));
+      const friendlyMsg = err?.message || 'Silakan coba lagi.';
+      setErrorMsg('Gagal menyimpan rekam pertumbuhan antropometri: ' + friendlyMsg);
     } finally {
       setIsSaving(false);
     }
