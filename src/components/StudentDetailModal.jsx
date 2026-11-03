@@ -399,10 +399,12 @@ export default function StudentDetailModal({
 
                 {isEditingClass ? (
                   <div className="p-3 bg-white rounded-lg border border-slate-200 space-y-2 animate-fade-in">
-                    <label className="block text-[11px] font-bold text-gray-700">
+                    <label htmlFor="edit-student-class-select" className="block text-[11px] font-bold text-gray-700">
                       Pilih Kelas / Kelompok Latihan Baru:
                     </label>
                     <select
+                      id="edit-student-class-select"
+                      name="editClassId"
                       value={editClassId}
                       onChange={(e) => setEditClassId(e.target.value)}
                       className="w-full px-3 py-2 text-xs bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:border-[#354944] font-medium text-gray-800"
@@ -574,8 +576,10 @@ export default function StudentDetailModal({
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="sm:col-span-1">
-                    <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">Nama Turnamen</label>
+                    <label htmlFor="student-tournament-name" className="block text-[10px] font-bold text-gray-600 uppercase mb-1">Nama Turnamen</label>
                     <input
+                      id="student-tournament-name"
+                      name="tournamentName"
                       type="text"
                       required
                       value={tournamentName}
@@ -586,19 +590,23 @@ export default function StudentDetailModal({
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">Tanggal</label>
+                    <label htmlFor="student-tournament-date" className="block text-[10px] font-bold text-gray-600 uppercase mb-1">Tanggal</label>
                     <input
+                      id="student-tournament-date"
+                      name="tournamentDate"
                       type="date"
                       required
                       value={tournamentDate}
                       onChange={(e) => setTournamentDate(e.target.value)}
-                      className="w-full px-3 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500"
+                      className="w-full px-3 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 font-medium text-gray-800"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold text-gray-600 uppercase mb-1">Pencapaian / Hasil</label>
+                    <label htmlFor="student-tournament-result" className="block text-[10px] font-bold text-gray-600 uppercase mb-1">Pencapaian / Hasil</label>
                     <select
+                      id="student-tournament-result"
+                      name="tournamentResult"
                       value={tournamentResult}
                       onChange={(e) => setTournamentResult(e.target.value)}
                       className="w-full px-3 py-1.5 text-xs bg-white border border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 font-bold text-[#333333]"

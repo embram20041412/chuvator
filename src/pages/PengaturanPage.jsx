@@ -753,6 +753,9 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
               {/* Input File & Status */}
               <div>
                 <input
+  aria-label="pengaturan file 755"
+  name="file_755"
+  id="pengaturan-file-755"
                   type="file"
                   accept="image/*"
                   onChange={handleLogoFileSelect}
@@ -882,6 +885,9 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                     <div>
                       <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase mb-1">Nama Bank</label>
                       <input
+  aria-label="pengaturan acc bank name"
+  name="acc_bankName"
+  id="pengaturan-acc-bank-name"
                         type="text"
                         value={acc.bankName || ''}
                         onChange={(e) => handleBankAccountChange(index, 'bankName', e.target.value)}
@@ -892,6 +898,9 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                     <div>
                       <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase mb-1">Nomor Rekening</label>
                       <input
+  aria-label="pengaturan acc account number"
+  name="acc_accountNumber"
+  id="pengaturan-acc-account-number"
                         type="text"
                         value={acc.accountNumber || ''}
                         onChange={(e) => handleBankAccountChange(index, 'accountNumber', e.target.value)}
@@ -902,6 +911,9 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                     <div>
                       <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase mb-1">Atas Nama (Pemilik)</label>
                       <input
+  aria-label="pengaturan acc account name"
+  name="acc_accountName"
+  id="pengaturan-acc-account-name"
                         type="text"
                         value={acc.accountName || ''}
                         onChange={(e) => handleBankAccountChange(index, 'accountName', e.target.value)}
@@ -962,7 +974,10 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                   <label className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-blue-500 hover:text-blue-600 text-slate-700 dark:text-slate-300 text-xs font-semibold rounded-lg cursor-pointer shadow-2xs transition-colors">
                     <Upload className="w-3 h-3 text-blue-600 dark:text-blue-400" />
                     <span className="truncate max-w-[200px]">{qrisFileName ? `File: ${qrisFileName}` : 'Pilih File Gambar QRIS...'}</span>
-                    <input type="file" accept="image/*" onChange={handleQrisFileSelect} className="hidden" />
+                    <input
+  aria-label="pengaturan file 977"
+  name="file_977"
+  id="pengaturan-file-977" type="file" accept="image/*" onChange={handleQrisFileSelect} className="hidden" />
                   </label>
                 </div>
               </div>
@@ -1015,6 +1030,9 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                   </label>
                   <div className="relative">
                     <input
+  aria-label="pengaturan spp billing start day"
+  name="sppBillingStartDay"
+  id="pengaturan-spp-billing-start-day"
                       type="number"
                       min="1"
                       max="28"
@@ -1033,6 +1051,9 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                   </label>
                   <div className="relative">
                     <input
+  aria-label="pengaturan spp due day"
+  name="sppDueDay"
+  id="pengaturan-spp-due-day"
                       type="number"
                       min="1"
                       max="28"
@@ -1063,6 +1084,9 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                       Nama Usaha / Header Struk
                     </label>
                     <input
+  aria-label="pengaturan receipt header name"
+  name="receiptHeaderName"
+  id="pengaturan-receipt-header-name"
                       type="text"
                       value={receiptHeaderName}
                       onChange={(e) => setReceiptHeaderName(e.target.value)}
@@ -1076,6 +1100,9 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                       Alamat Lengkap Usaha / Lapangan
                     </label>
                     <input
+  aria-label="pengaturan receipt address"
+  name="receiptAddress"
+  id="pengaturan-receipt-address"
                       type="text"
                       value={receiptAddress}
                       onChange={(e) => setReceiptAddress(e.target.value)}
@@ -1089,6 +1116,9 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                       Kontak / No. Telepon / WhatsApp
                     </label>
                     <input
+  aria-label="pengaturan receipt contact"
+  name="receiptContact"
+  id="pengaturan-receipt-contact"
                       type="text"
                       value={receiptContact}
                       onChange={(e) => setReceiptContact(e.target.value)}
@@ -1102,6 +1132,9 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                       Pesan Catatan Kaki (Footer Note Struk)
                     </label>
                     <textarea
+  aria-label="pengaturan receipt footer note"
+  name="receiptFooterNote"
+  id="pengaturan-receipt-footer-note"
                       rows={2}
                       value={receiptFooterNote}
                       onChange={(e) => setReceiptFooterNote(e.target.value)}
@@ -1302,6 +1335,9 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                           <div className="relative">
                             <span className="text-[11px] font-bold text-slate-400 absolute left-2.5 top-1.5">Rp</span>
                             <input
+  aria-label="e.g. 150.000"
+  name="currentBulkInput"
+  id="pengaturan-current-bulk-input"
                               type="text"
                               placeholder="e.g. 150.000"
                               value={currentBulkInput}
@@ -1364,6 +1400,9 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                             <div className="relative">
                               <span className="text-[11px] font-bold text-slate-400 absolute left-2.5 top-1.5">Rp</span>
                               <input
+  aria-label="pengaturan current price input"
+  name="currentPriceInput"
+  id="pengaturan-current-price-input"
                                 type="text"
                                 value={currentPriceInput}
                                 onChange={(e) => handlePriceInputChange(court.id, e.target.value)}
@@ -1454,6 +1493,9 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                       <div className="relative">
                         <span className="text-[11px] font-bold text-slate-400 absolute left-2 top-1.5">Rp</span>
                         <input
+  aria-label="pengaturan pricing spp0"
+  name="pricing_spp0"
+  id="pengaturan-pricing-spp0"
                           type="number"
                           min="0"
                           step="any"
@@ -1471,6 +1513,9 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                       <div className="relative">
                         <span className="text-[11px] font-bold text-slate-400 absolute left-2 top-1.5">Rp</span>
                         <input
+  aria-label="pengaturan pricing registration0"
+  name="pricing_registration0"
+  id="pengaturan-pricing-registration0"
                           type="number"
                           min="0"
                           step="any"
@@ -1497,6 +1542,9 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
               <div>
                 <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Nama Cabang</label>
                 <select
+  aria-label="pengaturan new sport name"
+  name="newSportName"
+  id="pengaturan-new-sport-name"
                   value={newSportName}
                   onChange={(e) => setNewSportName(e.target.value)}
                   className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg focus:outline-none focus:border-blue-500 font-bold text-slate-800 dark:text-slate-200 cursor-pointer"
@@ -1512,6 +1560,9 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
               <div>
                 <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">SPP Bulanan (Rp)</label>
                 <input
+  aria-label="e.g. 300000"
+  name="newSportSpp"
+  id="pengaturan-new-sport-spp"
                   type="number"
                   min="0"
                   step="any"
@@ -1524,6 +1575,9 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
               <div>
                 <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Pendaftaran (Rp)</label>
                 <input
+  aria-label="e.g. 150000"
+  name="newSportReg"
+  id="pengaturan-new-sport-reg"
                   type="number"
                   min="0"
                   step="any"

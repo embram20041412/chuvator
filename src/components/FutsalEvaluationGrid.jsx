@@ -115,6 +115,9 @@ export default function FutsalEvaluationGrid({
             Override Jenjang:
           </label>
           <select
+  aria-label="futsal evaluation grid manual futsal tier override"
+  name="manualFutsalTierOverride"
+  id="futsal-evaluation-grid-manual-futsal-tier-override"
             value={manualFutsalTierOverride}
             onChange={(e) => setManualFutsalTierOverride(e.target.value)}
             className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs font-bold text-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer"
@@ -229,6 +232,9 @@ export default function FutsalEvaluationGrid({
                       <span className="font-black text-rose-600 text-sm">{val}</span>
                     </div>
                     <input
+  aria-label="futsal evaluation grid val"
+  name="val"
+  id="futsal-evaluation-grid-val"
                       type="range"
                       min="0"
                       max="100"
@@ -264,6 +270,9 @@ export default function FutsalEvaluationGrid({
                       <span className="font-black text-blue-600 text-sm">{val}</span>
                     </div>
                     <input
+  aria-label="futsal evaluation grid val"
+  name="val"
+  id="futsal-evaluation-grid-val"
                       type="range"
                       min="0"
                       max="100"
@@ -299,6 +308,9 @@ export default function FutsalEvaluationGrid({
                       <span className="font-black text-teal-600 text-sm">{val}</span>
                     </div>
                     <input
+  aria-label="futsal evaluation grid val"
+  name="val"
+  id="futsal-evaluation-grid-val"
                       type="range"
                       min="0"
                       max="100"
@@ -341,6 +353,9 @@ export default function FutsalEvaluationGrid({
                       <span className="font-black text-purple-600 text-sm">{val}</span>
                     </div>
                     <input
+  aria-label="futsal evaluation grid val"
+  name="val"
+  id="futsal-evaluation-grid-val"
                       type="range"
                       min="0"
                       max="100"
@@ -376,6 +391,9 @@ export default function FutsalEvaluationGrid({
                       <span className="font-black text-emerald-600 text-sm">{val}</span>
                     </div>
                     <input
+  aria-label="futsal evaluation grid val"
+  name="val"
+  id="futsal-evaluation-grid-val"
                       type="range"
                       min="0"
                       max="100"
@@ -411,6 +429,9 @@ export default function FutsalEvaluationGrid({
                       <span className="font-black text-amber-600 text-sm">{val}</span>
                     </div>
                     <input
+  aria-label="futsal evaluation grid val"
+  name="val"
+  id="futsal-evaluation-grid-val"
                       type="range"
                       min="0"
                       max="100"
@@ -450,6 +471,9 @@ export default function FutsalEvaluationGrid({
                       <span className="font-black text-indigo-600 text-sm">{val}</span>
                     </div>
                     <input
+  aria-label="futsal evaluation grid val"
+  name="val"
+  id="futsal-evaluation-grid-val"
                       type="range"
                       min="0"
                       max="100"
@@ -491,6 +515,9 @@ export default function FutsalEvaluationGrid({
                         <span className="font-black text-cyan-700 text-sm">{val}</span>
                       </div>
                       <input
+  aria-label="futsal evaluation grid val"
+  name="val"
+  id="futsal-evaluation-grid-val"
                         type="range"
                         min="0"
                         max="100"

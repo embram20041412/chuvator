@@ -399,10 +399,12 @@ export default function BookingPaymentModal({
               <p className="font-bold text-emerald-900 dark:text-emerald-300 text-xs">Kalkulator Pembayaran Tunai (Cash)</p>
               
               <div>
-                <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                <label htmlFor="booking-cash-received" className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
                   Jumlah Uang Diterima (Rp) *
                 </label>
                 <input
+                  id="booking-cash-received"
+                  name="cashReceived"
                   type="number"
                   min="0"
                   placeholder="Contoh: 100000"

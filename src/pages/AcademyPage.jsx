@@ -967,6 +967,9 @@ export default function AcademyPage({ userProfile }) {
                       </div>
                     ) : (
                       <select
+                        id="academy-active-select"
+                        name="activeAcademyId"
+                        aria-label="Pilih Akademi Aktif"
                         value={activeAcademyId}
                         onChange={(e) => {
                           const id = e.target.value;
@@ -1040,6 +1043,9 @@ export default function AcademyPage({ userProfile }) {
                         </div>
                       ) : (
                         <select
+                          id="mobile-academy-active-select"
+                          name="activeAcademyId"
+                          aria-label="Pilih Akademi Aktif Mobile"
                           value={activeAcademyId}
                           onChange={(e) => {
                             const id = e.target.value;
@@ -1946,10 +1952,12 @@ export default function AcademyPage({ userProfile }) {
 
               {/* 2. DROPDOWN KELAS SEBAGAI FILTER GLOBAL */}
               <div className="flex items-center gap-2 shrink-0 w-full xl:w-72">
-                <label className="text-xs font-bold text-slate-700 whitespace-nowrap shrink-0">
+                <label htmlFor="academy-selected-class-filter" className="text-xs font-bold text-slate-700 whitespace-nowrap shrink-0">
                   Kelas:
                 </label>
                 <select
+                  id="academy-selected-class-filter"
+                  name="selectedClassId"
                   value={selectedClassId}
                   onChange={(e) => setSelectedClassId(e.target.value)}
                   className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:bg-white focus:outline-none focus:border-[#354944] focus:ring-1 focus:ring-[#354944]/30 text-xs font-bold text-slate-800 cursor-pointer shadow-2xs"
@@ -2271,11 +2279,14 @@ export default function AcademyPage({ userProfile }) {
 
             <form onSubmit={handleUpdateSelfPassword} className="space-y-3">
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label htmlFor="coach-new-password-input" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Password Baru <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="coach-new-password-input"
+                  name="newCoachPassword"
                   type="password"
+                  autoComplete="new-password"
                   value={newCoachPassword}
                   onChange={(e) => setNewCoachPassword(e.target.value)}
                   placeholder="Minimal 6 karakter"
@@ -2286,11 +2297,14 @@ export default function AcademyPage({ userProfile }) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                <label htmlFor="coach-confirm-password-input" className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                   Konfirmasi Password Baru <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="coach-confirm-password-input"
+                  name="confirmCoachPassword"
                   type="password"
+                  autoComplete="new-password"
                   value={confirmCoachPassword}
                   onChange={(e) => setConfirmCoachPassword(e.target.value)}
                   placeholder="Ketik ulang password baru"

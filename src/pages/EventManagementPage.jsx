@@ -1093,6 +1093,9 @@ export default function EventManagementPage({ userProfile }) {
       {/* MOBILE DROPDOWN */}
       <div className="block md:hidden mb-4">
         <select
+  aria-label="event management active tab"
+  name="activeTab"
+  id="event-management-active-tab"
           value={activeTab}
           onChange={(e) => setActiveTab(e.target.value)}
           className="w-full px-4 py-3 bg-white dark:bg-slate-900 border border-gray-200 dark:border-slate-800 rounded-2xl font-bold text-xs text-gray-800 dark:text-slate-100 shadow-sm focus:outline-none cursor-pointer"
@@ -1219,6 +1222,9 @@ export default function EventManagementPage({ userProfile }) {
             <div className="relative w-full md:w-80">
               <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
+  aria-label="Cari nama event, cabang, lokasi..."
+  name="eventSearch"
+  id="event-management-event-search"
                 type="text"
                 placeholder="Cari nama event, cabang, lokasi..."
                 value={eventSearch}
@@ -1230,6 +1236,9 @@ export default function EventManagementPage({ userProfile }) {
             <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
               {/* Status Filter */}
               <select
+  aria-label="event management event status filter"
+  name="eventStatusFilter"
+  id="event-management-event-status-filter"
                 value={eventStatusFilter}
                 onChange={(e) => setEventStatusFilter(e.target.value)}
                 className="px-3 py-2 border border-gray-200 rounded-xl text-xs font-medium bg-white text-gray-700 focus:outline-none cursor-pointer"
@@ -1243,6 +1252,9 @@ export default function EventManagementPage({ userProfile }) {
 
               {/* Sport Filter */}
               <select
+  aria-label="event management event sport filter"
+  name="eventSportFilter"
+  id="event-management-event-sport-filter"
                 value={eventSportFilter}
                 onChange={(e) => setEventSportFilter(e.target.value)}
                 className="px-3 py-2 border border-gray-200 rounded-xl text-xs font-medium bg-white text-gray-700 focus:outline-none cursor-pointer"
@@ -1461,6 +1473,9 @@ export default function EventManagementPage({ userProfile }) {
                     {/* CARD FOOTER */}
                     <div className="px-5 py-3.5 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-2">
                       <select
+  aria-label="event management ev status"
+  name="ev_status"
+  id="event-management-ev-status"
                         value={ev.status}
                         onChange={(e) => handleQuickStatusChange(ev.id, e.target.value)}
                         className="text-[11px] font-bold bg-white border border-slate-200 rounded-lg px-2 py-1 text-slate-700 cursor-pointer focus:outline-none"
@@ -1561,6 +1576,9 @@ export default function EventManagementPage({ userProfile }) {
             <div className="relative w-full md:w-80">
               <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
+  aria-label="Cari nama perusahaan, kontak, kategori..."
+  name="sponsorSearch"
+  id="event-management-sponsor-search"
                 type="text"
                 placeholder="Cari nama perusahaan, kontak, kategori..."
                 value={sponsorSearch}
@@ -1571,6 +1589,9 @@ export default function EventManagementPage({ userProfile }) {
 
             <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
               <select
+  aria-label="event management sponsor status filter"
+  name="sponsorStatusFilter"
+  id="event-management-sponsor-status-filter"
                 value={sponsorStatusFilter}
                 onChange={(e) => setSponsorStatusFilter(e.target.value)}
                 className="px-3 py-2 border border-gray-200 rounded-xl text-xs font-medium bg-white text-gray-700 focus:outline-none cursor-pointer"
@@ -1582,6 +1603,9 @@ export default function EventManagementPage({ userProfile }) {
               </select>
 
               <select
+  aria-label="event management sponsor event filter"
+  name="sponsorEventFilter"
+  id="event-management-sponsor-event-filter"
                 value={sponsorEventFilter}
                 onChange={(e) => setSponsorEventFilter(e.target.value)}
                 className="px-3 py-2 border border-gray-200 rounded-xl text-xs font-medium bg-white text-gray-700 focus:outline-none cursor-pointer max-w-[200px]"
@@ -1836,6 +1860,9 @@ export default function EventManagementPage({ userProfile }) {
             <div className="relative w-full md:w-80">
               <Search className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
+  aria-label="Cari judul dokumen, jenis, regulasi..."
+  name="docSearch"
+  id="event-management-doc-search"
                 type="text"
                 placeholder="Cari judul dokumen, jenis, regulasi..."
                 value={docSearch}
@@ -1846,6 +1873,9 @@ export default function EventManagementPage({ userProfile }) {
 
             <div className="w-full md:w-auto">
               <select
+  aria-label="event management doc event filter"
+  name="docEventFilter"
+  id="event-management-doc-event-filter"
                 value={docEventFilter}
                 onChange={(e) => setDocEventFilter(e.target.value)}
                 className="px-3 py-2 border border-gray-200 rounded-xl text-xs font-medium bg-white text-gray-700 focus:outline-none cursor-pointer w-full md:w-auto"
@@ -2210,6 +2240,9 @@ export default function EventManagementPage({ userProfile }) {
                           Nama Event / Turnamen *
                         </label>
                         <input
+  aria-label="Contoh: Chua Open Championship 2026"
+  name="eventForm_name"
+  id="event-management-event-form-name"
                           type="text"
                           required
                           placeholder="Contoh: Chua Open Championship 2026"
@@ -2225,6 +2258,9 @@ export default function EventManagementPage({ userProfile }) {
                           Spesifikasi Cabang Olahraga *
                         </label>
                         <select
+  aria-label="event management event form sport"
+  name="eventForm_sport"
+  id="event-management-event-form-sport"
                           value={eventForm.sport}
                           onChange={(e) => {
                             setEventForm({ ...eventForm, sport: e.target.value });
@@ -2246,6 +2282,9 @@ export default function EventManagementPage({ userProfile }) {
                           Status Event
                         </label>
                         <select
+  aria-label="event management event form status"
+  name="eventForm_status"
+  id="event-management-event-form-status"
                           value={eventForm.status}
                           onChange={(e) => setEventForm({ ...eventForm, status: e.target.value })}
                           className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer bg-white"
@@ -2263,6 +2302,9 @@ export default function EventManagementPage({ userProfile }) {
                           Tanggal Mulai *
                         </label>
                         <input
+  aria-label="event management event form start date"
+  name="eventForm_startDate"
+  id="event-management-event-form-start-date"
                           type="date"
                           required
                           value={eventForm.startDate}
@@ -2277,6 +2319,9 @@ export default function EventManagementPage({ userProfile }) {
                           Tanggal Selesai *
                         </label>
                         <input
+  aria-label="event management event form end date"
+  name="eventForm_endDate"
+  id="event-management-event-form-end-date"
                           type="date"
                           required
                           value={eventForm.endDate}
@@ -2371,6 +2416,9 @@ export default function EventManagementPage({ userProfile }) {
                           Biaya Registrasi / Slot (Rp)
                         </label>
                         <input
+  aria-label="Kosongkan jika gratis"
+  name="eventForm_registrationFee"
+  id="event-management-event-form-registration-fee"
                           type="number"
                           min="0"
                           placeholder="Kosongkan jika gratis"
@@ -2386,6 +2434,9 @@ export default function EventManagementPage({ userProfile }) {
                           Total Slot Peserta / Tim
                         </label>
                         <input
+  aria-label="Contoh: 16"
+  name="eventForm_totalSlots"
+  id="event-management-event-form-total-slots"
                           type="number"
                           min="1"
                           placeholder="Contoh: 16"
@@ -2401,6 +2452,9 @@ export default function EventManagementPage({ userProfile }) {
                           Total Hadiah / Prize Pool (Rp)
                         </label>
                         <input
+  aria-label="Contoh: 10000000"
+  name="eventForm_prizePool"
+  id="event-management-event-form-prize-pool"
                           type="number"
                           min="0"
                           placeholder="Contoh: 10000000"
@@ -2416,6 +2470,9 @@ export default function EventManagementPage({ userProfile }) {
                           Deskripsi Event
                         </label>
                         <textarea
+  aria-label="Catatan umum, kategori umur, atau kelompok turnamen..."
+  name="eventForm_description"
+  id="event-management-event-form-description"
                           rows="2"
                           placeholder="Catatan umum, kategori umur, atau kelompok turnamen..."
                           value={eventForm.description}
@@ -2447,6 +2504,9 @@ export default function EventManagementPage({ userProfile }) {
                           )}
                         </div>
                         <input
+  aria-label="event management file 2506"
+  name="file_2506"
+  id="event-management-file-2506"
                           type="file"
                           accept="image/*"
                           onChange={handlePosterFileChange}
@@ -2592,6 +2652,9 @@ export default function EventManagementPage({ userProfile }) {
                   Nama Perusahaan / Brand *
                 </label>
                 <input
+  aria-label="Contoh: PT Yonex Sunrise Indonesia"
+  name="sponsorForm_companyName"
+  id="event-management-sponsor-form-company-name"
                   type="text"
                   required
                   placeholder="Contoh: PT Yonex Sunrise Indonesia"
@@ -2607,6 +2670,9 @@ export default function EventManagementPage({ userProfile }) {
                   Event Terkait
                 </label>
                 <select
+  aria-label="event management sponsor form event id"
+  name="sponsorForm_eventId"
+  id="event-management-sponsor-form-event-id"
                   value={sponsorForm.eventId}
                   onChange={(e) => setSponsorForm({ ...sponsorForm, eventId: e.target.value })}
                   className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer bg-white"
@@ -2624,6 +2690,9 @@ export default function EventManagementPage({ userProfile }) {
                   Kategori Sponsor *
                 </label>
                 <select
+  aria-label="event management sponsor form category"
+  name="sponsorForm_category"
+  id="event-management-sponsor-form-category"
                   value={sponsorForm.category}
                   onChange={(e) => setSponsorForm({ ...sponsorForm, category: e.target.value })}
                   className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer bg-white"
@@ -2642,6 +2711,9 @@ export default function EventManagementPage({ userProfile }) {
                   Status CRM Deal
                 </label>
                 <select
+  aria-label="event management sponsor form status"
+  name="sponsorForm_status"
+  id="event-management-sponsor-form-status"
                   value={sponsorForm.status}
                   onChange={(e) => setSponsorForm({ ...sponsorForm, status: e.target.value })}
                   className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-emerald-500 focus:outline-none cursor-pointer bg-white"
@@ -2658,6 +2730,9 @@ export default function EventManagementPage({ userProfile }) {
                   Nilai Kontrak / Sponsorship (Rp) *
                 </label>
                 <input
+  aria-label="5000000"
+  name="sponsorForm_contractValue"
+  id="event-management-sponsor-form-contract-value"
                   type="number"
                   required
                   min="0"
@@ -2675,6 +2750,9 @@ export default function EventManagementPage({ userProfile }) {
                   Contact Person *
                 </label>
                 <input
+  aria-label="Bpk. Hendra S."
+  name="sponsorForm_contactPerson"
+  id="event-management-sponsor-form-contact-person"
                   type="text"
                   required
                   placeholder="Bpk. Hendra S."
@@ -2690,6 +2768,9 @@ export default function EventManagementPage({ userProfile }) {
                   No. WhatsApp *
                 </label>
                 <input
+  aria-label="081234567890"
+  name="sponsorForm_whatsappNumber"
+  id="event-management-sponsor-form-whatsapp-number"
                   type="text"
                   required
                   placeholder="081234567890"
@@ -2759,6 +2840,9 @@ export default function EventManagementPage({ userProfile }) {
                   Nama / Judul Dokumen *
                 </label>
                 <input
+  aria-label="Contoh: Technical Handbook & Peraturan Pertandingan"
+  name="docForm_title"
+  id="event-management-doc-form-title"
                   type="text"
                   required
                   placeholder="Contoh: Technical Handbook & Peraturan Pertandingan"
@@ -2775,6 +2859,9 @@ export default function EventManagementPage({ userProfile }) {
                     Event Terkait *
                   </label>
                   <select
+  aria-label="event management doc form event id"
+  name="docForm_eventId"
+  id="event-management-doc-form-event-id"
                     required
                     value={docForm.eventId}
                     onChange={(e) => setDocForm({ ...docForm, eventId: e.target.value })}
@@ -2792,6 +2879,9 @@ export default function EventManagementPage({ userProfile }) {
                     Tipe Dokumen
                   </label>
                   <select
+  aria-label="event management doc form document type"
+  name="docForm_documentType"
+  id="event-management-doc-form-document-type"
                     value={docForm.documentType}
                     onChange={(e) => setDocForm({ ...docForm, documentType: e.target.value })}
                     className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:outline-none cursor-pointer bg-white"
@@ -2811,6 +2901,9 @@ export default function EventManagementPage({ userProfile }) {
                   Unggah Dokumen (PDF, Word) {!editingDoc && <span className="text-red-500">*</span>}
                 </label>
                 <input
+  aria-label="event management file 2903"
+  name="file_2903"
+  id="event-management-file-2903"
                   type="file"
                   accept=".pdf,.doc,.docx"
                   onChange={(e) => {
@@ -2854,6 +2947,9 @@ export default function EventManagementPage({ userProfile }) {
                   Ringkasan / Teks Poin Peraturan
                 </label>
                 <textarea
+  aria-label="Ringkasan poin utama peraturan pertandingan..."
+  name="docForm_contentSummary"
+  id="event-management-doc-form-content-summary"
                   rows="3"
                   placeholder="Ringkasan poin utama peraturan pertandingan..."
                   value={docForm.contentSummary}

@@ -199,6 +199,9 @@ export default function AttendanceSection({ selectedClass, students = [], tenant
             <div className="relative flex items-center">
               <Calendar className="w-3.5 h-3.5 text-slate-400 absolute left-2 pointer-events-none" />
               <input
+                id="attendance-session-date"
+                name="attendanceDate"
+                aria-label="Tanggal Presensi"
                 type="date"
                 required
                 value={attendanceDate}
@@ -249,6 +252,9 @@ export default function AttendanceSection({ selectedClass, students = [], tenant
           {/* CATATAN / MATERI SESI */}
           <div>
             <input
+              id="attendance-session-notes"
+              name="sessionNotes"
+              aria-label="Catatan atau Materi Latihan Hari Ini"
               type="text"
               value={sessionNotes}
               onChange={(e) => setSessionNotes(e.target.value)}
@@ -266,8 +272,10 @@ export default function AttendanceSection({ selectedClass, students = [], tenant
                 </span>
 
                 {/* TOGGLE SISWA BELUM AKTIF / NON-AKTIF */}
-                <label className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 dark:text-slate-400 cursor-pointer select-none bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-200">
+                <label htmlFor="attendance-show-inactive-students" className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 dark:text-slate-400 cursor-pointer select-none bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-200">
                   <input
+                    id="attendance-show-inactive-students"
+                    name="showInactiveStudents"
                     type="checkbox"
                     checked={showInactiveStudents}
                     onChange={(e) => setShowInactiveStudents(e.target.checked)}

@@ -110,6 +110,9 @@ export default function StaffAndWorkerManagement({ userProfile }) {
               <div className="space-y-2 pt-1">
                 <div className="flex items-center space-x-2">
                   <input
+                    id="staff-generated-invite-url"
+                    name="inviteUrl"
+                    aria-label="Tautan Undangan Staf"
                     type="text"
                     readOnly
                     value={regResult.inviteUrl}
@@ -135,8 +138,11 @@ export default function StaffAndWorkerManagement({ userProfile }) {
         <form onSubmit={handleCreateStaff} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Nama Lengkap Staf</label>
+              <label htmlFor="staff-worker-name-input" className="block text-xs font-bold text-gray-700 uppercase mb-1">Nama Lengkap Staf</label>
               <input
+                id="staff-worker-name-input"
+                name="staffName"
+                autoComplete="name"
                 type="text"
                 required
                 value={staffName}
@@ -147,8 +153,11 @@ export default function StaffAndWorkerManagement({ userProfile }) {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Email Staf</label>
+              <label htmlFor="staff-worker-email-input" className="block text-xs font-bold text-gray-700 uppercase mb-1">Email Staf</label>
               <input
+                id="staff-worker-email-input"
+                name="staffEmail"
+                autoComplete="email"
                 type="email"
                 required
                 value={staffEmail}
@@ -161,8 +170,10 @@ export default function StaffAndWorkerManagement({ userProfile }) {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Role Akses (RBAC)</label>
+              <label htmlFor="staff-worker-role-select" className="block text-xs font-bold text-gray-700 uppercase mb-1">Role Akses (RBAC)</label>
               <select
+                id="staff-worker-role-select"
+                name="staffRole"
                 value={staffRole}
                 onChange={(e) => setStaffRole(e.target.value)}
                 className="w-full px-3.5 py-2.5 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:border-blue-500 font-bold text-blue-700"
@@ -175,8 +186,10 @@ export default function StaffAndWorkerManagement({ userProfile }) {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase mb-1">Tenant ID</label>
+              <label htmlFor="staff-worker-tenant-id-input" className="block text-xs font-bold text-gray-700 uppercase mb-1">Tenant ID</label>
               <input
+                id="staff-worker-tenant-id-input"
+                name="tenantId"
                 type="text"
                 disabled
                 value={tenantId}

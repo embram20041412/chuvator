@@ -109,13 +109,15 @@ export default function ImageUploader({
   return (
     <div className="space-y-2 text-left w-full">
       {label && (
-        <label className="block text-xs font-bold text-slate-700">
+        <label htmlFor="image-uploader-file-input" className="block text-xs font-bold text-slate-700">
           {label}
         </label>
       )}
 
       {/* Hidden Native File Input */}
       <input
+        id="image-uploader-file-input"
+        name="uploaderFile"
         ref={fileInputRef}
         type="file"
         accept={accept}

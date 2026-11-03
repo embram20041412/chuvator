@@ -833,6 +833,8 @@ export default function POSPage({ userProfile }) {
           <div className="w-full sm:w-80 relative">
             <Barcode className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
             <input
+  aria-label="Scan / Ketik Barcode [Enter]..."
+  name="manual-barcode-input"
               id="manual-barcode-input"
               type="text"
               placeholder="Scan / Ketik Barcode [Enter]..."
@@ -893,6 +895,9 @@ export default function POSPage({ userProfile }) {
               <div className="relative w-full sm:w-64">
                 <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
+  aria-label="pospage search query"
+  name="searchQuery"
+  id="pospage-search-query"
                   type="text"
                   placeholder={activeCatalogTab === 'spp' ? 'Cari nama siswa / wali...' : 'Cari nama / barcode produk...'}
                   value={searchQuery}
@@ -1313,6 +1318,9 @@ export default function POSPage({ userProfile }) {
               <div className="flex items-center justify-between gap-2">
                 <label className="text-[10px] font-semibold text-slate-400 uppercase shrink-0">Metode Bayar</label>
                 <select
+  aria-label="pospage payment method"
+  name="paymentMethod"
+  id="pospage-payment-method"
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value)}
                   className="px-2 py-1 text-xs bg-slate-50 dark:bg-white/10 border border-slate-200 dark:border-white/10 rounded-lg focus:bg-white focus:outline-none focus:border-[#354944] font-semibold text-slate-800 dark:text-slate-200 shrink-0 cursor-pointer"
@@ -1408,6 +1416,9 @@ export default function POSPage({ userProfile }) {
                   Nama Produk / Barang <span className="text-[#C89D32]">*</span>
                 </label>
                 <input
+  aria-label="pospage new product name"
+  name="newProductName"
+  id="pospage-new-product-name"
                   type="text"
                   required
                   value={newProductName}
@@ -1440,6 +1451,9 @@ export default function POSPage({ userProfile }) {
                   </button>
                 </div>
                 <input
+  aria-label="pospage new product barcode"
+  name="newProductBarcode"
+  id="pospage-new-product-barcode"
                   type="text"
                   value={newProductBarcode}
                   onChange={(e) => setNewProductBarcode(e.target.value)}
@@ -1452,6 +1466,9 @@ export default function POSPage({ userProfile }) {
                 <div>
                   <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Kategori</label>
                   <select
+  aria-label="pospage new product category"
+  name="newProductCategory"
+  id="pospage-new-product-category"
                     value={newProductCategory}
                     onChange={(e) => setNewProductCategory(e.target.value)}
                     className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:border-[#354944] cursor-pointer font-medium"
@@ -1470,6 +1487,9 @@ export default function POSPage({ userProfile }) {
                     HPP / Modal (Rp) <span className="text-emerald-600 font-normal">(COGS)</span>
                   </label>
                   <input
+  aria-label="pospage new product cogs"
+  name="newProductCogs"
+  id="pospage-new-product-cogs"
                     type="number"
                     min="0"
                     step="any"
@@ -1487,6 +1507,9 @@ export default function POSPage({ userProfile }) {
                     {newProductType === 'sewa' ? 'Harga Sewa (Rp / Sesi)' : 'Harga Jual (Rp)'}
                   </label>
                   <input
+  aria-label="pospage new product price"
+  name="newProductPrice"
+  id="pospage-new-product-price"
                     type="number"
                     min="0"
                     step="any"
@@ -1503,6 +1526,9 @@ export default function POSPage({ userProfile }) {
                     {newProductType === 'sewa' ? 'Unit Disewakan' : 'Stok Tersisa (Unit)'}
                   </label>
                   <input
+  aria-label="pospage new product stock"
+  name="newProductStock"
+  id="pospage-new-product-stock"
                     type="number"
                     min="0"
                     step="1"

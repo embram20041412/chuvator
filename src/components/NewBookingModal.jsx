@@ -173,6 +173,9 @@ export default function NewBookingModal({
               Pilih Lapangan <span className="text-[#C89D32]">*</span>
             </label>
             <select
+  aria-label="new booking selected court id"
+  name="selectedCourtId"
+  id="new-booking-selected-court-id"
               value={selectedCourtId}
               onChange={(e) => setSelectedCourtId(e.target.value)}
               className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-[#354944] font-bold"
@@ -196,6 +199,9 @@ export default function NewBookingModal({
             <div className="relative">
               <User className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
               <input
+  aria-label="new booking customer name"
+  name="customerName"
+  id="new-booking-customer-name"
                 type="text"
                 required
                 value={customerName}
@@ -213,6 +219,9 @@ export default function NewBookingModal({
             <div className="relative">
               <Phone className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5" />
               <input
+  aria-label="new booking customer phone"
+  name="customerPhone"
+  id="new-booking-customer-phone"
                 type="tel"
                 value={customerPhone}
                 onChange={(e) => setCustomerPhone(e.target.value)}
@@ -229,6 +238,9 @@ export default function NewBookingModal({
                 Tanggal <span className="text-[#C89D32]">*</span>
               </label>
               <input
+  aria-label="new booking booking date"
+  name="bookingDate"
+  id="new-booking-booking-date"
                 type="date"
                 required
                 min={new Date().toISOString().split('T')[0]}
@@ -244,6 +256,9 @@ export default function NewBookingModal({
                   Mulai <span className="text-[#C89D32]">*</span>
                 </label>
                 <input
+  aria-label="new booking start time"
+  name="startTime"
+  id="new-booking-start-time"
                   type="time"
                   required
                   value={startTime}
@@ -257,6 +272,9 @@ export default function NewBookingModal({
                   Selesai <span className="text-[#C89D32]">*</span>
                 </label>
                 <input
+  aria-label="new booking end time"
+  name="endTime"
+  id="new-booking-end-time"
                   type="time"
                   required
                   value={endTime}

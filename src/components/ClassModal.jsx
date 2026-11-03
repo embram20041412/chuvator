@@ -443,6 +443,9 @@ export default function ClassModal({
                 )}
               </label>
               <select
+  aria-label="class sport"
+  name="sport"
+  id="class-sport"
                 value={sport}
                 onChange={(e) => setSport(e.target.value)}
                 className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:border-[#354944] focus:ring-1 focus:ring-[#354944] font-bold text-slate-800 dark:text-slate-100 cursor-pointer"
@@ -461,6 +464,9 @@ export default function ClassModal({
                 Pelatih Utama
               </label>
               <select
+  aria-label="class coach id"
+  name="coachId"
+  id="class-coach-id"
                 value={coachId}
                 onChange={(e) => setCoachId(e.target.value)}
                 className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:bg-white dark:focus:bg-slate-900 focus:outline-none focus:border-[#354944] focus:ring-1 focus:ring-[#354944] font-bold text-slate-800 dark:text-slate-100 cursor-pointer"
@@ -493,6 +499,9 @@ export default function ClassModal({
             {/* Dropdown Tier */}
             <div>
               <select
+  aria-label="class tier code"
+  name="tierCode"
+  id="class-tier-code"
                 value={tierCode}
                 onChange={(e) => handleTierChange(e.target.value)}
                 className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:border-[#354944] focus:ring-1 focus:ring-[#354944] font-bold text-slate-800 dark:text-slate-100 cursor-pointer shadow-2xs"
@@ -512,6 +521,9 @@ export default function ClassModal({
                   Usia Min (Thn)
                 </label>
                 <input
+  aria-label="class min age"
+  name="minAge"
+  id="class-min-age"
                   type="number"
                   min="3"
                   max="99"
@@ -527,6 +539,9 @@ export default function ClassModal({
                   Usia Max (Thn)
                 </label>
                 <input
+  aria-label="class max age"
+  name="maxAge"
+  id="class-max-age"
                   type="number"
                   min="3"
                   max="99"
@@ -543,6 +558,9 @@ export default function ClassModal({
                   <Users className="w-3 h-3 text-slate-400" />
                 </label>
                 <input
+  aria-label="class max quota"
+  name="maxQuota"
+  id="class-max-quota"
                   type="number"
                   min="1"
                   max="100"
@@ -570,6 +588,9 @@ export default function ClassModal({
             <div className="relative">
               <GraduationCap className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
               <input
+  aria-label="class class name"
+  name="className"
+  id="class-class-name"
                 type="text"
                 required
                 value={className}
@@ -628,6 +649,9 @@ export default function ClassModal({
                     <div>
                       <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-0.5">Hari</label>
                       <select
+  aria-label="class row day"
+  name="row_day"
+  id="class-row-day"
                         value={row.day}
                         onChange={(e) => handleUpdateScheduleRow(row.id, 'day', e.target.value)}
                         className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-800 dark:text-slate-100 cursor-pointer"
@@ -642,6 +666,9 @@ export default function ClassModal({
                     <div>
                       <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-0.5">Mulai</label>
                       <input
+  aria-label="class row start time"
+  name="row_startTime"
+  id="class-row-start-time"
                         type="time"
                         required
                         value={row.startTime}
@@ -654,6 +681,9 @@ export default function ClassModal({
                     <div>
                       <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-0.5">Selesai</label>
                       <input
+  aria-label="class row end time"
+  name="row_endTime"
+  id="class-row-end-time"
                         type="time"
                         required
                         value={row.endTime}
@@ -669,6 +699,9 @@ export default function ClassModal({
                       Pilih Lapangan Latihan <span className="text-[#C89D32]">*</span>
                     </label>
                     <select
+  aria-label="class row court id"
+  name="row_courtId"
+  id="class-row-court-id"
                       value={row.courtId}
                       onChange={(e) => handleUpdateScheduleRow(row.id, 'courtId', e.target.value)}
                       className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-bold text-slate-800 dark:text-slate-100 cursor-pointer"

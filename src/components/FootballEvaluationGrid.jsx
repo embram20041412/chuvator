@@ -116,6 +116,9 @@ export default function FootballEvaluationGrid({
             Override Jenjang:
           </label>
           <select
+  aria-label="football evaluation grid manual tier override"
+  name="manualTierOverride"
+  id="football-evaluation-grid-manual-tier-override"
             value={manualTierOverride}
             onChange={(e) => setManualTierOverride(e.target.value)}
             className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs font-bold text-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
@@ -216,6 +219,9 @@ export default function FootballEvaluationGrid({
                       <span className="font-black text-rose-600 text-sm">{val}</span>
                     </div>
                     <input
+  aria-label="football evaluation grid val"
+  name="val"
+  id="football-evaluation-grid-val"
                       type="range"
                       min="0"
                       max="100"
@@ -251,6 +257,9 @@ export default function FootballEvaluationGrid({
                       <span className="font-black text-blue-600 text-sm">{val}</span>
                     </div>
                     <input
+  aria-label="football evaluation grid val"
+  name="val"
+  id="football-evaluation-grid-val"
                       type="range"
                       min="0"
                       max="100"
@@ -286,6 +295,9 @@ export default function FootballEvaluationGrid({
                       <span className="font-black text-teal-600 text-sm">{val}</span>
                     </div>
                     <input
+  aria-label="football evaluation grid val"
+  name="val"
+  id="football-evaluation-grid-val"
                       type="range"
                       min="0"
                       max="100"
@@ -328,6 +340,9 @@ export default function FootballEvaluationGrid({
                       <span className="font-black text-purple-600 text-sm">{val}</span>
                     </div>
                     <input
+  aria-label="football evaluation grid val"
+  name="val"
+  id="football-evaluation-grid-val"
                       type="range"
                       min="0"
                       max="100"
@@ -363,6 +378,9 @@ export default function FootballEvaluationGrid({
                       <span className="font-black text-emerald-600 text-sm">{val}</span>
                     </div>
                     <input
+  aria-label="football evaluation grid val"
+  name="val"
+  id="football-evaluation-grid-val"
                       type="range"
                       min="0"
                       max="100"
@@ -398,6 +416,9 @@ export default function FootballEvaluationGrid({
                       <span className="font-black text-amber-600 text-sm">{val}</span>
                     </div>
                     <input
+  aria-label="football evaluation grid val"
+  name="val"
+  id="football-evaluation-grid-val"
                       type="range"
                       min="0"
                       max="100"
@@ -437,6 +458,9 @@ export default function FootballEvaluationGrid({
                       <span className="font-black text-indigo-600 text-sm">{val}</span>
                     </div>
                     <input
+  aria-label="football evaluation grid val"
+  name="val"
+  id="football-evaluation-grid-val"
                       type="range"
                       min="0"
                       max="100"

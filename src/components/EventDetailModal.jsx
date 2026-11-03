@@ -731,6 +731,9 @@ export default function EventDetailModal({ event, isOpen, onClose, userProfile }
                   <div className="relative flex-1">
                     <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
+  aria-label="Cari nama peserta / official / WA..."
+  name="regSearch"
+  id="event-detail-reg-search"
                       type="text"
                       placeholder="Cari nama peserta / official / WA..."
                       value={regSearch}
@@ -740,6 +743,9 @@ export default function EventDetailModal({ event, isOpen, onClose, userProfile }
                   </div>
 
                   <select
+  aria-label="event detail reg category filter"
+  name="regCategoryFilter"
+  id="event-detail-reg-category-filter"
                     value={regCategoryFilter}
                     onChange={(e) => setRegCategoryFilter(e.target.value)}
                     className="bg-slate-950 border border-slate-800 text-slate-300 px-3 py-2 rounded-xl text-sm focus:outline-none focus:border-emerald-500"
@@ -751,6 +757,9 @@ export default function EventDetailModal({ event, isOpen, onClose, userProfile }
                   </select>
 
                   <select
+  aria-label="event detail reg status filter"
+  name="regStatusFilter"
+  id="event-detail-reg-status-filter"
                     value={regStatusFilter}
                     onChange={(e) => setRegStatusFilter(e.target.value)}
                     className="bg-slate-950 border border-slate-800 text-slate-300 px-3 py-2 rounded-xl text-sm focus:outline-none focus:border-emerald-500"
@@ -827,6 +836,9 @@ export default function EventDetailModal({ event, isOpen, onClose, userProfile }
                               </td>
                               <td className="p-3.5">
                                 <select
+  aria-label="event detail reg payment status lunas"
+  name="reg_paymentStatusLunas"
+  id="event-detail-reg-payment-status-lunas"
                                   value={reg.paymentStatus || 'Lunas'}
                                   onChange={(e) => handleQuickStatusReg(reg.id, e.target.value)}
                                   className={`text-xs font-semibold px-2.5 py-1 rounded-lg border focus:outline-none cursor-pointer ${
@@ -1089,6 +1101,9 @@ export default function EventDetailModal({ event, isOpen, onClose, userProfile }
                   NAMA KATEGORI *
                 </label>
                 <input
+  aria-label="Misal: Ganda Putra U-15 / Tunggal Putri Umum"
+  name="categoryForm_name"
+  id="event-detail-category-form-name"
                   type="text"
                   placeholder="Misal: Ganda Putra U-15 / Tunggal Putri Umum"
                   value={categoryForm.name}
@@ -1104,6 +1119,9 @@ export default function EventDetailModal({ event, isOpen, onClose, userProfile }
                     BATAS MAX PESERTA/TIM *
                   </label>
                   <input
+  aria-label="event detail category form max slots"
+  name="categoryForm_maxSlots"
+  id="event-detail-category-form-max-slots"
                     type="number"
                     min="2"
                     value={categoryForm.maxSlots}
@@ -1118,6 +1136,9 @@ export default function EventDetailModal({ event, isOpen, onClose, userProfile }
                     BIAYA REGISTRASI (RP) *
                   </label>
                   <input
+  aria-label="event detail category form fee"
+  name="categoryForm_fee"
+  id="event-detail-category-form-fee"
                     type="number"
                     min="0"
                     step="any"
@@ -1134,6 +1155,9 @@ export default function EventDetailModal({ event, isOpen, onClose, userProfile }
                   KETERANGAN / KETENTUAN KHUSUS
                 </label>
                 <textarea
+  aria-label="Misal: Kelahiran minimal tahun 2009, wajib bawa KK asli"
+  name="categoryForm_description"
+  id="event-detail-category-form-description"
                   rows="2"
                   placeholder="Misal: Kelahiran minimal tahun 2009, wajib bawa KK asli"
                   value={categoryForm.description}
@@ -1184,6 +1208,9 @@ export default function EventDetailModal({ event, isOpen, onClose, userProfile }
                   KATEGORI KOMPETISI *
                 </label>
                 <select
+  aria-label="event detail reg form category id"
+  name="regForm_categoryId"
+  id="event-detail-reg-form-category-id"
                   value={regForm.categoryId}
                   onChange={(e) => handleCategorySelectChange(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 text-white px-3.5 py-2 rounded-xl text-sm focus:outline-none focus:border-emerald-500"
@@ -1202,6 +1229,9 @@ export default function EventDetailModal({ event, isOpen, onClose, userProfile }
                   NAMA PESERTA / TIM / PASANGAN *
                 </label>
                 <input
+  aria-label="Misal: Ahmad & Budi (PB Jayaraya)"
+  name="regForm_participantName"
+  id="event-detail-reg-form-participant-name"
                   type="text"
                   placeholder="Misal: Ahmad & Budi (PB Jayaraya)"
                   value={regForm.participantName}
@@ -1217,6 +1247,9 @@ export default function EventDetailModal({ event, isOpen, onClose, userProfile }
                     NAMA OFFICIAL / MANAGER
                   </label>
                   <input
+  aria-label="Misal: Coach Hendra"
+  name="regForm_contactName"
+  id="event-detail-reg-form-contact-name"
                     type="text"
                     placeholder="Misal: Coach Hendra"
                     value={regForm.contactName}
@@ -1230,6 +1263,9 @@ export default function EventDetailModal({ event, isOpen, onClose, userProfile }
                     NO. WHATSAPP *
                   </label>
                   <input
+  aria-label="081234567890"
+  name="regForm_whatsappNumber"
+  id="event-detail-reg-form-whatsapp-number"
                     type="text"
                     placeholder="081234567890"
                     value={regForm.whatsappNumber}
@@ -1246,6 +1282,9 @@ export default function EventDetailModal({ event, isOpen, onClose, userProfile }
                     STATUS PEMBAYARAN *
                   </label>
                   <select
+  aria-label="event detail reg form payment status"
+  name="regForm_paymentStatus"
+  id="event-detail-reg-form-payment-status"
                     value={regForm.paymentStatus}
                     onChange={(e) => setRegForm({ ...regForm, paymentStatus: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 text-white px-3.5 py-2 rounded-xl text-sm focus:outline-none focus:border-emerald-500"
@@ -1261,6 +1300,9 @@ export default function EventDetailModal({ event, isOpen, onClose, userProfile }
                     METODE PEMBAYARAN
                   </label>
                   <select
+  aria-label="event detail reg form payment method"
+  name="regForm_paymentMethod"
+  id="event-detail-reg-form-payment-method"
                     value={regForm.paymentMethod}
                     onChange={(e) => setRegForm({ ...regForm, paymentMethod: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 text-white px-3.5 py-2 rounded-xl text-sm focus:outline-none focus:border-emerald-500"
@@ -1277,6 +1319,9 @@ export default function EventDetailModal({ event, isOpen, onClose, userProfile }
                   NOMINAL DIBAYAR (RP) *
                 </label>
                 <input
+  aria-label="event detail reg form amount paid"
+  name="regForm_amountPaid"
+  id="event-detail-reg-form-amount-paid"
                   type="number"
                   min="0"
                   step="any"
@@ -1329,6 +1374,9 @@ export default function EventDetailModal({ event, isOpen, onClose, userProfile }
                   KETERANGAN / ITEM PENGELUARAN *
                 </label>
                 <input
+  aria-label="Misal: Sewa Wasit PBSI 2 Hari / Piala & Trophy 3 Set"
+  name="expenseForm_title"
+  id="event-detail-expense-form-title"
                   type="text"
                   placeholder="Misal: Sewa Wasit PBSI 2 Hari / Piala & Trophy 3 Set"
                   value={expenseForm.title}
@@ -1344,6 +1392,9 @@ export default function EventDetailModal({ event, isOpen, onClose, userProfile }
                     KATEGORI BIAYA *
                   </label>
                   <select
+  aria-label="event detail expense form category"
+  name="expenseForm_category"
+  id="event-detail-expense-form-category"
                     value={expenseForm.category}
                     onChange={(e) => setExpenseForm({ ...expenseForm, category: e.target.value })}
                     className="w-full bg-slate-950 border border-slate-800 text-white px-3.5 py-2 rounded-xl text-sm focus:outline-none focus:border-emerald-500"
@@ -1361,6 +1412,9 @@ export default function EventDetailModal({ event, isOpen, onClose, userProfile }
                     NOMINAL (RP) *
                   </label>
                   <input
+  aria-label="event detail expense form amount"
+  name="expenseForm_amount"
+  id="event-detail-expense-form-amount"
                     type="number"
                     min="0"
                     step="any"
@@ -1377,6 +1431,9 @@ export default function EventDetailModal({ event, isOpen, onClose, userProfile }
                   CATATAN TAMBAHAN
                 </label>
                 <textarea
+  aria-label="Misal: Dibayarkan via transfer ke rekening Bendahara Wasit"
+  name="expenseForm_note"
+  id="event-detail-expense-form-note"
                   rows="2"
                   placeholder="Misal: Dibayarkan via transfer ke rekening Bendahara Wasit"
                   value={expenseForm.note}

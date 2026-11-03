@@ -593,6 +593,9 @@ export default function TennisAssessmentView({
               <span>Pilih Atlet ({students.length})</span>
             </label>
             <select
+  aria-label="tennis assessment view selected student id"
+  name="selectedStudent_id"
+  id="tennis-assessment-view-selected-student-id"
               value={selectedStudent?.id || ''}
               onChange={(e) => setSelectedStudentId(e.target.value)}
               className="h-10 w-full px-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500 cursor-pointer shadow-2xs"
@@ -615,6 +618,9 @@ export default function TennisAssessmentView({
               <span>Tanggal Evaluasi</span>
             </label>
             <input
+  aria-label="tennis assessment view evaluation date"
+  name="evaluationDate"
+  id="tennis-assessment-view-evaluation-date"
               type="date"
               value={evaluationDate}
               onChange={(e) => setEvaluationDate(e.target.value)}
@@ -629,6 +635,9 @@ export default function TennisAssessmentView({
               <span>Jenjang Evaluasi Tenis</span>
             </label>
             <select
+  aria-label="tennis assessment view override tennis level"
+  name="overrideTennisLevel"
+  id="tennis-assessment-view-override-tennis-level"
               value={overrideTennisLevel}
               onChange={(e) => setOverrideTennisLevel(e.target.value)}
               className="h-10 w-full px-3.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold text-slate-800 dark:text-slate-100 focus:outline-none focus:border-purple-500 cursor-pointer shadow-2xs"
@@ -877,6 +886,9 @@ export default function TennisAssessmentView({
                 </div>
                 <label className="flex items-center gap-1.5 cursor-pointer shrink-0 ml-2">
                   <input
+  aria-label="tennis assessment view checkbox 888"
+  name="checkbox_888"
+  id="tennis-assessment-view-checkbox-888"
                     type="checkbox"
                     checked={includeCommunicationInSingles}
                     onChange={(e) => setIncludeCommunicationInSingles(e.target.checked)}
@@ -913,6 +925,9 @@ export default function TennisAssessmentView({
                     1. {TENNIS10S_OBSERVATIONS.dominantHandAndBackhand.label}
                   </span>
                   <select
+  aria-label="tennis assessment view dominant hand and backhand"
+  name="dominantHandAndBackhand"
+  id="tennis-assessment-view-dominant-hand-and-backhand"
                     value={dominantHandAndBackhand}
                     onChange={(e) => setDominantHandAndBackhand(e.target.value)}
                     className="w-full sm:w-7/12 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500 cursor-pointer shadow-2xs"
@@ -931,6 +946,9 @@ export default function TennisAssessmentView({
                     2. {TENNIS10S_OBSERVATIONS.gripAdaptation.label}
                   </span>
                   <select
+  aria-label="tennis assessment view grip adaptation"
+  name="gripAdaptation"
+  id="tennis-assessment-view-grip-adaptation"
                     value={gripAdaptation}
                     onChange={(e) => setGripAdaptation(e.target.value)}
                     className="w-full sm:w-7/12 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500 cursor-pointer shadow-2xs"
@@ -949,6 +967,9 @@ export default function TennisAssessmentView({
                     3. {TENNIS10S_OBSERVATIONS.rallyReadinessAndTransition.label}
                   </span>
                   <select
+  aria-label="tennis assessment view rally readiness and transition"
+  name="rallyReadinessAndTransition"
+  id="tennis-assessment-view-rally-readiness-and-transition"
                     value={rallyReadinessAndTransition}
                     onChange={(e) => setRallyReadinessAndTransition(e.target.value)}
                     className="w-full sm:w-7/12 px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500 cursor-pointer shadow-2xs"
@@ -982,6 +1003,9 @@ export default function TennisAssessmentView({
                 <div className="space-y-1">
                   <span className="text-[10px] font-bold text-slate-400 block uppercase">Gaya Utama (Pilih 1):</span>
                   <select
+  aria-label="tennis assessment view primary style code"
+  name="primaryStyleCode"
+  id="tennis-assessment-view-primary-style-code"
                     value={primaryStyleCode}
                     onChange={(e) => setPrimaryStyleCode(e.target.value)}
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-100 focus:outline-none focus:border-amber-500 cursor-pointer"
@@ -1289,6 +1313,9 @@ export default function TennisAssessmentView({
             {/* Toggle Tampilkan Semua */}
             <label className="flex items-center gap-2 cursor-pointer select-none shrink-0 self-end xl:self-auto bg-slate-50 dark:bg-slate-800/80 px-3 py-1.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80 text-xs">
               <input
+  aria-label="tennis assessment view checkbox 1315"
+  name="checkbox_1315"
+  id="tennis-assessment-view-checkbox-1315"
                 type="checkbox"
                 checked={showAllAtOnce}
                 onChange={(e) => setShowAllAtOnce(e.target.checked)}
@@ -1335,6 +1362,9 @@ export default function TennisAssessmentView({
                   {/* Toggle Anti-Duplikasi */}
                   <label className="flex items-center gap-2 cursor-pointer bg-white dark:bg-slate-900 px-3 py-1.5 rounded-xl border border-emerald-200 dark:border-emerald-700 text-xs shadow-2xs">
                     <input
+  aria-label="tennis assessment view checkbox 1364"
+  name="checkbox_1364"
+  id="tennis-assessment-view-checkbox-1364"
                       type="checkbox"
                       checked={syncEmphasisWithCore}
                       onChange={(e) => setSyncEmphasisWithCore(e.target.checked)}
@@ -1560,6 +1590,9 @@ export default function TennisAssessmentView({
             <span>Catatan Khusus Pelatih &amp; Rekomendasi Latihan Tenis</span>
           </label>
           <textarea
+  aria-label="tennis assessment view coach note"
+  name="coachNote"
+  id="tennis-assessment-view-coach-note"
             rows={2.5}
             value={coachNote}
             onChange={(e) => setCoachNote(e.target.value)}
@@ -1711,6 +1744,9 @@ function IndicatorCard({ name, value, onChange, onDelta, mappedCore }) {
       {/* Range Slider */}
       <div className="flex items-center gap-2">
         <input
+  aria-label="tennis assessment view value"
+  name="value"
+  id="tennis-assessment-view-value"
           type="range"
           min="0"
           max="100"

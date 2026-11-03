@@ -524,6 +524,7 @@ export default function CoachModal({
                   {academies && academies.length > 1 ? (
                     <select
                       id="selectedAcademyId"
+                      name="selectedAcademyId"
                       value={selectedAcademyId}
                       onChange={(e) => setSelectedAcademyId(e.target.value)}
                       required

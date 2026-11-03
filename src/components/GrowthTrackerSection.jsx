@@ -248,6 +248,9 @@ export default function GrowthTrackerSection({ selectedStudent, students = [] })
               <span>Pilih Atlet Akademi:</span>
             </span>
             <select
+              id="growth-student-selector"
+              name="selectedStudentId"
+              aria-label="Pilih Atlet Akademi"
               value={selectedStudentId}
               onChange={(e) => setSelectedStudentId(e.target.value)}
               className="px-2.5 py-1 text-xs bg-white border border-slate-200 rounded-lg font-bold text-slate-800 focus:outline-none focus:ring-1 focus:ring-sky-500 cursor-pointer"
@@ -293,11 +296,13 @@ export default function GrowthTrackerSection({ selectedStudent, students = [] })
 
                 <form onSubmit={handleSaveGrowthRecord} className="space-y-2.5">
                   <div>
-                    <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center gap-1">
+                    <label htmlFor="growth-record-date" className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center gap-1">
                       <Calendar className="w-3 h-3 text-sky-600" />
                       <span>Tanggal Pencatatan</span>
                     </label>
                     <input
+                      id="growth-record-date"
+                      name="recordDate"
                       type="date"
                       value={recordDate}
                       onChange={(e) => setRecordDate(e.target.value)}
@@ -307,11 +312,13 @@ export default function GrowthTrackerSection({ selectedStudent, students = [] })
 
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center gap-1">
+                      <label htmlFor="growth-new-height" className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center gap-1">
                         <Ruler className="w-3 h-3 text-sky-600" />
                         <span>Tinggi (cm)</span>
                       </label>
                       <input
+                        id="growth-new-height"
+                        name="newHeight"
                         type="number"
                         min="50"
                         max="250"
@@ -325,11 +332,13 @@ export default function GrowthTrackerSection({ selectedStudent, students = [] })
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center gap-1">
+                      <label htmlFor="growth-new-weight" className="block text-[11px] font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center gap-1">
                         <Weight className="w-3 h-3 text-rose-500" />
                         <span>Berat (kg)</span>
                       </label>
                       <input
+                        id="growth-new-weight"
+                        name="newWeight"
                         type="number"
                         min="20"
                         max="200"

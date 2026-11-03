@@ -195,13 +195,16 @@ export default function PosCheckoutModal({
 
           {/* INPUT NAMA PELANGGAN (OPSIONAL) */}
           <div>
-            <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase mb-1">
+            <label htmlFor="pos-customer-name" className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase mb-1">
               Nama Pelanggan (Opsional)
             </label>
             <div className="relative">
               <User className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
               <input 
+                id="pos-customer-name"
+                name="customerName"
                 type="text"
+                autoComplete="name"
                 placeholder="Pelanggan Umum / Member"
                 value={customerName}
                 onChange={(e) => setCustomerName(e.target.value)}
@@ -262,12 +265,14 @@ export default function PosCheckoutModal({
           {isCash && (
             <div className="p-3.5 bg-slate-50 dark:bg-white/5 rounded-xl border border-slate-200 dark:border-white/10 space-y-3">
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 uppercase mb-1">
+                <label htmlFor="pos-cash-received" className="block text-[11px] font-bold text-slate-700 dark:text-slate-200 uppercase mb-1">
                   Uang Diterima dari Pelanggan (Rp) <span className="text-[#C89D32]">*</span>
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-slate-400 text-xs">Rp</span>
                   <input
+                    id="pos-cash-received"
+                    name="cashReceived"
                     type="number"
                     min="0"
                     placeholder="Masukkan jumlah uang"

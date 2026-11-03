@@ -200,6 +200,9 @@ export default function DateRangeFilter({
             <div className="flex items-center space-x-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 text-xs shrink-0">
               <Calendar className="w-3.5 h-3.5 text-slate-500 shrink-0" />
               <input
+                id="filter-custom-start-date"
+                name="customStartDate"
+                aria-label="Tanggal Mulai Filter"
                 type="date"
                 value={customDate.start || ''}
                 onChange={(e) => setCustomDate((prev) => ({ ...prev, start: e.target.value }))}
@@ -208,6 +211,9 @@ export default function DateRangeFilter({
               />
               <span className="text-gray-400 font-bold text-[10px]">s/d</span>
               <input
+                id="filter-custom-end-date"
+                name="customEndDate"
+                aria-label="Tanggal Sampai Filter"
                 type="date"
                 value={customDate.end || ''}
                 onChange={(e) => setCustomDate((prev) => ({ ...prev, end: e.target.value }))}

@@ -1433,6 +1433,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
             <div className="flex items-center gap-2.5 flex-wrap">
               <span className="text-xs font-semibold text-slate-400">Status Event:</span>
               <select
+  aria-label="event detail current event status pendaftaran buka"
+  name="currentEvent_statusPendaftaranBuka"
+  id="event-detail-current-event-status-pendaftaran-buka"
                 value={currentEvent.status || 'Pendaftaran Buka'}
                 onChange={(e) => handleQuickStatusChange(e.target.value)}
                 className={`text-xs font-extrabold px-3 py-1.5 rounded-xl border focus:outline-none cursor-pointer transition-colors shadow-2xs ${
@@ -1556,6 +1559,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
             Navigasi Event:
           </label>
           <select
+  aria-label="event detail active tab"
+  name="activeTab"
+  id="event-detail-active-tab"
             value={activeTab}
             onChange={(e) => setActiveTab(e.target.value)}
             className="w-full px-4 py-3 bg-white border border-slate-200 rounded-xl font-bold text-sm text-slate-800 shadow-xs focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
@@ -2097,6 +2103,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
             <div className="relative flex-1">
               <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <input
+  aria-label="Cari nama atlet, tim, atau nomor WhatsApp..."
+  name="regSearch"
+  id="event-detail-reg-search"
                 type="text"
                 placeholder="Cari nama atlet, tim, atau nomor WhatsApp..."
                 value={regSearch}
@@ -2107,6 +2116,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
 
             <div className="flex gap-2 flex-wrap">
               <select
+  aria-label="event detail reg category filter"
+  name="regCategoryFilter"
+  id="event-detail-reg-category-filter"
                 value={regCategoryFilter}
                 onChange={(e) => setRegCategoryFilter(e.target.value)}
                 className="bg-slate-50 border border-slate-200 text-slate-700 px-3 py-2 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
@@ -2118,6 +2130,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
               </select>
 
               <select
+  aria-label="event detail reg status filter"
+  name="regStatusFilter"
+  id="event-detail-reg-status-filter"
                 value={regStatusFilter}
                 onChange={(e) => setRegStatusFilter(e.target.value)}
                 className="bg-slate-50 border border-slate-200 text-slate-700 px-3 py-2 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
@@ -2255,6 +2270,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                               </span>
 
                               <select
+  aria-label="event detail is lunas lunas belum lunas"
+  name="isLunasLunasBelumLunas"
+  id="event-detail-is-lunas-lunas-belum-lunas"
                                 value={isLunas ? 'Lunas' : 'Belum Lunas'}
                                 onChange={(e) => handleQuickStatusReg(reg.id, e.target.value)}
                                 className="text-[11px] font-semibold text-slate-500 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg px-2 py-1 cursor-pointer focus:outline-none"
@@ -2387,6 +2405,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                   <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
                     <span className="text-[11px] font-bold text-slate-400">Kategori:</span>
                     <select
+  aria-label="event detail active cat id"
+  name="activeCatId"
+  id="event-detail-active-cat-id"
                       value={activeCatId}
                       onChange={(e) => setSelectedBracketCategory(e.target.value)}
                       className="bg-transparent text-slate-800 text-xs font-bold focus:outline-none cursor-pointer"
@@ -2680,6 +2701,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-bold text-slate-400">Filter Pekan:</span>
                         <select
+  aria-label="event detail selected matchday filter"
+  name="selectedMatchdayFilter"
+  id="event-detail-selected-matchday-filter"
                           value={selectedMatchdayFilter}
                           onChange={(e) => setSelectedMatchdayFilter(e.target.value)}
                           className="bg-white border border-slate-200 text-slate-800 text-xs font-bold px-3 py-2 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-2xs"
@@ -2872,6 +2896,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                 <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5">
                   <span className="text-[11px] font-bold text-slate-400">Kategori:</span>
                   <select
+  aria-label="event detail active cat id"
+  name="activeCatId"
+  id="event-detail-active-cat-id"
                     value={activeCatId}
                     onChange={(e) => setSelectedBracketCategory(e.target.value)}
                     className="bg-transparent text-slate-800 text-xs font-bold focus:outline-none cursor-pointer"
@@ -3619,6 +3646,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                   NAMA KATEGORI *
                 </label>
                 <input
+  aria-label="Misal: Ganda Putra Dewasa, Tunggal Pemula U-15"
+  name="categoryForm_name"
+  id="event-detail-category-form-name"
                   type="text"
                   placeholder="Misal: Ganda Putra Dewasa, Tunggal Pemula U-15"
                   value={categoryForm.name}
@@ -3634,6 +3664,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                     MAX KUOTA SLOT *
                   </label>
                   <input
+  aria-label="event detail category form max slots"
+  name="categoryForm_maxSlots"
+  id="event-detail-category-form-max-slots"
                     type="number"
                     min="2"
                     value={categoryForm.maxSlots}
@@ -3648,6 +3681,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                     BIAYA REGISTRASI (RP) *
                   </label>
                   <input
+  aria-label="event detail category form fee"
+  name="categoryForm_fee"
+  id="event-detail-category-form-fee"
                     type="number"
                     min="0"
                     step="any"
@@ -3664,6 +3700,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                   SYARAT &amp; KETENTUAN KHUSUS
                 </label>
                 <textarea
+  aria-label="Misal: Batasan umur kelahiran min. 2008, bawa KTP/KK asli"
+  name="categoryForm_description"
+  id="event-detail-category-form-description"
                   rows="2"
                   placeholder="Misal: Batasan umur kelahiran min. 2008, bawa KTP/KK asli"
                   value={categoryForm.description}
@@ -3760,6 +3799,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                     })()}
                   </div>
                   <select
+  aria-label="event detail reg form category id"
+  name="regForm_categoryId"
+  id="event-detail-reg-form-category-id"
                     value={regForm.categoryId}
                     onChange={(e) => handleCategorySelectChange(e.target.value)}
                     required
@@ -3809,6 +3851,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                     {isTeamSport ? 'NAMA TIM / KLUB *' : 'NAMA PESERTA / PASANGAN *'}
                   </label>
                   <input
+  aria-label="event detail reg form participant name"
+  name="regForm_participantName"
+  id="event-detail-reg-form-participant-name"
                     type="text"
                     placeholder={isTeamSport ? "Misal: Garuda FC / Bhayangkara VC / Satria Muda" : "Misal: PB Djarum / Kevin & Marcus"}
                     value={regForm.participantName}
@@ -3842,6 +3887,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                             {idx + 1}.
                           </span>
                           <input
+  aria-label="Nama Pemain"
+  name="player_name"
+  id="event-detail-player-name"
                             type="text"
                             placeholder="Nama Pemain"
                             value={player.name}
@@ -3851,6 +3899,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                           <div className="relative w-24 shrink-0">
                             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 font-mono text-xs">#</span>
                             <input
+  aria-label="No"
+  name="player_number"
+  id="event-detail-player-number"
                               type="number"
                               placeholder="No"
                               value={player.number}
@@ -3890,6 +3941,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                       NAMA OFFICIAL / MANAGER
                     </label>
                     <input
+  aria-label="Nama kontak penanggung jawab"
+  name="regForm_contactName"
+  id="event-detail-reg-form-contact-name"
                       type="text"
                       placeholder="Nama kontak penanggung jawab"
                       value={regForm.contactName}
@@ -3904,6 +3958,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                     </label>
                     <div className="relative">
                       <input
+  aria-label="Misal: 081234567890"
+  name="regForm_whatsappNumber"
+  id="event-detail-reg-form-whatsapp-number"
                         type="text"
                         placeholder="Misal: 081234567890"
                         value={regForm.whatsappNumber}
@@ -3922,6 +3979,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                       STATUS PEMBAYARAN *
                     </label>
                     <select
+  aria-label="event detail reg form payment status"
+  name="regForm_paymentStatus"
+  id="event-detail-reg-form-payment-status"
                       value={regForm.paymentStatus}
                       onChange={(e) => {
                         const val = e.target.value;
@@ -3945,6 +4005,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                       METODE BAYAR
                     </label>
                     <select
+  aria-label="event detail reg form payment method"
+  name="regForm_paymentMethod"
+  id="event-detail-reg-form-payment-method"
                       value={regForm.paymentMethod}
                       onChange={(e) => setRegForm({ ...regForm, paymentMethod: e.target.value })}
                       className="w-full bg-slate-50 border border-slate-200 text-slate-900 px-3.5 py-2.5 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
@@ -3967,6 +4030,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                     )}
                   </div>
                   <input
+  aria-label="event detail reg form amount paid"
+  name="regForm_amountPaid"
+  id="event-detail-reg-form-amount-paid"
                     type="number"
                     min="0"
                     step="any"
@@ -4124,6 +4190,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                   KETERANGAN PENGELUARAN *
                 </label>
                 <input
+  aria-label="Misal: Honor Wasit 2 Hari, Sewa Lapangan Final, Piala & Medali"
+  name="expenseForm_title"
+  id="event-detail-expense-form-title"
                   type="text"
                   placeholder="Misal: Honor Wasit 2 Hari, Sewa Lapangan Final, Piala & Medali"
                   value={expenseForm.title}
@@ -4140,6 +4209,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                     KATEGORI BIAYA *
                   </label>
                   <select
+  aria-label="event detail expense form category"
+  name="expenseForm_category"
+  id="event-detail-expense-form-category"
                     value={expenseForm.category}
                     onChange={(e) => setExpenseForm({ ...expenseForm, category: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-200 text-slate-900 px-3.5 py-2.5 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-rose-500 cursor-pointer"
@@ -4157,6 +4229,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                     TANGGAL TRANSAKSI *
                   </label>
                   <input
+  aria-label="event detail expense form date"
+  name="expenseForm_date"
+  id="event-detail-expense-form-date"
                     type="date"
                     value={expenseForm.date}
                     onChange={(e) => setExpenseForm({ ...expenseForm, date: e.target.value })}
@@ -4178,6 +4253,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                   )}
                 </div>
                 <input
+  aria-label="event detail expense form amount"
+  name="expenseForm_amount"
+  id="event-detail-expense-form-amount"
                   type="number"
                   min="0"
                   step="any"
@@ -4193,6 +4271,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                   CATATAN / NOMOR NOTA (OPSIONAL)
                 </label>
                 <textarea
+  aria-label="Keterangan rincian nota atau nama penerima biaya"
+  name="expenseForm_note"
+  id="event-detail-expense-form-note"
                   rows="2"
                   placeholder="Keterangan rincian nota atau nama penerima biaya"
                   value={expenseForm.note}
@@ -4247,6 +4328,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-xs font-bold text-slate-800 truncate">{editingMatch.participant1}</span>
                   <input
+  aria-label="event detail score form score1"
+  name="scoreForm_score1"
+  id="event-detail-score-form-score1"
                     type="number"
                     min="0"
                     value={scoreForm.score1}
@@ -4258,6 +4342,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                 <div className="flex items-center justify-between gap-3">
                   <span className="text-xs font-bold text-slate-800 truncate">{editingMatch.participant2}</span>
                   <input
+  aria-label="event detail score form score2"
+  name="scoreForm_score2"
+  id="event-detail-score-form-score2"
                     type="number"
                     min="0"
                     value={scoreForm.score2}
@@ -4272,6 +4359,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                   DETAIL SKOR TIAP SET
                 </label>
                 <input
+  aria-label="Misal: 21-18, 19-21, 21-15"
+  name="scoreForm_sets"
+  id="event-detail-score-form-sets"
                   type="text"
                   placeholder="Misal: 21-18, 19-21, 21-15"
                   value={scoreForm.sets}
@@ -4286,6 +4376,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                     NOMOR LAPANGAN
                   </label>
                   <input
+  aria-label="event detail score form court number"
+  name="scoreForm_courtNumber"
+  id="event-detail-score-form-court-number"
                     type="number"
                     min="1"
                     max="20"
@@ -4300,6 +4393,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                     WAKTU / JAM PERTANDINGAN
                   </label>
                   <input
+  aria-label="Misal: 09:30"
+  name="scoreForm_time"
+  id="event-detail-score-form-time"
                     type="text"
                     placeholder="Misal: 09:30"
                     value={scoreForm.time}
@@ -4314,6 +4410,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                   STATUS PERTANDINGAN
                 </label>
                 <select
+  aria-label="event detail score form status"
+  name="scoreForm_status"
+  id="event-detail-score-form-status"
                   value={scoreForm.status}
                   onChange={(e) => setScoreForm({ ...scoreForm, status: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-200 text-slate-900 px-3.5 py-2.5 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
@@ -4329,6 +4428,9 @@ export default function EventDetailPage({ eventData, eventId, userProfile, tenan
                   PENENTUAN HASIL &amp; PEMENANG
                 </label>
                 <select
+  aria-label="event detail score form winner"
+  name="scoreForm_winner"
+  id="event-detail-score-form-winner"
                   value={scoreForm.winner}
                   onChange={(e) => setScoreForm({ ...scoreForm, winner: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-200 text-slate-900 px-3.5 py-2.5 rounded-xl text-xs font-bold focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"

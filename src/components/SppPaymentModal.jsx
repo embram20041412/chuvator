@@ -265,11 +265,13 @@ export default function SppPaymentModal({
           
           {/* Month Selector */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+            <label htmlFor="spp-cycle-month" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1 flex items-center gap-1.5">
               <Calendar className="w-3.5 h-3.5 text-[#354944]" />
               <span>Siklus Bulan SPP <span className="text-rose-500">*</span></span>
             </label>
             <input
+              id="spp-cycle-month"
+              name="sppCycleMonth"
               type="month"
               required
               value={selectedMonth}
@@ -286,6 +288,7 @@ export default function SppPaymentModal({
 
             {/* Checkbox 1: Biaya Pendaftaran */}
             <label 
+              htmlFor="spp-pay-registration-fee"
               onClick={() => {
                 if (!isRegistrationFeeAlreadyPaid) setPayRegistrationFee(!payRegistrationFee);
               }}
@@ -297,6 +300,8 @@ export default function SppPaymentModal({
             >
               <div className="flex items-center gap-2">
                 <input
+                  id="spp-pay-registration-fee"
+                  name="payRegistrationFee"
                   type="checkbox"
                   checked={payRegistrationFee}
                   disabled={isRegistrationFeeAlreadyPaid}
@@ -315,6 +320,7 @@ export default function SppPaymentModal({
 
             {/* Checkbox 2: SPP Bulan Ini */}
             <label 
+              htmlFor="spp-pay-monthly-fee"
               onClick={() => setPaySppFee(!paySppFee)}
               className={`flex items-center justify-between p-2.5 rounded-xl border text-xs font-bold transition-all cursor-pointer ${
                 paySppFee 
@@ -324,6 +330,8 @@ export default function SppPaymentModal({
             >
               <div className="flex items-center gap-2">
                 <input
+                  id="spp-pay-monthly-fee"
+                  name="paySppFee"
                   type="checkbox"
                   checked={paySppFee}
                   onChange={(e) => setPaySppFee(e.target.checked)}
@@ -337,10 +345,12 @@ export default function SppPaymentModal({
 
           {/* Payment Method Selector */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
+            <label htmlFor="spp-payment-method" className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
               Metode Pembayaran <span className="text-rose-500">*</span>
             </label>
             <select
+              id="spp-payment-method"
+              name="paymentMethod"
               value={paymentMethod}
               onChange={(e) => setPaymentMethod(e.target.value)}
               className="w-full px-3.5 py-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-extrabold text-slate-900 cursor-pointer"

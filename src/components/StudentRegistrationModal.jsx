@@ -525,10 +525,12 @@ export default function StudentRegistrationModal({
                   Foto ini akan otomatis digunakan pada <strong>ID Card resmi</strong> dan <strong>Barcode presensi</strong> siswa.
                 </p>
                 <div className="flex items-center justify-center sm:justify-start gap-2">
-                  <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-[#162320] hover:bg-[#354944]/10 text-[#354944] dark:text-[#C89D32] border border-[#354944]/20 rounded-xl text-xs font-semibold cursor-pointer transition-colors shadow-2xs">
+                  <label htmlFor="registration-photo-file" className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white dark:bg-[#162320] hover:bg-[#354944]/10 text-[#354944] dark:text-[#C89D32] border border-[#354944]/20 rounded-xl text-xs font-semibold cursor-pointer transition-colors shadow-2xs">
                     <Upload className="w-3.5 h-3.5" />
                     <span>{photoPreview ? 'Ganti Foto' : 'Unggah Foto'}</span>
                     <input
+                      id="registration-photo-file"
+                      name="registrationPhoto"
                       type="file"
                       accept="image/*"
                       onChange={handlePhotoFileChange}

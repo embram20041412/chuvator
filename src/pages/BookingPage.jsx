@@ -98,6 +98,9 @@ export default function BookingPage({ userProfile }) {
           <div className="flex items-center space-x-2 bg-slate-50 dark:bg-white/5 border border-slate-200/80 dark:border-white/10 px-2.5 py-1.5 rounded-lg text-xs">
             <Calendar className="w-3.5 h-3.5 text-[#C89D32] shrink-0" />
             <input
+              id="booking-selected-date"
+              name="selectedDate"
+              aria-label="Pilih Tanggal Booking"
               type="date"
               value={selectedDate}
               onChange={(e) => setSelectedDate(e.target.value)}

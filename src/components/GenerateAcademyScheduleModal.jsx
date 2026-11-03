@@ -225,12 +225,14 @@ export default function GenerateAcademyScheduleModal({
             )}
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+            <label htmlFor="gen-schedule-start-date" className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
               Dari Tanggal <span className="text-[#354944] dark:text-[#C89D32]">*</span>
             </label>
             <div className="relative">
               <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
               <input
+                id="gen-schedule-start-date"
+                name="startDate"
                 type="date"
                 required
                 value={startDate}
@@ -241,12 +243,14 @@ export default function GenerateAcademyScheduleModal({
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+            <label htmlFor="gen-schedule-end-date" className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
               Sampai Tanggal <span className="text-[#354944] dark:text-[#C89D32]">*</span>
             </label>
             <div className="relative">
               <Calendar className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
               <input
+                id="gen-schedule-end-date"
+                name="endDate"
                 type="date"
                 required
                 value={endDate}

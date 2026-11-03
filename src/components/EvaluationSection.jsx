@@ -894,6 +894,9 @@ function FutsalAssessmentView({
                 </label>
                 <div className="relative">
                   <select
+  aria-label="evaluation section selected student id"
+  name="selectedStudent_id"
+  id="evaluation-section-selected-student-id"
                     value={selectedStudent?.id || ''}
                     onChange={(e) => setSelectedStudentId(e.target.value)}
                     className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#354944] font-bold text-slate-800 shadow-2xs cursor-pointer appearance-none pr-7"
@@ -922,6 +925,9 @@ function FutsalAssessmentView({
                     <span>Tanggal</span>
                   </label>
                   <input
+  aria-label="evaluation section evaluation date"
+  name="evaluationDate"
+  id="evaluation-section-evaluation-date"
                     type="date"
                     value={evaluationDate}
                     onChange={(e) => setEvaluationDate(e.target.value)}
@@ -935,6 +941,9 @@ function FutsalAssessmentView({
                     <span>Jenjang</span>
                   </label>
                   <select
+  aria-label="evaluation section override futsal tier"
+  name="overrideFutsalTier"
+  id="evaluation-section-override-futsal-tier"
                     value={overrideFutsalTier}
                     onChange={(e) => setOverrideFutsalTier(e.target.value)}
                     className="w-full px-2 py-1.5 text-xs bg-white border border-slate-200 rounded-lg font-bold text-slate-800 focus:ring-1 focus:ring-[#354944] shadow-2xs cursor-pointer truncate"
@@ -1058,6 +1067,9 @@ function FutsalAssessmentView({
                             1. Posisi Pemain
                           </label>
                           <select
+  aria-label="evaluation section selected position"
+  name="selectedPosition"
+  id="evaluation-section-selected-position"
                             value={selectedPosition}
                             onChange={(e) => setSelectedPosition(e.target.value)}
                             className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-bold text-slate-800 cursor-pointer"
@@ -1077,6 +1089,9 @@ function FutsalAssessmentView({
                               2. Profil Gaya Bermain (STY)
                             </label>
                             <select
+  aria-label="evaluation section selected style code"
+  name="selectedStyleCode"
+  id="evaluation-section-selected-style-code"
                               value={selectedStyleCode}
                               onChange={(e) => setSelectedStyleCode(e.target.value)}
                               className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-bold text-slate-800 cursor-pointer"
@@ -1459,6 +1474,9 @@ function FutsalAssessmentView({
                   </div>
 
                   <textarea
+  aria-label="evaluation section coach note"
+  name="coachNote"
+  id="evaluation-section-coach-note"
                     rows={2.5}
                     value={coachNote}
                     onChange={(e) => setCoachNote(e.target.value)}
@@ -2087,6 +2105,9 @@ function BadmintonAssessmentView({
                 </label>
                 <div className="relative">
                   <select
+  aria-label="evaluation section selected student id"
+  name="selectedStudentId"
+  id="evaluation-section-selected-student-id"
                     value={selectedStudentId}
                     onChange={(e) => setSelectedStudentId(e.target.value)}
                     className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#354944] font-bold text-slate-800 shadow-2xs cursor-pointer appearance-none pr-7"
@@ -2111,6 +2132,9 @@ function BadmintonAssessmentView({
                     <span>Tanggal</span>
                   </label>
                   <input
+  aria-label="evaluation section evaluation date"
+  name="evaluationDate"
+  id="evaluation-section-evaluation-date"
                     type="date"
                     value={evaluationDate}
                     onChange={(e) => setEvaluationDate(e.target.value)}
@@ -2124,6 +2148,9 @@ function BadmintonAssessmentView({
                     <span>Jenjang</span>
                   </label>
                   <select
+  aria-label="evaluation section override badminton tier"
+  name="overrideBadmintonTier"
+  id="evaluation-section-override-badminton-tier"
                     value={overrideBadmintonTier}
                     onChange={(e) => setOverrideBadmintonTier(e.target.value)}
                     className="w-full px-2 py-1.5 text-xs bg-white border border-slate-200 rounded-lg font-bold text-slate-800 focus:ring-1 focus:ring-[#354944] shadow-2xs cursor-pointer truncate"
@@ -2246,6 +2273,9 @@ function BadmintonAssessmentView({
                             1. Nomor Pertandingan
                           </label>
                           <select
+  aria-label="evaluation section event code"
+  name="eventCode"
+  id="evaluation-section-event-code"
                             value={eventCode}
                             onChange={(e) => setEventCode(e.target.value)}
                             className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-bold text-slate-800 cursor-pointer"
@@ -2265,6 +2295,9 @@ function BadmintonAssessmentView({
                               2. Profil Gaya Bermain (STY)
                             </label>
                             <select
+  aria-label="evaluation section style code"
+  name="styleCode"
+  id="evaluation-section-style-code"
                               value={styleCode}
                               onChange={(e) => setStyleCode(e.target.value)}
                               className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-bold text-slate-800 cursor-pointer"
@@ -2285,6 +2318,9 @@ function BadmintonAssessmentView({
                               3. Spesialisasi Nomor Ganda
                             </label>
                             <select
+  aria-label="evaluation section doubles spec code"
+  name="doublesSpecCode"
+  id="evaluation-section-doubles-spec-code"
                               value={doublesSpecCode}
                               onChange={(e) => setDoublesSpecCode(e.target.value)}
                               className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-bold text-slate-800 cursor-pointer"
@@ -2338,6 +2374,9 @@ function BadmintonAssessmentView({
                             <div>
                               <label className="text-[10px] font-bold text-slate-600 block mb-1">Kesiapan Fisik:</label>
                               <select
+  aria-label="evaluation section health physical readiness"
+  name="healthPhysicalReadiness"
+  id="evaluation-section-health-physical-readiness"
                                 value={healthPhysicalReadiness}
                                 onChange={(e) => setHealthPhysicalReadiness(e.target.value)}
                                 className="w-full px-2.5 py-1.5 text-[11px] bg-white border border-slate-200 rounded-xl font-normal text-slate-800 focus:outline-none"
@@ -2353,6 +2392,9 @@ function BadmintonAssessmentView({
                             <div>
                               <label className="text-[10px] font-bold text-slate-600 block mb-1">Kualitas Tidur:</label>
                               <select
+  aria-label="evaluation section health recovery quality"
+  name="healthRecoveryQuality"
+  id="evaluation-section-health-recovery-quality"
                                 value={healthRecoveryQuality}
                                 onChange={(e) => setHealthRecoveryQuality(e.target.value)}
                                 className="w-full px-2.5 py-1.5 text-[11px] bg-white border border-slate-200 rounded-xl font-normal text-slate-800 focus:outline-none"
@@ -2367,6 +2409,9 @@ function BadmintonAssessmentView({
                           <div>
                             <label className="text-[10px] font-bold text-slate-600 block mb-1">Riwayat Cedera:</label>
                             <input
+  aria-label="evaluation section health injury notes"
+  name="healthInjuryNotes"
+  id="evaluation-section-health-injury-notes"
                               type="text"
                               value={healthInjuryNotes}
                               onChange={(e) => setHealthInjuryNotes(e.target.value)}
@@ -2726,6 +2771,9 @@ function BadmintonAssessmentView({
                               </button>
 
                               <input
+  aria-label="evaluation section val"
+  name="val"
+  id="evaluation-section-val"
                                 type="range"
                                 min="0"
                                 max="100"
@@ -2812,6 +2860,9 @@ function BadmintonAssessmentView({
           </div>
 
           <textarea
+  aria-label="evaluation section coach note"
+  name="coachNote"
+  id="evaluation-section-coach-note"
             value={coachNote}
             onChange={(e) => setCoachNote(e.target.value)}
             rows={2.5}
@@ -3461,6 +3512,9 @@ function FootballAssessmentView({
                 </label>
                 <div className="relative">
                   <select
+  aria-label="evaluation section selected student id"
+  name="selectedStudent_id"
+  id="evaluation-section-selected-student-id"
                     value={selectedStudent?.id || ''}
                     onChange={(e) => setSelectedStudentId(e.target.value)}
                     className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#354944] font-bold text-slate-800 shadow-2xs cursor-pointer appearance-none pr-8"
@@ -3490,6 +3544,9 @@ function FootballAssessmentView({
                     <span>Tanggal</span>
                   </label>
                   <input
+  aria-label="evaluation section evaluation date"
+  name="evaluationDate"
+  id="evaluation-section-evaluation-date"
                     type="date"
                     value={evaluationDate}
                     onChange={(e) => setEvaluationDate(e.target.value)}
@@ -3503,6 +3560,9 @@ function FootballAssessmentView({
                     <span>Jenjang</span>
                   </label>
                   <select
+  aria-label="evaluation section override tier"
+  name="overrideTier"
+  id="evaluation-section-override-tier"
                     value={overrideTier}
                     onChange={(e) => setOverrideTier(e.target.value)}
                     className="w-full px-2.5 py-2 text-xs bg-white border border-slate-200 rounded-xl font-bold text-slate-800 focus:ring-2 focus:ring-[#354944] shadow-2xs cursor-pointer truncate"
@@ -3631,6 +3691,9 @@ function FootballAssessmentView({
                       1. Posisi / Peran Bermain (Utama)
                     </label>
                     <select
+  aria-label="evaluation section selected position"
+  name="selectedPosition"
+  id="evaluation-section-selected-position"
                       value={selectedPosition}
                       onChange={(e) => handlePositionChange(e.target.value)}
                       className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-800 cursor-pointer"
@@ -3660,6 +3723,9 @@ function FootballAssessmentView({
                         </span>
                       </label>
                       <select
+  aria-label="evaluation section secondary position"
+  name="secondaryPosition"
+  id="evaluation-section-secondary-position"
                         value={secondaryPosition}
                         onChange={(e) => setSecondaryPosition(e.target.value)}
                         className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-800 cursor-pointer"
@@ -3679,6 +3745,9 @@ function FootballAssessmentView({
                         Spesialisasi Peran
                       </label>
                       <select
+  aria-label="evaluation section selected specialization"
+  name="selectedSpecialization"
+  id="evaluation-section-selected-specialization"
                         value={selectedSpecialization}
                         onChange={(e) => setSelectedSpecialization(e.target.value)}
                         className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-800 cursor-pointer"
@@ -3698,6 +3767,9 @@ function FootballAssessmentView({
                         Profil Gaya Bermain Taktis (STY)
                       </label>
                       <select
+  aria-label="evaluation section selected style code"
+  name="selectedStyleCode"
+  id="evaluation-section-selected-style-code"
                         value={selectedStyleCode}
                         onChange={(e) => setSelectedStyleCode(e.target.value)}
                         className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-800 cursor-pointer"
@@ -4091,6 +4163,9 @@ function FootballAssessmentView({
                   </div>
 
                   <textarea
+  aria-label="evaluation section coach note"
+  name="coachNote"
+  id="evaluation-section-coach-note"
                     rows={2.5}
                     value={coachNote}
                     onChange={(e) => setCoachNote(e.target.value)}
@@ -4589,6 +4664,9 @@ function IndicatorCard({ title, value, isSpecial = false, onScoreChange, onAdjus
       </div>
 
       <input
+  aria-label="evaluation section value"
+  name="value"
+  id="evaluation-section-value"
         type="range"
         min="0"
         max="100"
@@ -4858,6 +4936,9 @@ function Standard4PillarView({
             <div className="flex-1">
               <label className="block text-xs font-bold text-slate-700 uppercase mb-1">Pilih Siswa</label>
               <select
+  aria-label="evaluation section selected student id"
+  name="selectedStudent_id"
+  id="evaluation-section-selected-student-id"
                 value={selectedStudent?.id || ''}
                 onChange={(e) => setSelectedStudentId(e.target.value)}
                 className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl font-bold cursor-pointer"
@@ -4872,6 +4953,9 @@ function Standard4PillarView({
             <div>
               <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">Tanggal</label>
               <input
+  aria-label="evaluation section evaluation date"
+  name="evaluationDate"
+  id="evaluation-section-evaluation-date"
                 type="date"
                 value={evaluationDate}
                 onChange={(e) => setEvaluationDate(e.target.value)}
@@ -4992,6 +5076,9 @@ function Standard4PillarView({
                               <span className="text-indigo-600">{scores[kpi] !== undefined ? scores[kpi] : 0}</span>
                             </div>
                             <input
+  aria-label="evaluation section scoreskpiundefinedscoreskpi0"
+  name="scoreskpiundefinedscoreskpi0"
+  id="evaluation-section-scoreskpiundefinedscoreskpi0"
                               type="range"
                               min="0"
                               max="100"
@@ -5015,6 +5102,9 @@ function Standard4PillarView({
                 <button type="button" onClick={handleGenerateDraft} className="text-xs font-bold text-[#354944] hover:underline">⚡ Buat Draf</button>
               </div>
               <textarea
+  aria-label="evaluation section coach note"
+  name="coachNote"
+  id="evaluation-section-coach-note"
                 rows={2.5}
                 value={coachNote}
                 onChange={(e) => setCoachNote(e.target.value)}
@@ -5090,6 +5180,9 @@ function HistorySection({
         <div className="flex items-center gap-2">
           <Filter className="w-3.5 h-3.5 text-slate-400" />
           <select
+  aria-label="evaluation section filter student id"
+  name="filterStudentId"
+  id="evaluation-section-filter-student-id"
             value={filterStudentId}
             onChange={(e) => setFilterStudentId(e.target.value)}
             className="px-2.5 py-1 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-700 cursor-pointer"

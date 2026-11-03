@@ -537,6 +537,9 @@ export default function SponsorPaymentModal({
                 Rp
               </span>
               <input
+  aria-label="sponsor payment payment amount"
+  name="paymentAmount"
+  id="sponsor-payment-payment-amount"
                 type="number"
                 min="0"
                 step="any"
@@ -591,6 +594,9 @@ export default function SponsorPaymentModal({
               )}
             </label>
             <select
+  aria-label="sponsor payment payment method"
+  name="paymentMethod"
+  id="sponsor-payment-payment-method"
               value={paymentMethod}
               onChange={(e) => setPaymentMethod(e.target.value)}
               className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs font-bold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer"
@@ -636,6 +642,9 @@ export default function SponsorPaymentModal({
                     Nomor Cek / Bilyet Giro *
                   </label>
                   <input
+  aria-label="sponsor payment giro details giro number"
+  name="giroDetails_giroNumber"
+  id="sponsor-payment-giro-details-giro-number"
                     type="text"
                     required={isGiro}
                     value={giroDetails.giroNumber}
@@ -651,6 +660,9 @@ export default function SponsorPaymentModal({
                     Bank Penerbit *
                   </label>
                   <input
+  aria-label="sponsor payment giro details bank issuer"
+  name="giroDetails_bankIssuer"
+  id="sponsor-payment-giro-details-bank-issuer"
                     type="text"
                     required={isGiro}
                     value={giroDetails.bankIssuer}
@@ -668,6 +680,9 @@ export default function SponsorPaymentModal({
                 </label>
                 <div className="relative">
                   <input
+  aria-label="sponsor payment giro details due date"
+  name="giroDetails_dueDate"
+  id="sponsor-payment-giro-details-due-date"
                     type="date"
                     required={isGiro}
                     value={giroDetails.dueDate}
@@ -694,6 +709,9 @@ export default function SponsorPaymentModal({
                 Catatan / Keterangan Termin
               </label>
               <input
+  aria-label="sponsor payment payment notes"
+  name="paymentNotes"
+  id="sponsor-payment-payment-notes"
                 type="text"
                 value={paymentNotes}
                 onChange={(e) => setPaymentNotes(e.target.value)}
@@ -708,6 +726,9 @@ export default function SponsorPaymentModal({
                 <span className="text-[10px] text-slate-400 font-normal lowercase">(opsional)</span>
               </label>
               <input
+  aria-label="sponsor payment invoice due date"
+  name="invoiceDueDate"
+  id="sponsor-payment-invoice-due-date"
                 type="date"
                 value={invoiceDueDate}
                 onChange={(e) => setInvoiceDueDate(e.target.value)}
