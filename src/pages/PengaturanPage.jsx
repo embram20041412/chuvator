@@ -8,6 +8,9 @@ import {
   registerNewStaff,
   registerStaffByOwner, 
   getStaffListByTenant, 
+  getInvitationsByTenant,
+  getPendingInvitationsByTenant,
+  revokeStaffInvitation,
   deleteStaffDoc,
   resendStaffInvitation
 } from '../services/staffService';
@@ -18,6 +21,7 @@ import {
   Dumbbell, 
   Save, 
   CheckCircle2, 
+  AlertCircle,
   DollarSign, 
   Inbox, 
   QrCode,
@@ -38,7 +42,14 @@ import {
   LogOut,
   Sun,
   Moon,
-  Mail
+  Mail,
+  Clock,
+  Ban,
+  X,
+  Copy,
+  Check,
+  Info,
+  Send
 } from 'lucide-react';
 import { Pengaturan3DIcon } from '../components/icons/App3DIcons';
 import { uploadToCloudinary } from '../services/uploadService';
@@ -169,26 +180,39 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
 
   // Staff Management (Client-Side RBAC) States
   const [staffList, setStaffList] = useState([]);
+  const [pendingInvitations, setPendingInvitations] = useState([]);
+  const [sessionInviteLinks, setSessionInviteLinks] = useState({});
+  const [inviteSuccessModal, setInviteSuccessModal] = useState(null);
+  const [revokeConfirmModal, setRevokeConfirmModal] = useState(null);
+  const [copiedModalLink, setCopiedModalLink] = useState(false);
+  const [copiedTableLinkId, setCopiedTableLinkId] = useState(null);
   const [loadingStaff, setLoadingStaff] = useState(false);
   const [staffSuccessMsg, setStaffSuccessMsg] = useState(null);
   const [staffErrorMsg, setStaffErrorMsg] = useState(null);
   const [registeringStaff, setRegisteringStaff] = useState(false);
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffEmail, setNewStaffEmail] = useState('');
-  const [newStaffPassword, setNewStaffPassword] = useState('');
   const [newStaffRole, setNewStaffRole] = useState('admin');
   const [resendingStaffEmail, setResendingStaffEmail] = useState(null);
+  const [revokingId, setRevokingId] = useState(null);
 
   useEffect(() => {
     if (tenant?.id && activeTab === 'staf') {
       fetchStaffList();
 
-      // Realtime listener untuk users_staff di tenant aktif
+      // Realtime listener untuk users_staff & invitations di tenant aktif
       const channel = supabase
         .channel(`realtime_pengaturan_staff_${tenant.id}`)
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'users_staff', filter: `tenant_id=eq.${tenant.id}` },
+          () => {
+            fetchStaffList();
+          }
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'invitations', filter: `tenant_id=eq.${tenant.id}` },
           () => {
             fetchStaffList();
           }
@@ -205,10 +229,14 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
     if (!tenant?.id) return;
     setLoadingStaff(true);
     try {
-      const list = await getStaffListByTenant(tenant.id);
+      const [list, invites] = await Promise.all([
+        getStaffListByTenant(tenant.id),
+        getInvitationsByTenant(tenant.id)
+      ]);
       setStaffList(list);
+      setPendingInvitations(invites);
     } catch (err) {
-      console.error('Error fetching staff list:', err);
+      console.error('Error fetching staff list and invitations:', err);
     } finally {
       setLoadingStaff(false);
     }
@@ -221,40 +249,72 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
       return;
     }
 
+    const cleanEmail = newStaffEmail.trim().toLowerCase();
+    const cleanName = newStaffName.trim();
+
+    if (!cleanName || !cleanEmail) {
+      setStaffErrorMsg('Nama lengkap dan email staf wajib diisi.');
+      return;
+    }
+
     setRegisteringStaff(true);
     setStaffSuccessMsg(null);
     setStaffErrorMsg(null);
 
     try {
       const res = await registerNewStaff({
-        fullName: newStaffName,
-        name: newStaffName,
-        email: newStaffEmail,
+        fullName: cleanName,
+        name: cleanName,
+        email: cleanEmail,
         role: newStaffRole,
         tenantId: tenant.id
       });
 
+      const invId = res.invitationId || res.invitation?.invitation_id || res.invitation?.id;
+
       if (res?.inviteUrl) {
-        setStaffSuccessMsg(`Tautan undangan untuk ${newStaffEmail} berhasil diterbitkan & disalin ke clipboard: ${res.inviteUrl}`);
-        try {
-          navigator.clipboard?.writeText(res.inviteUrl);
-        } catch (_) {}
-      } else {
-        setStaffSuccessMsg(`Berhasil menerbitkan undangan untuk ${newStaffEmail}!`);
+        setSessionInviteLinks((prev) => ({
+          ...prev,
+          ...(invId ? { [invId]: res.inviteUrl } : {}),
+          [cleanEmail]: res.inviteUrl,
+        }));
+
+        setInviteSuccessModal({
+          inviteUrl: res.inviteUrl,
+          email: cleanEmail,
+          role: res.role || newStaffRole,
+          tenantName: tenant?.name || userProfile?.tenant?.name || 'Cabang Aktif',
+          expiresAt: res.expiresAt,
+          invitationId: invId,
+        });
       }
 
       setNewStaffName('');
       setNewStaffEmail('');
-      setNewStaffPassword('');
       setNewStaffRole('admin');
 
       fetchStaffList();
-      setTimeout(() => setStaffSuccessMsg(null), 8000);
     } catch (err) {
-      console.error('Error registering staff:', err);
+      console.error('Error registering staff in PengaturanPage:', err);
       setStaffErrorMsg(err.message || 'Gagal mendaftarkan akun staf.');
     } finally {
       setRegisteringStaff(false);
+    }
+  };
+
+  const executeRevokeInvitation = async (invitationId, invEmail) => {
+    setRevokingId(invitationId);
+    try {
+      await revokeStaffInvitation(invitationId);
+      setStaffSuccessMsg(`Undangan untuk ${invEmail} berhasil dibatalkan.`);
+      setTimeout(() => setStaffSuccessMsg(null), 4000);
+      setRevokeConfirmModal(null);
+      fetchStaffList();
+    } catch (err) {
+      console.error('Error revoking invitation in PengaturanPage:', err);
+      setStaffErrorMsg('Gagal membatalkan undangan: ' + err.message);
+    } finally {
+      setRevokingId(null);
     }
   };
 
@@ -1626,20 +1686,21 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
       {/* TAB 6: KELOLA STAF & PELATIH (CLIENT-SIDE RBAC) */}
       {activeTab === 'staf' && (
         <div className="space-y-3.5 text-left animate-fadeIn mt-3.5">
-          {/* CARD 1: FORM PENDAFTARAN STAF (SUPABASE AUTH) */}
+          
+          {/* CARD 1: FORM TERBITKAN UNDANGAN STAFF (NO PASSWORD FIELD) */}
           <div className="bg-white dark:bg-slate-900 rounded-xl p-3.5 sm:p-4 shadow-2xs border border-slate-200/80 dark:border-white/10 space-y-3.5">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 pb-2.5">
               <div>
                 <h2 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200 flex items-center space-x-1.5">
                   <UserPlus className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                  <span>Daftarkan Staf Baru (Owner Portal)</span>
+                  <span>Terbitkan Undangan Staff Baru (Owner Portal)</span>
                 </h2>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                  Registrasi staf/pelatih. Akun Owner Anda tidak akan ter-logout saat proses ini berlangsung.
+                  Menerbitkan token undangan berbasis database RPC tepercaya. Penerima undangan akan mengatur kata sandinya sendiri saat mengklaim akun.
                 </p>
               </div>
-              <span className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 text-[9px] font-bold rounded border border-indigo-100 dark:border-indigo-900/40 shrink-0">
-                Supabase Auth
+              <span className="px-2 py-0.5 bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 text-[9px] font-bold rounded border border-blue-100 dark:border-blue-900/40 shrink-0">
+                PostgreSQL RPC
               </span>
             </div>
 
@@ -1651,8 +1712,9 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
             )}
 
             {staffErrorMsg && (
-              <div className="p-2.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 text-red-700 dark:text-red-300 text-xs rounded-xl font-semibold">
-                {staffErrorMsg}
+              <div className="p-2.5 bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800/60 text-red-700 dark:text-red-300 text-xs rounded-xl font-semibold flex items-center space-x-2">
+                <AlertCircle className="w-4 h-4 text-red-600 dark:text-red-400 shrink-0" />
+                <span>{staffErrorMsg}</span>
               </div>
             )}
 
@@ -1660,7 +1722,7 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label htmlFor="settings-staff-name" className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                    Nama Lengkap Staf / Pelatih
+                    Nama Lengkap Staf / Pelatih <span className="text-red-500">*</span>
                   </label>
                   <input
                     id="settings-staff-name"
@@ -1677,7 +1739,7 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
 
                 <div>
                   <label htmlFor="settings-staff-email" className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                    Email Akun Staf
+                    Alamat Email Staf <span className="text-red-500">*</span>
                   </label>
                   <input
                     id="settings-staff-email"
@@ -1693,65 +1755,46 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label htmlFor="settings-staff-password" className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                    Kata Sandi (Password)
-                  </label>
-                  <input
-                    id="settings-staff-password"
-                    name="newStaffPassword"
-                    type="password"
-                    autoComplete="new-password"
-                    required
-                    minLength={6}
-                    placeholder="Minimal 6 Karakter"
-                    value={newStaffPassword}
-                    onChange={(e) => setNewStaffPassword(e.target.value)}
-                    className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-blue-500 font-medium"
-                  />
-                </div>
-
-                <div>
-                  <label htmlFor="settings-staff-role" className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                    Role / Hak Akses RBAC
-                  </label>
-                  <select
-                    id="settings-staff-role"
-                    name="newStaffRole"
-                    value={newStaffRole}
-                    onChange={(e) => setNewStaffRole(e.target.value)}
-                    className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-blue-500 font-bold cursor-pointer"
-                  >
-                    <option value="admin">1. admin (Booking, Akademi, Event &amp; Keuangan)</option>
-                    <option value="pelatih">2. pelatih (HANYA Modul Akademi)</option>
-                  </select>
-                </div>
+              <div>
+                <label htmlFor="settings-staff-role" className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                  Role / Hak Akses RBAC <span className="text-red-500">*</span>
+                </label>
+                <select
+                  id="settings-staff-role"
+                  name="newStaffRole"
+                  value={newStaffRole}
+                  onChange={(e) => setNewStaffRole(e.target.value)}
+                  className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-blue-500 font-bold cursor-pointer"
+                >
+                  <option value="admin">1. admin (Booking, POS, Akademi, Event &amp; Keuangan)</option>
+                  <option value="kasir">2. kasir (POS &amp; Transaksi Lapangan)</option>
+                  <option value="pelatih">3. pelatih (HANYA Modul Akademi)</option>
+                  <option value="staff">4. staff (Akses Operasional Lapangan)</option>
+                </select>
               </div>
 
-              <div className="p-2.5 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 rounded-lg text-[10px] text-blue-800 dark:text-blue-300 leading-relaxed">
-                <strong>Ketentuan Hak Akses Role RBAC:</strong>
-                <ul className="list-disc list-inside mt-0.5 space-y-0.5">
-                  <li><strong>Admin Staf ("admin"):</strong> Memiliki akses ke Booking, Akademi, Event, dan Keuangan.</li>
-                  <li><strong>Pelatih ("pelatih"):</strong> HANYA memiliki akses ke modul Akademi.</li>
-                </ul>
+              <div className="p-2.5 bg-blue-50/50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/40 rounded-lg text-[10px] text-blue-800 dark:text-blue-300 leading-relaxed flex items-start space-x-2">
+                <Info className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                <span>
+                  <strong>Alur Pendaftaran Murni Undangan:</strong> Owner menerbitkan tautan undangan aman &rarr; staf membuka tautan &rarr; staf mendaftar/masuk dengan kata sandinya sendiri &rarr; mengklaim akun. Kata sandi tidak ditentukan oleh Owner.
+                </span>
               </div>
 
               <div className="pt-1 flex justify-end">
                 <button
                   type="submit"
                   disabled={registeringStaff}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg shadow-2xs transition-all cursor-pointer flex items-center space-x-1.5 disabled:opacity-60"
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg shadow-2xs transition-all cursor-pointer flex items-center space-x-1.5 disabled:opacity-60"
                 >
                   {registeringStaff ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
-                      <span>Mendaftarkan Staf...</span>
+                      <span>Menerbitkan Undangan...</span>
                     </>
                   ) : (
                     <>
-                      <UserPlus className="w-3.5 h-3.5" />
-                      <span>Daftarkan Staf Baru</span>
+                      <Send className="w-3.5 h-3.5" />
+                      <span>Terbitkan Undangan Staff</span>
                     </>
                   )}
                 </button>
@@ -1759,7 +1802,110 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
             </form>
           </div>
 
-          {/* CARD 2: DAFTAR STAF TERDAFTAR IN USERS_STAFF */}
+          {/* CARD 2: DAFTAR UNDANGAN STAFF PENDING & TAUTAN UNDANGAN */}
+          {pendingInvitations.length > 0 && (
+            <div className="bg-white dark:bg-slate-900 rounded-xl p-3.5 sm:p-4 shadow-2xs border border-amber-200/80 dark:border-amber-900/50 space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 pb-2.5">
+                <h3 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                  <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                  <span>Daftar Undangan Staff ({pendingInvitations.length})</span>
+                </h3>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                  Menunggu staf mengklaim akun
+                </span>
+              </div>
+
+              <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-700/80 rounded-xl overflow-hidden text-xs">
+                {pendingInvitations.map((inv) => {
+                  const sessionUrl = sessionInviteLinks[inv.id] || sessionInviteLinks[inv.email];
+                  const isPending = inv.status === 'pending';
+
+                  return (
+                    <div key={inv.id} className="p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2 hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors">
+                      <div>
+                        <div className="flex items-center space-x-2">
+                          <span className="font-mono font-bold text-slate-900 dark:text-slate-100">{inv.email}</span>
+                          <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-bold text-[9px] rounded uppercase border border-blue-200 dark:border-blue-900/40">
+                            {inv.role}
+                          </span>
+                          {inv.status === 'pending' && (
+                            <span className="px-2 py-0.5 bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-bold text-[9px] rounded">
+                              Pending
+                            </span>
+                          )}
+                          {inv.status === 'accepted' && (
+                            <span className="px-2 py-0.5 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-bold text-[9px] rounded">
+                              Accepted
+                            </span>
+                          )}
+                          {inv.status === 'expired' && (
+                            <span className="px-2 py-0.5 bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-bold text-[9px] rounded">
+                              Kedaluwarsa
+                            </span>
+                          )}
+                          {inv.status === 'revoked' && (
+                            <span className="px-2 py-0.5 bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 font-bold text-[9px] rounded">
+                              Dibatalkan
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                          Dibuat: {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('id-ID') : '-'} • Berlaku s.d. {inv.expiresAt ? new Date(inv.expiresAt).toLocaleDateString('id-ID') : '-'}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center space-x-2 self-end sm:self-center">
+                        {sessionUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              navigator.clipboard.writeText(sessionUrl);
+                              setCopiedTableLinkId(inv.id);
+                              setTimeout(() => setCopiedTableLinkId(null), 2500);
+                            }}
+                            className="px-2.5 py-1 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/80 rounded-md text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer"
+                          >
+                            {copiedTableLinkId === inv.id ? (
+                              <>
+                                <Check className="w-3 h-3 text-emerald-600" />
+                                <span>Tersalin!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3 h-3" />
+                                <span>Salin Tautan</span>
+                              </>
+                            )}
+                          </button>
+                        ) : (
+                          <span 
+                            className="text-[10px] text-slate-400 italic cursor-help"
+                            title="Tautan hanya tersedia saat undangan pertama kali dibuat. Buat undangan baru jika tautan hilang."
+                          >
+                            Tautan hanya di memori awal
+                          </span>
+                        )}
+
+                        {isPending && (
+                          <button
+                            type="button"
+                            onClick={() => setRevokeConfirmModal({ id: inv.id, email: inv.email })}
+                            disabled={revokingId === inv.id}
+                            className="px-2.5 py-1 bg-rose-50 dark:bg-rose-950/50 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800/80 rounded-md text-[11px] font-bold transition flex items-center space-x-1 cursor-pointer disabled:opacity-50"
+                          >
+                            <Ban className="w-3 h-3" />
+                            <span>Batalkan</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* CARD 3: DAFTAR STAF TERDAFTAR IN USERS_STAFF */}
           <div className="bg-white dark:bg-slate-900 rounded-xl p-3.5 sm:p-4 shadow-2xs border border-slate-200/80 dark:border-white/10 space-y-3">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 pb-2.5">
               <h3 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
@@ -1777,7 +1923,7 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
               <div className="py-6 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-center p-4 flex flex-col items-center">
                 <Users className="w-7 h-7 text-slate-300 dark:text-slate-700 mb-1.5" />
                 <p className="text-xs font-bold text-slate-600 dark:text-slate-400">Belum ada staf atau pelatih terdaftar.</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">Gunakan formulir di atas untuk mendaftarkan staf baru.</p>
+                <p className="text-[10px] text-slate-400 mt-0.5">Gunakan formulir di atas untuk menerbitkan undangan baru.</p>
               </div>
             ) : (
               <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-700/80 rounded-xl overflow-hidden">
@@ -1794,20 +1940,15 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                           {staf.role === 'admin' ? 'Admin Staf' : 'Pelatih Akademi'}
                         </span>
 
-                        {staf.status === 'pending_confirmation' || staf.status === 'pending' ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 font-bold text-[9px] rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
-                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                            Menunggu Konfirmasi Email
-                          </span>
-                        ) : staf.status === 'suspended' || staf.status === 'inactive' ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 font-bold text-[9px] rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800">
-                            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                            Non-Aktif
-                          </span>
-                        ) : (
+                        {staf.isBound ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 font-bold text-[9px] rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                             <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                            Aktif
+                            Terikat Auth UID
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 font-bold text-[9px] rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                            Menunggu Klaim
                           </span>
                         )}
                       </div>
@@ -1818,18 +1959,6 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                     </div>
 
                     <div className="flex items-center gap-1.5 self-end sm:self-center">
-                      {(staf.status === 'pending_confirmation' || staf.status === 'pending') && (
-                        <button
-                          type="button"
-                          onClick={() => handleResendInvite(staf.email)}
-                          disabled={resendingStaffEmail === staf.email}
-                          className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800/80 rounded-md text-[11px] font-bold transition-colors cursor-pointer flex items-center gap-1 disabled:opacity-50"
-                          title="Kirim Ulang Email Konfirmasi"
-                        >
-                          <Mail className="w-3 h-3" />
-                          <span>{resendingStaffEmail === staf.email ? 'Mengirim...' : 'Kirim Ulang'}</span>
-                        </button>
-                      )}
                       <button
                         type="button"
                         onClick={() => handleDeleteStaff(staf.id, staf.email)}
@@ -1844,6 +1973,168 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* PERSISTENT SUCCESS MODAL (DIALOG KONFIRMASI UNDANGAN BERHASIL) */}
+      {inviteSuccessModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 text-left relative">
+            <button
+              type="button"
+              onClick={() => setInviteSuccessModal(null)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800 transition cursor-pointer"
+              aria-label="Tutup Modal"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center space-x-3">
+              <div className="p-3 bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 rounded-xl">
+                <CheckCircle2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">
+                  Undangan Staff Berhasil Dibuat
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Token undangan resmi telah dibuat di database PostgreSQL Supabase RLS.
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-800/60 p-4 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
+              <div className="flex justify-between py-1 border-b border-slate-200 dark:border-slate-700">
+                <span className="text-slate-500 font-medium">Email Penerima:</span>
+                <span className="font-bold text-slate-900 dark:text-slate-100 font-mono">{inviteSuccessModal.email}</span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200 dark:border-slate-700">
+                <span className="text-slate-500 font-medium">Role yang Diberikan:</span>
+                <span className="px-2 py-0.5 bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 font-bold rounded uppercase text-[10px]">
+                  {inviteSuccessModal.role}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-slate-200 dark:border-slate-700">
+                <span className="text-slate-500 font-medium">Nama Tenant / GOR:</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200">{inviteSuccessModal.tenantName}</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span className="text-slate-500 font-medium">Masa Berlaku:</span>
+                <span className="font-semibold text-amber-700 dark:text-amber-400 flex items-center space-x-1">
+                  <Clock className="w-3.5 h-3.5" />
+                  <span>
+                    {inviteSuccessModal.expiresAt 
+                      ? `7 Hari (s.d. ${new Date(inviteSuccessModal.expiresAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })})`
+                      : '7 Hari'}
+                  </span>
+                </span>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="pengaturan-modal-invite-url" className="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase">
+                URL Undangan Lengkap
+              </label>
+              <div className="flex items-center space-x-2">
+                <input
+                  id="pengaturan-modal-invite-url"
+                  name="modalInviteUrl"
+                  type="text"
+                  readOnly
+                  value={inviteSuccessModal.inviteUrl}
+                  className="flex-1 px-3 py-2 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-xl font-mono text-slate-800 dark:text-slate-200 select-all focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (inviteSuccessModal.inviteUrl) {
+                      navigator.clipboard.writeText(inviteSuccessModal.inviteUrl);
+                      setCopiedModalLink(true);
+                      setTimeout(() => setCopiedModalLink(false), 2500);
+                    }
+                  }}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl transition flex items-center space-x-1.5 cursor-pointer shadow-2xs shrink-0"
+                >
+                  {copiedModalLink ? (
+                    <>
+                      <Check className="w-4 h-4 text-emerald-300" />
+                      <span>Tersalin!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      <span>Salin Tautan</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 rounded-xl text-[11px] text-amber-900 dark:text-amber-300 flex items-start space-x-2">
+              <Info className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <span>
+                <strong>Penting:</strong> Salin dan bagikan tautan ini ke penerima. Tautan ini tetap tersedia selama dialog ini terbuka. Setelah dialog ditutup dan halaman di-refresh, tautan tidak dapat dimunculkan kembali demi alasan keamanan token.
+              </span>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setInviteSuccessModal(null)}
+                className="px-6 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs rounded-xl transition cursor-pointer"
+              >
+                Tutup
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL REVOKE CONFIRMATION */}
+      {revokeConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 text-left relative">
+            <div className="flex items-center space-x-3 text-rose-600 dark:text-rose-400">
+              <div className="p-2.5 bg-rose-100 dark:bg-rose-950/60 rounded-xl">
+                <Ban className="w-6 h-6" />
+              </div>
+              <h3 className="font-bold text-base text-slate-900 dark:text-slate-100">
+                Batalkan Undangan Staff?
+              </h3>
+            </div>
+
+            <p className="text-xs text-slate-600 dark:text-slate-300 leading-relaxed">
+              Apakah Anda yakin ingin membatalkan undangan untuk <strong className="text-slate-900 dark:text-slate-100 font-mono">{revokeConfirmModal.email}</strong>? Tautan yang pernah diterbitkan tidak akan bisa digunakan lagi untuk mengklaim akun staf.
+            </p>
+
+            <div className="flex items-center justify-end space-x-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setRevokeConfirmModal(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold text-xs rounded-xl transition cursor-pointer"
+              >
+                Batal
+              </button>
+              <button
+                type="button"
+                onClick={() => executeRevokeInvitation(revokeConfirmModal.id, revokeConfirmModal.email)}
+                disabled={revokingId === revokeConfirmModal.id}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs rounded-xl transition flex items-center space-x-1.5 cursor-pointer disabled:opacity-50"
+              >
+                {revokingId === revokeConfirmModal.id ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Membatalkan...</span>
+                  </>
+                ) : (
+                  <>
+                    <Ban className="w-3.5 h-3.5" />
+                    <span>Ya, Batalkan Undangan</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
