@@ -219,9 +219,9 @@ export async function getStaffListByTenant(tenantId) {
 }
 
 /**
- * Mengambil daftar undangan pending untuk tenant tertentu.
+ * Mengambil seluruh daftar undangan (pending, accepted, expired, revoked) untuk tenant tertentu.
  */
-export async function getPendingInvitationsByTenant(tenantId) {
+export async function getInvitationsByTenant(tenantId) {
   if (!tenantId) return [];
 
   try {
@@ -229,28 +229,47 @@ export async function getPendingInvitationsByTenant(tenantId) {
       .from('invitations')
       .select('id, tenant_id, invite_email, email, invite_role, role, status, expires_at, created_at, created_by_uid')
       .eq('tenant_id', String(tenantId))
-      .eq('status', 'pending')
       .order('created_at', { ascending: false });
 
     if (error) {
-      console.warn('[staffService] Fetch pending invitations warning:', error.message);
+      console.warn('[staffService] Fetch invitations warning:', error.message);
       return [];
     }
 
-    return (data || []).map((inv) => ({
-      id: inv.id,
-      tenantId: inv.tenant_id,
-      email: inv.invite_email || inv.email,
-      role: inv.invite_role || inv.role,
-      status: inv.status,
-      expiresAt: inv.expires_at,
-      createdAt: inv.created_at,
-      isExpired: new Date(inv.expires_at) <= new Date(),
-    }));
+    return (data || []).map((inv) => {
+      const expiresAt = inv.expires_at;
+      const isExpired = expiresAt ? new Date(expiresAt) <= new Date() : false;
+      let rawStatus = (inv.status || 'pending').toLowerCase();
+      let computedStatus = rawStatus;
+
+      if (rawStatus === 'pending' && isExpired) {
+        computedStatus = 'expired';
+      }
+
+      return {
+        id: inv.id,
+        tenantId: inv.tenant_id,
+        email: inv.invite_email || inv.email,
+        role: inv.invite_role || inv.role,
+        status: computedStatus,
+        rawStatus: rawStatus,
+        expiresAt: expiresAt,
+        createdAt: inv.created_at,
+        isExpired: isExpired,
+      };
+    });
   } catch (error) {
-    console.warn('[staffService] Error fetching pending invitations:', error);
+    console.warn('[staffService] Error fetching invitations:', error);
     return [];
   }
+}
+
+/**
+ * Mengambil daftar undangan pending untuk tenant tertentu.
+ */
+export async function getPendingInvitationsByTenant(tenantId) {
+  const invitations = await getInvitationsByTenant(tenantId);
+  return invitations.filter((inv) => inv.status === 'pending');
 }
 
 /**
