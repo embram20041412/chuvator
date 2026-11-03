@@ -1828,11 +1828,13 @@ export default function PortalDashboard() {
                 )}
 
                 <div className="space-y-1.5 pt-0.5">
-                  <label className="text-[10px] text-slate-400 font-medium block">
+                  <label htmlFor="portal-target-account-number" className="text-[10px] text-slate-400 font-medium block">
                     Nomor Rekening Tujuan ({activeBank}):
                   </label>
                   <div className="flex items-center gap-2">
                     <input
+                      id="portal-target-account-number"
+                      name="targetAccountNumber"
                       type="text"
                       readOnly
                       value={activeAccountNumber || ''}

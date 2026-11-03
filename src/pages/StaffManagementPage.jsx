@@ -304,6 +304,8 @@ export default function StaffManagementPage({ userProfile }) {
 
               <div className="flex items-center space-x-2">
                 <input
+                  id="created-invite-url"
+                  name="inviteUrl"
                   type="text"
                   readOnly
                   value={createdInvite.inviteUrl}
@@ -336,13 +338,16 @@ export default function StaffManagementPage({ userProfile }) {
           <form onSubmit={handleInviteStaff} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                <label htmlFor="invite-staff-display-name" className="block text-xs font-bold text-gray-700 uppercase mb-1">
                   Nama Lengkap Staf <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <User className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
                   <input
+                    id="invite-staff-display-name"
+                    name="displayName"
                     type="text"
+                    autoComplete="name"
                     required
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
@@ -353,13 +358,16 @@ export default function StaffManagementPage({ userProfile }) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                <label htmlFor="invite-staff-email" className="block text-xs font-bold text-gray-700 uppercase mb-1">
                   Alamat Email Staf <span className="text-red-500">*</span>
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
                   <input
+                    id="invite-staff-email"
+                    name="email"
                     type="email"
+                    autoComplete="email"
                     required
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -372,10 +380,12 @@ export default function StaffManagementPage({ userProfile }) {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                <label htmlFor="invite-staff-role" className="block text-xs font-bold text-gray-700 uppercase mb-1">
                   Peran Akses (RBAC) <span className="text-red-500">*</span>
                 </label>
                 <select
+                  id="invite-staff-role"
+                  name="staffRole"
                   value={staffRole}
                   onChange={(e) => setStaffRole(e.target.value)}
                   className="w-full px-3.5 py-2.5 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:border-blue-500 font-bold text-gray-800"
@@ -396,10 +406,12 @@ export default function StaffManagementPage({ userProfile }) {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-gray-700 uppercase mb-1">
+                <label htmlFor="invite-staff-tenant-name" className="block text-xs font-bold text-gray-700 uppercase mb-1">
                   Tenant Cabang
                 </label>
                 <input
+                  id="invite-staff-tenant-name"
+                  name="tenantName"
                   type="text"
                   disabled
                   value={userProfile?.tenant?.name || tenantId || 'Tenant Aktif'}
@@ -534,6 +546,8 @@ export default function StaffManagementPage({ userProfile }) {
             <div className="relative">
               <Search className="w-3.5 h-3.5 text-gray-400 absolute left-3 top-2.5" />
               <input
+                id="staff-search-query"
+                name="searchQuery"
                 type="text"
                 placeholder="Cari staf..."
                 value={searchQuery}
@@ -543,6 +557,8 @@ export default function StaffManagementPage({ userProfile }) {
             </div>
 
             <select
+              id="staff-role-filter"
+              name="roleFilter"
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
               className="px-3 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:border-blue-500"

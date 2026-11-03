@@ -769,9 +769,12 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
             </div>
 
             <div>
-              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Nama GOR / Sports Arena</label>
+              <label htmlFor="settings-arena-name" className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Nama GOR / Sports Arena</label>
               <input
+                id="settings-arena-name"
+                name="arenaName"
                 type="text"
+                autoComplete="organization"
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
@@ -781,8 +784,10 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Kategori Olahraga Utama</label>
+                <label htmlFor="settings-sports-type" className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Kategori Olahraga Utama</label>
                 <input
+                  id="settings-sports-type"
+                  name="sportsType"
                   type="text"
                   value={sportsType}
                   onChange={(e) => setSportsType(e.target.value)}
@@ -791,9 +796,12 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
               </div>
 
               <div>
-                <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Kontak WhatsApp</label>
+                <label htmlFor="settings-arena-phone" className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Kontak WhatsApp</label>
                 <input
+                  id="settings-arena-phone"
+                  name="phone"
                   type="tel"
+                  autoComplete="tel"
                   required
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
@@ -803,8 +811,10 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
             </div>
 
             <div>
-              <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Alamat Lengkap GOR</label>
+              <label htmlFor="settings-arena-address" className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">Alamat Lengkap GOR</label>
               <textarea
+                id="settings-arena-address"
+                name="address"
                 rows={2}
                 required
                 value={address}
@@ -1595,11 +1605,14 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
             <form onSubmit={handleRegisterStaff} className="space-y-3">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                  <label htmlFor="settings-staff-name" className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
                     Nama Lengkap Staf / Pelatih
                   </label>
                   <input
+                    id="settings-staff-name"
+                    name="newStaffName"
                     type="text"
+                    autoComplete="name"
                     required
                     placeholder="e.g. Coach Agus or Budi Admin"
                     value={newStaffName}
@@ -1609,11 +1622,14 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                  <label htmlFor="settings-staff-email" className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
                     Email Akun Staf
                   </label>
                   <input
+                    id="settings-staff-email"
+                    name="newStaffEmail"
                     type="email"
+                    autoComplete="email"
                     required
                     placeholder="staf@chuasport.com"
                     value={newStaffEmail}
@@ -1625,11 +1641,14 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                  <label htmlFor="settings-staff-password" className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
                     Kata Sandi (Password)
                   </label>
                   <input
+                    id="settings-staff-password"
+                    name="newStaffPassword"
                     type="password"
+                    autoComplete="new-password"
                     required
                     minLength={6}
                     placeholder="Minimal 6 Karakter"
@@ -1640,10 +1659,12 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                 </div>
 
                 <div>
-                  <label className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                  <label htmlFor="settings-staff-role" className="block text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
                     Role / Hak Akses RBAC
                   </label>
                   <select
+                    id="settings-staff-role"
+                    name="newStaffRole"
                     value={newStaffRole}
                     onChange={(e) => setNewStaffRole(e.target.value)}
                     className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-blue-500 font-bold cursor-pointer"
