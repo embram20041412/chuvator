@@ -24,6 +24,40 @@ export function buildInvitationUrl(rawToken) {
 }
 
 /**
+ * Format durasi dan tanggal kedaluwarsa undangan secara dinamis dari `expires_at` database.
+ * TIDAK meng-hardcode durasi statis (seperti '24 jam' atau '7 hari').
+ */
+export function formatInvitationExpiry(expiresAt, createdAt) {
+  if (!expiresAt) return '-';
+  const expDate = new Date(expiresAt);
+  if (isNaN(expDate.getTime())) return '-';
+
+  const refDate = createdAt ? new Date(createdAt) : new Date();
+  const diffMs = expDate.getTime() - refDate.getTime();
+  const diffHours = Math.round(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.round(diffHours / 24);
+
+  let durationText = '';
+  if (diffHours > 0) {
+    if (diffHours % 24 === 0 || diffDays >= 1) {
+      durationText = `${diffDays} Hari`;
+    } else {
+      durationText = `${diffHours} Jam`;
+    }
+  }
+
+  const formattedDate = expDate.toLocaleDateString('id-ID', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  return durationText ? `${durationText} (s.d. ${formattedDate})` : `s.d. ${formattedDate}`;
+}
+
+/**
  * Membuat undangan staf baru melalui RPC database resmi:
  * 1. Menyiapkan record calon staf aktif di `users_staff` dengan `uid = NULL`.
  * 2. Memanggil RPC `create_staff_invitation(target_tenant_id, invite_email, invite_role)`.

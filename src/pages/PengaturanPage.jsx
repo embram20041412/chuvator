@@ -12,7 +12,8 @@ import {
   getPendingInvitationsByTenant,
   revokeStaffInvitation,
   deleteStaffDoc,
-  resendStaffInvitation
+  resendStaffInvitation,
+  formatInvitationExpiry
 } from '../services/staffService';
 import { 
   Building2, 
@@ -285,6 +286,7 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
           role: res.role || newStaffRole,
           tenantName: tenant?.name || userProfile?.tenant?.name || 'Cabang Aktif',
           expiresAt: res.expiresAt,
+          createdAt: res.invitation?.created_at || new Date().toISOString(),
           invitationId: invId,
         });
       }
@@ -1850,7 +1852,7 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                           )}
                         </div>
                         <p className="text-[10px] text-slate-400 mt-0.5 font-mono">
-                          Dibuat: {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('id-ID') : '-'} • Berlaku s.d. {inv.expiresAt ? new Date(inv.expiresAt).toLocaleDateString('id-ID') : '-'}
+                          Dibuat: {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString('id-ID') : '-'} • Masa Berlaku: {formatInvitationExpiry(inv.expiresAt, inv.createdAt)}
                         </p>
                       </div>
 
@@ -2024,9 +2026,7 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
                 <span className="font-semibold text-amber-700 dark:text-amber-400 flex items-center space-x-1">
                   <Clock className="w-3.5 h-3.5" />
                   <span>
-                    {inviteSuccessModal.expiresAt 
-                      ? `7 Hari (s.d. ${new Date(inviteSuccessModal.expiresAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })})`
-                      : '7 Hari'}
+                    {formatInvitationExpiry(inviteSuccessModal.expiresAt, inviteSuccessModal.createdAt)}
                   </span>
                 </span>
               </div>

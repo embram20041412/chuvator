@@ -26,7 +26,8 @@ import {
   getStaffListByTenant, 
   getInvitationsByTenant, 
   revokeStaffInvitation, 
-  deleteStaffDoc
+  deleteStaffDoc,
+  formatInvitationExpiry
 } from '../services/staffService';
 import useAuthRole from '../hooks/useAuthRole';
 
@@ -179,6 +180,7 @@ export default function StaffManagementPage({ userProfile }) {
         role: result.role,
         tenantName: tenantName,
         expiresAt: result.expiresAt,
+        createdAt: result.invitation?.created_at || new Date().toISOString(),
         invitationId: invId,
       });
 
@@ -828,9 +830,7 @@ export default function StaffManagementPage({ userProfile }) {
                 <span className="font-semibold text-amber-700 flex items-center space-x-1">
                   <Clock className="w-3.5 h-3.5" />
                   <span>
-                    {inviteSuccessModal.expiresAt 
-                      ? `7 Hari (s.d. ${new Date(inviteSuccessModal.expiresAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })})`
-                      : '7 Hari'}
+                    {formatInvitationExpiry(inviteSuccessModal.expiresAt, inviteSuccessModal.createdAt)}
                   </span>
                 </span>
               </div>
