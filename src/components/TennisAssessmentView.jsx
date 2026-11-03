@@ -588,7 +588,7 @@ export default function TennisAssessmentView({
           
           {/* KOLOM 1: PILIH ATLET */}
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap h-5">
+            <label htmlFor="tennis-assessment-view-selected-student-id" className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap h-5">
               <User className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
               <span>Pilih Atlet ({students.length})</span>
             </label>
@@ -613,7 +613,7 @@ export default function TennisAssessmentView({
 
           {/* KOLOM 2: TANGGAL EVALUASI */}
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap h-5">
+            <label htmlFor="tennis-assessment-view-evaluation-date" className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap h-5">
               <Calendar className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400 shrink-0" />
               <span>Tanggal Evaluasi</span>
             </label>
@@ -630,7 +630,7 @@ export default function TennisAssessmentView({
 
           {/* KOLOM 3: JENJANG EVALUASI (ITF / PELTI) */}
           <div className="space-y-1.5">
-            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap h-5">
+            <label htmlFor="tennis-assessment-view-override-tennis-level" className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5 whitespace-nowrap h-5">
               <Target className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400 shrink-0" />
               <span>Jenjang Evaluasi Tenis</span>
             </label>

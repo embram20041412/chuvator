@@ -888,7 +888,7 @@ function FutsalAssessmentView({
             <div className="bg-slate-50/90 p-2.5 sm:p-3 rounded-xl border border-slate-200/90 space-y-2">
               {/* Baris 1: Pilih Atlet (1 Kolom Penuh) */}
               <div>
-                <label className="block text-[11px] font-bold text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
+                <label htmlFor="evaluation-section-selected-student-id" className="block text-[11px] font-bold text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
                   <UserCheck className="w-3.5 h-3.5 text-[#354944]" />
                   <span>Pilih Atlet ({students.length})</span>
                 </label>
@@ -920,7 +920,7 @@ function FutsalAssessmentView({
               {/* Baris 2: Tanggal Evaluasi & Jenjang Evaluasi (2 Kolom Berdampingan) */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
+                  <label htmlFor="evaluation-section-evaluation-date" className="block text-[10px] font-bold text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
                     <Calendar className="w-3 h-3 text-[#354944]" />
                     <span>Tanggal</span>
                   </label>
@@ -936,7 +936,7 @@ function FutsalAssessmentView({
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
+                  <label htmlFor="evaluation-section-override-futsal-tier" className="block text-[10px] font-bold text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
                     <GraduationCap className="w-3 h-3 text-[#354944]" />
                     <span>Jenjang</span>
                   </label>
@@ -2099,7 +2099,7 @@ function BadmintonAssessmentView({
             <div className="bg-slate-50/90 p-2.5 sm:p-3 rounded-xl border border-slate-200/90 space-y-2">
               {/* Baris 1: Pilih Atlet (1 Kolom Penuh) */}
               <div>
-                <label className="block text-[11px] font-bold text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
+                <label htmlFor="evaluation-section-selected-student-id" className="block text-[11px] font-bold text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
                   <UserCheck className="w-3.5 h-3.5 text-[#354944]" />
                   <span>Pilih Atlet ({students.length})</span>
                 </label>
@@ -2118,7 +2118,7 @@ function BadmintonAssessmentView({
                       </option>
                     ))}
                   </select>
-                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-slate-500">
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-[#64748b]">
                     <ChevronDown className="w-3.5 h-3.5" />
                   </div>
                 </div>
@@ -2127,7 +2127,7 @@ function BadmintonAssessmentView({
               {/* Baris 2: Tanggal Evaluasi & Jenjang Evaluasi (2 Kolom Berdampingan) */}
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
+                  <label htmlFor="evaluation-section-evaluation-date" className="block text-[10px] font-bold text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
                     <Calendar className="w-3 h-3 text-[#354944]" />
                     <span>Tanggal</span>
                   </label>
@@ -2143,7 +2143,7 @@ function BadmintonAssessmentView({
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
+                  <label htmlFor="evaluation-section-override-badminton-tier" className="block text-[10px] font-bold text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
                     <GraduationCap className="w-3 h-3 text-[#354944]" />
                     <span>Jenjang</span>
                   </label>
@@ -3506,7 +3506,7 @@ function FootballAssessmentView({
             <div className="bg-slate-50/90 p-3 sm:p-4 rounded-2xl border border-slate-200/90 space-y-2.5">
               {/* Baris 1: Pilih Atlet (1 Kolom Penuh) */}
               <div>
-                <label className="block text-[11px] sm:text-xs font-black text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                <label htmlFor="evaluation-section-selected-student-id" className="block text-[11px] sm:text-xs font-black text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1.5">
                   <UserCheck className="w-3.5 h-3.5 text-[#354944]" />
                   <span>Pilih Atlet ({students.length})</span>
                 </label>
@@ -3539,7 +3539,7 @@ function FootballAssessmentView({
               {/* Baris 2: Tanggal Evaluasi & Jenjang Evaluasi (2 Kolom Berdampingan) */}
               <div className="grid grid-cols-2 gap-2.5">
                 <div>
-                  <label className="block text-[10px] sm:text-xs font-black text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
+                  <label htmlFor="evaluation-section-evaluation-date" className="block text-[10px] sm:text-xs font-black text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
                     <Calendar className="w-3.5 h-3.5 text-[#354944]" />
                     <span>Tanggal</span>
                   </label>
@@ -3555,7 +3555,7 @@ function FootballAssessmentView({
                 </div>
 
                 <div>
-                  <label className="block text-[10px] sm:text-xs font-black text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
+                  <label htmlFor="evaluation-section-override-tier" className="block text-[10px] sm:text-xs font-black text-slate-800 uppercase tracking-wider mb-1 flex items-center gap-1">
                     <GraduationCap className="w-3.5 h-3.5 text-[#354944]" />
                     <span>Jenjang</span>
                   </label>
@@ -3687,7 +3687,7 @@ function FootballAssessmentView({
 
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1">
+                    <label htmlFor="evaluation-section-selected-position" className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1">
                       1. Posisi / Peran Bermain (Utama)
                     </label>
                     <select
@@ -4148,7 +4148,7 @@ function FootballAssessmentView({
                 {/* CATATAN & SIMPAN */}
                 <div className="p-3 sm:p-3.5 rounded-xl bg-white border border-slate-200 shadow-sm space-y-2.5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
-                    <label className="block text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <label htmlFor="evaluation-section-coach-note" className="block text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                       <MessageSquare className="w-4 h-4 text-[#354944]" />
                       <span>Catatan Evaluasi Taktis &amp; Rekomendasi Pelatih ({tierConfig.shortLabel})</span>
                     </label>
