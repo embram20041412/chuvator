@@ -180,9 +180,21 @@ export default function AcademyPage({ userProfile }) {
   const tabParam = searchParams.get('tab');
   const initialTab = (tabParam && validTabs.includes(tabParam)) ? tabParam : 'dasbor';
 
-  // Access scope & Coach RBAC
+  // Access scope & Role-Based Access Control (RBAC)
   const accessScope = useUserAccessScope(userProfile);
-  const { isCoachOnly, coachProfile } = accessScope;
+  const { isCoachOnly, coachProfile, isOwner, isAdmin, isSuperAdmin, role } = accessScope;
+
+  // Pemeriksaan izin eksplisit: Hanya Owner, Admin, dan Superadmin yang diizinkan mengelola kelas
+  // (membuat, mengedit, mengarsipkan, memulihkan kelas, dan mengunci jadwal lapangan).
+  // Coach, Kasir, Staff, dan role lain yang tidak berwenang bersifat strictly read-only.
+  const canManageClasses = useMemo(() => {
+    const rawRole = String(role || userProfile?.role || '').toLowerCase().trim();
+    if (isSuperAdmin || rawRole === 'superadmin') return true;
+    if (isOwner || rawRole === 'owner') return true;
+    if (rawRole === 'admin') return true;
+    if (isAdmin && !['kasir', 'coach', 'pelatih', 'staff'].includes(rawRole)) return true;
+    return false;
+  }, [isSuperAdmin, isOwner, isAdmin, role, userProfile?.role]);
 
   // Coach Self-Service Password Modal State
   const [showCoachPasswordModal, setShowCoachPasswordModal] = useState(false);
@@ -474,12 +486,33 @@ export default function AcademyPage({ userProfile }) {
   const [editingClass, setEditingClass] = useState(null);
   const [idCardTarget, setIdCardTarget] = useState(null); // { data, role: 'SISWA' | 'PELATIH' }
 
+  const handleOpenCreateClass = () => {
+    if (!canManageClasses) {
+      setErrorMsg('Akses ditolak: Hanya Owner, Admin, atau Superadmin yang memiliki izin membuat kelas baru.');
+      setTimeout(() => setErrorMsg(null), 3500);
+      return;
+    }
+    setEditingClass(null);
+    setShowClassModal(true);
+  };
+
   const handleEditClass = (classData) => {
+    if (!canManageClasses) {
+      setErrorMsg('Akses ditolak: Hanya Owner, Admin, atau Superadmin yang memiliki izin mengedit data kelas.');
+      setTimeout(() => setErrorMsg(null), 3500);
+      return;
+    }
     setEditingClass(classData);
     setShowClassModal(true);
   };
 
   const handleArchiveClass = async (classId, className = 'kelas ini') => {
+    if (!canManageClasses) {
+      setErrorMsg('Akses ditolak: Hanya Owner, Admin, atau Superadmin yang memiliki izin mengarsipkan kelas.');
+      setTimeout(() => setErrorMsg(null), 3500);
+      return;
+    }
+
     if (!window.confirm(`Yakin ingin mengarsipkan "${className}"?\n\nKelas akan dinonaktifkan dari jadwal dan pendaftaran aktif. Seluruh data presensi, evaluasi, dan siswa tetap aman tersimpan.`)) return;
 
     try {
@@ -498,6 +531,12 @@ export default function AcademyPage({ userProfile }) {
   };
 
   const handleUnarchiveClass = async (classId, className = 'kelas ini') => {
+    if (!canManageClasses) {
+      setErrorMsg('Akses ditolak: Hanya Owner, Admin, atau Superadmin yang memiliki izin memulihkan kelas.');
+      setTimeout(() => setErrorMsg(null), 3500);
+      return;
+    }
+
     if (!window.confirm(`Yakin ingin memulihkan "${className}"?\n\nKelas akan kembali aktif dan dapat digunakan untuk pendaftaran serta jadwal latihan.`)) return;
 
     try {
@@ -513,6 +552,15 @@ export default function AcademyPage({ userProfile }) {
       setErrorMsg(err.message || 'Gagal memulihkan kelas. Silakan coba lagi.');
       setTimeout(() => setErrorMsg(null), 3500);
     }
+  };
+
+  const handleOpenGenerateSchedule = (classData) => {
+    if (!canManageClasses) {
+      setErrorMsg('Akses ditolak: Hanya Owner, Admin, atau Superadmin yang memiliki izin mengunci jadwal.');
+      setTimeout(() => setErrorMsg(null), 3500);
+      return;
+    }
+    setGenerateModalClass(classData);
   };
 
   // Student Form States
@@ -1296,7 +1344,7 @@ export default function AcademyPage({ userProfile }) {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setShowClassModal(true)}
+                      onClick={handleOpenCreateClass}
                       className="py-3 bg-white dark:bg-[#162320] text-[#354944] dark:text-white border border-slate-200 dark:border-slate-800 font-bold text-xs rounded-xl shadow-2xs flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       <Plus className="w-3.5 h-3.5 text-[#354944] dark:text-[#C89D32]" />
@@ -1426,7 +1474,7 @@ export default function AcademyPage({ userProfile }) {
           calculateSppStatus={calculateSppStatus}
           handleSendWABilling={handleSendWABilling}
           onAddStudent={() => setShowAddModal(true)}
-          onAddClass={() => setShowClassModal(true)}
+          onAddClass={handleOpenCreateClass}
           onPaySpp={(st) => setPaymentModalStudent(st)}
           onViewStudentDetail={(st) => setDetailModalStudent(st)}
         />
@@ -1844,13 +1892,10 @@ export default function AcademyPage({ userProfile }) {
                 </button>
               </div>
 
-              {!isCoachOnly && classSubTab === 'active' && (
+              {canManageClasses && classSubTab === 'active' && (
                 <button
                   type="button"
-                  onClick={() => {
-                    setEditingClass(null);
-                    setShowClassModal(true);
-                  }}
+                  onClick={handleOpenCreateClass}
                   className="px-2.5 py-1 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white font-semibold text-xs rounded-lg shadow-xs transition-colors cursor-pointer flex items-center space-x-1 shrink-0"
                 >
                   <Plus className="w-3.5 h-3.5 text-[#C89D32]" />
@@ -1877,17 +1922,14 @@ export default function AcademyPage({ userProfile }) {
                   <BookOpen className="w-10 h-10 text-slate-300 dark:text-slate-700 mb-2" />
                   <p className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300">Belum ada kelas/kelompok latihan aktif.</p>
                   <p className="text-[11px] text-slate-400 max-w-sm mt-0.5 mb-3">
-                    {isCoachOnly
-                      ? 'Belum ada kelas aktif yang terdaftar atau ditugaskan kepada Anda pada akademi ini.'
-                      : 'Buat kelas latihan berdasarkan kelompok umur & alokasikan pelatih utama.'}
+                    {canManageClasses
+                      ? 'Buat kelas latihan berdasarkan kelompok umur & alokasikan pelatih utama.'
+                      : 'Belum ada kelas aktif yang terdaftar atau ditugaskan kepada Anda pada akademi ini.'}
                   </p>
-                  {!isCoachOnly ? (
+                  {canManageClasses ? (
                     <button
                       type="button"
-                      onClick={() => {
-                        setEditingClass(null);
-                        setShowClassModal(true);
-                      }}
+                      onClick={handleOpenCreateClass}
                       className="px-3 py-1.5 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs"
                     >
                       + Buat Kelas Pertama
@@ -1949,8 +1991,8 @@ export default function AcademyPage({ userProfile }) {
                             </span>
                           )}
                           
-                          {/* Tombol Aksi Kelas (Hanya untuk Owner & Admin) */}
-                          {!isCoachOnly && (
+                          {/* Tombol Aksi Kelas (Hanya untuk Owner, Admin, dan Superadmin) */}
+                          {canManageClasses && (
                             <div className="flex items-center gap-0.5 ml-1 pl-1 border-l border-slate-200 dark:border-slate-700">
                               {classSubTab === 'active' ? (
                                 <>
@@ -2062,12 +2104,12 @@ export default function AcademyPage({ userProfile }) {
                       </div>
                     </div>
 
-                    {/* Tombol Kunci Jadwal (Hanya untuk Owner & Admin di Kelas Aktif) */}
-                    {!isCoachOnly && classSubTab === 'active' && (
+                    {/* Tombol Kunci Jadwal (Hanya untuk Owner, Admin, dan Superadmin di Kelas Aktif) */}
+                    {canManageClasses && classSubTab === 'active' && (
                       <div className="pt-2 border-t border-slate-200/70 dark:border-slate-800">
                         <button
                           type="button"
-                          onClick={() => setGenerateModalClass(cls)}
+                          onClick={() => handleOpenGenerateSchedule(cls)}
                           className="w-full py-1.5 bg-[#354944]/10 dark:bg-[#354944]/30 text-[#354944] dark:text-[#C89D32] border border-[#354944]/20 hover:bg-[#354944]/20 font-bold text-xs rounded-lg transition-colors cursor-pointer flex items-center justify-center space-x-1.5 shadow-2xs"
                         >
                           <Lock className="w-3.5 h-3.5 text-[#354944] dark:text-[#C89D32]" />
@@ -2370,7 +2412,7 @@ export default function AcademyPage({ userProfile }) {
       )}
 
       {/* MODAL 5: BUAT / EDIT KELAS AKADEMI */}
-      {showClassModal && (
+      {showClassModal && canManageClasses && (
         <ClassModal
           isOpen={showClassModal}
           onClose={() => {
@@ -2399,7 +2441,7 @@ export default function AcademyPage({ userProfile }) {
       )}
 
       {/* MODAL 6: GENERATE / KUNCI JADWAL LAPANGAN AKADEMI */}
-      {generateModalClass && (
+      {generateModalClass && canManageClasses && (
         <GenerateAcademyScheduleModal
           isOpen={!!generateModalClass}
           onClose={() => setGenerateModalClass(null)}
