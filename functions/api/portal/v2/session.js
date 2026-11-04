@@ -40,7 +40,8 @@ export async function onRequestGet(context) {
         session: {
           authUserId: result.session.authUserId,
           email: result.session.email,
-          accounts: result.session.parentAccounts || [],
+          accessibleTenants: result.session.accessibleTenants || [],
+          children: result.session.childrenSummary || [],
           csrfToken: result.session.csrfToken || null,
           expiresAt: result.session.expiresAt
         }

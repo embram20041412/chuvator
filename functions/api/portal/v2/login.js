@@ -2,7 +2,8 @@
  * Cloudflare Pages Function: /api/portal/v2/login
  * Supabase Auth email/password login endpoint for Parent Portal.
  * Uses ONLY anon/publishable key. Never service_role.
- * Verifies Auth UID, validates active parent_accounts, and sets secure portal_session_v2 cookie.
+ * Resolves child & tenant access via RPC parent_get_children.
+ * Enforces server-side rate limiting, strict origin/CSRF, and secure portal_session_v2 cookie.
  */
 
 import {
@@ -11,10 +12,14 @@ import {
   getCleanSupabaseUrl,
   getSupabaseAnonKey,
   supabaseSignInWithPassword,
-  fetchParentAccounts,
+  fetchChildrenViaRpc,
   createPortalV2Session,
-  buildV2SessionCookie
+  buildV2SessionCookie,
+  getClientIp,
+  hashString
 } from '../_auth_v2.js';
+
+import { checkRateLimit } from '../_auth.js';
 
 export async function onRequestOptions(context) {
   const corsHeaders = getCorsHeaders(context.request, context.env);
@@ -66,6 +71,25 @@ export async function onRequestPost(context) {
     );
   }
 
+  // 3. Edge Rate Limiting: IP-based and Normalized Email-based
+  // Email identifier is hashed using server secret or salted SHA-256 to avoid storing raw email
+  const clientIp = getClientIp(request);
+  const saltSecret = env.PORTAL_TOKEN_ENCRYPTION_SECRET || 'chuvator-rate-salt';
+  const hashedEmail = await hashString(`v2_email_${email}_${saltSecret}`);
+  const rateLimitKey = `v2_login_${clientIp}_${hashedEmail}`;
+
+  // Limit: max 5 login attempts per 15 minutes (900 seconds)
+  const rateLimitResult = await checkRateLimit(context, rateLimitKey, 5, 900);
+  if (!rateLimitResult.allowed) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        message: 'Terlalu banyak percobaan login. Silakan tunggu beberapa menit sebelum mencoba kembali.'
+      }),
+      { status: 429, headers: corsHeaders }
+    );
+  }
+
   const supabaseUrl = getCleanSupabaseUrl(env);
   const anonKey = getSupabaseAnonKey(env);
 
@@ -81,7 +105,7 @@ export async function onRequestPost(context) {
   }
 
   try {
-    // 3. Authenticate with Supabase Auth using anon key
+    // 4. Authenticate with Supabase Auth using anon key
     const authResult = await supabaseSignInWithPassword(supabaseUrl, anonKey, email, password);
 
     if (!authResult.success || !authResult.data?.access_token) {
@@ -108,43 +132,57 @@ export async function onRequestPost(context) {
       );
     }
 
-    // 4. Query parent_accounts for this user using their access token (Enforces RLS)
-    const accountsResult = await fetchParentAccounts(supabaseUrl, anonKey, access_token);
-    if (!accountsResult.success) {
+    // 5. Query accessible children & tenants via RPC parent_get_children (Respects RLS & auth.uid())
+    const childrenResult = await fetchChildrenViaRpc(supabaseUrl, anonKey, access_token);
+    if (!childrenResult.success) {
       return new Response(
         JSON.stringify({
           success: false,
-          message: 'Gagal memverifikasi status akun wali murid.'
+          message: 'Gagal memverifikasi akun wali murid melalui database.'
         }),
         { status: 500, headers: corsHeaders }
       );
     }
 
-    const activeAccounts = accountsResult.accounts || [];
+    const linkedChildren = childrenResult.children || [];
 
-    // Rule 5: User must have at least one active parent_accounts record. Do NOT auto-create account.
-    if (activeAccounts.length === 0) {
+    // Rule 9: If RPC returns empty array, reject login with appropriate notice.
+    // Do NOT auto-create account.
+    if (linkedChildren.length === 0) {
       return new Response(
         JSON.stringify({
           success: false,
-          message: 'Akun Anda belum terdaftar atau belum diaktifkan sebagai wali murid oleh pihak pengelola.'
+          message: 'Akun Anda belum terdaftar atau belum dihubungkan dengan data siswa oleh pihak pengelola.'
         }),
         { status: 403, headers: corsHeaders }
       );
     }
 
-    // 5. Create secure server-side v2 session
+    // Extract unique accessible tenant IDs without fabricating missing fields
+    const tenantSet = new Set();
+    linkedChildren.forEach(child => {
+      if (child.tenant_id) {
+        tenantSet.add(child.tenant_id);
+      }
+    });
+    const accessibleTenants = Array.from(tenantSet);
+
+    // Minimize children summary for the session (only fields returned by RPC)
+    const childrenSummary = linkedChildren.map(child => ({
+      studentId: child.student_id || child.id,
+      studentName: child.student_name || child.full_name || child.name || '',
+      tenantId: child.tenant_id || '',
+      academyName: child.academy_name || child.tenant_name || '',
+      className: child.class_name || ''
+    }));
+
+    // 6. Create secure server-side v2 session (Strict AES-256-GCM + KV)
     const tokenExpiresAt = new Date(Date.now() + (expires_in || 3600) * 1000).toISOString();
     const sessionInit = await createPortalV2Session(context, {
       authUserId,
       email,
-      parentAccounts: activeAccounts.map(acc => ({
-        id: acc.id,
-        tenantId: acc.tenant_id,
-        fullName: acc.full_name || '',
-        phone: acc.phone || '',
-        status: acc.status
-      })),
+      accessibleTenants,
+      childrenSummary,
       accessToken: access_token,
       refreshToken: refresh_token,
       tokenExpiresAt
@@ -158,7 +196,7 @@ export async function onRequestPost(context) {
       'Set-Cookie': cookieHeader
     };
 
-    // Return sanitized session and parent info (without secrets or access tokens)
+    // Return sanitized session payload without exposing tokens or secrets
     return new Response(
       JSON.stringify({
         success: true,
@@ -166,12 +204,8 @@ export async function onRequestPost(context) {
         user: {
           authUserId,
           email,
-          accounts: activeAccounts.map(acc => ({
-            id: acc.id,
-            tenantId: acc.tenant_id,
-            fullName: acc.full_name || '',
-            status: acc.status
-          }))
+          accessibleTenants,
+          children: childrenSummary
         },
         csrfToken: sessionInit.csrfToken,
         expiresAt: sessionInit.expiresAt
@@ -183,7 +217,9 @@ export async function onRequestPost(context) {
     return new Response(
       JSON.stringify({
         success: false,
-        message: 'Terjadi kesalahan pada sistem saat memproses login.'
+        message: err.message.startsWith('CONFIG_ERROR')
+          ? 'Konfigurasi server bermasalah. Hubungi administrator.'
+          : 'Terjadi kesalahan pada sistem saat memproses login.'
       }),
       { status: 500, headers: corsHeaders }
     );
