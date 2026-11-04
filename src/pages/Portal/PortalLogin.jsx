@@ -38,6 +38,7 @@ export default function PortalLogin() {
         headers: {
           'Content-Type': 'application/json'
         },
+        credentials: 'include',
         body: JSON.stringify({
           studentId: studentId.trim(),
           parentPhone: parentPhone.trim(),
@@ -49,7 +50,7 @@ export default function PortalLogin() {
       const data = await response.json().catch(() => ({}));
 
       if (response.ok && data.success && data.student) {
-        // Simpan data profil siswa aktif ke localStorage
+        // Simpan data profil siswa aktif ke localStorage untuk tampilan UI (bukan bukti autentikasi)
         localStorage.setItem('activeStudent', JSON.stringify(data.student));
         // Redirect ke dashboard portal wali murid
         navigate('/portal/dashboard');

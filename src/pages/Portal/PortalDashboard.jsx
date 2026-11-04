@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
-import { supabase } from '../../config/supabase';
 import { 
   GraduationCap, 
   LogOut, 
@@ -120,7 +119,7 @@ const getTournamentMedalStyle = (resultStr) => {
 export default function PortalDashboard() {
   const navigate = useNavigate();
 
-  // 1. Route Guard & Inisialisasi: Ambil data activeStudent dari localStorage
+  // 1. Inisialisasi: Profil tampilan aktif dari localStorage
   const student = (() => {
     try {
       const stored = localStorage.getItem('activeStudent');
@@ -131,39 +130,111 @@ export default function PortalDashboard() {
     }
   })();
 
-  // State untuk penagihan, QRIS, & Rekening Bank Dinamis
+  // Session & CSRF Token State (In-Memory Only)
+  const [csrfToken, setCsrfToken] = useState(null);
+  const [isSessionVerified, setIsSessionVerified] = useState(false);
+  const [isVerifyingSession, setIsVerifyingSession] = useState(true);
+  const [sessionError, setSessionError] = useState(null);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // State Penagihan, QRIS, & Bank
   const [billingData, setBillingData] = useState(null);
   const [bankAccounts, setBankAccounts] = useState([]);
   const [selectedBankIndex, setSelectedBankIndex] = useState(0);
   const [bankDetails, setBankDetails] = useState({ bank: '', number: '', name: '' });
   const [isLoadingBilling, setIsLoadingBilling] = useState(true);
+  const [billingError, setBillingError] = useState(null);
   const [showQrisModal, setShowQrisModal] = useState(false);
   const [copiedAccount, setCopiedAccount] = useState(false);
 
-  // State untuk Jadwal Sesi Latihan & Catatan Presensi Siswa
+  // State Jadwal & Presensi
   const [scheduleData, setScheduleData] = useState(null);
   const [isLoadingSchedule, setIsLoadingSchedule] = useState(true);
+  const [scheduleError, setScheduleError] = useState(null);
   const [activeScheduleTab, setActiveScheduleTab] = useState('jadwal'); // 'jadwal' | 'presensi'
 
-  // State untuk Prestasi Turnamen & Evaluasi Pelatih
+  // State Evaluasi & Prestasi
   const [evaluationData, setEvaluationData] = useState(null);
   const [isLoadingEvaluation, setIsLoadingEvaluation] = useState(true);
+  const [evaluationError, setEvaluationError] = useState(null);
   const [activeEvalTab, setActiveEvalTab] = useState('evaluasi'); // 'evaluasi' | 'prestasi'
 
-  // State untuk Tab Aktif Bottom Navigation: 'home' | 'billing' | 'schedule' | 'evaluation'
+  // State Bottom Navigation: 'home' | 'billing' | 'schedule' | 'evaluation'
   const [activeTab, setActiveTab] = useState('home');
 
-  // 2. Fetch billing data dari endpoint /api/portal/billing saat mount
+  // 2. VERIFIKASI SESI BACKEND DENGAN COOKIE HTTPONLY (GET /api/portal/session)
   useEffect(() => {
-    if (!student?.id) return;
+    let isMounted = true;
+
+    const verifySession = async () => {
+      setIsVerifyingSession(true);
+      setSessionError(null);
+
+      try {
+        const response = await fetch('/api/portal/session', {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json'
+          },
+          credentials: 'include'
+        });
+
+        if (response.ok) {
+          const res = await response.json().catch(() => ({}));
+          if (isMounted && res.authenticated && res.session?.csrfToken) {
+            // CSRF Token disimpan HANYA di React State (memory)
+            setCsrfToken(res.session.csrfToken);
+            setIsSessionVerified(true);
+            setIsVerifyingSession(false);
+            return;
+          }
+        }
+
+        // Sesi tidak valid / kedaluwarsa
+        if (isMounted) {
+          localStorage.removeItem('activeStudent');
+          sessionStorage.clear();
+          setIsSessionVerified(false);
+          setCsrfToken(null);
+          setSessionError('Sesi Anda telah kedaluwarsa atau tidak valid. Silakan login kembali.');
+          setIsVerifyingSession(false);
+        }
+      } catch (err) {
+        console.error('Portal Session verification error:', err);
+        if (isMounted) {
+          localStorage.removeItem('activeStudent');
+          sessionStorage.clear();
+          setIsSessionVerified(false);
+          setCsrfToken(null);
+          setSessionError('Gagal memverifikasi sesi dengan server. Silakan login kembali.');
+          setIsVerifyingSession(false);
+        }
+      }
+    };
+
+    verifySession();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // 3. FETCH DATA BILLING (HANYA DARI API /api/portal/billing, TANPA FALLBACK SUPABASE)
+  useEffect(() => {
+    if (!isSessionVerified || !csrfToken || !student?.id) return;
     let isMounted = true;
 
     const fetchBilling = async () => {
       setIsLoadingBilling(true);
+      setBillingError(null);
+
       try {
         const response = await fetch('/api/portal/billing', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Portal-CSRF': csrfToken
+          },
+          credentials: 'include',
           body: JSON.stringify({
             studentId: student.id,
             tenantId: student.tenantId || ''
@@ -175,7 +246,6 @@ export default function PortalDashboard() {
           if (isMounted && res.success) {
             setBillingData(res);
 
-            // Normalisasi daftar rekening bank
             const list = Array.isArray(res.bankAccounts) && res.bankAccounts.length > 0
               ? res.bankAccounts
               : (Array.isArray(res.tenant?.bankAccounts) && res.tenant.bankAccounts.length > 0
@@ -206,121 +276,15 @@ export default function PortalDashboard() {
             return;
           }
         }
-      } catch (err) {
-        console.warn('Billing API fetch failed (fallback to client):', err);
-      }
-
-      // Dev-mode fallback jika Pages functions endpoint belum aktif di preview lokal
-      try {
-        const tenantId = student.tenantId;
-        let tData = {};
-        if (tenantId) {
-          const { data } = await supabase.from('tenants').select('*').eq('id', tenantId).maybeSingle();
-          if (data) tData = data;
-        }
-
-        // Ambil data fresh dari database Supabase
-        let freshStudent = student;
-        if (student.id) {
-          const { data } = await supabase.from('students').select('*').eq('id', student.id).maybeSingle();
-          if (data) {
-            freshStudent = {
-              ...data,
-              id: data.id,
-              tenantId: data.tenant_id,
-              registrationFeePaid: data.registration_fee_paid || data.is_registration_fee_paid,
-              registrationFee: Number(data.registration_fee || data.entry_fee || 0),
-              monthlyFee: Number(data.monthly_fee || 0),
-              lastPaidMonth: data.last_paid_month
-            };
-          }
-        }
-
-        const isRegPaid = Boolean(freshStudent.registrationFeePaid || freshStudent.isRegistrationFeePaid);
-        const regFee = Number(freshStudent.registrationFee || freshStudent.entryFee || 0);
-        const sppFee = Number(freshStudent.monthlyFee || 0);
-        const currentMonth = new Date().toISOString().slice(0, 7);
-        const lastPaid = freshStudent.lastPaidMonth || '';
-
-        const localDetails = [];
-        let localTotal = 0;
-
-        if (!isRegPaid && regFee > 0) {
-          localDetails.push({ name: 'Biaya Pendaftaran / Registrasi', amount: regFee });
-          localTotal += regFee;
-        }
-
-        if (lastPaid !== currentMonth && sppFee > 0) {
-          localDetails.push({ name: `Iuran SPP Bulan Ini`, amount: sppFee });
-          localTotal += sppFee;
-        }
-
-        // Ekstraksi seluruh info bank dari profil tenant
-        const rawBankList = Array.isArray(tData.bankAccounts)
-          ? tData.bankAccounts
-          : (Array.isArray(tData.accounts) ? tData.accounts : []);
-
-        const extractedBankAccounts = [];
-        for (const item of rawBankList) {
-          if (!item) continue;
-          const bName = (item.bankName || item.bank || item.namaBank || '').trim();
-          const bNum = String(item.accountNumber || item.bankAccountNumber || item.bankAccount || item.noRekening || item.nomorRekening || '').trim();
-          const bAccName = (item.accountName || item.bankAccountName || item.accountHolder || item.atasNama || tData.name || '').trim();
-          if (bName || bNum) {
-            extractedBankAccounts.push({ bankName: bName || 'Bank', accountNumber: bNum, accountName: bAccName });
-          }
-        }
-
-        if (extractedBankAccounts.length === 0) {
-          const fallbackBank = tData.bankName || tData.bank || '';
-          const fallbackNumber = String(tData.bankAccountNumber || tData.bankAccount || tData.noRekening || tData.accountNumber || '').trim();
-          const fallbackHolder = tData.bankAccountName || tData.bankAccountHolder || tData.accountHolder || tData.atasNama || tData.name || '';
-          if (fallbackBank || fallbackNumber) {
-            extractedBankAccounts.push({ bankName: fallbackBank || 'Bank', accountNumber: fallbackNumber, accountName: fallbackHolder });
-          }
-        }
-
-        const primaryAcc = extractedBankAccounts[0] || { bankName: '', accountNumber: '', accountName: '' };
-        const localBankDetails = {
-          bank: primaryAcc.bankName,
-          number: primaryAcc.accountNumber,
-          name: primaryAcc.accountName
-        };
 
         if (isMounted) {
-          setBankAccounts(extractedBankAccounts);
-          setSelectedBankIndex(0);
-          setBankDetails(localBankDetails);
-          setBillingData({
-            success: true,
-            tenant: {
-              id: tenantId || '',
-              name: tData.name || student.academyName || 'Sports Arena',
-              qrisUrl: tData.qrisUrl || tData.qrisImageUrl || tData.qrisImageBase64 || null,
-              bankName: primaryAcc.bankName,
-              bankAccount: primaryAcc.accountNumber,
-              bankAccountNumber: primaryAcc.accountNumber,
-              accountHolder: primaryAcc.accountName,
-              bankAccountName: primaryAcc.accountName,
-              bankDetails: localBankDetails,
-              bankAccounts: extractedBankAccounts
-            },
-            bankDetails: localBankDetails,
-            bankAccounts: extractedBankAccounts,
-            billing: {
-              totalAmount: localTotal,
-              details: localDetails,
-              monthlyFee: sppFee,
-              currentMonth,
-              lastPaidMonth: lastPaid,
-              isPaidThisMonth: localTotal === 0,
-              statusText: localTotal === 0 ? 'LUNAS BULAN INI' : 'MENUNGGU PEMBAYARAN'
-            },
-            paymentHistory: []
-          });
+          setBillingError('Gagal mengambil data penagihan dari server.');
         }
-      } catch (fbErr) {
-        console.warn('Firestore fallback billing fetch error:', fbErr);
+      } catch (err) {
+        console.error('Billing fetch error:', err);
+        if (isMounted) {
+          setBillingError('Gagal terhubung ke server penagihan.');
+        }
       } finally {
         if (isMounted) setIsLoadingBilling(false);
       }
@@ -330,19 +294,25 @@ export default function PortalDashboard() {
     return () => {
       isMounted = false;
     };
-  }, [student?.id, student?.tenantId]);
+  }, [isSessionVerified, csrfToken, student?.id, student?.tenantId]);
 
-  // 3. Fetch Jadwal Latihan & Catatan Presensi Siswa dari /api/portal/schedule
+  // 4. FETCH JADWAL & PRESENSI (HANYA DARI API /api/portal/schedule, TANPA FALLBACK SUPABASE)
   useEffect(() => {
-    if (!student?.id) return;
+    if (!isSessionVerified || !csrfToken || !student?.id) return;
     let isMounted = true;
 
     const fetchSchedule = async () => {
       setIsLoadingSchedule(true);
+      setScheduleError(null);
+
       try {
         const response = await fetch('/api/portal/schedule', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Portal-CSRF': csrfToken
+          },
+          credentials: 'include',
           body: JSON.stringify({
             studentId: student.id,
             tenantId: student.tenantId || '',
@@ -358,89 +328,15 @@ export default function PortalDashboard() {
             return;
           }
         }
-      } catch (err) {
-        console.warn('Schedule API fetch failed (fallback to client):', err);
-      }
-
-      // Dev-mode fallback jika Pages functions endpoint belum aktif di preview lokal
-      try {
-        let classObj = null;
-        if (student.classId) {
-          const { data } = await supabase.from('academy_classes').select('*').eq('id', student.classId).maybeSingle();
-          if (data) classObj = { id: data.id, ...data, className: data.class_name, coachName: data.coach_name };
-        }
-        if (!classObj && student.tenantId) {
-          const { data: cData } = await supabase.from('academy_classes').select('*').eq('tenant_id', student.tenantId);
-          if (cData && cData.length > 0) {
-            const found = cData.find(d => (d.class_name || d.className) === student.className);
-            const target = found || cData[0];
-            classObj = { id: target.id, ...target, className: target.class_name || target.className, coachName: target.coach_name || target.coachName };
-          }
-        }
-
-        const localSchedules = Array.isArray(classObj?.schedules) ? classObj.schedules : [];
-        const localAttendances = [];
-
-        if (student.tenantId) {
-          try {
-            const { data: attData } = await supabase.from('academy_attendance').select('*').eq('tenant_id', student.tenantId);
-            const cleanSid = String(student.id).toLowerCase();
-            (attData || []).forEach(data => {
-              const studentsList = Array.isArray(data.students) ? data.students : [];
-              const matched = studentsList.find(s => String(s.studentId || s.student_id || s.id || '').toLowerCase() === cleanSid);
-              if (matched) {
-                localAttendances.push({
-                  id: data.id,
-                  date: data.date || '',
-                  className: data.class_name || data.className || student.className || 'Kelas',
-                  coachName: data.coach_name || data.coachName || student.coachName || 'Pelatih',
-                  status: matched.status || 'Hadir',
-                  notes: data.notes || ''
-                });
-              }
-            });
-          } catch (e) {
-            console.warn('Fallback attendances error:', e);
-          }
-        }
-
-        localAttendances.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
-
-        let hadirCount = 0;
-        let izinCount = 0;
-        let sakitCount = 0;
-        let alphaCount = 0;
-        for (const a of localAttendances) {
-          const st = String(a.status || '').toLowerCase();
-          if (st.includes('hadir')) hadirCount++;
-          else if (st.includes('izin')) izinCount++;
-          else if (st.includes('sakit')) sakitCount++;
-          else alphaCount++;
-        }
 
         if (isMounted) {
-          setScheduleData({
-            success: true,
-            classInfo: {
-              id: classObj?.id || student.classId || '',
-              className: classObj?.className || student.className || 'Kelas Reguler',
-              sport: classObj?.sport || student.sportCategory || 'Badminton',
-              coachName: classObj?.coachName || student.coachName || 'Pelatih Utama'
-            },
-            schedules: localSchedules,
-            attendances: localAttendances,
-            stats: {
-              totalSessions: localAttendances.length,
-              hadir: hadirCount,
-              izin: izinCount,
-              sakit: sakitCount,
-              alpha: alphaCount,
-              attendanceRate: localAttendances.length > 0 ? `${Math.round((hadirCount / localAttendances.length) * 100)}%` : '100%'
-            }
-          });
+          setScheduleError('Gagal memuat jadwal & presensi dari server.');
         }
-      } catch (fbErr) {
-        console.warn('Fallback schedule error:', fbErr);
+      } catch (err) {
+        console.error('Schedule fetch error:', err);
+        if (isMounted) {
+          setScheduleError('Gagal terhubung ke server jadwal latihan.');
+        }
       } finally {
         if (isMounted) setIsLoadingSchedule(false);
       }
@@ -450,19 +346,25 @@ export default function PortalDashboard() {
     return () => {
       isMounted = false;
     };
-  }, [student?.id, student?.tenantId, student?.classId]);
+  }, [isSessionVerified, csrfToken, student?.id, student?.tenantId, student?.classId]);
 
-  // 4. Fetch evaluation data & prestasi dari endpoint /api/portal/evaluations saat mount
+  // 5. FETCH EVALUASI & PRESTASI (HANYA DARI API /api/portal/evaluations, TANPA FALLBACK SUPABASE)
   useEffect(() => {
-    if (!student?.id) return;
+    if (!isSessionVerified || !csrfToken || !student?.id) return;
     let isMounted = true;
 
     const fetchEvaluations = async () => {
       setIsLoadingEvaluation(true);
+      setEvaluationError(null);
+
       try {
         const response = await fetch('/api/portal/evaluations', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Portal-CSRF': csrfToken
+          },
+          credentials: 'include',
           body: JSON.stringify({
             studentId: student.id,
             tenantId: student.tenantId || ''
@@ -477,99 +379,15 @@ export default function PortalDashboard() {
             return;
           }
         }
-      } catch (err) {
-        console.warn('Evaluations API fetch failed (fallback to client):', err);
-      }
-
-      // Dev-mode fallback jika Pages functions endpoint belum aktif di preview lokal
-      try {
-        let localEvals = [];
-        let localAchievements = [];
-
-        // Ambil evaluasi langsung dari Supabase
-        try {
-          const { data: evData } = await supabase.from('academy_evaluations').select('*').eq('student_id', student.id);
-          (evData || []).forEach(data => {
-            const pScores = data.pillar_scores || data.pillarScores || {};
-            const teknikScore = typeof pScores.teknik === 'number' ? pScores.teknik : (typeof data.technicalScore === 'number' ? data.technicalScore : 75);
-            const fisikScore = typeof pScores.fisik === 'number' ? pScores.fisik : (typeof data.physicalScore === 'number' ? data.physicalScore : 75);
-            const mentalScore = typeof pScores.mental === 'number' ? pScores.mental : (typeof data.mentalScore === 'number' ? data.mentalScore : 75);
-            const taktikScore = typeof pScores.taktik === 'number' ? pScores.taktik : (typeof data.tacticalScore === 'number' ? data.tacticalScore : 75);
-            const overall = typeof data.overall_score === 'number' ? data.overall_score : (typeof data.overallScore === 'number' ? data.overallScore : Math.round((teknikScore + fisikScore + mentalScore + taktikScore) / 4));
-
-            localEvals.push({
-              id: data.id,
-              date: data.date || (data.created_at ? String(data.created_at).substring(0, 10) : '-'),
-              evaluator: data.evaluator || data.coach_name || data.coachName || 'Pelatih Utama',
-              className: data.class_name || data.className || student.className || 'Kelas Akademi',
-              sport: data.sport || data.sport_name || student.sportCategory || 'Olahraga',
-              playerRole: data.player_role || data.playerRole || 'Umum',
-              overallScore: overall,
-              pillarScores: {
-                teknik: Math.round(teknikScore),
-                fisik: Math.round(fisikScore),
-                mental: Math.round(mentalScore),
-                taktik: Math.round(taktikScore),
-                teamwork: typeof pScores.teamwork === 'number' ? Math.round(pScores.teamwork) : null,
-                health: typeof pScores.health === 'number' ? Math.round(pScores.health) : null,
-                position: pScores.position ? Math.round(pScores.position) : null
-              },
-              mainPosition: data.main_position || data.mainPosition || null,
-              subPosition: data.sub_position || data.subPosition || null,
-              playingRole: data.playing_role || data.playingRole || null,
-              secondaryPosition: data.secondary_position || data.secondaryPosition || null,
-              coachNote: data.coach_note || data.coachNote || data.notes || 'Perkembangan atlet menunjukkan konsistensi dan determinasi yang baik.',
-              scores: data.scores || {}
-            });
-          });
-        } catch (e) {
-          console.warn('Fallback evals error:', e);
-        }
-
-        // Ambil prestasi dari data student atau doc student
-        try {
-          let studentDocData = student;
-          if (student.id) {
-            const { data: sDoc } = await supabase.from('students').select('*').eq('id', student.id).maybeSingle();
-            if (sDoc) {
-              studentDocData = { ...student, ...sDoc };
-            }
-          }
-          const rawTournaments = Array.isArray(studentDocData.tournaments)
-            ? studentDocData.tournaments
-            : (Array.isArray(studentDocData.achievements) ? studentDocData.achievements : []);
-
-          rawTournaments.forEach((t, idx) => {
-            localAchievements.push({
-              id: t.id || `ach-${idx}`,
-              name: t.name || t.title || t.tournamentName || 'Kejuaraan / Turnamen',
-              date: t.date || t.year || '-',
-              result: t.result || t.rank || t.achievement || 'Peserta',
-              category: t.category || t.sport || student.sportCategory || 'Umum',
-              notes: t.notes || ''
-            });
-          });
-        } catch (e) {
-          console.warn('Fallback achievements error:', e);
-        }
-
-        localEvals.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
-        localAchievements.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
 
         if (isMounted) {
-          setEvaluationData({
-            success: true,
-            evaluations: localEvals,
-            latestEvaluation: localEvals[0] || null,
-            achievements: localAchievements,
-            student: {
-              id: student.id,
-              studentName: student.studentName || ''
-            }
-          });
+          setEvaluationError('Gagal memuat evaluasi pelatih dari server.');
         }
-      } catch (fallbackErr) {
-        console.error('All evaluations fetch attempts failed:', fallbackErr);
+      } catch (err) {
+        console.error('Evaluations fetch error:', err);
+        if (isMounted) {
+          setEvaluationError('Gagal terhubung ke server evaluasi.');
+        }
       } finally {
         if (isMounted) setIsLoadingEvaluation(false);
       }
@@ -579,21 +397,56 @@ export default function PortalDashboard() {
     return () => {
       isMounted = false;
     };
-  }, [student?.id, student?.tenantId]);
+  }, [isSessionVerified, csrfToken, student?.id, student?.tenantId]);
 
-  // Jika tidak ada data siswa aktif, redirect langsung ke halaman login portal
-  if (!student) {
-    return <Navigate to="/portal" replace />;
+  // Handler Logout Backend
+  const handleLogout = async () => {
+    if (isLoggingOut) return;
+    setIsLoggingOut(true);
+
+    try {
+      const response = await fetch('/api/portal/logout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfToken ? { 'X-Portal-CSRF': csrfToken } : {})
+        },
+        credentials: 'include'
+      });
+
+      if (response.ok) {
+        localStorage.removeItem('activeStudent');
+        sessionStorage.clear();
+        navigate('/portal', { replace: true });
+      } else {
+        const data = await response.json().catch(() => ({}));
+        alert(data.message || 'Gagal memproses logout pada server. Silakan coba lagi.');
+      }
+    } catch (err) {
+      console.error('Logout request error:', err);
+      alert('Gagal terhubung ke server untuk proses logout. Silakan periksa koneksi internet Anda.');
+    } finally {
+      setIsLoggingOut(false);
+    }
+  };
+
+  // TAMPILAN LOADING VERIFIKASI SESI
+  if (isVerifyingSession) {
+    return (
+      <div className="flex-1 min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
+        <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-3" />
+        <h2 className="text-sm font-bold text-slate-800">Memverifikasi Keamanan Sesi Portal...</h2>
+        <p className="text-xs text-slate-500 mt-1 max-w-xs">
+          Menghubungkan ke enkripsi portal resmi CHUA SPORT CORE
+        </p>
+      </div>
+    );
   }
 
-  // Handler Tombol Keluar
-  const handleLogout = () => {
-    localStorage.removeItem('activeStudent');
-    sessionStorage.removeItem('portal_student_id');
-    sessionStorage.removeItem('portal_parent_phone');
-    sessionStorage.removeItem('portal_student_data');
-    navigate('/portal');
-  };
+  // JIKA SESI TIDAK VALID ATAU SISWA KOSONG, REDIRECT KE LOGIN PORTAL
+  if (!student || !isSessionVerified) {
+    return <Navigate to="/portal" replace />;
+  }
 
   const studentName = student.studentName || 'Nama Siswa';
   const photoUrl = student.photoUrl || null;
