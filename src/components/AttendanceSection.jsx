@@ -16,10 +16,13 @@ import {
   ChevronUp,
   User,
   Loader2,
-  Check
+  Check,
+  Archive
 } from 'lucide-react';
 
 export default function AttendanceSection({ selectedClass, students = [], tenantId }) {
+  // Identifikasi status kelas arsip secara eksplisit
+  const isArchived = Boolean(selectedClass?.isArchived === true);
   // 1. SETUP STATE & FILTERING DATA
   const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().split('T')[0]);
   const [coachAttendance, setCoachAttendance] = useState(true);
@@ -67,6 +70,13 @@ export default function AttendanceSection({ selectedClass, students = [], tenant
     setCoachAttendance(true);
   }, [selectedClass?.id, students.length, showInactiveStudents]);
 
+  // Reset catatan sementara & pesan saat berpindah kelas
+  useEffect(() => {
+    setSessionNotes('');
+    setErrorMsg(null);
+    setSuccessMsg(null);
+  }, [selectedClass?.id]);
+
   // Fetch attendance history from Supabase
   const fetchAttendanceHistory = useCallback(async () => {
     if (!tenantId || !selectedClass?.id) {
@@ -94,6 +104,7 @@ export default function AttendanceSection({ selectedClass, students = [], tenant
 
   // Handler update status presensi siswa individual
   const handleStudentStatusChange = (studentId, status) => {
+    if (isArchived) return;
     setStudentAttendance((prev) => ({
       ...prev,
       [studentId]: status
@@ -102,6 +113,7 @@ export default function AttendanceSection({ selectedClass, students = [], tenant
 
   // Quick action: Set all students status
   const handleSetAllStudents = (status) => {
+    if (isArchived) return;
     const updated = {};
     classStudents.forEach((st) => {
       updated[st.id] = status;
@@ -112,6 +124,10 @@ export default function AttendanceSection({ selectedClass, students = [], tenant
   // 3. LOGIKA PENYIMPANAN (FIRESTORE)
   const handleSaveAttendance = async (e) => {
     e.preventDefault();
+    if (isArchived) {
+      setErrorMsg('Tidak dapat menyimpan presensi: Kelas ini telah diarsipkan (mode baca-saja).');
+      return;
+    }
     if (!selectedClass?.id || !tenantId) return;
 
     if (!attendanceDate) {
@@ -171,6 +187,10 @@ export default function AttendanceSection({ selectedClass, students = [], tenant
   };
 
   const handleDeleteHistory = async (id, dateStr) => {
+    if (isArchived) {
+      alert('Tidak dapat menghapus riwayat: Kelas ini telah diarsipkan (mode baca-saja).');
+      return;
+    }
     if (!window.confirm(`Hapus catatan presensi tanggal ${dateStr}?`)) return;
     try {
       await deleteAttendanceSession(id);
@@ -184,14 +204,28 @@ export default function AttendanceSection({ selectedClass, students = [], tenant
   return (
     <div className="space-y-3.5 text-left font-sans">
       
+      {/* BANNER INFORMASI MODE BACA-SAJA UNTUK KELAS ARSIP */}
+      {isArchived && (
+        <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs rounded-xl font-medium flex items-center gap-2.5 shadow-2xs">
+          <Archive className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0" />
+          <span>Kelas ini telah diarsipkan. Mode baca-saja aktif untuk peninjauan riwayat presensi.</span>
+        </div>
+      )}
+
       {/* FORM PRESENSI UTAMA (CLEAN & MINIMALIST) */}
-      <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-slate-200/80 shadow-2xs space-y-3">
+      <div className={`rounded-xl p-3 sm:p-3.5 border shadow-2xs space-y-3 ${
+        isArchived 
+          ? 'bg-slate-50/70 dark:bg-slate-900/60 border-slate-200/90 dark:border-slate-800' 
+          : 'bg-white dark:bg-slate-900 border-slate-200/80 dark:border-slate-800'
+      }`}>
         
         {/* CONTROL BAR INLINE: DATE PICKER + TOGGLE SWITCH KEHADIRAN PELATIH */}
-        <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-100 pb-2">
+        <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-100 dark:border-slate-800 pb-2">
           <div className="flex items-center gap-1.5">
-            <ClipboardCheck className="w-4 h-4 text-[#354944] shrink-0" />
-            <h3 className="font-bold text-xs text-slate-800 uppercase tracking-wider">Presensi Sesi Latihan</h3>
+            <ClipboardCheck className="w-4 h-4 text-[#354944] dark:text-[#C89D32] shrink-0" />
+            <h3 className="font-bold text-xs text-slate-800 dark:text-slate-100 uppercase tracking-wider">
+              {isArchived ? 'Presensi Sesi Latihan (Mode Baca-Saja)' : 'Presensi Sesi Latihan'}
+            </h3>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -204,22 +238,28 @@ export default function AttendanceSection({ selectedClass, students = [], tenant
                 aria-label="Tanggal Presensi"
                 type="date"
                 required
+                disabled={isArchived}
                 value={attendanceDate}
                 onChange={(e) => setAttendanceDate(e.target.value)}
-                className="pl-6 pr-2 py-0.5 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:border-[#354944] font-medium text-slate-700 cursor-pointer"
+                className="pl-6 pr-2 py-0.5 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:bg-white focus:outline-none focus:border-[#354944] font-medium text-slate-700 dark:text-slate-200 disabled:cursor-not-allowed disabled:opacity-75"
               />
             </div>
 
             {/* TOGGLE SWITCH ELEGAN (GAYA iOS/MANTINE) - PELATIH HADIR */}
-            <label className="inline-flex items-center gap-1.5 cursor-pointer select-none bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-200">
-              <span className="text-[11px] font-medium text-slate-700">Pelatih Hadir</span>
+            <label className={`inline-flex items-center gap-1.5 select-none bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700 ${isArchived ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'}`}>
+              <span className="text-[11px] font-medium text-slate-700 dark:text-slate-300">Pelatih Hadir</span>
               <button
                 type="button"
                 role="switch"
+                disabled={isArchived}
                 aria-checked={coachAttendance}
-                onClick={() => setCoachAttendance(!coachAttendance)}
-                className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none cursor-pointer ${
-                  coachAttendance ? 'bg-emerald-500' : 'bg-slate-300'
+                onClick={() => {
+                  if (!isArchived) setCoachAttendance(!coachAttendance);
+                }}
+                className={`relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors duration-200 ease-in-out focus:outline-none ${
+                  isArchived ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'
+                } ${
+                  coachAttendance ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-600'
                 }`}
               >
                 <span
@@ -256,10 +296,11 @@ export default function AttendanceSection({ selectedClass, students = [], tenant
               name="sessionNotes"
               aria-label="Catatan atau Materi Latihan Hari Ini"
               type="text"
+              disabled={isArchived}
               value={sessionNotes}
               onChange={(e) => setSessionNotes(e.target.value)}
-              placeholder="Catatan / materi latihan hari ini (opsional)..."
-              className="w-full px-2.5 py-1 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:outline-none focus:border-[#354944] text-slate-700 font-medium"
+              placeholder={isArchived ? "Catatan sesi dinonaktifkan (kelas diarsipkan)" : "Catatan / materi latihan hari ini (opsional)..."}
+              className="w-full px-2.5 py-1 text-xs bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:bg-white focus:outline-none focus:border-[#354944] text-slate-700 dark:text-slate-200 font-medium disabled:cursor-not-allowed disabled:opacity-75"
             />
           </div>
 
@@ -267,12 +308,12 @@ export default function AttendanceSection({ selectedClass, students = [], tenant
           <div className="space-y-2">
             <div className="flex flex-wrap items-center justify-between gap-1.5">
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-bold text-slate-700">
+                <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
                   Siswa ({classStudents.length})
                 </span>
 
                 {/* TOGGLE SISWA BELUM AKTIF / NON-AKTIF */}
-                <label htmlFor="attendance-show-inactive-students" className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 dark:text-slate-400 cursor-pointer select-none bg-slate-50 px-2 py-0.5 rounded-lg border border-slate-200">
+                <label htmlFor="attendance-show-inactive-students" className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-600 dark:text-slate-400 cursor-pointer select-none bg-slate-50 dark:bg-slate-800 px-2 py-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
                   <input
                     id="attendance-show-inactive-students"
                     name="showInactiveStudents"
@@ -285,8 +326,8 @@ export default function AttendanceSection({ selectedClass, students = [], tenant
                 </label>
               </div>
 
-              {/* Quick action buttons */}
-              {classStudents.length > 0 && (
+              {/* Quick action buttons - Hanya aktif pada kelas aktif */}
+              {!isArchived && classStudents.length > 0 && (
                 <div className="flex items-center gap-1.5 text-[10px]">
                   <button
                     type="button"
@@ -359,8 +400,11 @@ export default function AttendanceSection({ selectedClass, students = [], tenant
                         {/* 1. HADIR */}
                         <button
                           type="button"
+                          disabled={isArchived}
                           onClick={() => handleStudentStatusChange(st.id, 'Hadir')}
-                          className={`py-0.5 px-2 rounded text-[11px] font-medium transition-all cursor-pointer text-center ${
+                          className={`py-0.5 px-2 rounded text-[11px] font-medium transition-all text-center ${
+                            isArchived ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'
+                          } ${
                             currentStatus === 'Hadir'
                               ? 'bg-emerald-500 text-white shadow-2xs font-bold'
                               : 'bg-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -372,8 +416,11 @@ export default function AttendanceSection({ selectedClass, students = [], tenant
                         {/* 2. IZIN */}
                         <button
                           type="button"
+                          disabled={isArchived}
                           onClick={() => handleStudentStatusChange(st.id, 'Izin')}
-                          className={`py-0.5 px-2 rounded text-[11px] font-medium transition-all cursor-pointer text-center ${
+                          className={`py-0.5 px-2 rounded text-[11px] font-medium transition-all text-center ${
+                            isArchived ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'
+                          } ${
                             currentStatus === 'Izin'
                               ? 'bg-[#354944] text-white shadow-2xs font-bold'
                               : 'bg-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -385,8 +432,11 @@ export default function AttendanceSection({ selectedClass, students = [], tenant
                         {/* 3. SAKIT */}
                         <button
                           type="button"
+                          disabled={isArchived}
                           onClick={() => handleStudentStatusChange(st.id, 'Sakit')}
-                          className={`py-0.5 px-2 rounded text-[11px] font-medium transition-all cursor-pointer text-center ${
+                          className={`py-0.5 px-2 rounded text-[11px] font-medium transition-all text-center ${
+                            isArchived ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'
+                          } ${
                             currentStatus === 'Sakit'
                               ? 'bg-amber-500 text-white shadow-2xs font-bold'
                               : 'bg-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -398,8 +448,11 @@ export default function AttendanceSection({ selectedClass, students = [], tenant
                         {/* 4. ALPA */}
                         <button
                           type="button"
+                          disabled={isArchived}
                           onClick={() => handleStudentStatusChange(st.id, 'Alpa')}
-                          className={`py-0.5 px-2 rounded text-[11px] font-medium transition-all cursor-pointer text-center ${
+                          className={`py-0.5 px-2 rounded text-[11px] font-medium transition-all text-center ${
+                            isArchived ? 'cursor-not-allowed opacity-75' : 'cursor-pointer'
+                          } ${
                             currentStatus === 'Alpa' || currentStatus === 'Alpha'
                               ? 'bg-rose-500 text-white shadow-2xs font-bold'
                               : 'bg-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
@@ -420,14 +473,21 @@ export default function AttendanceSection({ selectedClass, students = [], tenant
           <div className="pt-0.5 hidden lg:flex justify-end">
             <button
               type="submit"
-              disabled={isSaving || classStudents.length === 0}
-              className="px-4 py-1.5 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white font-semibold text-xs rounded-lg shadow-xs transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+              disabled={isArchived || isSaving || classStudents.length === 0}
+              className={`px-4 py-1.5 border-b-2 font-semibold text-xs rounded-lg shadow-xs transition-all flex items-center justify-center gap-1.5 ${
+                isArchived
+                  ? 'bg-slate-300 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-400 dark:border-slate-700 cursor-not-allowed opacity-80'
+                  : 'bg-[#354944] hover:bg-[#2B3D38] border-[#C89D32] text-white cursor-pointer disabled:opacity-50'
+              }`}
+              title={isArchived ? 'Mode baca-saja: Kelas diarsipkan' : 'Simpan Presensi'}
             >
               {isSaving ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
                   <span>Menyimpan...</span>
                 </>
+              ) : isArchived ? (
+                <span>Presensi Terkunci (Mode Baca-Saja)</span>
               ) : (
                 <>
                   <Check className="w-3.5 h-3.5" />
@@ -437,30 +497,22 @@ export default function AttendanceSection({ selectedClass, students = [], tenant
             </button>
           </div>
 
-          {/* FLOATING SAVE BAR FOR MOBILE (< 1024px) */}
-          <div className="lg:hidden fixed bottom-16 inset-x-4 z-30 bg-[#354944] text-white py-3 px-4 rounded-2xl shadow-xl flex items-center justify-between font-bold text-sm border-b-2 border-[#C89D32]">
-            <div className="flex items-center gap-2">
-              <ClipboardCheck className="w-4 h-4 text-[#C89D32]" />
-              <span>Presensi ({classStudents.length} Siswa)</span>
+          {/* FLOATING SAVE BAR FOR MOBILE (< 1024px) - HANYA PADA KELAS AKTIF */}
+          {!isArchived && (
+            <div className="lg:hidden fixed bottom-16 inset-x-4 z-30 bg-[#354944] text-white py-3 px-4 rounded-2xl shadow-xl flex items-center justify-between font-bold text-sm border-b-2 border-[#C89D32]">
+              <div className="flex items-center gap-2">
+                <ClipboardCheck className="w-4 h-4 text-[#C89D32]" />
+                <span>Presensi ({classStudents.length} Siswa)</span>
+              </div>
+              <button
+                type="submit"
+                disabled={isSaving || classStudents.length === 0}
+                className="px-4 py-1.5 bg-[#C89D32] hover:bg-[#b58c2b] text-slate-900 font-black text-xs rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {isSaving ? 'Menyimpan...' : 'Simpan'}
+              </button>
             </div>
-            <button
-              type="submit"
-              disabled={isSaving || classStudents.length === 0}
-              className="px-4 py-1.5 bg-[#C89D32] hover:bg-[#b58c2b] text-slate-900 font-black text-xs rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Menyimpan...</span>
-                </>
-              ) : (
-                <>
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Simpan Presensi</span>
-                </>
-              )}
-            </button>
-          </div>
+          )}
 
         </form>
       </div>
@@ -532,17 +584,19 @@ export default function AttendanceSection({ selectedClass, students = [], tenant
                       </div>
 
                       <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleDeleteHistory(sess.id, sess.date);
-                          }}
-                          className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors cursor-pointer"
-                          title="Hapus"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {!isArchived && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteHistory(sess.id, sess.date);
+                            }}
+                            className="p-1 text-slate-400 hover:text-rose-600 rounded transition-colors cursor-pointer"
+                            title="Hapus"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                         <span className="text-slate-400">
                           {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                         </span>
