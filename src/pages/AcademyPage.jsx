@@ -182,19 +182,29 @@ export default function AcademyPage({ userProfile }) {
 
   // Access scope & Role-Based Access Control (RBAC)
   const accessScope = useUserAccessScope(userProfile);
-  const { isCoachOnly, coachProfile, isOwner, isAdmin, isSuperAdmin, role } = accessScope;
+  const { isCoachOnly, coachProfile, isOwner, isSuperAdmin, role } = accessScope;
 
-  // Pemeriksaan izin eksplisit: Hanya Owner, Admin, dan Superadmin yang diizinkan mengelola kelas
-  // (membuat, mengedit, mengarsipkan, memulihkan kelas, dan mengunci jadwal lapangan).
-  // Coach, Kasir, Staff, dan role lain yang tidak berwenang bersifat strictly read-only.
+  // Pemeriksaan izin fail-closed: Hanya Superadmin terverifikasi, Owner terverifikasi,
+  // atau Admin dengan role ternormalisasi persis 'admin' yang berhak mengelola kelas.
+  // Role kosong, null, tidak dikenal, kasir, coach, pelatih, dan staff secara tegas menghasilkan false.
   const canManageClasses = useMemo(() => {
+    // 1. Superadmin terverifikasi
+    if (Boolean(isSuperAdmin)) return true;
+
+    // 2. Owner terverifikasi
+    if (Boolean(isOwner)) return true;
+
+    // Normalisasi role pengguna dari auth scope atau userProfile
     const rawRole = String(role || userProfile?.role || '').toLowerCase().trim();
-    if (isSuperAdmin || rawRole === 'superadmin') return true;
-    if (isOwner || rawRole === 'owner') return true;
+
+    if (rawRole === 'superadmin' || rawRole === 'owner') return true;
+
+    // 3. Admin hanya jika role yang telah dinormalisasi persis 'admin'
     if (rawRole === 'admin') return true;
-    if (isAdmin && !['kasir', 'coach', 'pelatih', 'staff'].includes(rawRole)) return true;
+
+    // 4. Fail-closed: Role kosong, null, tidak dikenal, kasir, coach, pelatih, staff -> false
     return false;
-  }, [isSuperAdmin, isOwner, isAdmin, role, userProfile?.role]);
+  }, [isSuperAdmin, isOwner, role, userProfile?.role]);
 
   // Coach Self-Service Password Modal State
   const [showCoachPasswordModal, setShowCoachPasswordModal] = useState(false);
