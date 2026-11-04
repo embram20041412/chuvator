@@ -940,9 +940,10 @@ function FutsalAssessmentView({
   name="evaluationDate"
   id="evaluation-section-evaluation-date"
                     type="date"
+                    disabled={isArchived}
                     value={evaluationDate}
                     onChange={(e) => setEvaluationDate(e.target.value)}
-                    className="w-full px-2 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#354944] font-bold text-slate-800 shadow-2xs cursor-pointer"
+                    className="w-full px-2 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#354944] font-bold text-slate-800 shadow-2xs cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -955,9 +956,10 @@ function FutsalAssessmentView({
   aria-label="evaluation section override futsal tier"
   name="overrideFutsalTier"
   id="evaluation-section-override-futsal-tier"
+                    disabled={isArchived}
                     value={overrideFutsalTier}
                     onChange={(e) => setOverrideFutsalTier(e.target.value)}
-                    className="w-full px-2 py-1.5 text-xs bg-white border border-slate-200 rounded-lg font-bold text-slate-800 focus:ring-1 focus:ring-[#354944] shadow-2xs cursor-pointer truncate"
+                    className="w-full px-2 py-1.5 text-xs bg-white border border-slate-200 rounded-lg font-bold text-slate-800 focus:ring-1 focus:ring-[#354944] shadow-2xs cursor-pointer truncate disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <option value="AUTO">Otomatis: Tier {detectedFutsalTier} ({studentAge} Thn)</option>
                     <option value="1">Tier 1 — Usia Dini (6–12 Thn)</option>
@@ -1081,9 +1083,10 @@ function FutsalAssessmentView({
   aria-label="evaluation section selected position"
   name="selectedPosition"
   id="evaluation-section-selected-position"
+                            disabled={isArchived}
                             value={selectedPosition}
                             onChange={(e) => setSelectedPosition(e.target.value)}
-                            className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-bold text-slate-800 cursor-pointer"
+                            className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-bold text-slate-800 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                           >
                             {availablePositions.map((p) => (
                               <option key={p.code} value={p.code}>
@@ -1103,9 +1106,10 @@ function FutsalAssessmentView({
   aria-label="evaluation section selected style code"
   name="selectedStyleCode"
   id="evaluation-section-selected-style-code"
+                              disabled={isArchived}
                               value={selectedStyleCode}
                               onChange={(e) => setSelectedStyleCode(e.target.value)}
-                              className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-bold text-slate-800 cursor-pointer"
+                              className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-500 font-bold text-slate-800 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                               {FUTSAL_PLAYING_STYLES.map((st) => (
                                 <option key={st.code} value={st.code}>
@@ -1128,8 +1132,9 @@ function FutsalAssessmentView({
                       <div className="grid grid-cols-4 gap-1.5 w-full">
                         <button
                           type="button"
+                          disabled={isArchived}
                           onClick={() => handleSetAllGlobalValue(0)}
-                          className="py-1.5 px-1 text-[11px] font-bold rounded-lg flex items-center justify-center gap-1 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-200 transition-all cursor-pointer shadow-2xs"
+                          className="py-1.5 px-1 text-[11px] font-bold rounded-lg flex items-center justify-center gap-1 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Reset semua indikator ke 0"
                         >
                           <RotateCcw className="w-3 h-3 shrink-0" />
@@ -1137,22 +1142,25 @@ function FutsalAssessmentView({
                         </button>
                         <button
                           type="button"
+                          disabled={isArchived}
                           onClick={() => handleSetAllGlobalValue(50)}
-                          className="py-1.5 px-1 text-[11px] font-bold rounded-lg flex items-center justify-center bg-slate-100 hover:bg-slate-700 hover:text-white text-slate-800 border border-slate-200 transition-all cursor-pointer shadow-2xs"
+                          className="py-1.5 px-1 text-[11px] font-bold rounded-lg flex items-center justify-center bg-slate-100 hover:bg-slate-700 hover:text-white text-slate-800 border border-slate-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Standard
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleSetAllGlobalValue(75)}
-                          className="py-1.5 px-1 text-[11px] font-bold rounded-lg flex items-center justify-center bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-800 border border-blue-200 transition-all cursor-pointer shadow-2xs"
+                          disabled={isArchived}
+                          onClick={() => handleSetAllGlobalValue(50)}
+                          className="py-1.5 px-1 text-[11px] font-bold rounded-lg flex items-center justify-center bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-800 border border-blue-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Good
                         </button>
                         <button
                           type="button"
+                          disabled={isArchived}
                           onClick={() => handleSetAllGlobalValue(90)}
-                          className="py-1.5 px-1 text-[11px] font-bold rounded-lg flex items-center justify-center bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-800 border border-emerald-200 transition-all cursor-pointer shadow-2xs"
+                          className="py-1.5 px-1 text-[11px] font-bold rounded-lg flex items-center justify-center bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-800 border border-emerald-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Elite
                         </button>
@@ -1496,11 +1504,12 @@ function FutsalAssessmentView({
   aria-label="evaluation section coach note"
   name="coachNote"
   id="evaluation-section-coach-note"
+                    disabled={isArchived}
                     rows={2.5}
                     value={coachNote}
                     onChange={(e) => setCoachNote(e.target.value)}
                     placeholder={`Contoh: Atlet ${selectedStudent.studentName} sangat kuat pada posisi ${currentPosIndicatorsConfig.shortLabel} dengan kontrol sole dan rotasi passing cepat. Perlu peningkatan stamina transisi.`}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#354944] font-medium text-slate-800 leading-normal"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#354944] font-medium text-slate-800 leading-normal disabled:opacity-60 disabled:cursor-not-allowed"
                   />
 
                   <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-1.5">
@@ -1544,6 +1553,7 @@ function FutsalAssessmentView({
                   onScoreChange={handleScoreChange}
                   onAdjustScore={handleAdjustScore}
                   onSetCategoryPreset={handleSetCategoryPreset}
+                  isArchived={isArchived}
                 />
 
               </form>
@@ -2168,9 +2178,10 @@ function BadmintonAssessmentView({
   name="evaluationDate"
   id="evaluation-section-evaluation-date"
                     type="date"
+                    disabled={isArchived}
                     value={evaluationDate}
                     onChange={(e) => setEvaluationDate(e.target.value)}
-                    className="w-full px-2 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#354944] font-bold text-slate-800 shadow-2xs cursor-pointer"
+                    className="w-full px-2 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#354944] font-bold text-slate-800 shadow-2xs cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -2183,9 +2194,10 @@ function BadmintonAssessmentView({
   aria-label="evaluation section override badminton tier"
   name="overrideBadmintonTier"
   id="evaluation-section-override-badminton-tier"
+                    disabled={isArchived}
                     value={overrideBadmintonTier}
                     onChange={(e) => setOverrideBadmintonTier(e.target.value)}
-                    className="w-full px-2 py-1.5 text-xs bg-white border border-slate-200 rounded-lg font-bold text-slate-800 focus:ring-1 focus:ring-[#354944] shadow-2xs cursor-pointer truncate"
+                    className="w-full px-2 py-1.5 text-xs bg-white border border-slate-200 rounded-lg font-bold text-slate-800 focus:ring-1 focus:ring-[#354944] shadow-2xs cursor-pointer truncate disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <option value="AUTO">Otomatis: Tier {detectedBadmintonTier} ({pbsiLevelInfo.name})</option>
                     <option value="1">Tier 1 — Usia Dini (&le;10 Thn)</option>
@@ -2308,9 +2320,10 @@ function BadmintonAssessmentView({
   aria-label="evaluation section event code"
   name="eventCode"
   id="evaluation-section-event-code"
+                            disabled={isArchived}
                             value={eventCode}
                             onChange={(e) => setEventCode(e.target.value)}
-                            className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-bold text-slate-800 cursor-pointer"
+                            className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-bold text-slate-800 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                           >
                             {availableEvents.map((ev) => (
                               <option key={ev.code} value={ev.code}>
@@ -2330,9 +2343,10 @@ function BadmintonAssessmentView({
   aria-label="evaluation section style code"
   name="styleCode"
   id="evaluation-section-style-code"
+                              disabled={isArchived}
                               value={styleCode}
                               onChange={(e) => setStyleCode(e.target.value)}
-                              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-bold text-slate-800 cursor-pointer"
+                              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-bold text-slate-800 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                               {BADMINTON_PLAYING_STYLES.map((st) => (
                                 <option key={st.code} value={st.code}>
@@ -2353,9 +2367,10 @@ function BadmintonAssessmentView({
   aria-label="evaluation section doubles spec code"
   name="doublesSpecCode"
   id="evaluation-section-doubles-spec-code"
+                              disabled={isArchived}
                               value={doublesSpecCode}
                               onChange={(e) => setDoublesSpecCode(e.target.value)}
-                              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-bold text-slate-800 cursor-pointer"
+                              className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-bold text-slate-800 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                             >
                               {BADMINTON_DOUBLES_SPECS.map((sp) => (
                                 <option key={sp.code} value={sp.code}>
@@ -2409,9 +2424,10 @@ function BadmintonAssessmentView({
   aria-label="evaluation section health physical readiness"
   name="healthPhysicalReadiness"
   id="evaluation-section-health-physical-readiness"
+                                disabled={isArchived}
                                 value={healthPhysicalReadiness}
                                 onChange={(e) => setHealthPhysicalReadiness(e.target.value)}
-                                className="w-full px-2.5 py-1.5 text-[11px] bg-white border border-slate-200 rounded-xl font-normal text-slate-800 focus:outline-none"
+                                className="w-full px-2.5 py-1.5 text-[11px] bg-white border border-slate-200 rounded-xl font-normal text-slate-800 focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
                               >
                                 <option value="Fit 100%">Fit 100% (Prima)</option>
                                 <option value="Sangat Fit">Sangat Fit</option>
@@ -2427,9 +2443,10 @@ function BadmintonAssessmentView({
   aria-label="evaluation section health recovery quality"
   name="healthRecoveryQuality"
   id="evaluation-section-health-recovery-quality"
+                                disabled={isArchived}
                                 value={healthRecoveryQuality}
                                 onChange={(e) => setHealthRecoveryQuality(e.target.value)}
-                                className="w-full px-2.5 py-1.5 text-[11px] bg-white border border-slate-200 rounded-xl font-normal text-slate-800 focus:outline-none"
+                                className="w-full px-2.5 py-1.5 text-[11px] bg-white border border-slate-200 rounded-xl font-normal text-slate-800 focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
                               >
                                 <option value="Bagus (8+ Jam)">Bagus (8+ Jam)</option>
                                 <option value="Cukup (6-7 Jam)">Cukup (6-7 Jam)</option>
@@ -2444,11 +2461,12 @@ function BadmintonAssessmentView({
   aria-label="evaluation section health injury notes"
   name="healthInjuryNotes"
   id="evaluation-section-health-injury-notes"
+                              disabled={isArchived}
                               type="text"
                               value={healthInjuryNotes}
                               onChange={(e) => setHealthInjuryNotes(e.target.value)}
                               placeholder="Misal: Bebas cedera / nyeri lutut..."
-                              className="w-full px-2.5 py-1.5 text-[11px] bg-white border border-slate-200 rounded-xl font-normal text-slate-800 focus:outline-none"
+                              className="w-full px-2.5 py-1.5 text-[11px] bg-white border border-slate-200 rounded-xl font-normal text-slate-800 focus:outline-none disabled:opacity-60 disabled:cursor-not-allowed"
                             />
                           </div>
                         </div>
@@ -2465,8 +2483,9 @@ function BadmintonAssessmentView({
                       <div className="grid grid-cols-4 gap-1.5 w-full">
                         <button
                           type="button"
+                          disabled={isArchived}
                           onClick={() => handleSetAllGlobalValue(0)}
-                          className="py-1.5 px-1 text-[11px] font-bold rounded-lg flex items-center justify-center gap-1 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-200 transition-all cursor-pointer shadow-2xs"
+                          className="py-1.5 px-1 text-[11px] font-bold rounded-lg flex items-center justify-center gap-1 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
                           title="Reset semua indikator ke 0"
                         >
                           <RotateCcw className="w-3 h-3 shrink-0" />
@@ -2474,22 +2493,25 @@ function BadmintonAssessmentView({
                         </button>
                         <button
                           type="button"
+                          disabled={isArchived}
                           onClick={() => handleSetAllGlobalValue(50)}
-                          className="py-1.5 px-1 text-[11px] font-bold rounded-lg flex items-center justify-center bg-slate-100 hover:bg-slate-700 hover:text-white text-slate-800 border border-slate-200 transition-all cursor-pointer shadow-2xs"
+                          className="py-1.5 px-1 text-[11px] font-bold rounded-lg flex items-center justify-center bg-slate-100 hover:bg-slate-700 hover:text-white text-slate-800 border border-slate-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Standard
                         </button>
                         <button
                           type="button"
+                          disabled={isArchived}
                           onClick={() => handleSetAllGlobalValue(75)}
-                          className="py-1.5 px-1 text-[11px] font-bold rounded-lg flex items-center justify-center bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-800 border border-blue-200 transition-all cursor-pointer shadow-2xs"
+                          className="py-1.5 px-1 text-[11px] font-bold rounded-lg flex items-center justify-center bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-800 border border-blue-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Good
                         </button>
                         <button
                           type="button"
+                          disabled={isArchived}
                           onClick={() => handleSetAllGlobalValue(90)}
-                          className="py-1.5 px-1 text-[11px] font-bold rounded-lg flex items-center justify-center bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-800 border border-emerald-200 transition-all cursor-pointer shadow-2xs"
+                          className="py-1.5 px-1 text-[11px] font-bold rounded-lg flex items-center justify-center bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-800 border border-emerald-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                           Elite
                         </button>
@@ -2887,25 +2909,28 @@ function BadmintonAssessmentView({
               </h3>
             </div>
 
-            <button
-              type="button"
-              onClick={handleGenerateDraft}
-              className="px-2.5 py-1 text-xs font-bold bg-[#354944]/10 hover:bg-[#354944]/20 text-[#354944] border border-[#354944]/30 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 self-start sm:self-auto"
-            >
-              <Sparkles className="w-3.5 h-3.5 text-[#C89D32]" />
-              <span>Buat Draf Analisis Otomatis</span>
-            </button>
+            {!isArchived && (
+              <button
+                type="button"
+                onClick={handleGenerateDraft}
+                className="px-2.5 py-1 text-xs font-bold bg-[#354944]/10 hover:bg-[#354944]/20 text-[#354944] border border-[#354944]/30 rounded-lg transition-all cursor-pointer flex items-center gap-1.5 self-start sm:self-auto"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-[#C89D32]" />
+                <span>Buat Draf Analisis Otomatis</span>
+              </button>
+            )}
           </div>
 
           <textarea
   aria-label="evaluation section coach note"
   name="coachNote"
   id="evaluation-section-coach-note"
+            disabled={isArchived}
             value={coachNote}
             onChange={(e) => setCoachNote(e.target.value)}
             rows={2.5}
             placeholder="Tuliskan umpan balik pelatih, keunggulan pukulan, area perbaikan footwork/taktik, dan rekomendasi program latihan..."
-            className="w-full p-2.5 text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#354944] leading-normal text-slate-800 placeholder:text-slate-400"
+            className="w-full p-2.5 text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#354944] leading-normal text-slate-800 placeholder:text-slate-400 disabled:opacity-60 disabled:cursor-not-allowed"
           />
 
           {errorMsg && (
@@ -2960,6 +2985,7 @@ function BadmintonAssessmentView({
             onScoreChange={handleScoreChange}
             onAdjustScore={handleAdjustScore}
             onSetCategoryPreset={handleSetCategoryPreset}
+            isArchived={isArchived}
           />
         </div>
       )}
@@ -3598,9 +3624,10 @@ function FootballAssessmentView({
   name="evaluationDate"
   id="evaluation-section-evaluation-date"
                     type="date"
+                    disabled={isArchived}
                     value={evaluationDate}
                     onChange={(e) => setEvaluationDate(e.target.value)}
-                    className="w-full px-2.5 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#354944] font-bold text-slate-800 shadow-2xs cursor-pointer"
+                    className="w-full px-2.5 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-[#354944] font-bold text-slate-800 shadow-2xs cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                   />
                 </div>
 
@@ -3613,9 +3640,10 @@ function FootballAssessmentView({
   aria-label="evaluation section override tier"
   name="overrideTier"
   id="evaluation-section-override-tier"
+                    disabled={isArchived}
                     value={overrideTier}
                     onChange={(e) => setOverrideTier(e.target.value)}
-                    className="w-full px-2.5 py-2 text-xs bg-white border border-slate-200 rounded-xl font-bold text-slate-800 focus:ring-2 focus:ring-[#354944] shadow-2xs cursor-pointer truncate"
+                    className="w-full px-2.5 py-2 text-xs bg-white border border-slate-200 rounded-xl font-bold text-slate-800 focus:ring-2 focus:ring-[#354944] shadow-2xs cursor-pointer truncate disabled:opacity-60 disabled:cursor-not-allowed"
                   >
                     <option value="AUTO">Otomatis: {detectedTierCode} ({studentAge} Thn)</option>
                     <option value="FILANESIA_F1">Fase 1: U-8 &amp; U-10 (Usia 6–9 Thn) • Fase Kegembiraan (Joy Phase)</option>
@@ -3744,9 +3772,10 @@ function FootballAssessmentView({
   aria-label="evaluation section selected position"
   name="selectedPosition"
   id="evaluation-section-selected-position"
+                      disabled={isArchived}
                       value={selectedPosition}
                       onChange={(e) => handlePositionChange(e.target.value)}
-                      className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-800 cursor-pointer"
+                      className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-800 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                     >
                       {availablePositions.map((p) => (
                         <option key={p.code} value={p.code}>
@@ -3776,9 +3805,10 @@ function FootballAssessmentView({
   aria-label="evaluation section secondary position"
   name="secondaryPosition"
   id="evaluation-section-secondary-position"
+                        disabled={isArchived}
                         value={secondaryPosition}
                         onChange={(e) => setSecondaryPosition(e.target.value)}
-                        className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-800 cursor-pointer"
+                        className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-800 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                       >
                         {SECONDARY_FOOTBALL_POSITIONS.map((sp) => (
                           <option key={sp.code} value={sp.code}>
@@ -3798,9 +3828,10 @@ function FootballAssessmentView({
   aria-label="evaluation section selected specialization"
   name="selectedSpecialization"
   id="evaluation-section-selected-specialization"
+                        disabled={isArchived}
                         value={selectedSpecialization}
                         onChange={(e) => setSelectedSpecialization(e.target.value)}
-                        className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-800 cursor-pointer"
+                        className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-800 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                       >
                         {(getPositionConfig(selectedPosition).specializations || []).map((spec) => (
                           <option key={spec} value={spec}>
@@ -3820,9 +3851,10 @@ function FootballAssessmentView({
   aria-label="evaluation section selected style code"
   name="selectedStyleCode"
   id="evaluation-section-selected-style-code"
+                        disabled={isArchived}
                         value={selectedStyleCode}
                         onChange={(e) => setSelectedStyleCode(e.target.value)}
-                        className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-800 cursor-pointer"
+                        className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-800 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
                       >
                         {FOOTBALL_PLAYING_STYLES.map((st) => (
                           <option key={st.code} value={st.code}>
@@ -3857,8 +3889,9 @@ function FootballAssessmentView({
                 <div className="grid grid-cols-4 gap-1.5 w-full">
                   <button
                     type="button"
+                    disabled={isArchived}
                     onClick={() => handleSetAllGlobalValue(0)}
-                    className="py-1.5 px-1 text-[11px] font-bold rounded-lg flex items-center justify-center gap-1 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-200 transition-all cursor-pointer shadow-2xs"
+                    className="py-1.5 px-1 text-[11px] font-bold rounded-lg flex items-center justify-center gap-1 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Reset semua indikator ke 0"
                   >
                     <RotateCcw className="w-3 h-3 shrink-0" />
@@ -3866,22 +3899,25 @@ function FootballAssessmentView({
                   </button>
                   <button
                     type="button"
+                    disabled={isArchived}
                     onClick={() => handleSetAllGlobalValue(50)}
-                    className="py-1.5 px-1 text-[11px] font-bold rounded-lg flex items-center justify-center bg-slate-100 hover:bg-slate-700 hover:text-white text-slate-800 border border-slate-200 transition-all cursor-pointer shadow-2xs"
+                    className="py-1.5 px-1 text-[11px] font-bold rounded-lg flex items-center justify-center bg-slate-100 hover:bg-slate-700 hover:text-white text-slate-800 border border-slate-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Standard
                   </button>
                   <button
                     type="button"
+                    disabled={isArchived}
                     onClick={() => handleSetAllGlobalValue(75)}
-                    className="py-1.5 px-1 text-[11px] font-bold rounded-lg flex items-center justify-center bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-800 border border-blue-200 transition-all cursor-pointer shadow-2xs"
+                    className="py-1.5 px-1 text-[11px] font-bold rounded-lg flex items-center justify-center bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-800 border border-blue-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Good
                   </button>
                   <button
                     type="button"
+                    disabled={isArchived}
                     onClick={() => handleSetAllGlobalValue(90)}
-                    className="py-1.5 px-1 text-[11px] font-bold rounded-lg flex items-center justify-center bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-800 border border-emerald-200 transition-all cursor-pointer shadow-2xs"
+                    className="py-1.5 px-1 text-[11px] font-bold rounded-lg flex items-center justify-center bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-800 border border-emerald-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     Elite
                   </button>
@@ -4208,25 +4244,28 @@ function FootballAssessmentView({
                       <MessageSquare className="w-4 h-4 text-[#354944]" />
                       <span>Catatan Evaluasi Taktis &amp; Rekomendasi Pelatih ({tierConfig.shortLabel})</span>
                     </label>
-                    <button
-                      type="button"
-                      onClick={handleGenerateDraft}
-                      className="px-2.5 py-1 bg-[#354944]/10 hover:bg-[#354944]/20 text-[#354944] border border-[#354944]/30 text-[11px] font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-[#C89D32]" />
-                      <span>Buat Draf Analisis Otomatis</span>
-                    </button>
+                    {!isArchived && (
+                      <button
+                        type="button"
+                        onClick={handleGenerateDraft}
+                        className="px-2.5 py-1 bg-[#354944]/10 hover:bg-[#354944]/20 text-[#354944] border border-[#354944]/30 text-[11px] font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-[#C89D32]" />
+                        <span>Buat Draf Analisis Otomatis</span>
+                      </button>
+                    )}
                   </div>
 
                   <textarea
   aria-label="evaluation section coach note"
   name="coachNote"
   id="evaluation-section-coach-note"
+                    disabled={isArchived}
                     rows={2.5}
                     value={coachNote}
                     onChange={(e) => setCoachNote(e.target.value)}
                     placeholder={`Contoh: Atlet ${selectedStudent.studentName} menunjukkan penempatan posisi dan timing finishing yang tajam. Perlu peningkatan koordinasi pressing.`}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-medium text-slate-800 leading-relaxed"
+                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-medium text-slate-800 leading-relaxed disabled:opacity-60 disabled:cursor-not-allowed"
                   />
 
                   <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-1">
@@ -4235,14 +4274,20 @@ function FootballAssessmentView({
                     </p>
                     <button
                       type="submit"
-                      disabled={isSaving}
-                      className="w-full sm:w-auto px-5 py-2 bg-[#354944] hover:bg-[#2B3D38] text-white font-bold text-xs rounded-xl border-b-2 border-[#C89D32] shadow-sm transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+                      disabled={isSaving || isArchived}
+                      className={`w-full sm:w-auto px-5 py-2 font-bold text-xs rounded-xl border-b-2 shadow-sm transition-all flex items-center justify-center gap-2 ${
+                        isArchived 
+                          ? 'bg-slate-300 text-slate-500 border-slate-400 cursor-not-allowed opacity-80'
+                          : 'bg-[#354944] hover:bg-[#2B3D38] text-white border-[#C89D32] cursor-pointer disabled:opacity-50'
+                      }`}
                     >
                       {isSaving ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin text-white" />
                           <span>Menyimpan Assessment...</span>
                         </>
+                      ) : isArchived ? (
+                        <span>Evaluasi Terkunci (Mode Baca-Saja)</span>
                       ) : (
                         <>
                           <Award className="w-4 h-4 text-[#C89D32]" />
@@ -4264,6 +4309,7 @@ function FootballAssessmentView({
                   onScoreChange={handleScoreChange}
                   onAdjustScore={handleAdjustScore}
                   onSetCategoryPreset={handleSetCategoryPreset}
+                  isArchived={isArchived}
                 />
 
               </form>
@@ -4277,6 +4323,7 @@ function FootballAssessmentView({
         setFilterStudentId={setFilterStudentId}
         students={students}
         onDeleteEvaluation={onDeleteEvaluation}
+        isArchived={isArchived}
       />
     </div>
   );
@@ -4294,9 +4341,10 @@ export function CategoryAssessmentModal({
   scores = {},
   onScoreChange,
   onAdjustScore,
-  onSetCategoryPreset
+  onSetCategoryPreset,
+  isArchived = false
 }) {
-  const [currentKey, setCurrentKey] = useState(activeCategoryKey || categoryList[0]?.key);
+  const [currentKey, setCurrentKey] = useState(activeCategoryKey || '');
 
   useEffect(() => {
     if (activeCategoryKey) {
@@ -4371,7 +4419,7 @@ export function CategoryAssessmentModal({
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="font-extrabold text-base text-slate-900 dark:text-slate-100 tracking-tight">
-                  Edit &amp; Input Penilaian Indikator
+                  Edit &amp; Input Penilaian Indikator {isArchived && '(Mode Baca-Saja)'}
                 </h3>
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-[#354944]/10 dark:bg-[#C89D32]/10 text-[#354944] dark:text-[#C89D32] border border-[#354944]/20 dark:border-[#C89D32]/20">
                   {categoryList.length} Kategori
@@ -4381,7 +4429,7 @@ export function CategoryAssessmentModal({
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-                Pilih kategori di menu kiri, isi nilai indikator per kategori, dan gunakan navigasi berikutnya untuk alur kerja cepat.
+                {isArchived ? 'Kelas ini diarsipkan. Seluruh nilai dalam mode baca-saja.' : 'Pilih kategori di menu kiri, isi nilai indikator per kategori, dan gunakan navigasi berikutnya untuk alur kerja cepat.'}
               </p>
             </div>
           </div>
@@ -4564,30 +4612,34 @@ export function CategoryAssessmentModal({
                       <span className="text-[10px] font-bold text-slate-400 px-1 hidden sm:inline">Preset:</span>
                       <button
                         type="button"
+                        disabled={isArchived}
                         onClick={() => onSetCategoryPreset(activeCategory.key, 0)}
-                        className="px-2 py-1 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 font-bold text-[10px] sm:text-[11px] rounded-lg border border-rose-200 dark:border-rose-800 transition-colors cursor-pointer"
+                        className="px-2 py-1 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/60 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 font-bold text-[10px] sm:text-[11px] rounded-lg border border-rose-200 dark:border-rose-800 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                         title="Reset semua nilai di kategori ini ke 0"
                       >
                         Reset 0
                       </button>
                       <button
                         type="button"
+                        disabled={isArchived}
                         onClick={() => onSetCategoryPreset(activeCategory.key, 50)}
-                        className="px-2 py-1 bg-slate-50 hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-[10px] sm:text-[11px] rounded-lg border border-slate-200 dark:border-slate-600 transition-colors cursor-pointer"
+                        className="px-2 py-1 bg-slate-50 hover:bg-slate-100 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-[10px] sm:text-[11px] rounded-lg border border-slate-200 dark:border-slate-600 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         50
                       </button>
                       <button
                         type="button"
+                        disabled={isArchived}
                         onClick={() => onSetCategoryPreset(activeCategory.key, 75)}
-                        className="px-2 py-1 bg-[#354944]/10 hover:bg-[#354944]/20 dark:bg-[#C89D32]/20 text-[#354944] dark:text-[#C89D32] font-bold text-[10px] sm:text-[11px] rounded-lg border border-[#354944]/20 dark:border-[#C89D32]/30 transition-colors cursor-pointer"
+                        className="px-2 py-1 bg-[#354944]/10 hover:bg-[#354944]/20 dark:bg-[#C89D32]/20 text-[#354944] dark:text-[#C89D32] font-bold text-[10px] sm:text-[11px] rounded-lg border border-[#354944]/20 dark:border-[#C89D32]/30 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         75
                       </button>
                       <button
                         type="button"
+                        disabled={isArchived}
                         onClick={() => onSetCategoryPreset(activeCategory.key, 90)}
-                        className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 font-bold text-[10px] sm:text-[11px] rounded-lg border border-emerald-200 dark:border-emerald-800 transition-colors cursor-pointer"
+                        className="px-2 py-1 bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 font-bold text-[10px] sm:text-[11px] rounded-lg border border-emerald-200 dark:border-emerald-800 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         90
                       </button>
@@ -4612,6 +4664,7 @@ export function CategoryAssessmentModal({
                           isSpecial={activeCategory.isSpecial}
                           onScoreChange={(v) => onScoreChange(ind, v)}
                           onAdjust={(delta) => onAdjustScore(ind, delta)}
+                          isArchived={isArchived}
                         />
                       );
                     })}
@@ -4685,7 +4738,7 @@ export function CategoryAssessmentModal({
 // =====================================================================
 // COMPONENT: INDIVIDUAL INDICATOR CARD WITH +/- BUTTONS & TOUCH SLIDER
 // =====================================================================
-function IndicatorCard({ title, value, isSpecial = false, onScoreChange, onAdjust }) {
+function IndicatorCard({ title, value, isSpecial = false, onScoreChange, onAdjust, isArchived = false }) {
   return (
     <div className={`p-3.5 bg-white border ${isSpecial ? 'border-indigo-200 hover:border-indigo-400' : 'border-slate-200/90 hover:border-slate-300'} rounded-2xl space-y-2 shadow-2xs transition-all`}>
       <div className="flex items-center justify-between text-xs font-bold gap-2">
@@ -4697,8 +4750,9 @@ function IndicatorCard({ title, value, isSpecial = false, onScoreChange, onAdjus
         <div className="flex items-center gap-1 shrink-0">
           <button
             type="button"
+            disabled={isArchived}
             onClick={() => onAdjust(-5)}
-            className="w-6 h-6 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-black flex items-center justify-center text-xs transition-colors cursor-pointer"
+            className="w-6 h-6 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-black flex items-center justify-center text-xs transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             title="Kurangi 5"
           >
             <Minus className="w-3 h-3" />
@@ -4710,8 +4764,9 @@ function IndicatorCard({ title, value, isSpecial = false, onScoreChange, onAdjus
 
           <button
             type="button"
+            disabled={isArchived}
             onClick={() => onAdjust(5)}
-            className="w-6 h-6 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-black flex items-center justify-center text-xs transition-colors cursor-pointer"
+            className="w-6 h-6 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 font-black flex items-center justify-center text-xs transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
             title="Tambah 5"
           >
             <Plus className="w-3 h-3" />
@@ -4727,9 +4782,10 @@ function IndicatorCard({ title, value, isSpecial = false, onScoreChange, onAdjus
         min="0"
         max="100"
         step="1"
+        disabled={isArchived}
         value={value}
         onChange={(e) => onScoreChange(e.target.value)}
-        className={`w-full cursor-pointer h-1.5 bg-slate-200 rounded-lg ${isSpecial ? 'accent-indigo-600' : 'accent-emerald-600'}`}
+        className={`w-full cursor-pointer h-1.5 bg-slate-200 rounded-lg ${isSpecial ? 'accent-indigo-600' : 'accent-emerald-600'} disabled:opacity-50 disabled:cursor-not-allowed`}
       />
     </div>
   );
@@ -5019,8 +5075,9 @@ function Standard4PillarView({
   id="evaluation-section-evaluation-date"
                 type="date"
                 value={evaluationDate}
+                disabled={isArchived}
                 onChange={(e) => setEvaluationDate(e.target.value)}
-                className="px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl font-bold"
+                className="px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl font-bold disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
           </div>
@@ -5125,10 +5182,10 @@ function Standard4PillarView({
                   <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
                     <span className="text-xs font-bold uppercase text-slate-800">Kategori Key Performance</span>
                     <div className="flex items-center gap-1">
-                      <button type="button" onClick={() => handleSetAllValues(0)} className="px-2 py-0.5 bg-rose-50 text-rose-700 rounded text-[10px] font-bold">Reset (0)</button>
-                      <button type="button" onClick={() => handleSetAllValues(50)} className="px-2 py-0.5 bg-slate-100 text-slate-800 rounded text-[10px] font-bold">50</button>
-                      <button type="button" onClick={() => handleSetAllValues(75)} className="px-2 py-0.5 bg-blue-50 text-blue-800 rounded text-[10px] font-bold">75</button>
-                      <button type="button" onClick={() => handleSetAllValues(90)} className="px-2 py-0.5 bg-emerald-50 text-emerald-800 rounded text-[10px] font-bold">90</button>
+                      <button type="button" disabled={isArchived} onClick={() => handleSetAllValues(0)} className="px-2 py-0.5 bg-rose-50 text-rose-700 rounded text-[10px] font-bold disabled:opacity-50 disabled:cursor-not-allowed">Reset (0)</button>
+                      <button type="button" disabled={isArchived} onClick={() => handleSetAllValues(50)} className="px-2 py-0.5 bg-slate-100 text-slate-800 rounded text-[10px] font-bold disabled:opacity-50 disabled:cursor-not-allowed">50</button>
+                      <button type="button" disabled={isArchived} onClick={() => handleSetAllValues(75)} className="px-2 py-0.5 bg-blue-50 text-blue-800 rounded text-[10px] font-bold disabled:opacity-50 disabled:cursor-not-allowed">75</button>
+                      <button type="button" disabled={isArchived} onClick={() => handleSetAllValues(90)} className="px-2 py-0.5 bg-emerald-50 text-emerald-800 rounded text-[10px] font-bold disabled:opacity-50 disabled:cursor-not-allowed">90</button>
                     </div>
                   </div>
 
@@ -5150,9 +5207,10 @@ function Standard4PillarView({
                               min="0"
                               max="100"
                               step="1"
+                              disabled={isArchived}
                               value={scores[kpi] !== undefined ? scores[kpi] : 0}
                               onChange={(e) => handleScoreChange(kpi, e.target.value)}
-                              className="w-full accent-indigo-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
+                              className="w-full accent-indigo-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                             />
                           </div>
                         ))}
@@ -5176,15 +5234,16 @@ function Standard4PillarView({
   id="evaluation-section-coach-note"
                 rows={2.5}
                 value={coachNote}
+                disabled={isArchived}
                 onChange={(e) => setCoachNote(e.target.value)}
-                className="w-full p-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944]"
+                className="w-full p-2.5 text-xs bg-slate-50 border border-slate-200 rounded-xl font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] disabled:opacity-60 disabled:cursor-not-allowed"
               />
               <button
                 type="submit"
-                disabled={isSaving}
-                className="px-5 py-2 bg-[#354944] hover:bg-[#2B3D38] text-white font-bold text-xs rounded-xl border-b-2 border-[#C89D32] shadow-sm cursor-pointer transition-colors"
+                disabled={isSaving || isArchived}
+                className="px-5 py-2 bg-[#354944] hover:bg-[#2B3D38] text-white font-bold text-xs rounded-xl border-b-2 border-[#C89D32] shadow-sm cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Simpan Evaluasi
+                {isArchived ? 'Evaluasi Terkunci (Mode Baca-Saja)' : 'Simpan Evaluasi'}
               </button>
             </div>
 
@@ -5198,12 +5257,17 @@ function Standard4PillarView({
               scores={scores}
               onScoreChange={handleScoreChange}
               onAdjustScore={(ind, delta) => {
+                if (isArchived) return;
                 setScores((prev) => {
                   const curr = prev[ind] !== undefined ? prev[ind] : 0;
                   return { ...prev, [ind]: Math.min(100, Math.max(0, curr + delta)) };
                 });
               }}
-              onSetCategoryPreset={handleSetCategoryPreset}
+              onSetCategoryPreset={(catKey, val) => {
+                if (isArchived) return;
+                handleSetCategoryPreset(catKey, val);
+              }}
+              isArchived={isArchived}
             />
           </form>
         )}
