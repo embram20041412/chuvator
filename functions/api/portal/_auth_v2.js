@@ -11,13 +11,137 @@
  * - Session validation, auto-refresh of Supabase tokens, and CSRF protection.
  */
 
-import {
-  getCorsHeaders,
-  verifyCsrf,
-  hashString
-} from './_auth.js';
+/**
+ * ArrayBuffer to Hex string encoder
+ */
+export function bufferToHex(buf) {
+  const byteArray = new Uint8Array(buf);
+  return Array.from(byteArray)
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
 
-export { getCorsHeaders, verifyCsrf, hashString };
+/**
+ * Compute SHA-256 hash of a string using Web Crypto API.
+ * Symmetrical and fully compatible with existing KV keys and hashes.
+ */
+export async function hashString(str) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(str);
+  const hashBuf = await crypto.subtle.digest('SHA-256', data);
+  return bufferToHex(hashBuf);
+}
+
+/**
+ * Strict Origin Validation (No wildcard *, exact match against ALLOWED_ORIGINS + request origin)
+ */
+export function getValidatedOrigin(request, env = {}) {
+  const reqOrigin = request.headers.get('Origin');
+  if (!reqOrigin) return null;
+
+  const allowedSet = new Set();
+
+  try {
+    const reqUrlOrigin = new URL(request.url).origin;
+    if (reqUrlOrigin) allowedSet.add(reqUrlOrigin);
+  } catch {
+    // Ignore URL parse error
+  }
+
+  if (env.ALLOWED_ORIGINS) {
+    env.ALLOWED_ORIGINS.split(',').forEach((o) => {
+      const trimmed = o.trim();
+      if (trimmed) allowedSet.add(trimmed);
+    });
+  }
+
+  // Exact match validation
+  if (allowedSet.has(reqOrigin)) {
+    return reqOrigin;
+  }
+
+  return null;
+}
+
+/**
+ * Construct CORS Headers with dynamic origin and Credentials support
+ */
+export function getCorsHeaders(request, env = {}) {
+  const validatedOrigin = getValidatedOrigin(request, env);
+  const headers = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Portal-CSRF',
+    'Access-Control-Max-Age': '86400'
+  };
+
+  if (validatedOrigin) {
+    headers['Access-Control-Allow-Origin'] = validatedOrigin;
+    headers['Access-Control-Allow-Credentials'] = 'true';
+  }
+
+  return headers;
+}
+
+/**
+ * Strict CSRF Validation for POST/PUT/DELETE requests.
+ * Checks Origin & Referer strictly against allowed origins.
+ * If expectedCsrfToken is passed, verifies X-Portal-CSRF header matches.
+ */
+export function verifyCsrf(request, env = {}, expectedCsrfToken = null) {
+  const method = request.method.toUpperCase();
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') {
+    return true;
+  }
+
+  const reqOrigin = request.headers.get('Origin');
+  const reqReferer = request.headers.get('Referer');
+
+  const allowedSet = new Set();
+  try {
+    const reqUrlOrigin = new URL(request.url).origin;
+    if (reqUrlOrigin) allowedSet.add(reqUrlOrigin);
+  } catch {
+    // Ignore
+  }
+
+  if (env.ALLOWED_ORIGINS) {
+    env.ALLOWED_ORIGINS.split(',').forEach((o) => {
+      const trimmed = o.trim();
+      if (trimmed) allowedSet.add(trimmed);
+    });
+  }
+
+  // 1. Verify Origin strictly if present
+  if (reqOrigin) {
+    if (!allowedSet.has(reqOrigin)) {
+      return false;
+    }
+  } else if (reqReferer) {
+    // 2. Fallback to Referer origin
+    try {
+      const refOrigin = new URL(reqReferer).origin;
+      if (!allowedSet.has(refOrigin)) {
+        return false;
+      }
+    } catch {
+      return false;
+    }
+  } else {
+    // Neither Origin nor Referer -> Reject
+    return false;
+  }
+
+  // 3. Check X-Portal-CSRF header token if session token is required
+  if (expectedCsrfToken) {
+    const headerCsrf = request.headers.get('X-Portal-CSRF');
+    if (!headerCsrf || headerCsrf !== expectedCsrfToken) {
+      return false;
+    }
+  }
+
+  return true;
+}
 
 /**
  * Strict IPv4 validator (RFC 791).

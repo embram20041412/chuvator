@@ -6,9 +6,14 @@ import {
   revokePortalV2Session,
   buildV2SessionCookie,
   buildClearV2SessionCookie,
-  hashString
+  hashString,
+  verifyCsrf,
+  getCorsHeaders,
+  supabaseRefreshToken
 } from '../functions/api/portal/_auth_v2.js';
-import { verifyCsrf, getCorsHeaders } from '../functions/api/portal/_auth.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { onRequestPost as handleLogout } from '../functions/api/portal/v2/logout.js';
 import { onRequestGet as handleGetSession } from '../functions/api/portal/v2/session.js';
 
@@ -172,3 +177,42 @@ test('CORS Headers verification for X-Portal-CSRF', async (t) => {
   assert.match(corsHeaders['Access-Control-Allow-Headers'], /X-Portal-CSRF/, 'X-Portal-CSRF must be allowed in CORS');
   assert.equal(corsHeaders['Access-Control-Allow-Credentials'], 'true');
 });
+
+test('Integritas FASE 2A: _auth_v2.js mandiri dan bebas dari dependensi impor _auth.js', async (t) => {
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  const authV2Path = path.resolve(__dirname, '../functions/api/portal/_auth_v2.js');
+  const fileContent = fs.readFileSync(authV2Path, 'utf8');
+
+  // 1. Harus tidak mengandung impor dari _auth.js
+  const hasAuthLegacyImport = /from\s+['"][^'"]*_auth\.js['"]/i.test(fileContent);
+  assert.equal(hasAuthLegacyImport, false, '_auth_v2.js tidak boleh mengimpor dari _auth.js');
+
+  // 2. Harus mengekspor fungsi getCorsHeaders, verifyCsrf, dan hashString secara langsung
+  assert.match(fileContent, /export\s+function\s+getCorsHeaders/, 'getCorsHeaders harus didefinisikan dan diekspor');
+  assert.match(fileContent, /export\s+function\s+verifyCsrf/, 'verifyCsrf harus didefinisikan dan diekspor');
+  assert.match(fileContent, /export\s+async\s+function\s+hashString/, 'hashString harus didefinisikan dan diekspor');
+
+  // 3. Harus tidak memiliki import statement sama sekali (100% mandiri)
+  const hasAnyImport = /^\s*import\s+/m.test(fileContent);
+  assert.equal(hasAnyImport, false, '_auth_v2.js harus 100% mandiri tanpa external import');
+});
+
+test('Token Refresh helper logic in _auth_v2.js', async (t) => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    return new Response(JSON.stringify({ error_description: 'Invalid Refresh Token' }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  };
+
+  try {
+    const result = await supabaseRefreshToken('https://example.supabase.co', 'mock-anon-key', 'mock-invalid-refresh-token');
+    assert.equal(result.success, false, 'Invalid refresh token must return success: false');
+    assert.equal(result.status, 400);
+    assert.equal(result.error, 'Invalid Refresh Token');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
