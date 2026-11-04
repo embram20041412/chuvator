@@ -53,6 +53,8 @@ import {
   Lock,
   Edit3,
   Trash2,
+  Archive,
+  RotateCcw,
   ChevronDown,
   ChevronUp,
   Building2,
@@ -239,10 +241,13 @@ export default function AcademyPage({ userProfile }) {
   const [selectedClassId, setSelectedClassId] = useState('');
   const [attendanceSubTab, setAttendanceSubTab] = useState('presensi'); // 'presensi' | 'evaluasi'
 
-  // Real-Time States from Firestore
+  // Real-Time States from Database
   const [students, setStudents] = useState([]);
   const [coaches, setCoaches] = useState([]);
   const [academyClasses, setAcademyClasses] = useState([]);
+  const [archivedClasses, setArchivedClasses] = useState([]);
+  const [classSubTab, setClassSubTab] = useState('active'); // 'active' | 'archived'
+  const [loadingArchivedClasses, setLoadingArchivedClasses] = useState(false);
 
   // 1. Tentukan Active Academy terlebih dahulu
   const activeAcademy = academies.find((a) => a.id === activeAcademyId) || (academies.length > 0 ? academies[0] : null);
@@ -310,6 +315,34 @@ export default function AcademyPage({ userProfile }) {
 
     return sortClassesByAgeGroup(rawList);
   }, [activeAcademy, academyClasses, isCurrentAcademyTennis, isCoachOnly, coachProfile]);
+
+  const activeArchivedClasses = useMemo(() => {
+    if (!activeAcademy) return [];
+    let rawList = archivedClasses
+      .filter((c) => c.academyId === activeAcademy.id)
+      .map((c) => {
+        if (isCurrentAcademyTennis && (!c.sport || c.sport.toLowerCase() === 'badminton' || !c.sport.toLowerCase().includes('tenis'))) {
+          return { ...c, sport: 'Tenis' };
+        }
+        return c;
+      });
+
+    if (isCoachOnly) {
+      if (!coachProfile) return [];
+      const cId = coachProfile.id;
+      const cEmail = coachProfile.email ? coachProfile.email.toLowerCase() : '';
+      const cName = coachProfile.name ? coachProfile.name.toLowerCase() : '';
+
+      rawList = rawList.filter((c) => {
+        const coachIdMatch = cId && (c.coachId === cId || c.coach_id === cId);
+        const coachEmailMatch = cEmail && (c.coachEmail?.toLowerCase() === cEmail || c.coach_email?.toLowerCase() === cEmail);
+        const coachNameMatch = cName && c.coachName && c.coachName.toLowerCase() === cName;
+        return Boolean(coachIdMatch || coachEmailMatch || coachNameMatch);
+      });
+    }
+
+    return sortClassesByAgeGroup(rawList);
+  }, [activeAcademy, archivedClasses, isCurrentAcademyTennis, isCoachOnly, coachProfile]);
 
   const activeStudents = useMemo(() => {
     if (!isCoachOnly || !coachProfile) return rawActiveStudents;
@@ -446,17 +479,38 @@ export default function AcademyPage({ userProfile }) {
     setShowClassModal(true);
   };
 
-  const handleDeleteClass = async (classId) => {
-    if (!window.confirm('Yakin ingin menghapus kelas ini?')) return;
+  const handleArchiveClass = async (classId, className = 'kelas ini') => {
+    if (!window.confirm(`Yakin ingin mengarsipkan "${className}"?\n\nKelas akan dinonaktifkan dari jadwal dan pendaftaran aktif. Seluruh data presensi, evaluasi, dan siswa tetap aman tersimpan.`)) return;
 
     try {
-      await supabaseAcademyService.deleteClass(classId);
-      setSuccessMsg('Kelas berhasil dihapus!');
-      fetchAcademyData();
-      setTimeout(() => setSuccessMsg(null), 3000);
+      await supabaseAcademyService.archiveClass(classId);
+      setSuccessMsg(`Kelas "${className}" berhasil diarsipkan!`);
+      await fetchAcademyData();
+      if (typeof fetchArchivedClasses === 'function') {
+        await fetchArchivedClasses();
+      }
+      setTimeout(() => setSuccessMsg(null), 3500);
     } catch (err) {
-      console.error('Error deleting class:', err);
-      setErrorMsg(err.message || 'Gagal menghapus kelas. Silakan coba lagi.');
+      console.error('Error archiving class:', err);
+      setErrorMsg(err.message || 'Gagal mengarsipkan kelas. Silakan coba lagi.');
+      setTimeout(() => setErrorMsg(null), 3500);
+    }
+  };
+
+  const handleUnarchiveClass = async (classId, className = 'kelas ini') => {
+    if (!window.confirm(`Yakin ingin memulihkan "${className}"?\n\nKelas akan kembali aktif dan dapat digunakan untuk pendaftaran serta jadwal latihan.`)) return;
+
+    try {
+      await supabaseAcademyService.unarchiveClass(classId);
+      setSuccessMsg(`Kelas "${className}" berhasil dipulihkan ke kelas aktif!`);
+      await fetchAcademyData();
+      if (typeof fetchArchivedClasses === 'function') {
+        await fetchArchivedClasses();
+      }
+      setTimeout(() => setSuccessMsg(null), 3500);
+    } catch (err) {
+      console.error('Error unarchiving class:', err);
+      setErrorMsg(err.message || 'Gagal memulihkan kelas. Silakan coba lagi.');
       setTimeout(() => setErrorMsg(null), 3500);
     }
   };
@@ -543,12 +597,33 @@ export default function AcademyPage({ userProfile }) {
     }
   }, [tenantId, activeAcademyId, activeAcademy?.id]);
 
-  // Otomatis re-fetch daftar pelatih setiap kali activeAcademyId di dropdown berubah
+  const fetchArchivedClasses = useCallback(async (targetAcId) => {
+    if (!tenantId) {
+      setLoadingArchivedClasses(false);
+      return;
+    }
+    setLoadingArchivedClasses(true);
+    try {
+      const acId = targetAcId !== undefined ? targetAcId : (activeAcademy?.id || activeAcademyId || null);
+      const data = await supabaseAcademyService.getClasses(tenantId, acId, null, { onlyArchived: true });
+      setArchivedClasses(data || []);
+    } catch (err) {
+      console.error('[Supabase fetchArchivedClasses Error]:', err);
+      setArchivedClasses([]);
+    } finally {
+      setLoadingArchivedClasses(false);
+    }
+  }, [tenantId, activeAcademy?.id, activeAcademyId]);
+
+  // Otomatis re-fetch daftar pelatih & kelas arsip setiap kali activeAcademyId di dropdown berubah
   useEffect(() => {
     if (tenantId) {
       fetchCoaches(activeAcademyId);
+      if (classSubTab === 'archived') {
+        fetchArchivedClasses(activeAcademyId);
+      }
     }
-  }, [tenantId, activeAcademyId, fetchCoaches]);
+  }, [tenantId, activeAcademyId, fetchCoaches, classSubTab, fetchArchivedClasses]);
 
   // SINGLE ASYNCHRONOUS DATA FETCHER: Promise.all to Supabase
   const isFetchingRef = React.useRef(false);
@@ -596,6 +671,7 @@ export default function AcademyPage({ userProfile }) {
       }
 
       await fetchCoaches(currentTargetId);
+      await fetchArchivedClasses(currentTargetId);
     } catch (err) {
       console.error('[Supabase fetchAcademyData Error]:', err);
     } finally {
@@ -604,7 +680,13 @@ export default function AcademyPage({ userProfile }) {
       setLoadingClasses(false);
       setLoadingAcademies(false);
     }
-  }, [tenantId, activeAcademyId, fetchCoaches, isCoachOnly, coachProfile?.academy_id]);
+  }, [tenantId, activeAcademyId, fetchCoaches, fetchArchivedClasses, isCoachOnly, coachProfile?.academy_id]);
+
+  useEffect(() => {
+    if (tenantId && activeAcademyTab === 'kelas' && classSubTab === 'archived') {
+      fetchArchivedClasses();
+    }
+  }, [tenantId, activeAcademyTab, classSubTab, fetchArchivedClasses]);
 
   useEffect(() => {
     if (tenantId) {
@@ -1703,65 +1785,146 @@ export default function AcademyPage({ userProfile }) {
 
       {/* TAB 4: KELAS & KELOMPOK */}
       {activeAcademyTab === 'kelas' && (
-        <div className="bg-white rounded-xl p-3 sm:p-3.5 shadow-xs border border-slate-200/80 space-y-2.5 text-left">
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <h2 className="font-bold text-xs sm:text-sm text-slate-800 flex items-center space-x-1.5">
-              <BookOpen className="w-4 h-4 text-[#354944]" />
-              <span>Daftar Kelas ({filteredClasses.length})</span>
-            </h2>
+        <div className="bg-white dark:bg-[#14211E] rounded-xl p-3 sm:p-3.5 shadow-xs border border-slate-200/80 dark:border-white/10 space-y-3 text-left">
+          {/* HEADER & SUB-TAB CONTROLS */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-100 dark:border-white/10 pb-2.5">
+            <div className="flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-[#354944] dark:text-[#C89D32]" />
+              <h2 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-100">
+                Manajemen Kelas ({classSubTab === 'active' ? filteredClasses.length : activeArchivedClasses.length})
+              </h2>
+            </div>
 
-            {!isCoachOnly && (
-              <button
-                onClick={() => {
-                  setEditingClass(null);
-                  setShowClassModal(true);
-                }}
-                className="px-2.5 py-1 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white font-semibold text-xs rounded-lg shadow-xs transition-colors cursor-pointer flex items-center space-x-1"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ Buat Kelas</span>
-              </button>
-            )}
-          </div>
-
-          {loadingClasses ? (
-            <p className="py-8 text-center text-xs text-slate-500">Memuat daftar kelas...</p>
-          ) : filteredClasses.length === 0 ? (
-            /* EMPTY STATE UNTUK TAB KELAS */
-            <div className="py-8 border-2 border-dashed border-slate-200 rounded-xl text-center flex flex-col items-center justify-center p-4">
-              <BookOpen className="w-10 h-10 text-slate-300 mb-2" />
-              <p className="text-xs sm:text-sm font-semibold text-slate-700">Belum ada kelas/kelompok latihan.</p>
-              <p className="text-[11px] text-slate-400 max-w-sm mt-0.5 mb-3">
-                {isCoachOnly
-                  ? 'Belum ada kelas yang terdaftar atau ditugaskan kepada Anda pada akademi ini.'
-                  : 'Buat kelas latihan berdasarkan kelompok umur & alokasikan pelatih utama.'}
-              </p>
-              {!isCoachOnly ? (
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+              {/* SEGMENTED TOGGLE: KELAS AKTIF VS ARSIP KELAS */}
+              <div className="inline-flex items-center p-0.5 bg-slate-100 dark:bg-white/5 rounded-xl border border-slate-200/80 dark:border-white/10">
                 <button
+                  type="button"
+                  onClick={() => setClassSubTab('active')}
+                  className={`px-3 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                    classSubTab === 'active'
+                      ? 'bg-[#354944] text-white shadow-xs border-b-2 border-[#C89D32]'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>Kelas Aktif</span>
+                  <span className={`px-1.5 py-0.2 text-[10px] rounded-full font-bold ${
+                    classSubTab === 'active'
+                      ? 'bg-white/20 text-white'
+                      : 'bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-slate-300'
+                  }`}>
+                    {filteredClasses.length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setClassSubTab('archived');
+                    fetchArchivedClasses();
+                  }}
+                  className={`px-3 py-1 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                    classSubTab === 'archived'
+                      ? 'bg-[#354944] text-white shadow-xs border-b-2 border-[#C89D32]'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Archive className="w-3.5 h-3.5" />
+                  <span>Arsip Kelas</span>
+                  {activeArchivedClasses.length > 0 && (
+                    <span className={`px-1.5 py-0.2 text-[10px] rounded-full font-bold ${
+                      classSubTab === 'archived'
+                        ? 'bg-[#C89D32] text-slate-900 font-extrabold'
+                        : 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800'
+                    }`}>
+                      {activeArchivedClasses.length}
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {!isCoachOnly && classSubTab === 'active' && (
+                <button
+                  type="button"
                   onClick={() => {
                     setEditingClass(null);
                     setShowClassModal(true);
                   }}
-                  className="px-3 py-1.5 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs"
+                  className="px-2.5 py-1 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white font-semibold text-xs rounded-lg shadow-xs transition-colors cursor-pointer flex items-center space-x-1 shrink-0"
                 >
-                  + Buat Kelas Pertama
+                  <Plus className="w-3.5 h-3.5 text-[#C89D32]" />
+                  <span>+ Buat Kelas</span>
                 </button>
+              )}
+            </div>
+          </div>
+
+          {/* DAFTAR KELAS SESUAI SUB-TAB AKTIF */}
+          {(classSubTab === 'active' ? loadingClasses : loadingArchivedClasses) ? (
+            <p className="py-8 text-center text-xs text-slate-500">
+              Memuat {classSubTab === 'active' ? 'daftar kelas aktif' : 'daftar kelas arsip'}...
+            </p>
+          ) : (classSubTab === 'active' ? filteredClasses : activeArchivedClasses).length === 0 ? (
+            /* EMPTY STATE UNTUK TAB KELAS AKTIF / ARSIP */
+            <div className={`py-8 border-2 border-dashed rounded-xl text-center flex flex-col items-center justify-center p-4 ${
+              classSubTab === 'archived'
+                ? 'border-amber-300/60 dark:border-amber-900/40 bg-amber-50/30 dark:bg-white/2'
+                : 'border-slate-200 dark:border-slate-800'
+            }`}>
+              {classSubTab === 'active' ? (
+                <>
+                  <BookOpen className="w-10 h-10 text-slate-300 dark:text-slate-700 mb-2" />
+                  <p className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300">Belum ada kelas/kelompok latihan aktif.</p>
+                  <p className="text-[11px] text-slate-400 max-w-sm mt-0.5 mb-3">
+                    {isCoachOnly
+                      ? 'Belum ada kelas aktif yang terdaftar atau ditugaskan kepada Anda pada akademi ini.'
+                      : 'Buat kelas latihan berdasarkan kelompok umur & alokasikan pelatih utama.'}
+                  </p>
+                  {!isCoachOnly ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingClass(null);
+                        setShowClassModal(true);
+                      }}
+                      className="px-3 py-1.5 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs"
+                    >
+                      + Buat Kelas Pertama
+                    </button>
+                  ) : (
+                    <p className="text-[11px] text-slate-500 font-medium italic">
+                      Hubungi pengelola akademi untuk penugasan kelas Anda.
+                    </p>
+                  )}
+                </>
               ) : (
-                <p className="text-[11px] text-slate-500 font-medium italic">
-                  Hubungi pengelola akademi untuk penugasan kelas Anda.
-                </p>
+                <>
+                  <Archive className="w-10 h-10 text-slate-300 dark:text-slate-600 mb-2" />
+                  <p className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300">Belum ada kelas yang diarsipkan.</p>
+                  <p className="text-[11px] text-slate-400 max-w-sm mt-0.5">
+                    Kelas yang diarsipkan oleh pengelola akademi akan tersimpan di sini secara aman tanpa menghapus riwayat presensi, evaluasi, atau data atlet.
+                  </p>
+                </>
               )}
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">
-              {filteredClasses.map((cls) => {
+              {(classSubTab === 'active' ? filteredClasses : activeArchivedClasses).map((cls) => {
                 const scheduleItems = parseScheduleItems(cls);
                 const enrolledCount = filteredStudents.filter((s) => s.classId === cls.id).length;
                 const maxQuota = Number(cls.maxQuota) > 0 ? Number(cls.maxQuota) : 20;
                 const isFull = enrolledCount >= maxQuota;
 
                 return (
-                  <div key={cls.id} className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-2xs rounded-xl p-3 sm:p-3.5 hover:border-[#354944]/40 transition-all space-y-2 flex flex-col justify-between group">
+                  <div
+                    key={cls.id}
+                    className={
+                      classSubTab === 'archived'
+                        ? "bg-amber-50/15 dark:bg-slate-900 border border-dashed border-amber-300/80 dark:border-amber-800/70 shadow-2xs rounded-xl p-3 sm:p-3.5 hover:border-amber-400 transition-all space-y-2 flex flex-col justify-between group"
+                        : "bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-2xs rounded-xl p-3 sm:p-3.5 hover:border-[#354944]/40 transition-all space-y-2 flex flex-col justify-between group"
+                    }
+                  >
                     <div className="space-y-2">
                       {/* Header Kelas */}
                       <div className="flex items-center justify-between flex-wrap gap-1">
@@ -1776,27 +1939,49 @@ export default function AcademyPage({ userProfile }) {
                           )}
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded-full border border-emerald-200/80 dark:border-emerald-800/50">Aktif</span>
+                          {classSubTab === 'active' ? (
+                            <span className="text-[9px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded-full border border-emerald-200/80 dark:border-emerald-800/50">
+                              Aktif
+                            </span>
+                          ) : (
+                            <span className="text-[9px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.5 rounded-full border border-amber-200/80 dark:border-amber-800/50 flex items-center gap-1">
+                              <Archive className="w-2.5 h-2.5" /> Diarsipkan
+                            </span>
+                          )}
                           
-                          {/* Tombol Edit & Hapus Kelas */}
+                          {/* Tombol Aksi Kelas (Hanya untuk Owner & Admin) */}
                           {!isCoachOnly && (
                             <div className="flex items-center gap-0.5 ml-1 pl-1 border-l border-slate-200 dark:border-slate-700">
-                              <button
-                                type="button"
-                                onClick={() => handleEditClass(cls)}
-                                className="p-0.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/50 rounded transition-colors cursor-pointer"
-                                title="Edit Data Kelas"
-                              >
-                                <Edit3 className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteClass(cls.id)}
-                                className="p-0.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 rounded transition-colors cursor-pointer"
-                                title="Hapus Kelas"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              {classSubTab === 'active' ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEditClass(cls)}
+                                    className="p-0.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/50 rounded transition-colors cursor-pointer"
+                                    title="Edit Data Kelas"
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleArchiveClass(cls.id, cls.className)}
+                                    className="p-0.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-950/50 rounded transition-colors cursor-pointer"
+                                    title="Arsipkan Kelas"
+                                  >
+                                    <Archive className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleUnarchiveClass(cls.id, cls.className)}
+                                  className="px-2 py-0.5 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/50 bg-emerald-50/50 dark:bg-emerald-950/30 border border-emerald-300/70 dark:border-emerald-700/60 rounded text-[10px] font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                                  title="Pulihkan Kelas ke Status Aktif"
+                                >
+                                  <RotateCcw className="w-3 h-3" />
+                                  <span>Pulihkan</span>
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
@@ -1821,6 +2006,12 @@ export default function AcademyPage({ userProfile }) {
                         {((cls.minAge !== undefined && cls.minAge !== null) || (cls.maxAge !== undefined && cls.maxAge !== null)) && (
                           <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">
                             Target Usia: <strong className="text-slate-600 dark:text-slate-300">{cls.minAge || 0} - {cls.maxAge || 99} Thn</strong>
+                          </p>
+                        )}
+                        {classSubTab === 'archived' && cls.archivedAt && (
+                          <p className="text-[10px] text-amber-700/80 dark:text-amber-400/80 mt-1 font-medium flex items-center gap-1">
+                            <Clock className="w-3 h-3 shrink-0" />
+                            <span>Diarsipkan: {new Date(cls.archivedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                           </p>
                         )}
                       </div>
@@ -1871,8 +2062,8 @@ export default function AcademyPage({ userProfile }) {
                       </div>
                     </div>
 
-                    {/* Tombol Kunci Jadwal (Hanya untuk Owner & Admin) */}
-                    {!isCoachOnly && (
+                    {/* Tombol Kunci Jadwal (Hanya untuk Owner & Admin di Kelas Aktif) */}
+                    {!isCoachOnly && classSubTab === 'active' && (
                       <div className="pt-2 border-t border-slate-200/70 dark:border-slate-800">
                         <button
                           type="button"

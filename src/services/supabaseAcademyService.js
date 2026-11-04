@@ -68,6 +68,8 @@ export function mapClassFromSupabase(row) {
     tierLabel: row.tier_label || 'Umum / Lintas Usia',
     schedule: typeof row.schedule === 'string' ? row.schedule : (Array.isArray(row.schedules) ? row.schedules.join(', ') : ''),
     schedules: Array.isArray(row.schedules) ? row.schedules : (Array.isArray(row.schedule) ? row.schedule : []),
+    isArchived: Boolean(row.is_archived === true),
+    archivedAt: row.archived_at || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -317,8 +319,10 @@ export async function deleteAcademy(academyId) {
 // 2. KELAS AKADEMI (academy_classes)
 // -------------------------------------------------------------------------
 
-export async function getClasses(tenantId, academyId = null, coachId = null) {
+export async function getClasses(tenantId, academyId = null, coachId = null, options = {}) {
   if (!tenantId) return [];
+
+  const { includeArchived = false, onlyArchived = false } = (typeof options === 'object' && options !== null) ? options : {};
 
   let query = supabase
     .from('academy_classes')
@@ -334,6 +338,13 @@ export async function getClasses(tenantId, academyId = null, coachId = null) {
   const safeCoachId = toUuidOrNull(coachId) || coachId;
   if (safeCoachId) {
     query = query.eq('coach_id', safeCoachId);
+  }
+
+  if (onlyArchived) {
+    query = query.eq('is_archived', true);
+  } else if (!includeArchived) {
+    // Filter default: hanya kelas aktif (is_archived false atau NULL dari data lama)
+    query = query.or('is_archived.is.null,is_archived.eq.false');
   }
 
   const { data, error } = await query;
@@ -434,6 +445,8 @@ export async function updateClass(classId, updatePayload) {
   if (updatePayload.schedules !== undefined) {
     mapped.schedules = Array.isArray(updatePayload.schedules) ? updatePayload.schedules : [];
   }
+  // Catatan: is_archived dan archived_at sengaja tidak dipetakan di sini
+  // untuk mencegah modifikasi status arsip lewat generic update
   mapped.updated_at = new Date().toISOString();
 
   const { data, error } = await supabase
@@ -450,6 +463,58 @@ export async function updateClass(classId, updatePayload) {
   return mapClassFromSupabase(data);
 }
 
+export async function archiveClass(classId) {
+  if (!classId) throw new Error('Class ID wajib disertakan.');
+  const safeClassId = toUuidOrNull(classId) || classId;
+
+  const updatePayload = {
+    is_archived: true,
+    archived_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+
+  const { data, error } = await supabase
+    .from('academy_classes')
+    .update(updatePayload)
+    .eq('id', safeClassId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[Supabase archiveClass Error]:', error);
+    throw error;
+  }
+  return mapClassFromSupabase(data);
+}
+
+export async function unarchiveClass(classId) {
+  if (!classId) throw new Error('Class ID wajib disertakan.');
+  const safeClassId = toUuidOrNull(classId) || classId;
+
+  const updatePayload = {
+    is_archived: false,
+    archived_at: null,
+    updated_at: new Date().toISOString()
+  };
+
+  const { data, error } = await supabase
+    .from('academy_classes')
+    .update(updatePayload)
+    .eq('id', safeClassId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error('[Supabase unarchiveClass Error]:', error);
+    throw error;
+  }
+  return mapClassFromSupabase(data);
+}
+
+/**
+ * @deprecated Gunakan archiveClass(classId) untuk menghindari penghapusan berantai (CASCADE)
+ * pada data riwayat presensi (academy_attendance) dan evaluasi siswa (academy_evaluations).
+ */
 export async function deleteClass(classId) {
   if (!classId) return true;
   const { error } = await supabase
@@ -1207,6 +1272,8 @@ export async function fetchAcademyBills(tenantId) {
 export const getSupabaseClasses = getClasses;
 export const createSupabaseClass = createClass;
 export const updateSupabaseClass = updateClass;
+export const archiveSupabaseClass = archiveClass;
+export const unarchiveSupabaseClass = unarchiveClass;
 export const deleteSupabaseClass = deleteClass;
 export const getSupabaseStudents = getStudents;
 export const createSupabaseStudent = createStudent;
@@ -1235,6 +1302,10 @@ const supabaseAcademyService = {
   getClasses,
   createClass,
   updateClass,
+  archiveClass,
+  unarchiveClass,
+  archiveSupabaseClass,
+  unarchiveSupabaseClass,
   deleteClass,
   mapClassFromSupabase,
   getCoaches,
