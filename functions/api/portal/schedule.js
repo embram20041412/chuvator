@@ -1,5 +1,5 @@
 /**
- * Cloudflare Pages Function: /api/portal/schedule (STAGE 7G.2A.3)
+ * Cloudflare Pages Function: /api/portal/schedule (STAGE 7G.2A.4)
  * Edge-safe schedule and attendance endpoint for Portal Wali Murid using Firebase Firestore REST API.
  * Enforces session authentication, CSRF validation, strict tenant/student isolation, and fail-closed credentials.
  */
@@ -29,19 +29,31 @@ export async function onRequestPost(context) {
   const corsHeaders = getCorsHeaders(request, env);
 
   try {
-    // 1. Session Validation
+    // 1. Session Validation (Requires valid studentId AND tenantId)
     const sessionResult = await validatePortalSession(context);
     if (!sessionResult.valid) {
       return new Response(
         JSON.stringify({
           success: false,
-          message: 'Sesi tidak valid atau telah kedaluwarsa.'
+          message: 'Sesi tidak valid atau belum terhubung dengan tenant akademi. Silakan login kembali.'
         }),
         { status: 401, headers: corsHeaders }
       );
     }
 
     const { session } = sessionResult;
+    const sessionStudentId = session.studentId;
+    const sessionTenantId = session.tenantId;
+
+    if (!sessionStudentId || !sessionTenantId) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: 'Identitas sesi tidak lengkap: studentId atau tenantId tidak ditemukan.'
+        }),
+        { status: 401, headers: corsHeaders }
+      );
+    }
 
     // 2. Strict CSRF & Origin Validation
     if (!verifyCsrf(request, env, session.csrfToken)) {
@@ -56,7 +68,7 @@ export async function onRequestPost(context) {
 
     // 3. Request Body Student Authorization Check
     const body = await request.json().catch(() => ({}));
-    if (body.studentId && String(body.studentId).trim().toLowerCase() !== session.studentId.toLowerCase()) {
+    if (body.studentId && String(body.studentId).trim().toLowerCase() !== sessionStudentId.toLowerCase()) {
       return new Response(
         JSON.stringify({
           success: false,
@@ -65,10 +77,6 @@ export async function onRequestPost(context) {
         { status: 403, headers: corsHeaders }
       );
     }
-
-    const studentId = session.studentId;
-    let tenantId = session.tenantId;
-    let classId = body.classId || '';
 
     // 4. Validate Service Account Credentials
     const projectId = env.FIREBASE_PROJECT_ID;
@@ -116,119 +124,73 @@ export async function onRequestPost(context) {
       'Authorization': `Bearer ${accessToken}`
     };
 
-    // 5. Fetch Student document for classId, className, and tenantId
-    let studentData = null;
-    try {
-      const studentUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/students/${encodeURIComponent(String(studentId).trim())}`;
-      const studentResp = await fetch(studentUrl, { method: 'GET', headers: reqHeaders });
-      if (studentResp.ok) {
-        const studentDoc = await studentResp.json();
-        studentData = parseFirestoreFields(studentDoc.fields);
-        if (!classId && studentData.classId) {
-          classId = studentData.classId;
-        }
-        if (!tenantId && studentData.tenantId) {
-          tenantId = studentData.tenantId;
-        }
-      }
-    } catch (err) {
-      console.warn('Gagal membaca data siswa di schedule.js:', err.message);
+    // 5. Fetch and Verify Student Document Ownership & Tenant Matching
+    const studentUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/students/${encodeURIComponent(sessionStudentId)}`;
+    const studentResp = await fetch(studentUrl, { method: 'GET', headers: reqHeaders });
+
+    if (!studentResp.ok) {
+      console.warn(`Student document fetch failed with status ${studentResp.status} for ${sessionStudentId}`);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: 'Dokumen siswa tidak ditemukan atau gagal diverifikasi.'
+        }),
+        { status: 403, headers: corsHeaders }
+      );
     }
 
-    const classNameFromStudent = studentData?.className || '';
-    const coachNameFromStudent = studentData?.coachName || '';
+    const studentDoc = await studentResp.json();
+    const studentData = parseFirestoreFields(studentDoc.fields);
+    const studentTenantId = String(studentData.tenantId || studentData.tenant_id || '').trim();
 
-    // 6. Fetch Class & Schedule Data from academy_classes
+    if (!studentTenantId || studentTenantId.toLowerCase() !== sessionTenantId.toLowerCase()) {
+      console.warn(`Tenant mismatch in schedule.js: student tenant (${studentTenantId}) vs session tenant (${sessionTenantId})`);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: 'Akses ditolak. Identitas tenant siswa tidak cocok dengan sesi aktif Anda.'
+        }),
+        { status: 403, headers: corsHeaders }
+      );
+    }
+
+    // 6. Verified Class & Schedule Lookup (NO FIRST-CLASS FALLBACK!)
+    const verifiedClassId = String(studentData.classId || '').trim();
+    const classNameFromStudent = studentData.className || '';
+    const coachNameFromStudent = studentData.coachName || '';
+
     let classInfo = {
-      id: classId || '',
+      id: verifiedClassId || '',
       className: classNameFromStudent || 'Kelas Reguler',
-      sport: studentData?.sportCategory || studentData?.sport || 'Olahraga',
+      sport: studentData.sportCategory || studentData.sport || 'Olahraga',
       coachName: coachNameFromStudent || 'Instruktur Utama',
       schedules: [],
       scheduleSummary: ''
     };
 
-    if (classId) {
+    if (verifiedClassId) {
       try {
-        const classUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/academy_classes/${encodeURIComponent(String(classId).trim())}`;
+        const classUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/academy_classes/${encodeURIComponent(verifiedClassId)}`;
         const classResp = await fetch(classUrl, { method: 'GET', headers: reqHeaders });
         if (classResp.ok) {
           const classDoc = await classResp.json();
           const cFields = parseFirestoreFields(classDoc.fields);
-          classInfo = {
-            id: classId,
-            className: cFields.className || classNameFromStudent || 'Kelas Akademi',
-            sport: cFields.sport || studentData?.sportCategory || 'Olahraga',
-            coachName: cFields.coachName || coachNameFromStudent || 'Instruktur Utama',
-            schedules: Array.isArray(cFields.schedules) ? cFields.schedules : [],
-            scheduleSummary: cFields.schedule || ''
-          };
+          const classTenantId = String(cFields.tenantId || cFields.tenant_id || '').trim();
+
+          // Verify class tenant matches session tenant
+          if (!classTenantId || classTenantId.toLowerCase() === sessionTenantId.toLowerCase()) {
+            classInfo = {
+              id: verifiedClassId,
+              className: cFields.className || classNameFromStudent || 'Kelas Akademi',
+              sport: cFields.sport || studentData.sportCategory || 'Olahraga',
+              coachName: cFields.coachName || coachNameFromStudent || 'Instruktur Utama',
+              schedules: Array.isArray(cFields.schedules) ? cFields.schedules : [],
+              scheduleSummary: cFields.schedule || ''
+            };
+          }
         }
       } catch (err) {
         console.warn('Gagal mengambil data academy_classes by ID:', err.message);
-      }
-    }
-
-    if (classInfo.schedules.length === 0 && tenantId) {
-      try {
-        const classQueryPayload = {
-          structuredQuery: {
-            from: [{ collectionId: 'academy_classes' }],
-            where: {
-              fieldFilter: {
-                field: { fieldPath: 'tenantId' },
-                op: 'EQUAL',
-                value: { stringValue: String(tenantId).trim() }
-              }
-            },
-            limit: 10
-          }
-        };
-
-        const classQueryUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents:runQuery`;
-        const classQueryResp = await fetch(classQueryUrl, {
-          method: 'POST',
-          headers: reqHeaders,
-          body: JSON.stringify(classQueryPayload)
-        });
-
-        if (classQueryResp.ok) {
-          const classResults = await classQueryResp.json();
-          const docs = (Array.isArray(classResults) ? classResults : []).filter((item) => item.document);
-
-          let matchedClass = null;
-          for (const d of docs) {
-            const docId = (d.document.name || '').split('/').pop();
-            const f = parseFirestoreFields(d.document.fields);
-            if (classId && docId === classId) {
-              matchedClass = { id: docId, ...f };
-              break;
-            }
-            if (classNameFromStudent && f.className && f.className.toLowerCase() === classNameFromStudent.toLowerCase()) {
-              matchedClass = { id: docId, ...f };
-              break;
-            }
-          }
-
-          if (!matchedClass && docs.length > 0) {
-            const firstDocId = (docs[0].document.name || '').split('/').pop();
-            matchedClass = { id: firstDocId, ...parseFirestoreFields(docs[0].document.fields) };
-          }
-
-          if (matchedClass) {
-            classInfo = {
-              id: matchedClass.id,
-              className: matchedClass.className || classNameFromStudent || 'Kelas Akademi',
-              sport: matchedClass.sport || studentData?.sportCategory || 'Olahraga',
-              coachName: matchedClass.coachName || coachNameFromStudent || 'Instruktur Utama',
-              schedules: Array.isArray(matchedClass.schedules) ? matchedClass.schedules : [],
-              scheduleSummary: matchedClass.schedule || ''
-            };
-            if (!classId) classId = matchedClass.id;
-          }
-        }
-      } catch (err) {
-        console.warn('Gagal menjalankan kueri academy_classes:', err.message);
       }
     }
 
@@ -259,22 +221,22 @@ export async function onRequestPost(context) {
       }
     }
 
-    // 7. Query Attendance Records for Authenticated Student
+    // 7. Query Attendance Records for Authenticated Student & Tenant (Exact Matching Only)
     const attendances = [];
-    const cleanStudentId = String(studentId).trim().toLowerCase();
+    const cleanStudentId = sessionStudentId.toLowerCase();
 
-    // A. Query academy_attendance collection for tenant
+    // A. Query academy_attendance collection strictly filtered by tenantId
     try {
       const attQueryPayload = {
         structuredQuery: {
           from: [{ collectionId: 'academy_attendance' }],
-          where: tenantId ? {
+          where: {
             fieldFilter: {
               field: { fieldPath: 'tenantId' },
               op: 'EQUAL',
-              value: { stringValue: String(tenantId).trim() }
+              value: { stringValue: sessionTenantId }
             }
-          } : undefined,
+          },
           limit: 25
         }
       };
@@ -295,9 +257,10 @@ export async function onRequestPost(context) {
           const f = parseFirestoreFields(d.document.fields);
 
           const studentsList = Array.isArray(f.students) ? f.students : [];
+          // EXACT STUDENT ID MATCHING (NO STARTSWITH BYPASS)
           const matchedRecord = studentsList.find((s) => {
             const sid = String(s.studentId || s.id || '').trim().toLowerCase();
-            return sid === cleanStudentId || sid.startsWith(cleanStudentId);
+            return sid === cleanStudentId;
           });
 
           if (matchedRecord) {
@@ -316,7 +279,7 @@ export async function onRequestPost(context) {
       console.warn('Gagal membaca academy_attendance:', attErr.message);
     }
 
-    // B. Query attendances collection directly for studentId
+    // B. Query attendances collection directly filtered by studentId AND tenantId
     try {
       const directAttPayload = {
         structuredQuery: {
@@ -325,7 +288,7 @@ export async function onRequestPost(context) {
             fieldFilter: {
               field: { fieldPath: 'studentId' },
               op: 'EQUAL',
-              value: { stringValue: String(studentId).trim() }
+              value: { stringValue: sessionStudentId }
             }
           },
           limit: 20
@@ -345,6 +308,13 @@ export async function onRequestPost(context) {
         for (const d of docs) {
           const docId = (d.document.name || '').split('/').pop();
           const f = parseFirestoreFields(d.document.fields);
+          const docTenant = String(f.tenantId || f.tenant_id || '').trim();
+
+          // Verify tenant ownership in application code
+          if (docTenant && docTenant.toLowerCase() !== sessionTenantId.toLowerCase()) {
+            continue;
+          }
+
           if (!attendances.some((a) => a.id === docId)) {
             attendances.push({
               id: docId,

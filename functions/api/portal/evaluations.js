@@ -1,5 +1,5 @@
 /**
- * Cloudflare Pages Function: /api/portal/evaluations (STAGE 7G.2A.3)
+ * Cloudflare Pages Function: /api/portal/evaluations (STAGE 7G.2A.4)
  * Edge-safe athlete evaluations and achievements endpoint for Portal Wali Murid using Firebase Firestore REST API.
  * Enforces session authentication, CSRF validation, strict tenant/student isolation, and fail-closed credentials.
  */
@@ -29,19 +29,31 @@ export async function onRequestPost(context) {
   const corsHeaders = getCorsHeaders(request, env);
 
   try {
-    // 1. Session Validation
+    // 1. Session Validation (Requires valid studentId AND tenantId)
     const sessionResult = await validatePortalSession(context);
     if (!sessionResult.valid) {
       return new Response(
         JSON.stringify({
           success: false,
-          message: 'Sesi tidak valid atau telah kedaluwarsa.'
+          message: 'Sesi tidak valid atau belum terhubung dengan tenant akademi. Silakan login kembali.'
         }),
         { status: 401, headers: corsHeaders }
       );
     }
 
     const { session } = sessionResult;
+    const sessionStudentId = session.studentId;
+    const sessionTenantId = session.tenantId;
+
+    if (!sessionStudentId || !sessionTenantId) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: 'Identitas sesi tidak lengkap: studentId atau tenantId tidak ditemukan.'
+        }),
+        { status: 401, headers: corsHeaders }
+      );
+    }
 
     // 2. Strict CSRF & Origin Validation
     if (!verifyCsrf(request, env, session.csrfToken)) {
@@ -56,7 +68,7 @@ export async function onRequestPost(context) {
 
     // 3. Request Body Student Authorization Check
     const body = await request.json().catch(() => ({}));
-    if (body.studentId && String(body.studentId).trim().toLowerCase() !== session.studentId.toLowerCase()) {
+    if (body.studentId && String(body.studentId).trim().toLowerCase() !== sessionStudentId.toLowerCase()) {
       return new Response(
         JSON.stringify({
           success: false,
@@ -65,9 +77,6 @@ export async function onRequestPost(context) {
         { status: 403, headers: corsHeaders }
       );
     }
-
-    const studentId = session.studentId;
-    let tenantId = session.tenantId;
 
     // 4. Validate Service Account Credentials
     const projectId = env.FIREBASE_PROJECT_ID;
@@ -115,23 +124,37 @@ export async function onRequestPost(context) {
       'Authorization': `Bearer ${accessToken}`
     };
 
-    // 5. Fetch Student document for achievements & tenantId
-    let studentData = null;
-    try {
-      const studentUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/students/${encodeURIComponent(String(studentId).trim())}`;
-      const studentResp = await fetch(studentUrl, { method: 'GET', headers: reqHeaders });
-      if (studentResp.ok) {
-        const studentDoc = await studentResp.json();
-        studentData = parseFirestoreFields(studentDoc.fields);
-        if (!tenantId && studentData.tenantId) {
-          tenantId = studentData.tenantId;
-        }
-      }
-    } catch (sErr) {
-      console.warn('Failed to fetch student document in evaluations.js:', sErr.message);
+    // 5. Fetch and Verify Student Document Ownership & Tenant Matching
+    const studentUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/students/${encodeURIComponent(sessionStudentId)}`;
+    const studentResp = await fetch(studentUrl, { method: 'GET', headers: reqHeaders });
+
+    if (!studentResp.ok) {
+      console.warn(`Student document fetch failed with status ${studentResp.status} for ${sessionStudentId}`);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: 'Dokumen siswa tidak ditemukan atau gagal diverifikasi.'
+        }),
+        { status: 403, headers: corsHeaders }
+      );
     }
 
-    // 6. Extract Achievements / Tournaments from Student Document
+    const studentDoc = await studentResp.json();
+    const studentData = parseFirestoreFields(studentDoc.fields);
+    const studentTenantId = String(studentData.tenantId || studentData.tenant_id || '').trim();
+
+    if (!studentTenantId || studentTenantId.toLowerCase() !== sessionTenantId.toLowerCase()) {
+      console.warn(`Tenant mismatch in evaluations.js: student tenant (${studentTenantId}) vs session tenant (${sessionTenantId})`);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: 'Akses ditolak. Identitas tenant siswa tidak cocok dengan sesi aktif Anda.'
+        }),
+        { status: 403, headers: corsHeaders }
+      );
+    }
+
+    // 6. Extract Achievements / Tournaments from Verified Student Document
     const achievementsList = [];
     if (studentData) {
       const rawTournaments = Array.isArray(studentData.tournaments) 
@@ -150,7 +173,7 @@ export async function onRequestPost(context) {
       });
     }
 
-    // 7. Query Coach Evaluations (academy_evaluations & evaluations)
+    // 7. Query Coach Evaluations Filtered by studentId & tenantId
     const runQueryUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents:runQuery`;
     let evaluations = [];
 
@@ -163,7 +186,7 @@ export async function onRequestPost(context) {
               fieldFilter: {
                 field: { fieldPath: 'studentId' },
                 op: 'EQUAL',
-                value: { stringValue: String(studentId).trim() }
+                value: { stringValue: sessionStudentId }
               }
             },
             limit: 50
@@ -184,6 +207,13 @@ export async function onRequestPost(context) {
               if (item.document && item.document.fields) {
                 const parsed = parseFirestoreFields(item.document.fields);
                 const docId = item.document.name.split('/').pop();
+                const docTenant = String(parsed.tenantId || parsed.tenant_id || '').trim();
+
+                // Strict in-memory tenant ownership check
+                if (docTenant && docTenant.toLowerCase() !== sessionTenantId.toLowerCase()) {
+                  continue;
+                }
+
                 list.push({
                   id: docId,
                   ...parsed
@@ -273,7 +303,7 @@ export async function onRequestPost(context) {
         latestEvaluation,
         achievements: achievementsList,
         student: {
-          id: studentId,
+          id: sessionStudentId,
           studentName: studentData?.studentName || '',
           className: studentData?.className || ''
         }

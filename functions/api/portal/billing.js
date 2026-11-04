@@ -1,5 +1,5 @@
 /**
- * Cloudflare Pages Function: /api/portal/billing (STAGE 7G.2A.3)
+ * Cloudflare Pages Function: /api/portal/billing (STAGE 7G.2A.4)
  * Edge-safe billing and QRIS endpoint for Portal Wali Murid using Firebase Firestore REST API.
  * Enforces session authentication, CSRF validation, strict tenant/student isolation, and fail-closed credentials.
  */
@@ -38,7 +38,6 @@ function extractAllBankAccounts(tFields) {
     }
   }
 
-  // Fallback ke field individual jika array kosong
   if (accounts.length === 0) {
     const sBank = (tFields.bankName || tFields.bank || '').trim();
     const sNum = String(tFields.bankAccountNumber || tFields.bankAccount || tFields.noRekening || tFields.accountNumber || '').trim();
@@ -73,19 +72,31 @@ export async function onRequestPost(context) {
   const corsHeaders = getCorsHeaders(request, env);
 
   try {
-    // 1. Session Validation
+    // 1. Session Validation (Requires valid studentId AND tenantId in session record)
     const sessionResult = await validatePortalSession(context);
     if (!sessionResult.valid) {
       return new Response(
         JSON.stringify({
           success: false,
-          message: 'Sesi tidak valid atau telah kedaluwarsa.'
+          message: 'Sesi tidak valid atau belum terhubung dengan tenant akademi. Silakan login kembali.'
         }),
         { status: 401, headers: corsHeaders }
       );
     }
 
     const { session } = sessionResult;
+    const sessionStudentId = session.studentId;
+    const sessionTenantId = session.tenantId;
+
+    if (!sessionStudentId || !sessionTenantId) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: 'Identitas sesi tidak lengkap: studentId atau tenantId tidak ditemukan.'
+        }),
+        { status: 401, headers: corsHeaders }
+      );
+    }
 
     // 2. Strict CSRF & Origin Validation
     if (!verifyCsrf(request, env, session.csrfToken)) {
@@ -98,9 +109,9 @@ export async function onRequestPost(context) {
       );
     }
 
-    // 3. Request Body Student & Tenant Authorization Check
+    // 3. Authorization Check against Request Body studentId (if provided)
     const body = await request.json().catch(() => ({}));
-    if (body.studentId && String(body.studentId).trim().toLowerCase() !== session.studentId.toLowerCase()) {
+    if (body.studentId && String(body.studentId).trim().toLowerCase() !== sessionStudentId.toLowerCase()) {
       return new Response(
         JSON.stringify({
           success: false,
@@ -109,9 +120,6 @@ export async function onRequestPost(context) {
         { status: 403, headers: corsHeaders }
       );
     }
-
-    const studentId = session.studentId;
-    let tenantId = session.tenantId;
 
     // 4. Validate Service Account Credentials
     const projectId = env.FIREBASE_PROJECT_ID;
@@ -159,28 +167,41 @@ export async function onRequestPost(context) {
       'Authorization': `Bearer ${accessToken}`
     };
 
-    let studentData = null;
+    // 5. Fetch and Verify Student Document Ownership & Tenant Matching
+    const studentUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/students/${encodeURIComponent(sessionStudentId)}`;
+    const studentResp = await fetch(studentUrl, { method: 'GET', headers: reqHeaders });
 
-    // 5. Fetch student document for billing details & tenant binding
-    try {
-      const studentUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/students/${encodeURIComponent(String(studentId).trim())}`;
-      const studentResp = await fetch(studentUrl, { method: 'GET', headers: reqHeaders });
-      if (studentResp.ok) {
-        const studentDoc = await studentResp.json();
-        studentData = parseFirestoreFields(studentDoc.fields);
-        if (!tenantId && studentData.tenantId) {
-          tenantId = studentData.tenantId;
-        }
-      }
-    } catch (err) {
-      console.warn('Gagal membaca data siswa di billing.js:', err.message);
+    if (!studentResp.ok) {
+      console.warn(`Student document fetch failed with status ${studentResp.status} for ${sessionStudentId}`);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: 'Dokumen siswa tidak ditemukan atau gagal diverifikasi.'
+        }),
+        { status: 403, headers: corsHeaders }
+      );
     }
 
-    // 6. Fetch tenant details for QRIS & Bank accounts
+    const studentDoc = await studentResp.json();
+    const studentData = parseFirestoreFields(studentDoc.fields);
+    const studentTenantId = String(studentData.tenantId || studentData.tenant_id || '').trim();
+
+    if (!studentTenantId || studentTenantId.toLowerCase() !== sessionTenantId.toLowerCase()) {
+      console.warn(`Tenant mismatch: student doc tenant (${studentTenantId}) vs session tenant (${sessionTenantId})`);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: 'Akses ditolak. Identitas tenant siswa tidak cocok dengan sesi aktif Anda.'
+        }),
+        { status: 403, headers: corsHeaders }
+      );
+    }
+
+    // 6. Fetch Tenant details for QRIS & Bank accounts
     let bankAccounts = [];
     let bankDetails = { bank: '', number: '', name: '' };
     let tenantInfo = {
-      id: tenantId || '',
+      id: sessionTenantId,
       name: '',
       qrisUrl: null,
       bankName: '',
@@ -191,42 +212,40 @@ export async function onRequestPost(context) {
       bankAccounts: []
     };
 
-    if (tenantId) {
-      try {
-        const tenantUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/tenants/${encodeURIComponent(String(tenantId).trim())}`;
-        const tenantResp = await fetch(tenantUrl, { method: 'GET', headers: reqHeaders });
-        if (tenantResp.ok) {
-          const tenantDoc = await tenantResp.json();
-          const tFields = parseFirestoreFields(tenantDoc.fields);
+    try {
+      const tenantUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/tenants/${encodeURIComponent(sessionTenantId)}`;
+      const tenantResp = await fetch(tenantUrl, { method: 'GET', headers: reqHeaders });
+      if (tenantResp.ok) {
+        const tenantDoc = await tenantResp.json();
+        const tFields = parseFirestoreFields(tenantDoc.fields);
 
-          bankAccounts = extractAllBankAccounts(tFields);
-          const primaryBank = bankAccounts[0] || { bankName: '', accountNumber: '', accountName: '' };
+        bankAccounts = extractAllBankAccounts(tFields);
+        const primaryBank = bankAccounts[0] || { bankName: '', accountNumber: '', accountName: '' };
 
-          bankDetails = {
-            bank: primaryBank.bankName,
-            number: primaryBank.accountNumber,
-            name: primaryBank.accountName
-          };
+        bankDetails = {
+          bank: primaryBank.bankName,
+          number: primaryBank.accountNumber,
+          name: primaryBank.accountName
+        };
 
-          tenantInfo = {
-            id: tenantId,
-            name: tFields.name || tFields.arenaName || '',
-            qrisUrl: tFields.qrisUrl || tFields.qrisImageUrl || tFields.qrisImageBase64 || null,
-            bankName: primaryBank.bankName,
-            bankAccount: primaryBank.accountNumber,
-            bankAccountNumber: primaryBank.accountNumber,
-            accountHolder: primaryBank.accountName,
-            bankAccountName: primaryBank.accountName,
-            bankDetails,
-            bankAccounts
-          };
-        }
-      } catch (err) {
-        console.warn('Gagal mengambil data tenant di billing.js:', err.message);
+        tenantInfo = {
+          id: sessionTenantId,
+          name: tFields.name || tFields.arenaName || '',
+          qrisUrl: tFields.qrisUrl || tFields.qrisImageUrl || tFields.qrisImageBase64 || null,
+          bankName: primaryBank.bankName,
+          bankAccount: primaryBank.accountNumber,
+          bankAccountNumber: primaryBank.accountNumber,
+          accountHolder: primaryBank.accountName,
+          bankAccountName: primaryBank.accountName,
+          bankDetails,
+          bankAccounts
+        };
       }
+    } catch (err) {
+      console.warn('Gagal mengambil data tenant di billing.js:', err.message);
     }
 
-    // 7. Query SPP payments & transactions for authenticated student
+    // 7. Query SPP payments & transactions filtered strictly by studentId AND tenantId
     const details = [];
     let totalAmount = 0;
     const paymentHistory = [];
@@ -241,16 +260,30 @@ export async function onRequestPost(context) {
     const currentMonth = `${currentYear}-${String(currentMonthIdx + 1).padStart(2, '0')}`;
     const currentMonthLabel = `${monthNamesIndo[currentMonthIdx]} ${currentYear}`;
 
-    // A. Query spp_payments for authenticated studentId
+    // A. Query spp_payments filtered by studentId & tenantId
     try {
       const sppQueryPayload = {
         structuredQuery: {
           from: [{ collectionId: 'spp_payments' }],
           where: {
-            fieldFilter: {
-              field: { fieldPath: 'studentId' },
-              op: 'EQUAL',
-              value: { stringValue: String(studentId).trim() }
+            compositeFilter: {
+              op: 'AND',
+              filters: [
+                {
+                  fieldFilter: {
+                    field: { fieldPath: 'studentId' },
+                    op: 'EQUAL',
+                    value: { stringValue: sessionStudentId }
+                  }
+                },
+                {
+                  fieldFilter: {
+                    field: { fieldPath: 'tenantId' },
+                    op: 'EQUAL',
+                    value: { stringValue: sessionTenantId }
+                  }
+                }
+              ]
             }
           },
           limit: 20
@@ -258,11 +291,33 @@ export async function onRequestPost(context) {
       };
 
       const sppQueryUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents:runQuery`;
-      const sppResp = await fetch(sppQueryUrl, {
+      let sppResp = await fetch(sppQueryUrl, {
         method: 'POST',
         headers: reqHeaders,
         body: JSON.stringify(sppQueryPayload)
       });
+
+      // Fallback query by studentId if composite index is pending, then filter tenantId in memory
+      if (!sppResp.ok) {
+        const fallbackPayload = {
+          structuredQuery: {
+            from: [{ collectionId: 'spp_payments' }],
+            where: {
+              fieldFilter: {
+                field: { fieldPath: 'studentId' },
+                op: 'EQUAL',
+                value: { stringValue: sessionStudentId }
+              }
+            },
+            limit: 20
+          }
+        };
+        sppResp = await fetch(sppQueryUrl, {
+          method: 'POST',
+          headers: reqHeaders,
+          body: JSON.stringify(fallbackPayload)
+        });
+      }
 
       if (sppResp.ok) {
         const sppResults = await sppResp.json();
@@ -271,6 +326,13 @@ export async function onRequestPost(context) {
         for (const d of docs) {
           const id = (d.document.name || '').split('/').pop();
           const f = parseFirestoreFields(d.document.fields);
+          const docTenant = String(f.tenantId || f.tenant_id || '').trim();
+
+          // Verify tenant ownership in application code
+          if (docTenant && docTenant.toLowerCase() !== sessionTenantId.toLowerCase()) {
+            continue;
+          }
+
           const status = String(f.status || '').toLowerCase();
           const itemAmount = Number(f.amount || f.totalAmount || f.nominal || 0);
 
@@ -289,7 +351,15 @@ export async function onRequestPost(context) {
               totalAmount += itemAmount;
             }
           } else {
-            paymentHistory.push({ id, ...f });
+            paymentHistory.push({
+              id,
+              month: f.month || '',
+              amount: itemAmount,
+              paymentDate: f.paymentDate || f.createdAt || f.date || '',
+              paymentMethod: f.paymentMethod || f.method || 'Transfer Bank / QRIS',
+              status: f.status || 'Lunas',
+              description: f.itemName || f.description || `Pembayaran SPP ${f.month || ''}`
+            });
           }
         }
       }
@@ -297,7 +367,7 @@ export async function onRequestPost(context) {
       console.warn('Gagal membaca spp_payments:', err.message);
     }
 
-    // B. Query transactions for authenticated studentId
+    // B. Query transactions filtered by studentId & tenantId
     try {
       const txQueryPayload = {
         structuredQuery: {
@@ -306,7 +376,7 @@ export async function onRequestPost(context) {
             fieldFilter: {
               field: { fieldPath: 'studentId' },
               op: 'EQUAL',
-              value: { stringValue: String(studentId).trim() }
+              value: { stringValue: sessionStudentId }
             }
           },
           limit: 10
@@ -326,14 +396,30 @@ export async function onRequestPost(context) {
         for (const d of docs) {
           const id = (d.document.name || '').split('/').pop();
           const f = parseFirestoreFields(d.document.fields);
-          paymentHistory.push({ id, ...f });
+          const docTenant = String(f.tenantId || f.tenant_id || '').trim();
+
+          if (docTenant && docTenant.toLowerCase() !== sessionTenantId.toLowerCase()) {
+            continue;
+          }
+
+          if (!paymentHistory.some((p) => p.id === id)) {
+            paymentHistory.push({
+              id,
+              month: f.month || '',
+              amount: Number(f.totalAmount || f.amount || 0),
+              paymentDate: f.createdAt || f.date || '',
+              paymentMethod: f.paymentMethod || f.type || 'Transaksi',
+              status: f.status || 'Berhasil',
+              description: f.description || f.title || 'Transaksi Portal'
+            });
+          }
         }
       }
     } catch (err) {
       console.warn('Gagal membaca transactions:', err.message);
     }
 
-    // C. Calculate unpaid fees from student document if no pending SPP documents exist
+    // C. Calculate unpaid fees from verified student document if no pending SPP documents exist
     if (details.length === 0 && studentData) {
       const isRegPaid = Boolean(studentData.registrationFeePaid || studentData.isRegistrationFeePaid);
       const regAmount = Number(studentData.registrationFee || studentData.entryFee || 0);

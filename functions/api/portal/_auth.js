@@ -753,9 +753,21 @@ export async function validatePortalSession(context) {
     return { valid: false, reason: 'Session expired' };
   }
 
+  // Strict tenant & student identity check
+  const studentId = String(sessionRecord.studentId || '').trim();
+  const tenantId = String(sessionRecord.tenantId || '').trim();
+
+  if (!studentId || !tenantId) {
+    return { valid: false, reason: 'Incomplete session identity: missing studentId or tenantId' };
+  }
+
   return {
     valid: true,
-    session: sessionRecord
+    session: {
+      ...sessionRecord,
+      studentId,
+      tenantId
+    }
   };
 }
 
