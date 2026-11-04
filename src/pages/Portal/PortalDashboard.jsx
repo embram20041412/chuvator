@@ -40,13 +40,15 @@ import { getStudentInitials, calculateAge } from '../../utils/helpers';
  * Helper to format number into IDR currency format
  */
 const formatRupiah = (val) => {
-  const num = Number(val) || 0;
+  if (val === null || val === undefined || typeof val !== 'number' || isNaN(val) || !Number.isFinite(val)) {
+    return '-';
+  }
   return new Intl.NumberFormat('id-ID', {
     style: 'currency',
     currency: 'IDR',
     minimumFractionDigits: 0,
     maximumFractionDigits: 0
-  }).format(num);
+  }).format(val);
 };
 
 /**
@@ -271,8 +273,19 @@ export default function PortalDashboard() {
         });
 
         if (response.ok) {
-          const res = await response.json();
-          if (isMounted && res.success && res.billing) {
+          const res = await response.json().catch(() => null);
+          const isValidPayload = Boolean(
+            res &&
+            res.success === true &&
+            res.billing &&
+            typeof res.billing.totalAmount === 'number' &&
+            Number.isFinite(res.billing.totalAmount) &&
+            res.billing.totalAmount >= 0 &&
+            typeof res.billing.isPaidThisMonth === 'boolean' &&
+            Array.isArray(res.billing.details)
+          );
+
+          if (isMounted && isValidPayload) {
             setBillingData(res);
 
             const list = Array.isArray(res.bankAccounts) && res.bankAccounts.length > 0
@@ -307,11 +320,13 @@ export default function PortalDashboard() {
         }
 
         if (isMounted) {
+          setBillingData(null);
           setBillingError('Gagal memuat data penagihan dari server.');
         }
       } catch (err) {
         console.error('Billing fetch error:', err);
         if (isMounted) {
+          setBillingData(null);
           setBillingError('Gagal terhubung ke server penagihan.');
         }
       } finally {
@@ -428,7 +443,7 @@ export default function PortalDashboard() {
     };
   }, [isSessionVerified, csrfToken, verifiedStudentId, verifiedTenantId]);
 
-  // Handler Logout Backend
+  // Handler Logout Backend (STAGE 7G.2B.2A.2 STRICT LOGOUT CONFIRMATION)
   const handleLogout = async () => {
     if (isLoggingOut) return;
     setIsLoggingOut(true);
@@ -444,17 +459,17 @@ export default function PortalDashboard() {
       });
 
       if (response.ok) {
-        const res = await response.json().catch(() => ({ success: true }));
-        if (res.success !== false) {
+        const data = await response.json().catch(() => null);
+        if (data && data.success === true) {
           localStorage.removeItem('activeStudent');
           sessionStorage.clear();
           navigate('/portal', { replace: true });
           return;
         }
-        alert(res.message || 'Gagal memproses pencabutan sesi di server.');
+        alert(data?.message || 'Gagal memverifikasi konfirmasi logout dari server.');
       } else {
-        const data = await response.json().catch(() => ({}));
-        alert(data.message || 'Gagal memproses logout pada server. Silakan coba lagi.');
+        const data = await response.json().catch(() => null);
+        alert(data?.message || 'Gagal memproses logout pada server. Silakan coba lagi.');
       }
     } catch (err) {
       console.error('Logout request error:', err);
@@ -490,11 +505,20 @@ export default function PortalDashboard() {
   const coachName = student.coachName || 'Instruktur Utama';
   const age = calculateAge(student.birthDate);
 
-  // Data Keuangan HANYA Berasal dari Respons API /api/portal/billing (STAGE 7G.2B.2A.1)
-  const isBillingValid = Boolean(billingData && billingData.success && billingData.billing);
-  const totalAmount = isBillingValid ? Number(billingData.billing.totalAmount || 0) : null;
-  const billingDetails = isBillingValid ? (Array.isArray(billingData.billing.details) ? billingData.billing.details : []) : [];
-  const isPaid = isBillingValid ? Boolean(billingData.billing.isPaidThisMonth) : null;
+  // Data Keuangan HANYA Berasal dari Respons API /api/portal/billing (STAGE 7G.2B.2A.1 & 7G.2B.2A.2)
+  const isBillingValid = Boolean(
+    billingData &&
+    billingData.success === true &&
+    billingData.billing &&
+    typeof billingData.billing.totalAmount === 'number' &&
+    Number.isFinite(billingData.billing.totalAmount) &&
+    billingData.billing.totalAmount >= 0 &&
+    typeof billingData.billing.isPaidThisMonth === 'boolean' &&
+    Array.isArray(billingData.billing.details)
+  );
+  const totalAmount = isBillingValid ? billingData.billing.totalAmount : null;
+  const billingDetails = isBillingValid ? billingData.billing.details : [];
+  const isPaid = isBillingValid ? billingData.billing.isPaidThisMonth : null;
   const qrisUrl = isBillingValid ? (billingData.tenant?.qrisUrl || null) : null;
 
   // Daftar rekening bank efektif (mendukung multi-rekening)
@@ -1544,7 +1568,7 @@ export default function PortalDashboard() {
         >
           <div className="relative">
             <CreditCard className={`w-5 h-5 mb-0.5 transition-transform ${activeTab === 'billing' ? 'text-blue-400 scale-110' : 'text-slate-400'}`} />
-            {!isPaid && (
+            {isPaid === false && (
               <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-500 animate-pulse ring-2 ring-slate-900" />
             )}
           </div>
