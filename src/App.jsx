@@ -9,6 +9,7 @@ import Layout from './components/Layout';
 import ProtectedRoute from './components/ProtectedRoute';
 import PortalLayout from './layouts/PortalLayout';
 import PortalLogin from './pages/Portal/PortalLogin';
+import PortalLoginV2 from './pages/Portal/PortalLoginV2';
 
 // Lazy-loaded heavy modules for Code Splitting & Performance Optimization
 const SaasAdminPage = lazy(() => import('./pages/SaasAdminPage'));
@@ -166,6 +167,7 @@ export default function App() {
             <Route element={<PortalLayout />}>
               <Route path="/portal" element={<PortalLogin />} />
               <Route path="/portal/dashboard" element={<PortalDashboard />} />
+              <Route path="/portal-v2" element={<PortalLoginV2 />} />
             </Route>
 
             {/* Super Admin Protected Route */}
