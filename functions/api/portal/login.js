@@ -185,14 +185,21 @@ export async function onRequestPost(context) {
       const exactMatches = [];
 
       for (const item of documents) {
-        const docName = item.document.name || '';
-        const firestoreDocumentId = (docName.split('/').pop() || '').trim();
-        const fields = parseFirestoreFields(item.document.fields);
-        const doc = { ...fields, id: firestoreDocumentId };
+        const rawDocName = String(item.document?.name || '').trim();
+        if (!rawDocName) continue;
 
-        // EXACT STUDENT DOCUMENT ID MATCHING (STAGE 7G.2A.7 — FIRESTORE DOCUMENT ID)
-        if (firestoreDocumentId.toLowerCase() === cleanStudentId.toLowerCase()) {
-          exactMatches.push(doc);
+        const nameParts = rawDocName.split('/');
+        if (
+          nameParts.length >= 6 &&
+          nameParts[0] === 'projects' &&
+          nameParts[nameParts.length - 2] === 'students'
+        ) {
+          const firestoreDocumentId = (nameParts[nameParts.length - 1] || '').trim();
+          if (firestoreDocumentId && firestoreDocumentId.toLowerCase() === cleanStudentId.toLowerCase()) {
+            const fields = parseFirestoreFields(item.document.fields);
+            const doc = { ...fields, id: firestoreDocumentId };
+            exactMatches.push(doc);
+          }
         }
       }
 
@@ -213,26 +220,38 @@ export async function onRequestPost(context) {
       );
     }
 
-    // Direct fetch fallback if query returns empty (STRICT EXACT ID MATCHING)
+    // Direct fetch fallback if query returns empty (STRICT EXACT ID MATCHING & FAIL-CLOSED DOCUMENT PATH VALIDATION)
     if (!candidateDoc && cleanStudentId.length >= 3) {
       try {
         const getDocUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/students/${encodeURIComponent(cleanStudentId)}`;
         const directDocResp = await fetch(getDocUrl, { method: 'GET', headers: reqHeaders });
         if (directDocResp.ok) {
           const docData = await directDocResp.json();
-          const firestoreDocumentId = ((docData.name || '').split('/').pop() || cleanStudentId).trim();
-          const fields = parseFirestoreFields(docData.fields);
-          const doc = { ...fields, id: firestoreDocumentId };
-          const docPhoneDigits = normalizePhoneDigits(fields.parentPhone || fields.phone);
+          const rawDocName = String(docData?.name || '').trim();
 
-          // EXACT MATCH REQUIREMENT (NO STARTSWITH, STRICT FIRESTORE DOCUMENT ID)
-          if (
-            firestoreDocumentId.toLowerCase() === cleanStudentId.toLowerCase() &&
-            docPhoneDigits &&
-            inputPhoneDigits &&
-            docPhoneDigits === inputPhoneDigits
-          ) {
-            candidateDoc = doc;
+          // Fail-closed verification: docData.name must be non-empty and have valid path structure
+          // projects/{projectId}/databases/{databaseId}/documents/students/{documentId}
+          if (rawDocName) {
+            const nameParts = rawDocName.split('/');
+            if (
+              nameParts.length >= 6 &&
+              nameParts[0] === 'projects' &&
+              nameParts[nameParts.length - 2] === 'students'
+            ) {
+              const firestoreDocumentId = (nameParts[nameParts.length - 1] || '').trim();
+              if (
+                firestoreDocumentId &&
+                firestoreDocumentId.toLowerCase() === cleanStudentId.toLowerCase()
+              ) {
+                const fields = parseFirestoreFields(docData.fields);
+                const doc = { ...fields, id: firestoreDocumentId };
+                const docPhoneDigits = normalizePhoneDigits(fields.parentPhone || fields.phone);
+
+                if (docPhoneDigits && inputPhoneDigits && docPhoneDigits === inputPhoneDigits) {
+                  candidateDoc = doc;
+                }
+              }
+            }
           }
         }
       } catch (err) {

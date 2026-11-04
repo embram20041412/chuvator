@@ -291,33 +291,11 @@ export async function onRequestPost(context) {
       };
 
       const sppQueryUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents:runQuery`;
-      let sppResp = await fetch(sppQueryUrl, {
+      const sppResp = await fetch(sppQueryUrl, {
         method: 'POST',
         headers: reqHeaders,
         body: JSON.stringify(sppQueryPayload)
       });
-
-      // Fallback query by studentId if composite index is pending, then filter tenantId in memory
-      if (!sppResp.ok) {
-        const fallbackPayload = {
-          structuredQuery: {
-            from: [{ collectionId: 'spp_payments' }],
-            where: {
-              fieldFilter: {
-                field: { fieldPath: 'studentId' },
-                op: 'EQUAL',
-                value: { stringValue: sessionStudentId }
-              }
-            },
-            limit: 20
-          }
-        };
-        sppResp = await fetch(sppQueryUrl, {
-          method: 'POST',
-          headers: reqHeaders,
-          body: JSON.stringify(fallbackPayload)
-        });
-      }
 
       if (sppResp.ok) {
         const sppResults = await sppResp.json();
@@ -370,6 +348,8 @@ export async function onRequestPost(context) {
             });
           }
         }
+      } else {
+        console.warn(`Query spp_payments failed with HTTP status ${sppResp.status}`);
       }
     } catch (err) {
       console.warn('Gagal membaca spp_payments:', err.message);
@@ -406,32 +386,11 @@ export async function onRequestPost(context) {
       };
 
       const txQueryUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents:runQuery`;
-      let txResp = await fetch(txQueryUrl, {
+      const txResp = await fetch(txQueryUrl, {
         method: 'POST',
         headers: reqHeaders,
         body: JSON.stringify(txQueryPayload)
       });
-
-      if (!txResp.ok) {
-        const fallbackTxPayload = {
-          structuredQuery: {
-            from: [{ collectionId: 'transactions' }],
-            where: {
-              fieldFilter: {
-                field: { fieldPath: 'studentId' },
-                op: 'EQUAL',
-                value: { stringValue: sessionStudentId }
-              }
-            },
-            limit: 10
-          }
-        };
-        txResp = await fetch(txQueryUrl, {
-          method: 'POST',
-          headers: reqHeaders,
-          body: JSON.stringify(fallbackTxPayload)
-        });
-      }
 
       if (txResp.ok) {
         const txResults = await txResp.json();
@@ -465,6 +424,8 @@ export async function onRequestPost(context) {
             });
           }
         }
+      } else {
+        console.warn(`Query transactions failed with HTTP status ${txResp.status}`);
       }
     } catch (err) {
       console.warn('Gagal membaca transactions:', err.message);
