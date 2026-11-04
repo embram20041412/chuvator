@@ -186,12 +186,12 @@ export async function onRequestPost(context) {
 
       for (const item of documents) {
         const docName = item.document.name || '';
-        const docId = (docName.split('/').pop() || '').trim();
+        const firestoreDocumentId = (docName.split('/').pop() || '').trim();
         const fields = parseFirestoreFields(item.document.fields);
-        const doc = { id: docId, ...fields };
+        const doc = { ...fields, id: firestoreDocumentId };
 
-        // EXACT STUDENT DOCUMENT ID MATCHING (STAGE 7G.2A.6 — NO STARTSWITH BYPASS)
-        if (doc.id.toLowerCase() === cleanStudentId.toLowerCase()) {
+        // EXACT STUDENT DOCUMENT ID MATCHING (STAGE 7G.2A.7 — FIRESTORE DOCUMENT ID)
+        if (firestoreDocumentId.toLowerCase() === cleanStudentId.toLowerCase()) {
           exactMatches.push(doc);
         }
       }
@@ -220,14 +220,14 @@ export async function onRequestPost(context) {
         const directDocResp = await fetch(getDocUrl, { method: 'GET', headers: reqHeaders });
         if (directDocResp.ok) {
           const docData = await directDocResp.json();
-          const docId = ((docData.name || '').split('/').pop() || cleanStudentId).trim();
+          const firestoreDocumentId = ((docData.name || '').split('/').pop() || cleanStudentId).trim();
           const fields = parseFirestoreFields(docData.fields);
-          const doc = { id: docId, ...fields };
+          const doc = { ...fields, id: firestoreDocumentId };
           const docPhoneDigits = normalizePhoneDigits(fields.parentPhone || fields.phone);
 
-          // EXACT MATCH REQUIREMENT (NO STARTSWITH)
+          // EXACT MATCH REQUIREMENT (NO STARTSWITH, STRICT FIRESTORE DOCUMENT ID)
           if (
-            doc.id.toLowerCase() === cleanStudentId.toLowerCase() &&
+            firestoreDocumentId.toLowerCase() === cleanStudentId.toLowerCase() &&
             docPhoneDigits &&
             inputPhoneDigits &&
             docPhoneDigits === inputPhoneDigits

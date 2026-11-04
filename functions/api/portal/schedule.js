@@ -320,33 +320,11 @@ export async function onRequestPost(context) {
       };
 
       const directAttUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents:runQuery`;
-      let directResp = await fetch(directAttUrl, {
+      const directResp = await fetch(directAttUrl, {
         method: 'POST',
         headers: reqHeaders,
         body: JSON.stringify(directAttPayload)
       });
-
-      // Fallback query by studentId if composite index is pending, then verify tenantId fail-closed
-      if (!directResp.ok) {
-        const fallbackPayload = {
-          structuredQuery: {
-            from: [{ collectionId: 'attendances' }],
-            where: {
-              fieldFilter: {
-                field: { fieldPath: 'studentId' },
-                op: 'EQUAL',
-                value: { stringValue: sessionStudentId }
-              }
-            },
-            limit: 20
-          }
-        };
-        directResp = await fetch(directAttUrl, {
-          method: 'POST',
-          headers: reqHeaders,
-          body: JSON.stringify(fallbackPayload)
-        });
-      }
 
       if (directResp.ok) {
         const directResults = await directResp.json();
@@ -379,9 +357,11 @@ export async function onRequestPost(context) {
             });
           }
         }
+      } else {
+        console.warn(`Query attendances directResp failed with status ${directResp.status}`);
       }
-    } catch (directErr) {
-      console.warn('Gagal membaca koleksi attendances:', directErr.message);
+    } catch (directAttErr) {
+      console.warn('Gagal membaca attendances collection:', directAttErr.message);
     }
 
     attendances.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
