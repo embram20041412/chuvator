@@ -18,7 +18,8 @@ import {
   User,
   Loader2,
   ChevronRight,
-  UserCheck
+  UserCheck,
+  Lock
 } from 'lucide-react';
 import {
   LineChart,
@@ -54,7 +55,15 @@ export function getBMIStatus(bmi) {
   return { status: 'Overweight', label: 'Kelebihan Massa (Overweight)', color: 'bg-rose-100 text-rose-800 border-rose-300' };
 }
 
-export default function GrowthTrackerSection({ selectedStudent, students = [], onStudentUpdated }) {
+export default function GrowthTrackerSection({
+  selectedStudent,
+  students = [],
+  onStudentUpdated,
+  selectedClass,
+  isArchived = false
+}) {
+  const effectiveIsArchived = isArchived || selectedClass?.isArchived === true;
+
   // If students array is passed and selectedStudent is not provided, allow choosing a student locally
   const [selectedStudentId, setSelectedStudentId] = useState(selectedStudent?.id || '');
   const [localStudentData, setLocalStudentData] = useState(null);
@@ -153,6 +162,11 @@ export default function GrowthTrackerSection({ selectedStudent, students = [], o
   // Save new growth record to Supabase
   const handleSaveGrowthRecord = async (e) => {
     e.preventDefault();
+
+    if (effectiveIsArchived) {
+      setErrorMsg('Tidak dapat menyimpan rekam pertumbuhan: Kelas ini telah diarsipkan (mode baca-saja).');
+      return;
+    }
 
     // Hindari penambahan histori ganda akibat satu kali klik Simpan
     if (isSaving) return;
@@ -281,6 +295,14 @@ export default function GrowthTrackerSection({ selectedStudent, students = [], o
           </div>
         </div>
 
+        {/* ARCHIVED BANNER */}
+        {effectiveIsArchived && (
+          <div className="p-3 bg-amber-50 border border-amber-200/90 text-amber-900 rounded-xl text-xs font-bold flex items-center gap-2 shadow-2xs">
+            <Lock className="w-4 h-4 text-amber-700 shrink-0" />
+            <span>Kelas ini telah diarsipkan. Mode baca-saja aktif untuk peninjauan riwayat pertumbuhan atlet.</span>
+          </div>
+        )}
+
         {/* FEEDBACK ALERTS */}
         {successMsg && (
           <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl font-bold flex items-center gap-1.5 shadow-2xs animate-fadeIn">
@@ -360,8 +382,9 @@ export default function GrowthTrackerSection({ selectedStudent, students = [], o
                       name="recordDate"
                       type="date"
                       value={recordDate}
+                      disabled={effectiveIsArchived}
                       onChange={(e) => setRecordDate(e.target.value)}
-                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-sky-500 font-bold text-slate-800 cursor-pointer shadow-2xs"
+                      className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-sky-500 font-bold text-slate-800 cursor-pointer shadow-2xs disabled:opacity-60 disabled:cursor-not-allowed"
                     />
                   </div>
 
@@ -380,9 +403,10 @@ export default function GrowthTrackerSection({ selectedStudent, students = [], o
                         step="0.5"
                         placeholder="e.g. 172"
                         value={newHeight}
+                        disabled={effectiveIsArchived}
                         onChange={(e) => setNewHeight(e.target.value)}
-                        required
-                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-sky-500 font-bold text-slate-800 shadow-2xs"
+                        required={!effectiveIsArchived}
+                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-sky-500 font-bold text-slate-800 shadow-2xs disabled:opacity-60 disabled:cursor-not-allowed"
                       />
                     </div>
 
@@ -400,9 +424,10 @@ export default function GrowthTrackerSection({ selectedStudent, students = [], o
                         step="0.5"
                         placeholder="e.g. 62"
                         value={newWeight}
+                        disabled={effectiveIsArchived}
                         onChange={(e) => setNewWeight(e.target.value)}
-                        required
-                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-sky-500 font-bold text-slate-800 shadow-2xs"
+                        required={!effectiveIsArchived}
+                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-sky-500 font-bold text-slate-800 shadow-2xs disabled:opacity-60 disabled:cursor-not-allowed"
                       />
                     </div>
                   </div>
@@ -423,13 +448,18 @@ export default function GrowthTrackerSection({ selectedStudent, students = [], o
 
                   <button
                     type="submit"
-                    disabled={isSaving}
-                    className="w-full py-1.5 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white font-bold text-xs rounded-lg shadow-2xs transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    disabled={isSaving || effectiveIsArchived}
+                    className="w-full py-1.5 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white font-bold text-xs rounded-lg shadow-2xs transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
                   >
                     {isSaving ? (
                       <>
                         <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
                         <span>Mencatat Growth...</span>
+                      </>
+                    ) : effectiveIsArchived ? (
+                      <>
+                        <Lock className="w-3.5 h-3.5 text-[#C89D32]" />
+                        <span>Antropometri Terkunci (Mode Baca-Saja)</span>
                       </>
                     ) : (
                       <>
