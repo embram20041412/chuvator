@@ -67,7 +67,8 @@ export default function TennisAssessmentView({
   filterStudentId,
   setFilterStudentId,
   onDeleteEvaluation,
-  onEvaluationSaved
+  onEvaluationSaved,
+  isArchived = false
 }) {
   // 1. STATE SELEKSI SISWA & TANGGAL
   const [selectedStudentId, setSelectedStudentId] = useState('');
@@ -455,6 +456,10 @@ export default function TennisAssessmentView({
   // 9. SIMPAN EVALUASI KE FIRESTORE
   const handleSaveAssessment = async (e) => {
     if (e) e.preventDefault();
+    if (isArchived || selectedClass?.isArchived === true) {
+      setErrorMsg('Tidak dapat menyimpan evaluasi: Kelas ini telah diarsipkan (mode baca-saja).');
+      return;
+    }
     if (!selectedStudent?.id || !tenantId) return;
 
     setIsSaving(true);
@@ -1612,11 +1617,17 @@ export default function TennisAssessmentView({
 
           <button
             type="submit"
-            disabled={isSaving || !selectedStudent?.id}
-            className="w-full sm:w-auto px-5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+            disabled={isSaving || !selectedStudent?.id || isArchived}
+            className={`w-full sm:w-auto px-5 py-2 font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2 ${
+              isArchived
+                ? 'bg-slate-300 text-slate-500 cursor-not-allowed opacity-80'
+                : 'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white'
+            }`}
           >
             {isSaving ? (
               <span>Menyimpan Evaluasi...</span>
+            ) : isArchived ? (
+              <span>Evaluasi Terkunci (Mode Baca-Saja)</span>
             ) : (
               <>
                 <CheckCircle2 className="w-4 h-4 text-white" />

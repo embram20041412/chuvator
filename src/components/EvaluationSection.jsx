@@ -43,7 +43,8 @@ import {
   Flame,
   Edit3,
   Check,
-  X
+  X,
+  Archive
 } from 'lucide-react';
 
 import {
@@ -231,6 +232,8 @@ function formatDateIndonesian(dateStr) {
 // MAIN COMPONENT EXPORT
 // =====================================================================
 export default function EvaluationSection({ selectedClass, students = [], tenantId, activeAcademy }) {
+  const isArchived = Boolean(selectedClass?.isArchived === true);
+
   // Filter students in current active class
   const classStudents = useMemo(() => {
     return students.filter((s) => s.classId === selectedClass?.id);
@@ -272,6 +275,10 @@ export default function EvaluationSection({ selectedClass, students = [], tenant
   };
 
   const handleDeleteEvaluation = async (id, studentName) => {
+    if (isArchived) {
+      alert('Tidak dapat menghapus evaluasi: Kelas ini telah diarsipkan (mode baca-saja).');
+      return;
+    }
     if (!window.confirm(`Hapus data rapor evaluasi untuk ${studentName}?`)) return;
     try {
       await supabaseAcademyService.deleteEvaluation(id);
@@ -305,87 +312,86 @@ export default function EvaluationSection({ selectedClass, students = [], tenant
     return selectedClass;
   }, [selectedClass, isTennis]);
 
-  if (isTennis) {
-    return (
-      <TennisAssessmentView
-        selectedClass={effectiveSelectedClass}
-        students={classStudents}
-        tenantId={tenantId}
-        activeAcademy={activeAcademy}
-        history={history}
-        loadingHistory={loadingHistory}
-        filterStudentId={filterStudentId}
-        setFilterStudentId={setFilterStudentId}
-        onDeleteEvaluation={handleDeleteEvaluation}
-        onEvaluationSaved={handleEvaluationSaved}
-      />
-    );
-  }
-
-  if (isBadminton) {
-    return (
-      <BadmintonAssessmentView
-        selectedClass={selectedClass}
-        students={classStudents}
-        tenantId={tenantId}
-        activeAcademy={activeAcademy}
-        history={history}
-        loadingHistory={loadingHistory}
-        filterStudentId={filterStudentId}
-        setFilterStudentId={setFilterStudentId}
-        onDeleteEvaluation={handleDeleteEvaluation}
-        onEvaluationSaved={handleEvaluationSaved}
-      />
-    );
-  }
-
-  if (isFutsal) {
-    return (
-      <FutsalAssessmentView
-        selectedClass={selectedClass}
-        students={classStudents}
-        tenantId={tenantId}
-        activeAcademy={activeAcademy}
-        history={history}
-        loadingHistory={loadingHistory}
-        filterStudentId={filterStudentId}
-        setFilterStudentId={setFilterStudentId}
-        onDeleteEvaluation={handleDeleteEvaluation}
-        onEvaluationSaved={handleEvaluationSaved}
-      />
-    );
-  }
-
-  if (isFootball) {
-    return (
-      <FootballAssessmentView
-        selectedClass={selectedClass}
-        students={classStudents}
-        tenantId={tenantId}
-        activeAcademy={activeAcademy}
-        history={history}
-        loadingHistory={loadingHistory}
-        filterStudentId={filterStudentId}
-        setFilterStudentId={setFilterStudentId}
-        onDeleteEvaluation={handleDeleteEvaluation}
-        onEvaluationSaved={handleEvaluationSaved}
-      />
-    );
-  }
-
   return (
-    <Standard4PillarView
-      selectedClass={selectedClass}
-      classStudents={classStudents}
-      tenantId={tenantId}
-      activeAcademy={activeAcademy}
-      history={history}
-      loadingHistory={loadingHistory}
-      filterStudentId={filterStudentId}
-      setFilterStudentId={setFilterStudentId}
-      onDeleteEvaluation={handleDeleteEvaluation}
-      onEvaluationSaved={handleEvaluationSaved}
-    />
+    <>
+      {isArchived && (
+        <div className="mb-3.5 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs rounded-xl font-medium flex items-center gap-2.5 shadow-2xs">
+          <Archive className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0" />
+          <span>Kelas ini telah diarsipkan. Mode baca-saja aktif untuk peninjauan riwayat evaluasi.</span>
+        </div>
+      )}
+      {isTennis ? (
+        <TennisAssessmentView
+          selectedClass={effectiveSelectedClass}
+          students={classStudents}
+          tenantId={tenantId}
+          activeAcademy={activeAcademy}
+          history={history}
+          loadingHistory={loadingHistory}
+          filterStudentId={filterStudentId}
+          setFilterStudentId={setFilterStudentId}
+          onDeleteEvaluation={handleDeleteEvaluation}
+          onEvaluationSaved={handleEvaluationSaved}
+          isArchived={isArchived}
+        />
+      ) : isBadminton ? (
+        <BadmintonAssessmentView
+          selectedClass={selectedClass}
+          students={classStudents}
+          tenantId={tenantId}
+          activeAcademy={activeAcademy}
+          history={history}
+          loadingHistory={loadingHistory}
+          filterStudentId={filterStudentId}
+          setFilterStudentId={setFilterStudentId}
+          onDeleteEvaluation={handleDeleteEvaluation}
+          onEvaluationSaved={handleEvaluationSaved}
+          isArchived={isArchived}
+        />
+      ) : isFutsal ? (
+        <FutsalAssessmentView
+          selectedClass={selectedClass}
+          students={classStudents}
+          tenantId={tenantId}
+          activeAcademy={activeAcademy}
+          history={history}
+          loadingHistory={loadingHistory}
+          filterStudentId={filterStudentId}
+          setFilterStudentId={setFilterStudentId}
+          onDeleteEvaluation={handleDeleteEvaluation}
+          onEvaluationSaved={handleEvaluationSaved}
+          isArchived={isArchived}
+        />
+      ) : isFootball ? (
+        <FootballAssessmentView
+          selectedClass={selectedClass}
+          students={classStudents}
+          tenantId={tenantId}
+          activeAcademy={activeAcademy}
+          history={history}
+          loadingHistory={loadingHistory}
+          filterStudentId={filterStudentId}
+          setFilterStudentId={setFilterStudentId}
+          onDeleteEvaluation={handleDeleteEvaluation}
+          onEvaluationSaved={handleEvaluationSaved}
+          isArchived={isArchived}
+        />
+      ) : (
+        <Standard4PillarView
+          selectedClass={selectedClass}
+          classStudents={classStudents}
+          tenantId={tenantId}
+          activeAcademy={activeAcademy}
+          history={history}
+          loadingHistory={loadingHistory}
+          filterStudentId={filterStudentId}
+          setFilterStudentId={setFilterStudentId}
+          onDeleteEvaluation={handleDeleteEvaluation}
+          onEvaluationSaved={handleEvaluationSaved}
+          isArchived={isArchived}
+        />
+      )}
+    </>
   );
 }
 
@@ -402,7 +408,8 @@ function FutsalAssessmentView({
   filterStudentId,
   setFilterStudentId,
   onDeleteEvaluation,
-  onEvaluationSaved
+  onEvaluationSaved,
+  isArchived = false
 }) {
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [evaluationDate, setEvaluationDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -718,6 +725,10 @@ function FutsalAssessmentView({
 
   const handleSaveEvaluation = async (e) => {
     e.preventDefault();
+    if (isArchived || selectedClass?.isArchived === true) {
+      setErrorMsg('Tidak dapat menyimpan evaluasi: Kelas ini telah diarsipkan (mode baca-saja).');
+      return;
+    }
     if (!selectedClass?.id || !tenantId) return;
     if (!selectedStudent?.id) {
       setErrorMsg('Pilih siswa atlet dari daftar untuk dievaluasi.');
@@ -1171,17 +1182,19 @@ function FutsalAssessmentView({
                         Rata-Rata: <strong className="text-slate-900 font-black">{axisScores.overall} / 100</strong>
                       </span>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveModalCategoryKey(futsalCategoryList[0]?.key);
-                          setIsModalOpen(true);
-                        }}
-                        className="flex-1 sm:flex-none px-3 py-2 bg-[#354944] hover:bg-[#2B3D38] text-white border-b-2 border-[#C89D32] rounded-xl font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all shrink-0"
-                      >
-                        <Edit3 className="w-3.5 h-3.5 text-[#C89D32]" />
-                        <span>✎ Edit Penilaian</span>
-                      </button>
+                      {!isArchived && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveModalCategoryKey(futsalCategoryList[0]?.key);
+                            setIsModalOpen(true);
+                          }}
+                          className="flex-1 sm:flex-none px-3 py-2 bg-[#354944] hover:bg-[#2B3D38] text-white border-b-2 border-[#C89D32] rounded-xl font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all shrink-0"
+                        >
+                          <Edit3 className="w-3.5 h-3.5 text-[#C89D32]" />
+                          <span>✎ Edit Penilaian</span>
+                        </button>
+                      )}
 
                       <button
                         type="button"
@@ -1206,10 +1219,14 @@ function FutsalAssessmentView({
                         <div
                           key={cat.key}
                           onClick={() => {
-                            setActiveModalCategoryKey(cat.key);
-                            setIsModalOpen(true);
+                            if (!isArchived) {
+                              setActiveModalCategoryKey(cat.key);
+                              setIsModalOpen(true);
+                            }
                           }}
-                          className="bg-slate-50 p-3 rounded-2xl border border-slate-200/90 hover:border-[#354944] hover:shadow-xs transition-all cursor-pointer group flex flex-col justify-between space-y-2"
+                          className={`bg-slate-50 p-3 rounded-2xl border border-slate-200/90 transition-all flex flex-col justify-between space-y-2 ${
+                            isArchived ? 'cursor-default' : 'hover:border-[#354944] hover:shadow-xs cursor-pointer'
+                          }`}
                         >
                           <div className="space-y-1 min-w-0">
                             <span className="font-bold text-xs text-slate-900 block leading-tight line-clamp-1" title={cat.label}>
@@ -1463,14 +1480,16 @@ function FutsalAssessmentView({
                       <MessageSquare className="w-4 h-4 text-[#354944]" />
                       <span>Catatan Evaluasi Pelatih ({futsalTierConfig.shortLabel})</span>
                     </label>
-                    <button
-                      type="button"
-                      onClick={handleGenerateDraft}
-                      className="px-3.5 py-1.5 bg-[#354944]/10 hover:bg-[#354944]/20 text-[#354944] border border-[#354944]/20 text-xs font-extrabold rounded-xl flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer self-start sm:self-auto"
-                    >
-                      <Sparkles className="w-3.5 h-3.5 text-[#C89D32]" />
-                      <span>Buat Draf Analisis Otomatis</span>
-                    </button>
+                    {!isArchived && (
+                      <button
+                        type="button"
+                        onClick={handleGenerateDraft}
+                        className="px-3.5 py-1.5 bg-[#354944]/10 hover:bg-[#354944]/20 text-[#354944] border border-[#354944]/20 text-xs font-extrabold rounded-xl flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer self-start sm:self-auto"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-[#C89D32]" />
+                        <span>Buat Draf Analisis Otomatis</span>
+                      </button>
+                    )}
                   </div>
 
                   <textarea
@@ -1490,14 +1509,20 @@ function FutsalAssessmentView({
                     </p>
                     <button
                       type="submit"
-                      disabled={isSaving}
-                      className="w-full sm:w-auto px-5 py-2 bg-[#354944] hover:bg-[#2B3D38] text-white font-bold text-xs rounded-xl border-b-2 border-[#C89D32] shadow-xs transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+                      disabled={isSaving || isArchived}
+                      className={`w-full sm:w-auto px-5 py-2 font-bold text-xs rounded-xl border-b-2 shadow-xs transition-all flex items-center justify-center gap-1.5 ${
+                        isArchived 
+                          ? 'bg-slate-300 text-slate-500 border-slate-400 cursor-not-allowed opacity-80'
+                          : 'bg-[#354944] hover:bg-[#2B3D38] text-white border-[#C89D32] cursor-pointer disabled:opacity-50'
+                      }`}
                     >
                       {isSaving ? (
                         <>
                           <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
                           <span>Menyimpan Assessment Futsal...</span>
                         </>
+                      ) : isArchived ? (
+                        <span>Evaluasi Terkunci (Mode Baca-Saja)</span>
                       ) : (
                         <>
                           <Award className="w-3.5 h-3.5 text-[#C89D32]" />
@@ -1535,6 +1560,7 @@ function FutsalAssessmentView({
         setFilterStudentId={setFilterStudentId}
         students={students}
         onDeleteEvaluation={onDeleteEvaluation}
+        isArchived={isArchived}
       />
     </div>
   );
@@ -1552,7 +1578,9 @@ function BadmintonAssessmentView({
   loadingHistory,
   filterStudentId,
   setFilterStudentId,
-  onDeleteEvaluation
+  onDeleteEvaluation,
+  onEvaluationSaved,
+  isArchived = false
 }) {
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [evaluationDate, setEvaluationDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -1954,7 +1982,11 @@ function BadmintonAssessmentView({
   };
 
   const handleSaveEvaluation = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
+    if (isArchived || selectedClass?.isArchived === true) {
+      setErrorMsg('Tidak dapat menyimpan evaluasi: Kelas ini telah diarsipkan (mode baca-saja).');
+      return;
+    }
     if (!selectedStudent) {
       setErrorMsg('Silakan pilih atlet terlebih dahulu.');
       return;
@@ -2487,17 +2519,19 @@ function BadmintonAssessmentView({
                         Rata-Rata: <strong className="text-slate-900 font-black">{axisScores.overall} / 100</strong>
                       </span>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveModalCategoryKey(badmintonCategoryList[0]?.key);
-                          setIsModalOpen(true);
-                        }}
-                        className="flex-1 sm:flex-none px-3 py-2 bg-[#354944] hover:bg-[#2B3D38] text-white border-b-2 border-[#C89D32] rounded-xl font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all shrink-0"
-                      >
-                        <Edit3 className="w-3.5 h-3.5 text-[#C89D32]" />
-                        <span>✎ Edit Penilaian</span>
-                      </button>
+                      {!isArchived && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveModalCategoryKey(badmintonCategoryList[0]?.key);
+                            setIsModalOpen(true);
+                          }}
+                          className="flex-1 sm:flex-none px-3 py-2 bg-[#354944] hover:bg-[#2B3D38] text-white border-b-2 border-[#C89D32] rounded-xl font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all shrink-0"
+                        >
+                          <Edit3 className="w-3.5 h-3.5 text-[#C89D32]" />
+                          <span>✎ Edit Penilaian</span>
+                        </button>
+                      )}
 
                       <button
                         type="button"
@@ -2522,10 +2556,14 @@ function BadmintonAssessmentView({
                         <div
                           key={cat.key}
                           onClick={() => {
-                            setActiveModalCategoryKey(cat.key);
-                            setIsModalOpen(true);
+                            if (!isArchived) {
+                              setActiveModalCategoryKey(cat.key);
+                              setIsModalOpen(true);
+                            }
                           }}
-                          className="bg-slate-50 p-3 rounded-2xl border border-slate-200/90 hover:border-[#354944] hover:shadow-xs transition-all cursor-pointer group flex flex-col justify-between space-y-2"
+                          className={`bg-slate-50 p-3 rounded-2xl border border-slate-200/90 transition-all flex flex-col justify-between space-y-2 ${
+                            isArchived ? 'cursor-default' : 'hover:border-[#354944] hover:shadow-xs cursor-pointer'
+                          }`}
                         >
                           <div className="space-y-1 min-w-0">
                             <span className="font-bold text-xs text-slate-900 block leading-tight line-clamp-1" title={cat.label}>
@@ -2888,14 +2926,20 @@ function BadmintonAssessmentView({
             <button
               type="button"
               onClick={handleSaveEvaluation}
-              disabled={isSaving}
-              className="w-full sm:w-auto px-5 py-2 bg-[#354944] hover:bg-[#2B3D38] active:bg-[#1E2E2A] text-white border-b-2 border-[#C89D32] font-bold text-xs rounded-xl transition-all shadow-xs disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5"
+              disabled={isSaving || isArchived}
+              className={`w-full sm:w-auto px-5 py-2 border-b-2 font-bold text-xs rounded-xl transition-all shadow-xs flex items-center justify-center gap-1.5 ${
+                isArchived
+                  ? 'bg-slate-300 text-slate-500 border-slate-400 cursor-not-allowed opacity-80'
+                  : 'bg-[#354944] hover:bg-[#2B3D38] active:bg-[#1E2E2A] text-white border-[#C89D32] cursor-pointer disabled:opacity-50'
+              }`}
             >
               {isSaving ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-[#C89D32]" />
                   <span>Menyimpan Rapor Badminton...</span>
                 </>
+              ) : isArchived ? (
+                <span>Evaluasi Terkunci (Mode Baca-Saja)</span>
               ) : (
                 <>
                   <Award className="w-4 h-4 text-[#C89D32]" />
@@ -2928,6 +2972,7 @@ function BadmintonAssessmentView({
         setFilterStudentId={setFilterStudentId}
         students={students}
         onDeleteEvaluation={onDeleteEvaluation}
+        isArchived={isArchived}
       />
     </div>
   );
@@ -2946,7 +2991,8 @@ function FootballAssessmentView({
   filterStudentId,
   setFilterStudentId,
   onDeleteEvaluation,
-  onEvaluationSaved
+  onEvaluationSaved,
+  isArchived = false
 }) {
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [evaluationDate, setEvaluationDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -3335,6 +3381,10 @@ function FootballAssessmentView({
   // Save evaluation to Firestore
   const handleSaveEvaluation = async (e) => {
     e.preventDefault();
+    if (isArchived || selectedClass?.isArchived === true) {
+      setErrorMsg('Tidak dapat menyimpan evaluasi: Kelas ini telah diarsipkan (mode baca-saja).');
+      return;
+    }
     if (!selectedClass?.id || !tenantId) return;
     if (!selectedStudent?.id) {
       setErrorMsg('Pilih siswa atlet dari daftar untuk dievaluasi.');
@@ -3860,17 +3910,19 @@ function FootballAssessmentView({
                   Rata-Rata: <strong className="text-slate-900 font-black">{axisScores.overall} / 100</strong>
                 </span>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveModalCategoryKey(footballCategoryList[0]?.key);
-                    setIsModalOpen(true);
-                  }}
-                  className="flex-1 sm:flex-none px-3 py-2 bg-[#354944] hover:bg-[#2B3D38] text-white border-b-2 border-[#C89D32] rounded-xl font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all shrink-0"
-                >
-                  <Edit3 className="w-3.5 h-3.5 text-[#C89D32]" />
-                  <span>✎ Edit Penilaian</span>
-                </button>
+                {!isArchived && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveModalCategoryKey(footballCategoryList[0]?.key);
+                      setIsModalOpen(true);
+                    }}
+                    className="flex-1 sm:flex-none px-3 py-2 bg-[#354944] hover:bg-[#2B3D38] text-white border-b-2 border-[#C89D32] rounded-xl font-bold text-xs shadow-sm flex items-center justify-center gap-1.5 cursor-pointer transition-all shrink-0"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-[#C89D32]" />
+                    <span>✎ Edit Penilaian</span>
+                  </button>
+                )}
 
                 <button
                   type="button"
@@ -3895,10 +3947,14 @@ function FootballAssessmentView({
                   <div
                     key={cat.key}
                     onClick={() => {
-                      setActiveModalCategoryKey(cat.key);
-                      setIsModalOpen(true);
+                      if (!isArchived) {
+                        setActiveModalCategoryKey(cat.key);
+                        setIsModalOpen(true);
+                      }
                     }}
-                    className="bg-slate-50 p-3 rounded-2xl border border-slate-200/90 hover:border-[#354944] hover:shadow-xs transition-all cursor-pointer group flex flex-col justify-between space-y-2"
+                    className={`bg-slate-50 p-3 rounded-2xl border border-slate-200/90 transition-all flex flex-col justify-between space-y-2 ${
+                      isArchived ? 'cursor-default' : 'hover:border-[#354944] hover:shadow-xs cursor-pointer'
+                    }`}
                   >
                     <div className="space-y-1 min-w-0">
                       <span className="font-bold text-xs text-slate-900 block leading-tight line-clamp-1" title={cat.label}>
@@ -4692,7 +4748,8 @@ function Standard4PillarView({
   filterStudentId,
   setFilterStudentId,
   onDeleteEvaluation,
-  onEvaluationSaved
+  onEvaluationSaved,
+  isArchived = false
 }) {
   const [selectedStudentId, setSelectedStudentId] = useState('');
 
@@ -4846,6 +4903,10 @@ function Standard4PillarView({
 
   const handleSaveEvaluation = async (e) => {
     e.preventDefault();
+    if (isArchived || selectedClass?.isArchived === true) {
+      setErrorMsg('Tidak dapat menyimpan evaluasi: Kelas ini telah diarsipkan (mode baca-saja).');
+      return;
+    }
     if (!selectedClass?.id || !tenantId || !selectedStudent?.id) return;
     setIsSaving(true);
     const finalScores = {};
@@ -5001,17 +5062,19 @@ function Standard4PillarView({
                         Rata-Rata: <strong className="text-slate-900 font-bold">{pillarScores.overall} / 100</strong>
                       </span>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setActiveModalCategoryKey(standardCategoryList[0]?.key);
-                          setIsModalOpen(true);
-                        }}
-                        className="px-2.5 py-1 bg-[#354944] hover:bg-[#2B3D38] text-white border-b-2 border-[#C89D32] rounded-lg font-bold text-xs shadow-sm flex items-center gap-1.5 cursor-pointer transition-all shrink-0"
-                      >
-                        <Edit3 className="w-3.5 h-3.5 text-[#C89D32]" />
-                        <span>✎ Edit / Input Penilaian</span>
-                      </button>
+                      {!isArchived && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveModalCategoryKey(standardCategoryList[0]?.key);
+                            setIsModalOpen(true);
+                          }}
+                          className="px-2.5 py-1 bg-[#354944] hover:bg-[#2B3D38] text-white border-b-2 border-[#C89D32] rounded-lg font-bold text-xs shadow-sm flex items-center gap-1.5 cursor-pointer transition-all shrink-0"
+                        >
+                          <Edit3 className="w-3.5 h-3.5 text-[#C89D32]" />
+                          <span>✎ Edit / Input Penilaian</span>
+                        </button>
+                      )}
                     </div>
                   </div>
 
@@ -5021,10 +5084,14 @@ function Standard4PillarView({
                         <div
                           key={cat.key}
                           onClick={() => {
-                            setActiveModalCategoryKey(cat.key);
-                            setIsModalOpen(true);
+                            if (!isArchived) {
+                              setActiveModalCategoryKey(cat.key);
+                              setIsModalOpen(true);
+                            }
                           }}
-                          className="bg-white p-2.5 rounded-lg border border-slate-200/90 hover:border-[#354944] shadow-2xs transition-all cursor-pointer group flex flex-col justify-between space-y-1.5"
+                          className={`bg-white p-2.5 rounded-lg border border-slate-200/90 shadow-2xs transition-all flex flex-col justify-between space-y-1.5 ${
+                            isArchived ? 'cursor-default' : 'hover:border-[#354944] cursor-pointer'
+                          }`}
                         >
                           <div className="flex items-start justify-between gap-1.5">
                             <div className="space-y-0.5 min-w-0">
@@ -5099,7 +5166,9 @@ function Standard4PillarView({
             <div className="p-3 sm:p-3.5 rounded-xl bg-white border border-slate-200 space-y-2.5 shadow-sm">
               <div className="flex items-center justify-between">
                 <label className="text-xs font-bold uppercase text-slate-800">Catatan Pelatih</label>
-                <button type="button" onClick={handleGenerateDraft} className="text-xs font-bold text-[#354944] hover:underline">⚡ Buat Draf</button>
+                {!isArchived && (
+                  <button type="button" onClick={handleGenerateDraft} className="text-xs font-bold text-[#354944] hover:underline">⚡ Buat Draf</button>
+                )}
               </div>
               <textarea
   aria-label="evaluation section coach note"
@@ -5161,7 +5230,8 @@ function HistorySection({
   filterStudentId,
   setFilterStudentId,
   students,
-  onDeleteEvaluation
+  onDeleteEvaluation,
+  isArchived = false
 }) {
   const filteredHistory = filterStudentId === 'ALL'
     ? history
@@ -5243,14 +5313,16 @@ function HistorySection({
                     <span className={`px-2 py-0.5 text-[11px] font-bold rounded-lg border ${gradeInfo.badge}`}>
                       {item.overallScore || 0} / 100
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => onDeleteEvaluation(item.id, item.studentName)}
-                      title="Hapus Evaluasi"
-                      className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    {!isArchived && (
+                      <button
+                        type="button"
+                        onClick={() => onDeleteEvaluation(item.id, item.studentName)}
+                        title="Hapus Evaluasi"
+                        className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
