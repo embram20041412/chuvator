@@ -243,6 +243,7 @@ export default function GrowthTrackerSection({
 
   // Generate AI Sports Nutrition Recommendation
   const handleGenerateAIInsight = async () => {
+    if (effectiveIsArchived) return;
     if (!currentStudent) return;
     const h = Number(newHeight || currentStudent.height || 165);
     const w = Number(newWeight || currentStudent.weight || 55);
@@ -488,13 +489,18 @@ export default function GrowthTrackerSection({
                 <button
                   type="button"
                   onClick={handleGenerateAIInsight}
-                  disabled={isGeneratingAI}
-                  className="w-full py-1.5 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white font-bold text-xs rounded-lg shadow-2xs transition-all cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+                  disabled={isGeneratingAI || effectiveIsArchived}
+                  className="w-full py-1.5 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white font-bold text-xs rounded-lg shadow-2xs transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
                 >
                   {isGeneratingAI ? (
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
                       <span>Menghitung Insight AI...</span>
+                    </>
+                  ) : effectiveIsArchived ? (
+                    <>
+                      <Lock className="w-3.5 h-3.5 text-[#C89D32]" />
+                      <span>AI Insight Dinonaktifkan (Kelas Arsip)</span>
                     </>
                   ) : (
                     <>
@@ -503,6 +509,12 @@ export default function GrowthTrackerSection({
                     </>
                   )}
                 </button>
+
+                {effectiveIsArchived && (
+                  <p className="text-[10px] text-amber-300/80 italic text-center pt-0.5">
+                    AI Insight dinonaktifkan karena kelas telah diarsipkan.
+                  </p>
+                )}
 
                 {aiInsight && (
                   <div className="p-2.5 bg-slate-950/80 border border-slate-700/80 rounded-xl text-[11px] text-sky-100 space-y-1.5 animate-fadeIn whitespace-pre-line leading-relaxed">
