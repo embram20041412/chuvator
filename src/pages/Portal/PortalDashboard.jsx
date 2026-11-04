@@ -119,7 +119,7 @@ const getTournamentMedalStyle = (resultStr) => {
 export default function PortalDashboard() {
   const navigate = useNavigate();
 
-  // 1. Inisialisasi: Profil tampilan aktif dari localStorage
+  // 1. Inisialisasi: Profil tampilan aktif dari localStorage (Non-otoritatif)
   const student = (() => {
     try {
       const stored = localStorage.getItem('activeStudent');
@@ -130,7 +130,9 @@ export default function PortalDashboard() {
     }
   })();
 
-  // Session & CSRF Token State (In-Memory Only)
+  // Verified Backend Session Identity & CSRF Token State (In-Memory Only)
+  const [verifiedStudentId, setVerifiedStudentId] = useState(null);
+  const [verifiedTenantId, setVerifiedTenantId] = useState(null);
   const [csrfToken, setCsrfToken] = useState(null);
   const [isSessionVerified, setIsSessionVerified] = useState(false);
   const [isVerifyingSession, setIsVerifyingSession] = useState(true);
@@ -162,7 +164,7 @@ export default function PortalDashboard() {
   // State Bottom Navigation: 'home' | 'billing' | 'schedule' | 'evaluation'
   const [activeTab, setActiveTab] = useState('home');
 
-  // 2. VERIFIKASI SESI BACKEND DENGAN COOKIE HTTPONLY (GET /api/portal/session)
+  // 2. STRICT SESSION IDENTITY BINDING (GET /api/portal/session)
   useEffect(() => {
     let isMounted = true;
 
@@ -181,22 +183,47 @@ export default function PortalDashboard() {
 
         if (response.ok) {
           const res = await response.json().catch(() => ({}));
-          if (isMounted && res.authenticated && res.session?.csrfToken) {
-            // CSRF Token disimpan HANYA di React State (memory)
-            setCsrfToken(res.session.csrfToken);
+          const sessionObj = res.session || {};
+          const bStudentId = String(sessionObj.studentId || '').trim();
+          const bTenantId = String(sessionObj.tenantId || '').trim();
+
+          // STRICT SESSION IDENTITY MATCHING (STAGE 7G.2B.2A.1)
+          if (
+            isMounted &&
+            res.authenticated &&
+            sessionObj.csrfToken &&
+            bStudentId &&
+            bTenantId &&
+            student?.id &&
+            student?.tenantId &&
+            bStudentId.toLowerCase() === String(student.id).trim().toLowerCase() &&
+            bTenantId.toLowerCase() === String(student.tenantId).trim().toLowerCase()
+          ) {
+            setVerifiedStudentId(bStudentId);
+            setVerifiedTenantId(bTenantId);
+            setCsrfToken(sessionObj.csrfToken);
             setIsSessionVerified(true);
             setIsVerifyingSession(false);
             return;
+          } else if (res.authenticated && bStudentId && bTenantId) {
+            console.warn('Portal session identity mismatch:', {
+              backendStudentId: bStudentId,
+              backendTenantId: bTenantId,
+              localStudentId: student?.id,
+              localTenantId: student?.tenantId
+            });
           }
         }
 
-        // Sesi tidak valid / kedaluwarsa
+        // Session invalid, expired, or identity mismatch
         if (isMounted) {
           localStorage.removeItem('activeStudent');
           sessionStorage.clear();
+          setVerifiedStudentId(null);
+          setVerifiedTenantId(null);
           setIsSessionVerified(false);
           setCsrfToken(null);
-          setSessionError('Sesi Anda telah kedaluwarsa atau tidak valid. Silakan login kembali.');
+          setSessionError('Identitas sesi Anda tidak valid atau tidak cocok. Silakan login kembali.');
           setIsVerifyingSession(false);
         }
       } catch (err) {
@@ -204,6 +231,8 @@ export default function PortalDashboard() {
         if (isMounted) {
           localStorage.removeItem('activeStudent');
           sessionStorage.clear();
+          setVerifiedStudentId(null);
+          setVerifiedTenantId(null);
           setIsSessionVerified(false);
           setCsrfToken(null);
           setSessionError('Gagal memverifikasi sesi dengan server. Silakan login kembali.');
@@ -218,9 +247,9 @@ export default function PortalDashboard() {
     };
   }, []);
 
-  // 3. FETCH DATA BILLING (HANYA DARI API /api/portal/billing, TANPA FALLBACK SUPABASE)
+  // 3. FETCH BILLING DATA (VERIFIED BACKEND SESSION IDENTITY ONLY)
   useEffect(() => {
-    if (!isSessionVerified || !csrfToken || !student?.id) return;
+    if (!isSessionVerified || !csrfToken || !verifiedStudentId || !verifiedTenantId) return;
     let isMounted = true;
 
     const fetchBilling = async () => {
@@ -236,14 +265,14 @@ export default function PortalDashboard() {
           },
           credentials: 'include',
           body: JSON.stringify({
-            studentId: student.id,
-            tenantId: student.tenantId || ''
+            studentId: verifiedStudentId,
+            tenantId: verifiedTenantId
           })
         });
 
         if (response.ok) {
           const res = await response.json();
-          if (isMounted && res.success) {
+          if (isMounted && res.success && res.billing) {
             setBillingData(res);
 
             const list = Array.isArray(res.bankAccounts) && res.bankAccounts.length > 0
@@ -278,7 +307,7 @@ export default function PortalDashboard() {
         }
 
         if (isMounted) {
-          setBillingError('Gagal mengambil data penagihan dari server.');
+          setBillingError('Gagal memuat data penagihan dari server.');
         }
       } catch (err) {
         console.error('Billing fetch error:', err);
@@ -294,11 +323,11 @@ export default function PortalDashboard() {
     return () => {
       isMounted = false;
     };
-  }, [isSessionVerified, csrfToken, student?.id, student?.tenantId]);
+  }, [isSessionVerified, csrfToken, verifiedStudentId, verifiedTenantId]);
 
-  // 4. FETCH JADWAL & PRESENSI (HANYA DARI API /api/portal/schedule, TANPA FALLBACK SUPABASE)
+  // 4. FETCH JADWAL & PRESENSI (VERIFIED BACKEND SESSION IDENTITY ONLY)
   useEffect(() => {
-    if (!isSessionVerified || !csrfToken || !student?.id) return;
+    if (!isSessionVerified || !csrfToken || !verifiedStudentId || !verifiedTenantId) return;
     let isMounted = true;
 
     const fetchSchedule = async () => {
@@ -314,9 +343,9 @@ export default function PortalDashboard() {
           },
           credentials: 'include',
           body: JSON.stringify({
-            studentId: student.id,
-            tenantId: student.tenantId || '',
-            classId: student.classId || ''
+            studentId: verifiedStudentId,
+            tenantId: verifiedTenantId,
+            classId: student?.classId || ''
           })
         });
 
@@ -346,11 +375,11 @@ export default function PortalDashboard() {
     return () => {
       isMounted = false;
     };
-  }, [isSessionVerified, csrfToken, student?.id, student?.tenantId, student?.classId]);
+  }, [isSessionVerified, csrfToken, verifiedStudentId, verifiedTenantId, student?.classId]);
 
-  // 5. FETCH EVALUASI & PRESTASI (HANYA DARI API /api/portal/evaluations, TANPA FALLBACK SUPABASE)
+  // 5. FETCH EVALUASI & PRESTASI (VERIFIED BACKEND SESSION IDENTITY ONLY)
   useEffect(() => {
-    if (!isSessionVerified || !csrfToken || !student?.id) return;
+    if (!isSessionVerified || !csrfToken || !verifiedStudentId || !verifiedTenantId) return;
     let isMounted = true;
 
     const fetchEvaluations = async () => {
@@ -366,8 +395,8 @@ export default function PortalDashboard() {
           },
           credentials: 'include',
           body: JSON.stringify({
-            studentId: student.id,
-            tenantId: student.tenantId || ''
+            studentId: verifiedStudentId,
+            tenantId: verifiedTenantId
           })
         });
 
@@ -397,7 +426,7 @@ export default function PortalDashboard() {
     return () => {
       isMounted = false;
     };
-  }, [isSessionVerified, csrfToken, student?.id, student?.tenantId]);
+  }, [isSessionVerified, csrfToken, verifiedStudentId, verifiedTenantId]);
 
   // Handler Logout Backend
   const handleLogout = async () => {
@@ -415,9 +444,14 @@ export default function PortalDashboard() {
       });
 
       if (response.ok) {
-        localStorage.removeItem('activeStudent');
-        sessionStorage.clear();
-        navigate('/portal', { replace: true });
+        const res = await response.json().catch(() => ({ success: true }));
+        if (res.success !== false) {
+          localStorage.removeItem('activeStudent');
+          sessionStorage.clear();
+          navigate('/portal', { replace: true });
+          return;
+        }
+        alert(res.message || 'Gagal memproses pencabutan sesi di server.');
       } else {
         const data = await response.json().catch(() => ({}));
         alert(data.message || 'Gagal memproses logout pada server. Silakan coba lagi.');
@@ -456,26 +490,13 @@ export default function PortalDashboard() {
   const coachName = student.coachName || 'Instruktur Utama';
   const age = calculateAge(student.birthDate);
 
-  // Status dan nominal tagihan riil dari API
-  const currentMonth = new Date().toISOString().slice(0, 7);
-  const totalAmount = billingData?.billing?.totalAmount ?? (
-    ((!student.registrationFeePaid && !student.isRegistrationFeePaid) ? Number(student.registrationFee || student.entryFee || 0) : 0) +
-    ((student.lastPaidMonth !== currentMonth) ? Number(student.monthlyFee || 0) : 0)
-  );
+  // Data Keuangan HANYA Berasal dari Respons API /api/portal/billing (STAGE 7G.2B.2A.1)
+  const isBillingValid = Boolean(billingData && billingData.success && billingData.billing);
+  const totalAmount = isBillingValid ? Number(billingData.billing.totalAmount || 0) : null;
+  const billingDetails = isBillingValid ? (Array.isArray(billingData.billing.details) ? billingData.billing.details : []) : [];
+  const isPaid = isBillingValid ? Boolean(billingData.billing.isPaidThisMonth) : null;
+  const qrisUrl = isBillingValid ? (billingData.tenant?.qrisUrl || null) : null;
 
-  const billingDetails = billingData?.billing?.details || (
-    [
-      ...((!student.registrationFeePaid && !student.isRegistrationFeePaid && Number(student.registrationFee || student.entryFee || 0) > 0)
-        ? [{ name: 'Biaya Pendaftaran / Registrasi', amount: Number(student.registrationFee || student.entryFee || 0) }]
-        : []),
-      ...((student.lastPaidMonth !== currentMonth && Number(student.monthlyFee || 0) > 0)
-        ? [{ name: `Iuran SPP Bulan Ini`, amount: Number(student.monthlyFee || 0) }]
-        : [])
-    ]
-  );
-
-  const isPaid = billingData?.billing?.isPaidThisMonth ?? (totalAmount === 0);
-  const qrisUrl = billingData?.tenant?.qrisUrl || null;
   // Daftar rekening bank efektif (mendukung multi-rekening)
   const effectiveBankList = bankAccounts.length > 0 
     ? bankAccounts 
@@ -623,6 +644,8 @@ export default function PortalDashboard() {
               >
                 <div className="flex items-center space-x-3 min-w-0">
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+                    isLoadingBilling ? 'bg-slate-50 text-slate-400 border border-slate-200' :
+                    !isBillingValid ? 'bg-rose-50 text-rose-600 border border-rose-100' :
                     isPaid ? 'bg-emerald-50 text-emerald-600 border border-emerald-100 group-hover:bg-emerald-100' : 'bg-amber-50 text-amber-600 border border-amber-100 group-hover:bg-amber-100'
                   }`}>
                     <CreditCard className="w-5 h-5" />
@@ -632,10 +655,14 @@ export default function PortalDashboard() {
                       Status Iuran SPP
                     </p>
                     <p className="font-black text-slate-800 text-sm truncate">
-                      {isPaid ? 'Lunas (Tidak Ada Tunggakan)' : formatRupiah(totalAmount)}
+                      {isLoadingBilling ? 'Memuat data tagihan...' :
+                       !isBillingValid ? 'Gagal Muat Data Tagihan' :
+                       isPaid ? 'Lunas (Tidak Ada Tunggakan)' : formatRupiah(totalAmount)}
                     </p>
                     <p className="text-[11px] text-slate-500 truncate">
-                      {isPaid ? 'Iuran bulan ini telah terverifikasi' : `${billingDetails.length} komponen tagihan aktif`}
+                      {isLoadingBilling ? 'Menghubungkan ke server...' :
+                       !isBillingValid ? (billingError || 'Data tagihan belum dapat diverifikasi') :
+                       isPaid ? 'Iuran bulan ini telah terverifikasi' : `${billingDetails.length} komponen tagihan aktif`}
                     </p>
                   </div>
                 </div>
@@ -760,7 +787,17 @@ export default function PortalDashboard() {
               </div>
             </div>
 
-            {isPaid ? (
+            {isLoadingBilling ? (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-extrabold border border-slate-200">
+                <Loader2 className="w-3 h-3 animate-spin" />
+                <span>MEMUAT</span>
+              </span>
+            ) : !isBillingValid ? (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 text-[10px] font-extrabold border border-rose-200">
+                <AlertCircle className="w-3 h-3 text-rose-600" />
+                <span>GAGAL MUAT</span>
+              </span>
+            ) : isPaid ? (
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-extrabold border border-emerald-200">
                 <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                 <span>LUNAS</span>
@@ -774,60 +811,73 @@ export default function PortalDashboard() {
           </div>
 
           {/* Kotak Ringkasan Total Tagihan Riil */}
-          <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                  Total Tagihan Belum Lunas
-                </p>
-                <p className="text-xl font-black text-slate-900 mt-0.5">
-                  {formatRupiah(totalAmount)}
-                </p>
+          {!isBillingValid && !isLoadingBilling ? (
+            <div className="p-4 bg-rose-50/80 border border-rose-200 rounded-xl space-y-2 text-rose-800 text-xs">
+              <div className="flex items-center gap-2 font-bold">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>Gagal Memuat Data Keuangan Resmi</span>
               </div>
-
-              <div className="text-right">
-                {isLoadingBilling ? (
-                  <div className="flex items-center space-x-1.5 text-slate-400 text-xs">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    <span>Menghitung...</span>
-                  </div>
-                ) : isPaid ? (
-                  <span className="inline-block px-2.5 py-1 bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded-lg border border-emerald-200">
-                    Semua Lunas
-                  </span>
-                ) : (
-                  <span className="inline-block px-2.5 py-1 bg-amber-100 text-amber-800 font-bold text-[10px] rounded-lg border border-amber-200/80">
-                    {billingDetails.length} Tagihan Aktif
-                  </span>
-                )}
-              </div>
+              <p className="text-[11px] text-rose-700 leading-relaxed">
+                {billingError || 'Data tagihan tidak dapat diverifikasi dari server. Silakan pastikan koneksi internet Anda lancar dan coba lagi.'}
+              </p>
             </div>
+          ) : (
+            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                    Total Tagihan Belum Lunas
+                  </p>
+                  <p className="text-xl font-black text-slate-900 mt-0.5">
+                    {isLoadingBilling ? '...' : formatRupiah(totalAmount)}
+                  </p>
+                </div>
 
-            {/* Rincian Komponen Tagihan (Pendaftaran + SPP) */}
-            {!isPaid && billingDetails.length > 0 && (
-              <div className="pt-2.5 border-t border-slate-200/70 space-y-1.5 text-xs">
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Rincian Biaya Belum Dibayar:
-                </p>
-                <div className="space-y-1">
-                  {billingDetails.map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between text-slate-700 text-xs">
-                      <span className="truncate pr-2 font-medium">{item.name}</span>
-                      <span className="font-bold text-slate-900 shrink-0 font-mono">
-                        {formatRupiah(item.amount)}
-                      </span>
+                <div className="text-right">
+                  {isLoadingBilling ? (
+                    <div className="flex items-center space-x-1.5 text-slate-400 text-xs">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Menghitung...</span>
                     </div>
-                  ))}
+                  ) : isPaid ? (
+                    <span className="inline-block px-2.5 py-1 bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded-lg border border-emerald-200">
+                      Semua Lunas
+                    </span>
+                  ) : (
+                    <span className="inline-block px-2.5 py-1 bg-amber-100 text-amber-800 font-bold text-[10px] rounded-lg border border-amber-200/80">
+                      {billingDetails.length} Tagihan Aktif
+                    </span>
+                  )}
                 </div>
               </div>
-            )}
-          </div>
+
+              {/* Rincian Komponen Tagihan (Pendaftaran + SPP) */}
+              {!isPaid && billingDetails.length > 0 && (
+                <div className="pt-2.5 border-t border-slate-200/70 space-y-1.5 text-xs">
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    Rincian Biaya Belum Dibayar:
+                  </p>
+                  <div className="space-y-1">
+                    {billingDetails.map((item, idx) => (
+                      <div key={idx} className="flex items-center justify-between text-slate-700 text-xs">
+                        <span className="truncate pr-2 font-medium">{item.name}</span>
+                        <span className="font-bold text-slate-900 shrink-0 font-mono">
+                          {formatRupiah(item.amount)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Tombol Lihat QRIS / Bayar (Memicu Modal Pop-up) */}
           <button
             type="button"
+            disabled={!isBillingValid || isLoadingBilling}
             onClick={() => setShowQrisModal(true)}
-            className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 active:scale-[0.99] text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-slate-300 disabled:to-slate-400 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
           >
             <QrCode className="w-4 h-4" />
             <span>Lihat QRIS / Bayar</span>
