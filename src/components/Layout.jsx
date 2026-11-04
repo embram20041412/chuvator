@@ -101,7 +101,11 @@ export default function Layout({ userProfile }) {
         const activeAcId = localStorage.getItem('activeAcademyId');
         let studQuery = supabase.from('students').select('id, academy_id').eq('tenant_id', tenantId);
         let coachQuery = supabase.from('coaches').select('id, academy_id').eq('tenant_id', tenantId);
-        let clsQuery = supabase.from('academy_classes').select('id, academy_id').eq('tenant_id', tenantId);
+        let clsQuery = supabase
+          .from('academy_classes')
+          .select('id, academy_id')
+          .eq('tenant_id', tenantId)
+          .or('is_archived.is.null,is_archived.eq.false');
 
         if (activeAcId) {
           studQuery = studQuery.eq('academy_id', activeAcId);

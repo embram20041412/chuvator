@@ -368,9 +368,9 @@ export default function AcademyPage({ userProfile }) {
 
   const activeStudents = useMemo(() => {
     if (!isCoachOnly || !coachProfile) return rawActiveStudents;
-    const allowedClassIds = new Set(activeClasses.map((c) => c.id));
+    const allowedClassIds = new Set([...activeClasses, ...activeArchivedClasses].map((c) => c.id));
     return rawActiveStudents.filter((s) => s.classId && allowedClassIds.has(s.classId));
-  }, [rawActiveStudents, isCoachOnly, coachProfile, activeClasses]);
+  }, [rawActiveStudents, isCoachOnly, coachProfile, activeClasses, activeArchivedClasses]);
 
   const handleUpdateSelfPassword = async (e) => {
     e.preventDefault();
@@ -431,6 +431,25 @@ export default function AcademyPage({ userProfile }) {
   const filteredCoaches = activeCoaches;
   const filteredClasses = activeClasses;
 
+  // Daftar kelas untuk modul Presensi, Evaluasi, dan Antropometri (mencakup Kelas Aktif & Kelas Arsip untuk kebutuhan riwayat)
+  const attendanceClasses = useMemo(() => {
+    const activeList = filteredClasses.map((cls) => ({
+      ...cls,
+      isArchived: false,
+    }));
+
+    const archivedList = activeArchivedClasses.map((cls) => ({
+      ...cls,
+      isArchived: true,
+    }));
+
+    return {
+      active: activeList,
+      archived: archivedList,
+      all: [...activeList, ...archivedList],
+    };
+  }, [filteredClasses, activeArchivedClasses]);
+
   // Emit counts to window so sidebar badges stay in exact real-time sync
   useEffect(() => {
     window.dispatchEvent(
@@ -467,15 +486,16 @@ export default function AcademyPage({ userProfile }) {
     }
   };
   useEffect(() => {
-    if (activeClasses.length > 0) {
-      const isValidInCurrentAcademy = activeClasses.some((c) => c.id === selectedClassId);
+    const allAvailable = [...activeClasses, ...activeArchivedClasses];
+    if (allAvailable.length > 0) {
+      const isValidInCurrentAcademy = allAvailable.some((c) => c.id === selectedClassId);
       if (!isValidInCurrentAcademy) {
-        setSelectedClassId(activeClasses[0].id);
+        setSelectedClassId(activeClasses.length > 0 ? activeClasses[0].id : allAvailable[0].id);
       }
     } else if (selectedClassId !== '') {
       setSelectedClassId('');
     }
-  }, [activeAcademyId, activeClasses.length, selectedClassId]);
+  }, [activeAcademyId, activeClasses, activeArchivedClasses, selectedClassId]);
 
   const [loadingStudents, setLoadingStudents] = useState(true);
   const [loadingCoaches, setLoadingCoaches] = useState(true);
@@ -673,15 +693,15 @@ export default function AcademyPage({ userProfile }) {
     }
   }, [tenantId, activeAcademy?.id, activeAcademyId]);
 
-  // Otomatis re-fetch daftar pelatih & kelas arsip setiap kali activeAcademyId di dropdown berubah
+  // Otomatis re-fetch daftar pelatih & kelas arsip setiap kali activeAcademyId di dropdown berubah atau tab arsip/presensi aktif
   useEffect(() => {
     if (tenantId) {
       fetchCoaches(activeAcademyId);
-      if (classSubTab === 'archived') {
+      if (classSubTab === 'archived' || activeAcademyTab === 'presensi') {
         fetchArchivedClasses(activeAcademyId);
       }
     }
-  }, [tenantId, activeAcademyId, fetchCoaches, classSubTab, fetchArchivedClasses]);
+  }, [tenantId, activeAcademyId, fetchCoaches, classSubTab, activeAcademyTab, fetchArchivedClasses]);
 
   // SINGLE ASYNCHRONOUS DATA FETCHER: Promise.all to Supabase
   const isFetchingRef = React.useRef(false);
@@ -741,7 +761,7 @@ export default function AcademyPage({ userProfile }) {
   }, [tenantId, activeAcademyId, fetchCoaches, fetchArchivedClasses, isCoachOnly, coachProfile?.academy_id]);
 
   useEffect(() => {
-    if (tenantId && activeAcademyTab === 'kelas' && classSubTab === 'archived') {
+    if (tenantId && ((activeAcademyTab === 'kelas' && classSubTab === 'archived') || activeAcademyTab === 'presensi')) {
       fetchArchivedClasses();
     }
   }, [tenantId, activeAcademyTab, classSubTab, fetchArchivedClasses]);
@@ -2200,9 +2220,9 @@ export default function AcademyPage({ userProfile }) {
                 </button>
               </div>
 
-              {/* 2. DROPDOWN KELAS SEBAGAI FILTER GLOBAL */}
+              {/* 2. DROPDOWN KELAS SEBAGAI FILTER GLOBAL (KELAS AKTIF & KELAS ARSIP RIWAYAT) */}
               <div className="flex items-center gap-2 shrink-0 w-full xl:w-72">
-                <label htmlFor="academy-selected-class-filter" className="text-xs font-bold text-slate-700 whitespace-nowrap shrink-0">
+                <label htmlFor="academy-selected-class-filter" className="text-xs font-bold text-slate-700 dark:text-slate-200 whitespace-nowrap shrink-0">
                   Kelas:
                 </label>
                 <select
@@ -2210,14 +2230,29 @@ export default function AcademyPage({ userProfile }) {
                   name="selectedClassId"
                   value={selectedClassId}
                   onChange={(e) => setSelectedClassId(e.target.value)}
-                  className="w-full px-2.5 py-1.5 bg-white border border-slate-300 rounded-lg focus:bg-white focus:outline-none focus:border-[#354944] focus:ring-1 focus:ring-[#354944]/30 text-xs font-bold text-slate-800 cursor-pointer shadow-2xs"
+                  className="w-full px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg focus:bg-white focus:outline-none focus:border-[#354944] focus:ring-1 focus:ring-[#354944]/30 text-xs font-bold text-slate-800 dark:text-slate-100 cursor-pointer shadow-2xs"
                 >
                   <option value="">-- Pilih Kelas Latihan --</option>
-                  {filteredClasses.map((cls) => (
-                    <option key={cls.id} value={cls.id}>
-                      {cls.className} - {cls.sport || 'Umum'}
-                    </option>
-                  ))}
+
+                  {attendanceClasses.active.length > 0 && (
+                    <optgroup label="── Kelas Aktif ──">
+                      {attendanceClasses.active.map((cls) => (
+                        <option key={cls.id} value={cls.id}>
+                          {cls.className} - {cls.sport || 'Umum'}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+
+                  {attendanceClasses.archived.length > 0 && (
+                    <optgroup label="── Arsip Kelas (Riwayat) ──">
+                      {attendanceClasses.archived.map((cls) => (
+                        <option key={cls.id} value={cls.id}>
+                          {cls.className} (Arsip) - {cls.sport || 'Umum'}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </div>
             </div>
@@ -2225,19 +2260,19 @@ export default function AcademyPage({ userProfile }) {
             {/* RENDER CONTENT SESUAI KELAS TERPILIH & MODE TAB AKTIF */}
             {!selectedClassId ? (
               /* EMPTY STATE: BELUM MEMILIH KELAS */
-              <div className="py-8 border-2 border-dashed border-slate-200 rounded-xl text-center flex flex-col items-center justify-center p-4 bg-slate-50/50">
-                <ClipboardCheck className="w-10 h-10 text-slate-300 mb-2" />
-                <p className="text-xs sm:text-sm font-semibold text-slate-700">
-                  {filteredClasses.length === 0
+              <div className="py-8 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-center flex flex-col items-center justify-center p-4 bg-slate-50/50 dark:bg-slate-900/40">
+                <ClipboardCheck className="w-10 h-10 text-slate-300 dark:text-slate-600 mb-2" />
+                <p className="text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200">
+                  {attendanceClasses.all.length === 0
                     ? 'Belum ada kelas/kelompok latihan terdaftar.'
-                    : 'Pilih kelas terlebih dahulu untuk mulai mencatat presensi, evaluasi, atau growth tracking.'}
+                    : 'Pilih kelas terlebih dahulu untuk mulai mencatat atau melihat riwayat presensi, evaluasi, atau growth tracking.'}
                 </p>
                 <p className="text-[11px] text-slate-400 max-w-sm mt-0.5 mb-3">
-                  {filteredClasses.length === 0
+                  {attendanceClasses.all.length === 0
                     ? 'Buat kelas latihan terlebih dahulu di tab "Kelas & Kelompok" untuk mulai mengelola presensi.'
-                    : 'Pilih salah satu kelas pada dropdown filter di atas untuk membuka lembar kerja.'}
+                    : 'Pilih salah satu kelas (aktif maupun arsip) pada dropdown filter di atas untuk membuka lembar kerja atau riwayat.'}
                 </p>
-                {filteredClasses.length === 0 && (
+                {attendanceClasses.all.length === 0 && canManageClasses && (
                   <button
                     onClick={() => setActiveAcademyTab('kelas')}
                     className="px-3 py-1.5 bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer shadow-xs"
@@ -2250,7 +2285,7 @@ export default function AcademyPage({ userProfile }) {
               /* KELAS DIPILIH: RINCIAN KELAS RINGKAS & BERSIH (TANPA DUPLIKASI TOMBOL TAB) */
               <div className="space-y-3">
                 {(() => {
-                  const currentClass = filteredClasses.find((c) => c.id === selectedClassId);
+                  const currentClass = attendanceClasses.all.find((c) => c.id === selectedClassId);
                   if (!currentClass) return null;
 
                   return (
@@ -2267,6 +2302,11 @@ export default function AcademyPage({ userProfile }) {
                           {currentClass.ageGroup && (
                             <span className="px-2 py-0.2 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 font-medium text-[10px] rounded-full border border-emerald-100/80 dark:border-emerald-800/50">
                               {currentClass.ageGroup}
+                            </span>
+                          )}
+                          {currentClass.isArchived && (
+                            <span className="px-2 py-0.2 bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 font-bold text-[10px] rounded-full border border-amber-200/80 dark:border-amber-800/50 flex items-center gap-1">
+                              <Archive className="w-2.5 h-2.5" /> Diarsipkan
                             </span>
                           )}
                         </div>
@@ -2290,7 +2330,7 @@ export default function AcademyPage({ userProfile }) {
 
                 {/* MEMANGGIL KONTEN UTAMA DENGAN DISPLAY TOGGLE (KEEP-ALIVE CACHE) */}
                 {(() => {
-                  const currentClass = filteredClasses.find((c) => c.id === selectedClassId);
+                  const currentClass = attendanceClasses.all.find((c) => c.id === selectedClassId);
                   if (!currentClass) return null;
 
                   return (
