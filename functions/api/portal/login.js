@@ -235,10 +235,16 @@ export async function onRequestPost(context) {
       return await genericFailure('student_not_found');
     }
 
-    // 7. Verify Phone Digits Match Strictly
+    // 7. Verify Phone Digits Match Strictly & Tenant ID Presence
     const recordPhoneDigits = normalizePhoneDigits(candidateDoc.parentPhone || candidateDoc.phone);
     if (!recordPhoneDigits || recordPhoneDigits !== inputPhoneDigits) {
       return await genericFailure('phone_mismatch');
+    }
+
+    const candidateTenantId = String(candidateDoc.tenantId || candidateDoc.tenant_id || '').trim();
+    if (!candidateTenantId) {
+      console.warn(`Student document ${candidateDoc.id} has no tenantId/tenant_id`);
+      return await genericFailure('no_tenant_id_on_record');
     }
 
     // 8. STRICT AUTHENTICATION FACTORS VERIFICATION (NO BYPASS!)
@@ -300,7 +306,7 @@ export async function onRequestPost(context) {
     try {
       sessionRes = await createPortalSession(context, {
         studentId: candidateDoc.id,
-        tenantId: candidateDoc.tenantId || '',
+        tenantId: candidateTenantId,
         studentName: sanitizedStudent.studentName
       });
     } catch (sessionErr) {

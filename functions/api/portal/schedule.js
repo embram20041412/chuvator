@@ -175,10 +175,11 @@ export async function onRequestPost(context) {
         if (classResp.ok) {
           const classDoc = await classResp.json();
           const cFields = parseFirestoreFields(classDoc.fields);
-          const classTenantId = String(cFields.tenantId || cFields.tenant_id || '').trim();
+          const classTenantId = String(cFields.tenantId || cFields.tenant_id || '').trim().toLowerCase();
 
-          // Verify class tenant matches session tenant
-          if (!classTenantId || classTenantId.toLowerCase() === sessionTenantId.toLowerCase()) {
+          // STRICT FAIL-CLOSED CLASS TENANT MATCHING:
+          // Reject class details if tenantId is missing, empty, or mismatched!
+          if (classTenantId && classTenantId === sessionTenantId.toLowerCase()) {
             classInfo = {
               id: verifiedClassId,
               className: cFields.className || classNameFromStudent || 'Kelas Akademi',
@@ -187,6 +188,8 @@ export async function onRequestPost(context) {
               schedules: Array.isArray(cFields.schedules) ? cFields.schedules : [],
               scheduleSummary: cFields.schedule || ''
             };
+          } else {
+            console.warn(`[Schedule] Rejecting class ${verifiedClassId}: missing or mismatched tenantId (${classTenantId} vs ${sessionTenantId})`);
           }
         }
       } catch (err) {
@@ -255,9 +258,16 @@ export async function onRequestPost(context) {
         for (const d of docs) {
           const docId = (d.document.name || '').split('/').pop();
           const f = parseFirestoreFields(d.document.fields);
+          const docTenant = String(f.tenantId || f.tenant_id || '').trim().toLowerCase();
+
+          // STRICT FAIL-CLOSED TENANT MATCHING ON ACADEMY ATTENDANCE
+          if (!docTenant || docTenant !== sessionTenantId.toLowerCase()) {
+            console.warn(`[Schedule] Rejecting academy_attendance ${docId}: missing or mismatched tenantId (${docTenant} vs ${sessionTenantId})`);
+            continue;
+          }
 
           const studentsList = Array.isArray(f.students) ? f.students : [];
-          // EXACT STUDENT ID MATCHING (NO STARTSWITH BYPASS)
+          // EXACT STUDENT ID MATCHING ONLY (NO PREFIX / STARTSWITH BYPASS)
           const matchedRecord = studentsList.find((s) => {
             const sid = String(s.studentId || s.id || '').trim().toLowerCase();
             return sid === cleanStudentId;
@@ -308,10 +318,17 @@ export async function onRequestPost(context) {
         for (const d of docs) {
           const docId = (d.document.name || '').split('/').pop();
           const f = parseFirestoreFields(d.document.fields);
-          const docTenant = String(f.tenantId || f.tenant_id || '').trim();
+          const docTenant = String(f.tenantId || f.tenant_id || '').trim().toLowerCase();
+          const docStudent = String(f.studentId || f.student_id || '').trim().toLowerCase();
 
-          // Verify tenant ownership in application code
-          if (docTenant && docTenant.toLowerCase() !== sessionTenantId.toLowerCase()) {
+          // STRICT FAIL-CLOSED TENANT & STUDENT MATCHING
+          if (!docTenant || docTenant !== sessionTenantId.toLowerCase()) {
+            console.warn(`[Schedule] Rejecting attendance doc ${docId}: missing or mismatched tenantId (${docTenant} vs ${sessionTenantId})`);
+            continue;
+          }
+
+          if (!docStudent || docStudent !== cleanStudentId) {
+            console.warn(`[Schedule] Rejecting attendance doc ${docId}: missing or mismatched studentId (${docStudent} vs ${cleanStudentId})`);
             continue;
           }
 

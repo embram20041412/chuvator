@@ -326,10 +326,18 @@ export async function onRequestPost(context) {
         for (const d of docs) {
           const id = (d.document.name || '').split('/').pop();
           const f = parseFirestoreFields(d.document.fields);
-          const docTenant = String(f.tenantId || f.tenant_id || '').trim();
+          const docTenant = String(f.tenantId || f.tenant_id || '').trim().toLowerCase();
+          const docStudent = String(f.studentId || f.student_id || '').trim().toLowerCase();
 
-          // Verify tenant ownership in application code
-          if (docTenant && docTenant.toLowerCase() !== sessionTenantId.toLowerCase()) {
+          // STRICT FAIL-CLOSED TENANT & STUDENT VALIDATION (STAGE 7G.2A.5):
+          // Reject document if tenantId is missing, empty, or mismatched!
+          if (!docTenant || docTenant !== sessionTenantId.toLowerCase()) {
+            console.warn(`[Billing] Rejecting spp_payment ${id}: missing or mismatched tenantId (${docTenant} vs ${sessionTenantId})`);
+            continue;
+          }
+
+          if (!docStudent || docStudent !== sessionStudentId.toLowerCase()) {
+            console.warn(`[Billing] Rejecting spp_payment ${id}: missing or mismatched studentId (${docStudent} vs ${sessionStudentId})`);
             continue;
           }
 
@@ -373,10 +381,24 @@ export async function onRequestPost(context) {
         structuredQuery: {
           from: [{ collectionId: 'transactions' }],
           where: {
-            fieldFilter: {
-              field: { fieldPath: 'studentId' },
-              op: 'EQUAL',
-              value: { stringValue: sessionStudentId }
+            compositeFilter: {
+              op: 'AND',
+              filters: [
+                {
+                  fieldFilter: {
+                    field: { fieldPath: 'studentId' },
+                    op: 'EQUAL',
+                    value: { stringValue: sessionStudentId }
+                  }
+                },
+                {
+                  fieldFilter: {
+                    field: { fieldPath: 'tenantId' },
+                    op: 'EQUAL',
+                    value: { stringValue: sessionTenantId }
+                  }
+                }
+              ]
             }
           },
           limit: 10
@@ -384,11 +406,32 @@ export async function onRequestPost(context) {
       };
 
       const txQueryUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents:runQuery`;
-      const txResp = await fetch(txQueryUrl, {
+      let txResp = await fetch(txQueryUrl, {
         method: 'POST',
         headers: reqHeaders,
         body: JSON.stringify(txQueryPayload)
       });
+
+      if (!txResp.ok) {
+        const fallbackTxPayload = {
+          structuredQuery: {
+            from: [{ collectionId: 'transactions' }],
+            where: {
+              fieldFilter: {
+                field: { fieldPath: 'studentId' },
+                op: 'EQUAL',
+                value: { stringValue: sessionStudentId }
+              }
+            },
+            limit: 10
+          }
+        };
+        txResp = await fetch(txQueryUrl, {
+          method: 'POST',
+          headers: reqHeaders,
+          body: JSON.stringify(fallbackTxPayload)
+        });
+      }
 
       if (txResp.ok) {
         const txResults = await txResp.json();
@@ -396,9 +439,17 @@ export async function onRequestPost(context) {
         for (const d of docs) {
           const id = (d.document.name || '').split('/').pop();
           const f = parseFirestoreFields(d.document.fields);
-          const docTenant = String(f.tenantId || f.tenant_id || '').trim();
+          const docTenant = String(f.tenantId || f.tenant_id || '').trim().toLowerCase();
+          const docStudent = String(f.studentId || f.student_id || '').trim().toLowerCase();
 
-          if (docTenant && docTenant.toLowerCase() !== sessionTenantId.toLowerCase()) {
+          // STRICT FAIL-CLOSED TENANT & STUDENT VALIDATION:
+          if (!docTenant || docTenant !== sessionTenantId.toLowerCase()) {
+            console.warn(`[Billing] Rejecting transaction ${id}: missing or mismatched tenantId (${docTenant} vs ${sessionTenantId})`);
+            continue;
+          }
+
+          if (!docStudent || docStudent !== sessionStudentId.toLowerCase()) {
+            console.warn(`[Billing] Rejecting transaction ${id}: missing or mismatched studentId (${docStudent} vs ${sessionStudentId})`);
             continue;
           }
 

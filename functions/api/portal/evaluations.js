@@ -207,10 +207,17 @@ export async function onRequestPost(context) {
               if (item.document && item.document.fields) {
                 const parsed = parseFirestoreFields(item.document.fields);
                 const docId = item.document.name.split('/').pop();
-                const docTenant = String(parsed.tenantId || parsed.tenant_id || '').trim();
+                const docTenant = String(parsed.tenantId || parsed.tenant_id || '').trim().toLowerCase();
+                const docStudent = String(parsed.studentId || parsed.student_id || '').trim().toLowerCase();
 
-                // Strict in-memory tenant ownership check
-                if (docTenant && docTenant.toLowerCase() !== sessionTenantId.toLowerCase()) {
+                // STRICT FAIL-CLOSED TENANT & STUDENT OWNERSHIP CHECK (STAGE 7G.2A.5)
+                if (!docTenant || docTenant !== sessionTenantId.toLowerCase()) {
+                  console.warn(`[Evaluations] Rejecting evaluation ${docId}: missing or mismatched tenantId (${docTenant} vs ${sessionTenantId})`);
+                  continue;
+                }
+
+                if (!docStudent || docStudent !== sessionStudentId.toLowerCase()) {
+                  console.warn(`[Evaluations] Rejecting evaluation ${docId}: missing or mismatched studentId (${docStudent} vs ${sessionStudentId})`);
                   continue;
                 }
 
