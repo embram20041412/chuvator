@@ -24,6 +24,50 @@ import {
   hashString
 } from './_auth.js';
 
+/**
+ * Strict fail-closed Firestore document path validator for Student documents (STAGE 7G.2A.9).
+ * Enforces exact path structure:
+ * projects/{projectId}/databases/{databaseId}/documents/students/{documentId}
+ *
+ * Rules:
+ * 1. Split by '/' must yield exactly 7 segments.
+ * 2. seg[0] === 'projects'
+ * 3. seg[1] === projectId (exact case-sensitive string equality)
+ * 4. seg[2] === 'databases'
+ * 5. seg[3] === databaseId (exact case-sensitive string equality)
+ * 6. seg[4] === 'documents'
+ * 7. seg[5] === 'students'
+ * 8. seg[6] non-empty documentId
+ * 9. seg[6] === cleanStudentId (exact case-sensitive string equality)
+ *
+ * @returns {string|null} Document ID if valid, or null if any check fails.
+ */
+export function validateStudentDocumentPath(rawDocName, projectId, databaseId, cleanStudentId) {
+  if (!rawDocName || typeof rawDocName !== 'string') return null;
+  const trimmed = rawDocName.trim();
+  if (!trimmed) return null;
+
+  const parts = trimmed.split('/');
+  if (parts.length !== 7) return null;
+
+  const [pPrefix, pProjId, pDbPrefix, pDbId, pDocsPrefix, pCollName, pDocId] = parts;
+
+  if (pPrefix !== 'projects') return null;
+  if (!projectId || pProjId !== projectId) return null;
+  if (pDbPrefix !== 'databases') return null;
+  if (!databaseId || pDbId !== databaseId) return null;
+  if (pDocsPrefix !== 'documents') return null;
+  if (pCollName !== 'students') return null;
+  if (!pDocId || !pDocId.trim()) return null;
+
+  const firestoreDocumentId = pDocId.trim();
+
+  // Strict case-sensitive exact string equality (===)
+  if (firestoreDocumentId !== cleanStudentId) return null;
+
+  return firestoreDocumentId;
+}
+
 // OPTIONS CORS Preflight handler
 export async function onRequestOptions(context) {
   const corsHeaders = getCorsHeaders(context.request, context.env);
@@ -185,21 +229,18 @@ export async function onRequestPost(context) {
       const exactMatches = [];
 
       for (const item of documents) {
-        const rawDocName = String(item.document?.name || '').trim();
-        if (!rawDocName) continue;
+        const rawDocName = item.document?.name;
+        const firestoreDocumentId = validateStudentDocumentPath(
+          rawDocName,
+          projectId,
+          databaseId,
+          cleanStudentId
+        );
 
-        const nameParts = rawDocName.split('/');
-        if (
-          nameParts.length >= 6 &&
-          nameParts[0] === 'projects' &&
-          nameParts[nameParts.length - 2] === 'students'
-        ) {
-          const firestoreDocumentId = (nameParts[nameParts.length - 1] || '').trim();
-          if (firestoreDocumentId && firestoreDocumentId.toLowerCase() === cleanStudentId.toLowerCase()) {
-            const fields = parseFirestoreFields(item.document.fields);
-            const doc = { ...fields, id: firestoreDocumentId };
-            exactMatches.push(doc);
-          }
+        if (firestoreDocumentId) {
+          const fields = parseFirestoreFields(item.document.fields);
+          const doc = { ...fields, id: firestoreDocumentId };
+          exactMatches.push(doc);
         }
       }
 
@@ -227,30 +268,21 @@ export async function onRequestPost(context) {
         const directDocResp = await fetch(getDocUrl, { method: 'GET', headers: reqHeaders });
         if (directDocResp.ok) {
           const docData = await directDocResp.json();
-          const rawDocName = String(docData?.name || '').trim();
+          const rawDocName = docData?.name;
+          const firestoreDocumentId = validateStudentDocumentPath(
+            rawDocName,
+            projectId,
+            databaseId,
+            cleanStudentId
+          );
 
-          // Fail-closed verification: docData.name must be non-empty and have valid path structure
-          // projects/{projectId}/databases/{databaseId}/documents/students/{documentId}
-          if (rawDocName) {
-            const nameParts = rawDocName.split('/');
-            if (
-              nameParts.length >= 6 &&
-              nameParts[0] === 'projects' &&
-              nameParts[nameParts.length - 2] === 'students'
-            ) {
-              const firestoreDocumentId = (nameParts[nameParts.length - 1] || '').trim();
-              if (
-                firestoreDocumentId &&
-                firestoreDocumentId.toLowerCase() === cleanStudentId.toLowerCase()
-              ) {
-                const fields = parseFirestoreFields(docData.fields);
-                const doc = { ...fields, id: firestoreDocumentId };
-                const docPhoneDigits = normalizePhoneDigits(fields.parentPhone || fields.phone);
+          if (firestoreDocumentId) {
+            const fields = parseFirestoreFields(docData.fields);
+            const doc = { ...fields, id: firestoreDocumentId };
+            const docPhoneDigits = normalizePhoneDigits(fields.parentPhone || fields.phone);
 
-                if (docPhoneDigits && inputPhoneDigits && docPhoneDigits === inputPhoneDigits) {
-                  candidateDoc = doc;
-                }
-              }
+            if (docPhoneDigits && inputPhoneDigits && docPhoneDigits === inputPhoneDigits) {
+              candidateDoc = doc;
             }
           }
         }
