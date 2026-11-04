@@ -6,8 +6,8 @@
  * - Mandatory strict encryption for sensitive tokens using AES-GCM 256-bit with PORTAL_TOKEN_ENCRYPTION_SECRET.
  * - Symmetrical cookie management for 'portal_session_v2'.
  * - Production-enforced fail-closed session storage (PORTAL_SESSIONS_KV).
- * - Pure Edge Rate Limiting (Durable Objects > Dedicated KV / Isolated Namespace) WITHOUT Firestore.
- * - Trusted Cloudflare Client IP extraction ('cf-connecting-ip').
+ * - Pure Edge Rate Limiting (Dual-counter: IP & Email) WITHOUT Firestore.
+ * - Strict Cloudflare Client IP extraction ('cf-connecting-ip') without silent 127.0.0.1 fallback.
  * - Session validation, auto-refresh of Supabase tokens, and CSRF protection.
  */
 
@@ -23,19 +23,29 @@ export { getCorsHeaders, verifyCsrf, hashString };
  * Strict Cloudflare Client IP extraction.
  * 'cf-connecting-ip' is provided and validated directly by Cloudflare edge proxy
  * and CANNOT be forged by client HTTP headers.
- * Never fallback to untrusted client-supplied 'x-forwarded-for' in Cloudflare environment.
+ * Never fallback to untrusted client-supplied 'x-forwarded-for'.
+ * Never silently fallback to '127.0.0.1'. If absent or invalid, returns null.
  */
 export function getTrustedClientIp(request) {
   const cfIp = request.headers.get('cf-connecting-ip');
-  if (cfIp && cfIp.trim()) {
-    return cfIp.trim();
+  if (cfIp && typeof cfIp === 'string') {
+    const trimmed = cfIp.trim();
+    if (trimmed && trimmed.length >= 7 && trimmed.length <= 45) {
+      return trimmed;
+    }
   }
-  // True client IP fallback provided by Cloudflare Enterprise/Worker if cf-connecting-ip is absent
+
+  // True-Client-IP fallback provided by Cloudflare Enterprise if cf-connecting-ip is absent
   const trueClientIp = request.headers.get('true-client-ip');
-  if (trueClientIp && trueClientIp.trim()) {
-    return trueClientIp.trim();
+  if (trueClientIp && typeof trueClientIp === 'string') {
+    const trimmed = trueClientIp.trim();
+    if (trimmed && trimmed.length >= 7 && trimmed.length <= 45) {
+      return trimmed;
+    }
   }
-  return '127.0.0.1';
+
+  // Fail-closed: No silent dummy IP fallback
+  return null;
 }
 
 /**
@@ -139,83 +149,74 @@ export async function decryptToken(encryptedString, env) {
 }
 
 /**
- * Pure Edge Rate Limiting for Parent Portal v2 (NO FIRESTORE).
+ * Pure Edge Rate Limiting Counter for Parent Portal v2 (NO FIRESTORE).
+ * Evaluates and increments an isolated rate limit key.
  *
- * Tiering strategy:
- * 1. Cloudflare Durable Objects (Atomic counter if env.PORTAL_RATELIMIT_DO or env.PORTAL_V2_RATELIMIT_DO is bound).
- * 2. Cloudflare KV Namespace:
- *    - Prefers dedicated env.PORTAL_RATELIMIT_KV if bound.
- *    - Falls back to env.PORTAL_SESSIONS_KV with isolated prefix 'v2_ratelimit:' so it never collides with session records.
- * 3. Non-production development: Memory Map fallback.
+ * Key format convention in KV:
+ * - IP rate limit:    `v2_ratelimit:ip:<ipHash>`
+ * - Email rate limit: `v2_ratelimit:email:<emailHash>`
  *
- * In production:
- * If neither Durable Objects nor KV is available, it FAILS CLOSED (locks request) and does NOT touch Firestore.
+ * NOTE: Cloudflare KV is an eventually consistent key-value store, not an atomic counter.
+ * For strict atomic serialization, Durable Objects can be bound in the future.
+ *
+ * Fails closed in production if no KV storage is available.
  */
-export async function checkV2RateLimit(context, rawKey, maxAttempts = 5, windowSeconds = 900) {
+export async function checkV2RateLimit(context, storageKey, maxAttempts = 5, windowSeconds = 900) {
   const { env = {} } = context;
   const isProduction = env.ENVIRONMENT === 'production';
-  const keyHash = await hashString(rawKey);
 
-  // Mode 1: Cloudflare Durable Objects (Atomic counter - strongly recommended for high concurrency)
-  const doBinding = env.PORTAL_V2_RATELIMIT_DO || env.PORTAL_RATELIMIT_DO;
-  if (doBinding) {
-    try {
-      const id = doBinding.idFromName(`v2_rl_${keyHash}`);
-      const stub = doBinding.get(id);
-      const res = await stub.fetch(`https://ratelimit.internal/check?max=${maxAttempts}&window=${windowSeconds}`);
-      if (res.ok) {
-        const data = await res.json();
-        return { allowed: Boolean(data.allowed), count: Number(data.count || 0), atomic: true };
-      }
-      return { allowed: false, count: maxAttempts, error: true };
-    } catch (doErr) {
-      console.error('Durable Object v2 rate limit error:', doErr);
-      return { allowed: false, count: maxAttempts, error: true };
-    }
-  }
-
-  // Mode 2: Cloudflare KV Namespace (Dedicated PORTAL_RATELIMIT_KV or isolated namespace in PORTAL_SESSIONS_KV)
+  // Mode 1: Cloudflare KV Namespace (Dedicated PORTAL_RATELIMIT_KV or isolated namespace in PORTAL_SESSIONS_KV)
   const kvBinding = env.PORTAL_RATELIMIT_KV || env.PORTAL_SESSIONS_KV;
   if (kvBinding) {
     try {
-      const isolatedKvKey = `v2_ratelimit:${keyHash}`;
-      const currentVal = await kvBinding.get(isolatedKvKey);
-      const count = currentVal ? Number(currentVal) : 0;
-      if (count >= maxAttempts) {
-        return { allowed: false, count, atomic: false };
+      const currentVal = await kvBinding.get(storageKey);
+      let count = 0;
+      if (currentVal !== null && currentVal !== undefined) {
+        count = Number(currentVal);
+        if (isNaN(count) || count < 0) {
+          // Corrupted value -> FAIL-CLOSED
+          console.error('Invalid counter value in rate limit store for key:', storageKey);
+          return { allowed: false, count: maxAttempts, error: true };
+        }
       }
-      await kvBinding.put(isolatedKvKey, String(count + 1), { expirationTtl: windowSeconds });
-      return { allowed: true, count: count + 1, atomic: false };
+
+      // Check limit
+      const nextCount = count + 1;
+      const isAllowed = count < maxAttempts;
+
+      // Always record/increment attempt to accurately accumulate brute-force attempts
+      await kvBinding.put(storageKey, String(nextCount), { expirationTtl: windowSeconds });
+
+      return { allowed: isAllowed, count: nextCount, atomic: false };
     } catch (kvErr) {
-      console.error('KV v2 rate limit error:', kvErr);
+      console.error('KV v2 rate limit error for key:', kvErr);
       // FAIL-CLOSED: Lock request if rate limit store fails
       return { allowed: false, count: maxAttempts, error: true };
     }
   }
 
-  // Mode 3: Local memory fallback ONLY for non-production development environments
+  // Mode 2: Local memory fallback ONLY for non-production development environments
   if (!isProduction) {
     globalThis.__chuvator_v2_ratelimits = globalThis.__chuvator_v2_ratelimits || new Map();
     const now = Date.now();
-    const entry = globalThis.__chuvator_v2_ratelimits.get(keyHash);
+    const entry = globalThis.__chuvator_v2_ratelimits.get(storageKey);
 
     if (entry && entry.expiresAt > now) {
-      if (entry.count >= maxAttempts) {
-        return { allowed: false, count: entry.count, atomic: false };
-      }
-      entry.count += 1;
-      return { allowed: true, count: entry.count, atomic: false };
+      const nextCount = entry.count + 1;
+      const isAllowed = entry.count < maxAttempts;
+      entry.count = nextCount;
+      return { allowed: isAllowed, count: nextCount, atomic: false };
     }
 
-    globalThis.__chuvator_v2_ratelimits.set(keyHash, {
+    globalThis.__chuvator_v2_ratelimits.set(storageKey, {
       count: 1,
       expiresAt: now + windowSeconds * 1000
     });
     return { allowed: true, count: 1, atomic: false };
   }
 
-  // If in production and NO KV/DO is configured -> FAIL-CLOSED without contacting Firestore
-  console.error('FAIL_CLOSED: No valid KV or Durable Object rate limit store configured in production.');
+  // If in production and NO KV is configured -> FAIL-CLOSED without contacting Firestore
+  console.error('FAIL_CLOSED: No valid KV rate limit store configured in production.');
   return { allowed: false, count: maxAttempts, error: true };
 }
 
@@ -392,7 +393,7 @@ export async function createPortalV2Session(context, sessionPayload) {
   const { env = {} } = context;
   const isProduction = env.ENVIRONMENT === 'production';
 
-  // Rule C: Production must NOT use memory fallback
+  // Rule: Production must NOT use memory fallback
   if (isProduction && !env.PORTAL_SESSIONS_KV) {
     throw new Error('CONFIG_ERROR: PORTAL_SESSIONS_KV binding wajib tersedia pada environment production.');
   }

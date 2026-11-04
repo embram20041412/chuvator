@@ -3,8 +3,13 @@
  * Supabase Auth email/password login endpoint for Parent Portal.
  * Uses ONLY anon/publishable key. Never service_role.
  * Resolves child & tenant access via RPC parent_get_children.
- * Enforces pure edge rate limiting (NO FIRESTORE), strict server secret salt,
- * trusted Cloudflare client IP, strict origin/CSRF, and secure portal_session_v2 cookie.
+ *
+ * Enforces dual-counter rate limiting:
+ * 1. IP rate limit: Max 30 attempts per 900 seconds.
+ * 2. Email rate limit: Max 5 attempts per 900 seconds.
+ * Both counters are always evaluated and accumulated on every attempt.
+ *
+ * Strict fail-closed, trusted Cloudflare IP ('cf-connecting-ip'), and origin/CSRF protection.
  */
 
 import {
@@ -58,6 +63,7 @@ export async function onRequestPost(context) {
     );
   }
 
+  // 3. Normalisasi email
   const email = (body.email || '').trim().toLowerCase();
   const password = body.password || '';
 
@@ -71,9 +77,7 @@ export async function onRequestPost(context) {
     );
   }
 
-  // 3. Strict Server-Side Salt & Rate Limiting (NO FIRESTORE)
-  // Must use PORTAL_TOKEN_ENCRYPTION_SECRET as server-side salt.
-  // NO FALLBACK to hardcoded strings, anon keys, or public values.
+  // 4. Validasi Konfigurasi Secret Server-Side (FAIL-CLOSED)
   const encryptionSecret = (env.PORTAL_TOKEN_ENCRYPTION_SECRET || '').trim();
   if (!encryptionSecret) {
     console.error('FAIL_CLOSED: PORTAL_TOKEN_ENCRYPTION_SECRET tidak dikonfigurasi.');
@@ -86,14 +90,32 @@ export async function onRequestPost(context) {
     );
   }
 
-  // Extract IP using Cloudflare edge proxy header ('cf-connecting-ip'), non-spoofable
+  // 5. Validasi IP Klien Tepercaya Cloudflare (FAIL-CLOSED)
   const clientIp = getTrustedClientIp(request);
-  const hashedEmail = await hashString(`v2_salt_${email}_${encryptionSecret}`);
-  const rateLimitKey = `v2_login_${clientIp}_${hashedEmail}`;
+  if (!clientIp) {
+    console.error('FAIL_CLOSED: Alamat IP klien tidak terdeteksi dari header proxy tepercaya Cloudflare.');
+    return new Response(
+      JSON.stringify({
+        success: false,
+        message: 'Gagal memverifikasi identitas jaringan. Permintaan ditolak.'
+      }),
+      { status: 400, headers: corsHeaders }
+    );
+  }
 
-  // Limit: max 5 login attempts per 15 minutes (900 seconds)
-  const rateLimitResult = await checkV2RateLimit(context, rateLimitKey, 5, 900);
-  if (!rateLimitResult.allowed) {
+  // 6. Dual-Counter Rate Limiting (Keduanya dievaluasi dan dicatat pada setiap percobaan)
+  // Counter A: IP Limit (Maks 30 percobaan per 900 detik)
+  const hashedIp = await hashString(`v2_ip_${clientIp}_${encryptionSecret}`);
+  const ipStorageKey = `v2_ratelimit:ip:${hashedIp}`;
+  const ipRateLimit = await checkV2RateLimit(context, ipStorageKey, 30, 900);
+
+  // Counter B: Email Limit (Maks 5 percobaan per 900 detik)
+  const hashedEmail = await hashString(`v2_email_${email}_${encryptionSecret}`);
+  const emailStorageKey = `v2_ratelimit:email:${hashedEmail}`;
+  const emailRateLimit = await checkV2RateLimit(context, emailStorageKey, 5, 900);
+
+  // Jika salah satu counter menolak atau mengalami error -> Tolak login
+  if (!ipRateLimit.allowed || !emailRateLimit.allowed) {
     return new Response(
       JSON.stringify({
         success: false,
@@ -118,7 +140,7 @@ export async function onRequestPost(context) {
   }
 
   try {
-    // 4. Authenticate with Supabase Auth using anon key
+    // 7. Authenticate with Supabase Auth using anon key
     const authResult = await supabaseSignInWithPassword(supabaseUrl, anonKey, email, password);
 
     if (!authResult.success || !authResult.data?.access_token) {
@@ -145,7 +167,7 @@ export async function onRequestPost(context) {
       );
     }
 
-    // 5. Query accessible children & tenants via RPC parent_get_children (Respects RLS & auth.uid())
+    // 8. Query accessible children & tenants via RPC parent_get_children (Respects RLS & auth.uid())
     const childrenResult = await fetchChildrenViaRpc(supabaseUrl, anonKey, access_token);
     if (!childrenResult.success) {
       return new Response(
@@ -189,7 +211,7 @@ export async function onRequestPost(context) {
       className: child.class_name || ''
     }));
 
-    // 6. Create secure server-side v2 session (Strict AES-256-GCM + KV)
+    // 9. Create secure server-side v2 session (Strict AES-256-GCM + KV)
     const tokenExpiresAt = new Date(Date.now() + (expires_in || 3600) * 1000).toISOString();
     const sessionInit = await createPortalV2Session(context, {
       authUserId,
