@@ -521,6 +521,19 @@ export default function PortalDashboard() {
   const isPaid = isBillingValid ? billingData.billing.isPaidThisMonth : null;
   const qrisUrl = isBillingValid ? (billingData.tenant?.qrisUrl || null) : null;
 
+  // B. PENGAMANAN QRIS MODAL: Otomatis tutup modal jika billing berubah menjadi tidak valid (STAGE 7G.2B.2A.3)
+  useEffect(() => {
+    if (showQrisModal && !isBillingValid) {
+      setShowQrisModal(false);
+    }
+  }, [showQrisModal, isBillingValid]);
+
+  const handleOpenQrisModal = () => {
+    if (isBillingValid && !isLoadingBilling) {
+      setShowQrisModal(true);
+    }
+  };
+
   // Daftar rekening bank efektif (mendukung multi-rekening)
   const effectiveBankList = bankAccounts.length > 0 
     ? bankAccounts 
@@ -670,7 +683,8 @@ export default function PortalDashboard() {
                   <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
                     isLoadingBilling ? 'bg-slate-50 text-slate-400 border border-slate-200' :
                     !isBillingValid ? 'bg-rose-50 text-rose-600 border border-rose-100' :
-                    isPaid ? 'bg-emerald-50 text-emerald-600 border border-emerald-100 group-hover:bg-emerald-100' : 'bg-amber-50 text-amber-600 border border-amber-100 group-hover:bg-amber-100'
+                    (isBillingValid && isPaid === true) ? 'bg-emerald-50 text-emerald-600 border border-emerald-100 group-hover:bg-emerald-100' :
+                    'bg-amber-50 text-amber-600 border border-amber-100 group-hover:bg-amber-100'
                   }`}>
                     <CreditCard className="w-5 h-5" />
                   </div>
@@ -681,12 +695,16 @@ export default function PortalDashboard() {
                     <p className="font-black text-slate-800 text-sm truncate">
                       {isLoadingBilling ? 'Memuat data tagihan...' :
                        !isBillingValid ? 'Gagal Muat Data Tagihan' :
-                       isPaid ? 'Lunas (Tidak Ada Tunggakan)' : formatRupiah(totalAmount)}
+                       (isBillingValid && isPaid === true) ? 'Lunas (Tidak Ada Tunggakan)' :
+                       (isBillingValid && isPaid === false) ? formatRupiah(totalAmount) :
+                       'Gagal Muat Data Tagihan'}
                     </p>
                     <p className="text-[11px] text-slate-500 truncate">
                       {isLoadingBilling ? 'Menghubungkan ke server...' :
                        !isBillingValid ? (billingError || 'Data tagihan belum dapat diverifikasi') :
-                       isPaid ? 'Iuran bulan ini telah terverifikasi' : `${billingDetails.length} komponen tagihan aktif`}
+                       (isBillingValid && isPaid === true) ? 'Iuran bulan ini telah terverifikasi' :
+                       (isBillingValid && isPaid === false) ? `${billingDetails.length} komponen tagihan aktif` :
+                       'Data tagihan belum dapat diverifikasi'}
                     </p>
                   </div>
                 </div>
@@ -821,15 +839,20 @@ export default function PortalDashboard() {
                 <AlertCircle className="w-3 h-3 text-rose-600" />
                 <span>GAGAL MUAT</span>
               </span>
-            ) : isPaid ? (
+            ) : (isBillingValid && isPaid === true) ? (
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-extrabold border border-emerald-200">
                 <CheckCircle2 className="w-3 h-3 text-emerald-600" />
                 <span>LUNAS</span>
               </span>
-            ) : (
+            ) : (isBillingValid && isPaid === false) ? (
               <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-extrabold border border-amber-200 animate-pulse">
                 <Clock className="w-3 h-3 text-amber-600" />
                 <span>BELUM LUNAS</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 text-[10px] font-extrabold border border-rose-200">
+                <AlertCircle className="w-3 h-3 text-rose-600" />
+                <span>GAGAL MUAT</span>
               </span>
             )}
           </div>
@@ -853,7 +876,7 @@ export default function PortalDashboard() {
                     Total Tagihan Belum Lunas
                   </p>
                   <p className="text-xl font-black text-slate-900 mt-0.5">
-                    {isLoadingBilling ? '...' : formatRupiah(totalAmount)}
+                    {isLoadingBilling ? '...' : (isBillingValid && isPaid === false) ? formatRupiah(totalAmount) : (isBillingValid && isPaid === true) ? formatRupiah(0) : '-'}
                   </p>
                 </div>
 
@@ -863,20 +886,20 @@ export default function PortalDashboard() {
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       <span>Menghitung...</span>
                     </div>
-                  ) : isPaid ? (
+                  ) : (isBillingValid && isPaid === true) ? (
                     <span className="inline-block px-2.5 py-1 bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded-lg border border-emerald-200">
                       Semua Lunas
                     </span>
-                  ) : (
+                  ) : (isBillingValid && isPaid === false) ? (
                     <span className="inline-block px-2.5 py-1 bg-amber-100 text-amber-800 font-bold text-[10px] rounded-lg border border-amber-200/80">
                       {billingDetails.length} Tagihan Aktif
                     </span>
-                  )}
+                  ) : null}
                 </div>
               </div>
 
               {/* Rincian Komponen Tagihan (Pendaftaran + SPP) */}
-              {!isPaid && billingDetails.length > 0 && (
+              {isBillingValid && isPaid === false && billingDetails.length > 0 && (
                 <div className="pt-2.5 border-t border-slate-200/70 space-y-1.5 text-xs">
                   <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
                     Rincian Biaya Belum Dibayar:
@@ -900,7 +923,7 @@ export default function PortalDashboard() {
           <button
             type="button"
             disabled={!isBillingValid || isLoadingBilling}
-            onClick={() => setShowQrisModal(true)}
+            onClick={handleOpenQrisModal}
             className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-slate-300 disabled:to-slate-400 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
           >
             <QrCode className="w-4 h-4" />
@@ -1568,7 +1591,7 @@ export default function PortalDashboard() {
         >
           <div className="relative">
             <CreditCard className={`w-5 h-5 mb-0.5 transition-transform ${activeTab === 'billing' ? 'text-blue-400 scale-110' : 'text-slate-400'}`} />
-            {isPaid === false && (
+            {isBillingValid === true && isPaid === false && (
               <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-500 animate-pulse ring-2 ring-slate-900" />
             )}
           </div>
@@ -1605,7 +1628,7 @@ export default function PortalDashboard() {
       </nav>
 
       {/* 6. MODAL QRIS PEMBAYARAN DENGAN RINCIAN BIAYA RIIL */}
-      {showQrisModal && (
+      {showQrisModal && isBillingValid === true && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-slate-900 border border-slate-800 text-white rounded-3xl max-w-sm w-full shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200">
             {/* Modal Header */}
