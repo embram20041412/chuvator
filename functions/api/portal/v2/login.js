@@ -146,19 +146,49 @@ export async function onRequestPost(context) {
     const authResult = await supabaseSignInWithPassword(supabaseUrl, anonKey, email, password);
 
     if (!authResult.success || !authResult.data?.access_token) {
-      // Catat kegagalan autentikasi pada counter email gagal (audit & risk tracking)
-      // Mencegah account lockout DoS: Wali murid sah tidak akan terkunci meskipun pihak ketiga sengaja mencoba password salah.
-      const hashedEmail = await hashString(`v2_email_${email}_${encryptionSecret}`);
-      const emailFailureStorageKey = `v2_ratelimit:email_failed:${hashedEmail}`;
-      await recordV2FailedLogin(context, emailFailureStorageKey, 900);
+      // Kondisi 1: Kredensial tidak valid (wrong password, unconfirmed, etc.)
+      if (authResult.category === 'INVALID_CREDENTIALS') {
+        // Catat kegagalan autentikasi pada counter email gagal (audit & risk tracking)
+        // Mencegah account lockout DoS: Wali murid sah tidak akan terkunci meskipun pihak ketiga sengaja mencoba password salah.
+        // Pure telemetry: Kegagalan pencatatan telemetry tidak mengubah hasil autentikasi.
+        try {
+          const hashedEmail = await hashString(`v2_email_${email}_${encryptionSecret}`);
+          const emailFailureStorageKey = `v2_ratelimit:email_failed:${hashedEmail}`;
+          await recordV2FailedLogin(context, emailFailureStorageKey, 900);
+        } catch (telemetryErr) {
+          console.error('Failed to record failed login telemetry:', telemetryErr.message);
+        }
 
-      // Anti-enumeration: Generic failure message
+        // Anti-enumeration: Generic failure message
+        return new Response(
+          JSON.stringify({
+            success: false,
+            message: 'Email atau kata sandi tidak sesuai.'
+          }),
+          { status: 401, headers: corsHeaders }
+        );
+      }
+
+      // Kondisi 2: Gangguan upstream (5xx, network error, timeout, fetch exception)
+      // JANGAN menambah email failure counter!
+      if (authResult.category === 'UPSTREAM_ERROR') {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            message: 'Layanan autentikasi sedang mengalami gangguan. Silakan coba beberapa saat lagi.'
+          }),
+          { status: authResult.status >= 500 ? authResult.status : 503, headers: corsHeaders }
+        );
+      }
+
+      // Kondisi 3: Konfigurasi bermasalah atau bad request dari server
+      // JANGAN menambah email failure counter!
       return new Response(
         JSON.stringify({
           success: false,
-          message: 'Email atau kata sandi tidak sesuai.'
+          message: 'Terjadi kendala pada konfigurasi layanan autentikasi. Hubungi administrator.'
         }),
-        { status: 401, headers: corsHeaders }
+        { status: 500, headers: corsHeaders }
       );
     }
 

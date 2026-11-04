@@ -20,22 +20,127 @@ import {
 export { getCorsHeaders, verifyCsrf, hashString };
 
 /**
+ * Strict IPv4 validator (RFC 791).
+ * - Exactly 4 decimal octets separated by '.'
+ * - Range 0-255 per octet
+ * - Strictly NO leading zeros (e.g., '01', '00' are invalid; '0' is valid)
+ * - Strictly digits only (no signs, letters, colons, ports, spaces)
+ */
+export function isValidIpv4(ip) {
+  if (!ip || typeof ip !== 'string') return false;
+  if (/\s/.test(ip)) return false;
+
+  const parts = ip.split('.');
+  if (parts.length !== 4) return false;
+
+  for (let i = 0; i < 4; i++) {
+    const part = parts[i];
+    if (!/^\d+$/.test(part)) return false;
+    if (part.length > 1 && part.startsWith('0')) return false;
+    const num = Number(part);
+    if (num < 0 || num > 255) return false;
+  }
+  return true;
+}
+
+/**
+ * Strict RFC 4291 compliant IPv6 validator.
+ * - Supports full 8-hextet format
+ * - Supports compressed '::' notation (at most one '::' in total)
+ * - Supports unspecified (::) and loopback (::1)
+ * - Supports IPv4-mapped (::ffff:x.x.x.x) and IPv4-embedded (e.g., 2001:db8::x.x.x.x)
+ * - Strictly rejects zone identifiers (%eth0, etc.)
+ * - Strictly rejects port numbers, brackets, whitespace, and non-hex characters
+ * - Rejects excessive hextets and empty/oversized hextets (>4 hex chars)
+ */
+export function isValidIpv6(ip) {
+  if (!ip || typeof ip !== 'string') return false;
+  if (/\s/.test(ip)) return false;
+
+  // Strictly reject zone IDs (e.g. %eth0), brackets, and non-delimiter illegal punctuation
+  if (ip.includes('%') || ip.includes('[') || ip.includes(']')) return false;
+
+  // Check for IPv4-embedded or IPv4-mapped syntax (e.g., ::ffff:192.0.2.128, 2001:db8::192.0.2.128)
+  let ipv6Prefix = ip;
+  let embeddedIpv4Hextets = 0;
+
+  if (ip.includes('.')) {
+    const lastColon = ip.lastIndexOf(':');
+    if (lastColon === -1) return false;
+
+    const ipv4Part = ip.slice(lastColon + 1);
+    if (!isValidIpv4(ipv4Part)) return false;
+
+    embeddedIpv4Hextets = 2; // IPv4 address occupies 32 bits = 2 x 16-bit hextets
+    const beforeIpv4 = ip.slice(0, lastColon);
+
+    // If beforeIpv4 ends with ':', that means the original address had '::' right before IPv4 (e.g., '::192.0.2.1' or '2001:db8::192.0.2.1')
+    if (beforeIpv4.endsWith(':')) {
+      ipv6Prefix = beforeIpv4 + ':';
+    } else {
+      ipv6Prefix = beforeIpv4;
+    }
+  }
+
+  // Check double-colon '::' occurrences
+  const firstDoubleColon = ipv6Prefix.indexOf('::');
+  if (firstDoubleColon !== -1) {
+    if (ipv6Prefix.indexOf('::', firstDoubleColon + 1) !== -1) {
+      // More than one '::' is strictly invalid
+      return false;
+    }
+  }
+
+  // Disallow leading or trailing single colon (e.g., ':2001:...', '...:2001:')
+  // '::' at beginning or end is valid, but single colon is not.
+  if (ipv6Prefix.startsWith(':') && !ipv6Prefix.startsWith('::')) return false;
+  if (ipv6Prefix.endsWith(':') && !ipv6Prefix.endsWith('::')) return false;
+
+  let leftParts = [];
+  let rightParts = [];
+
+  if (firstDoubleColon !== -1) {
+    const leftStr = ipv6Prefix.slice(0, firstDoubleColon);
+    const rightStr = ipv6Prefix.slice(firstDoubleColon + 2);
+
+    if (leftStr.length > 0) {
+      leftParts = leftStr.split(':');
+    }
+    if (rightStr.length > 0) {
+      rightParts = rightStr.split(':');
+    }
+  } else {
+    leftParts = ipv6Prefix.split(':');
+  }
+
+  const allParts = [...leftParts, ...rightParts];
+
+  // Each hextet must be 1 to 4 hexadecimal digits
+  for (const part of allParts) {
+    if (!/^[0-9a-fA-F]{1,4}$/.test(part)) {
+      return false;
+    }
+  }
+
+  const totalHextets = allParts.length + embeddedIpv4Hextets;
+
+  if (firstDoubleColon !== -1) {
+    // With '::', it must replace at least one 16-bit hextet, so total specified hextets must be < 8
+    return totalHextets < 8;
+  } else {
+    // Without '::', must have exactly 8 hextets
+    return totalHextets === 8;
+  }
+}
+
+/**
  * Strict IPv4 and IPv6 format validator.
  * Ensures the IP string strictly conforms to valid IP representation without dummy values.
  */
 export function isValidIp(ip) {
   if (!ip || typeof ip !== 'string') return false;
-  const trimmed = ip.trim();
-
-  // IPv4 strict regex (0.0.0.0 to 255.255.255.255, no leading zeros)
-  const ipv4Regex = /^(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$/;
-  if (ipv4Regex.test(trimmed)) {
-    return true;
-  }
-
-  // IPv6 strict regex (RFC 4291 compliant, matches full, shortened ::, and IPv4-mapped)
-  const ipv6Regex = /^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|:([0-9a-fA-F]{1,4}:){1,7}|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|::(ffff(:0{1,4})?:)?((25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])\.){3}(25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9]))$/;
-  return ipv6Regex.test(trimmed);
+  if (/\s/.test(ip)) return false;
+  return isValidIpv4(ip) || isValidIpv6(ip);
 }
 
 /**
@@ -342,25 +447,94 @@ export function parseCookie(request, cookieName) {
 }
 
 /**
- * Call Supabase Auth: signInWithPassword via REST API using anon key only
+ * Call Supabase Auth: signInWithPassword via REST API using anon key only.
+ * Classifies failure modes:
+ * - 'INVALID_CREDENTIALS': Wrong password, unconfirmed email, or user not found (HTTP 400 + invalid_grant).
+ * - 'UPSTREAM_ERROR': Supabase outage (5xx), network exception, DNS error, timeout.
+ * - 'CONFIG_OR_CLIENT_ERROR': Missing/invalid API keys (401/403) or malformed parameters.
  */
 export async function supabaseSignInWithPassword(supabaseUrl, anonKey, email, password) {
   const url = `${supabaseUrl}/auth/v1/token?grant_type=password`;
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'apikey': anonKey
-    },
-    body: JSON.stringify({ email, password })
-  });
+  let response;
 
-  const data = await response.json().catch(() => null);
-  if (!response.ok) {
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': anonKey
+      },
+      body: JSON.stringify({ email, password })
+    });
+  } catch (networkErr) {
+    console.error('Supabase Auth network/fetch exception:', networkErr.message);
     return {
       success: false,
-      status: response.status,
-      error: data?.error_description || data?.msg || data?.message || 'Login gagal'
+      category: 'UPSTREAM_ERROR',
+      status: 503,
+      error: networkErr.message || 'Layanan autentikasi gagal dihubungi.'
+    };
+  }
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    const status = response.status;
+    const errorMsg = data?.error_description || data?.msg || data?.message || data?.error || '';
+    const errorCode = data?.error_code || data?.error || '';
+
+    // Upstream 5xx server errors
+    if (status >= 500) {
+      return {
+        success: false,
+        category: 'UPSTREAM_ERROR',
+        status,
+        error: errorMsg || 'Layanan autentikasi upstream sedang bermasalah.'
+      };
+    }
+
+    // Config errors (401/403: API key invalid / permission denied)
+    if (status === 401 || status === 403) {
+      return {
+        success: false,
+        category: 'CONFIG_OR_CLIENT_ERROR',
+        status,
+        error: errorMsg || 'Konfigurasi kunci autentikasi tidak valid.'
+      };
+    }
+
+    // HTTP 400: Differentiate invalid credentials from other client errors
+    if (status === 400) {
+      const isInvalidCredentials =
+        errorCode === 'invalid_grant' ||
+        errorCode === 'invalid_credentials' ||
+        /invalid.*credential/i.test(errorMsg) ||
+        /email.*not.*confirm/i.test(errorMsg) ||
+        /user.*not.*found/i.test(errorMsg);
+
+      if (isInvalidCredentials) {
+        return {
+          success: false,
+          category: 'INVALID_CREDENTIALS',
+          status: 400,
+          error: errorMsg || 'Kredensial tidak valid.'
+        };
+      }
+
+      return {
+        success: false,
+        category: 'CONFIG_OR_CLIENT_ERROR',
+        status: 400,
+        error: errorMsg || 'Format permintaan autentikasi tidak valid.'
+      };
+    }
+
+    // Fallback for other 4xx status codes
+    return {
+      success: false,
+      category: 'CONFIG_OR_CLIENT_ERROR',
+      status,
+      error: errorMsg || 'Permintaan autentikasi gagal diproses.'
     };
   }
 
