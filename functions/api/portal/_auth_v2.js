@@ -803,7 +803,7 @@ export async function validatePortalV2Session(context) {
       accessibleTenants: sessionRecord.accessibleTenants || [],
       childrenSummary: sessionRecord.childrenSummary || [],
       csrfToken: sessionRecord.csrfToken,
-      expiresAt: sessionExpiresAt,
+      expiresAt: sessionRecord.expiresAt,
       accessToken: activeAccessToken,
       tokenRefreshed
     }
