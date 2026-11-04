@@ -20,31 +20,47 @@ import {
 export { getCorsHeaders, verifyCsrf, hashString };
 
 /**
+ * Strict IPv4 and IPv6 format validator.
+ * Ensures the IP string strictly conforms to valid IP representation without dummy values.
+ */
+export function isValidIp(ip) {
+  if (!ip || typeof ip !== 'string') return false;
+  const trimmed = ip.trim();
+
+  // IPv4 strict regex (0.0.0.0 to 255.255.255.255, no leading zeros)
+  const ipv4Regex = /^(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\.(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])$/;
+  if (ipv4Regex.test(trimmed)) {
+    return true;
+  }
+
+  // IPv6 strict regex (RFC 4291 compliant, matches full, shortened ::, and IPv4-mapped)
+  const ipv6Regex = /^(([0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|:([0-9a-fA-F]{1,4}:){1,7}|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|::(ffff(:0{1,4})?:)?((25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9])\.){3}(25[0-5]|(2[0-4]|1[0-9]|[1-9])?[0-9]))$/;
+  return ipv6Regex.test(trimmed);
+}
+
+/**
  * Strict Cloudflare Client IP extraction.
  * 'cf-connecting-ip' is provided and validated directly by Cloudflare edge proxy
  * and CANNOT be forged by client HTTP headers.
- * Never fallback to untrusted client-supplied 'x-forwarded-for'.
- * Never silently fallback to '127.0.0.1'. If absent or invalid, returns null.
+ *
+ * Security Rules:
+ * - Only inspect 'cf-connecting-ip'.
+ * - Removed 'true-client-ip' fallback (not guaranteed in non-Enterprise Cloudflare tiers).
+ * - Never fallback to untrusted client-supplied 'x-forwarded-for'.
+ * - Never silently fallback to '127.0.0.1'.
+ * - Strict regex format validation for IPv4 and IPv6.
+ * - Fail-closed: If header is absent or value is not a valid IPv4/IPv6 address, returns null.
  */
 export function getTrustedClientIp(request) {
   const cfIp = request.headers.get('cf-connecting-ip');
   if (cfIp && typeof cfIp === 'string') {
     const trimmed = cfIp.trim();
-    if (trimmed && trimmed.length >= 7 && trimmed.length <= 45) {
+    if (isValidIp(trimmed)) {
       return trimmed;
     }
   }
 
-  // True-Client-IP fallback provided by Cloudflare Enterprise if cf-connecting-ip is absent
-  const trueClientIp = request.headers.get('true-client-ip');
-  if (trueClientIp && typeof trueClientIp === 'string') {
-    const trimmed = trueClientIp.trim();
-    if (trimmed && trimmed.length >= 7 && trimmed.length <= 45) {
-      return trimmed;
-    }
-  }
-
-  // Fail-closed: No silent dummy IP fallback
+  // Fail-closed: No fallback to true-client-ip, x-forwarded-for, or dummy IP
   return null;
 }
 
@@ -153,11 +169,15 @@ export async function decryptToken(encryptedString, env) {
  * Evaluates and increments an isolated rate limit key.
  *
  * Key format convention in KV:
- * - IP rate limit:    `v2_ratelimit:ip:<ipHash>`
- * - Email rate limit: `v2_ratelimit:email:<emailHash>`
+ * - IP hard rate limit:   `v2_ratelimit:ip:<ipHash>` (Maks 30 req / 900s)
+ * - Email failed log:     `v2_ratelimit:email_failed:<emailHash>` (Risk tracking)
  *
- * NOTE: Cloudflare KV is an eventually consistent key-value store, not an atomic counter.
- * For strict atomic serialization, Durable Objects can be bound in the future.
+ * KV Storage Behavior & Characteristics:
+ * - Eventually Consistent: Cloudflare KV replicates asynchronously across global edge points.
+ * - Rolling TTL Window: Each write via `put` with `expirationTtl` resets the key's TTL from the
+ *   moment of write (rolling window).
+ * - For strictly serialized atomic increments without rolling window reset, Cloudflare Durable
+ *   Objects can be integrated in a later stage.
  *
  * Fails closed in production if no KV storage is available.
  */
@@ -218,6 +238,56 @@ export async function checkV2RateLimit(context, storageKey, maxAttempts = 5, win
   // If in production and NO KV is configured -> FAIL-CLOSED without contacting Firestore
   console.error('FAIL_CLOSED: No valid KV rate limit store configured in production.');
   return { allowed: false, count: maxAttempts, error: true };
+}
+
+/**
+ * Record failed login attempt for an email target in KV (Audit / Risk Tracking).
+ * Crucial Anti-Lockout Design:
+ * - This does NOT block or lock legitimate parent logins.
+ * - Legitimate parents providing the correct password will NOT be denied login
+ *   due to malicious 3rd parties attempting incorrect passwords from other IPs.
+ */
+export async function recordV2FailedLogin(context, storageKey, windowSeconds = 900) {
+  const { env = {} } = context;
+  const isProduction = env.ENVIRONMENT === 'production';
+  const kvBinding = env.PORTAL_RATELIMIT_KV || env.PORTAL_SESSIONS_KV;
+
+  if (kvBinding) {
+    try {
+      const currentVal = await kvBinding.get(storageKey);
+      let count = 0;
+      if (currentVal !== null && currentVal !== undefined) {
+        const parsed = Number(currentVal);
+        if (!isNaN(parsed) && parsed >= 0) {
+          count = parsed;
+        }
+      }
+      const nextCount = count + 1;
+      await kvBinding.put(storageKey, String(nextCount), { expirationTtl: windowSeconds });
+      return { success: true, count: nextCount };
+    } catch (err) {
+      console.error('Failed to record failed login in KV:', err);
+      return { success: false, error: err.message };
+    }
+  }
+
+  if (!isProduction) {
+    globalThis.__chuvator_v2_ratelimits = globalThis.__chuvator_v2_ratelimits || new Map();
+    const now = Date.now();
+    const entry = globalThis.__chuvator_v2_ratelimits.get(storageKey);
+    let currentCount = 0;
+    if (entry && entry.expiresAt > now) {
+      currentCount = entry.count;
+    }
+    const nextCount = currentCount + 1;
+    globalThis.__chuvator_v2_ratelimits.set(storageKey, {
+      count: nextCount,
+      expiresAt: now + windowSeconds * 1000
+    });
+    return { success: true, count: nextCount };
+  }
+
+  return { success: false, reason: 'No KV store available' };
 }
 
 /**

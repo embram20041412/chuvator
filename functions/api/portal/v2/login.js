@@ -4,12 +4,18 @@
  * Uses ONLY anon/publishable key. Never service_role.
  * Resolves child & tenant access via RPC parent_get_children.
  *
- * Enforces dual-counter rate limiting:
- * 1. IP rate limit: Max 30 attempts per 900 seconds.
- * 2. Email rate limit: Max 5 attempts per 900 seconds.
- * Both counters are always evaluated and accumulated on every attempt.
+ * Rate Limiting & Account Protection Architecture:
+ * 1. IP Hard Rate Limit: Max 30 attempts per 900 seconds.
+ *    - Hard rate limit applied before Supabase Auth call.
+ *    - All login requests from the client IP are counted.
+ *    - Successful logins do not clear this IP counter.
+ * 2. Email Failure Tracking (Anti-Lockout):
+ *    - Failed credential attempts are recorded per hashed email (`v2_ratelimit:email_failed:<hash>`).
+ *    - NO hard lockout prior to Supabase Auth call, preventing malicious 3rd parties
+ *      from locking legitimate parents out of their accounts.
  *
- * Strict fail-closed, trusted Cloudflare IP ('cf-connecting-ip'), and origin/CSRF protection.
+ * Strict fail-closed, trusted Cloudflare IP ('cf-connecting-ip' with strict IPv4/IPv6 validation),
+ * and origin/CSRF protection.
  */
 
 import {
@@ -23,6 +29,7 @@ import {
   buildV2SessionCookie,
   getTrustedClientIp,
   checkV2RateLimit,
+  recordV2FailedLogin,
   hashString
 } from '../_auth_v2.js';
 
@@ -93,7 +100,7 @@ export async function onRequestPost(context) {
   // 5. Validasi IP Klien Tepercaya Cloudflare (FAIL-CLOSED)
   const clientIp = getTrustedClientIp(request);
   if (!clientIp) {
-    console.error('FAIL_CLOSED: Alamat IP klien tidak terdeteksi dari header proxy tepercaya Cloudflare.');
+    console.error('FAIL_CLOSED: Alamat IP klien tidak terdeteksi atau format tidak valid dari cf-connecting-ip.');
     return new Response(
       JSON.stringify({
         success: false,
@@ -103,23 +110,18 @@ export async function onRequestPost(context) {
     );
   }
 
-  // 6. Dual-Counter Rate Limiting (Keduanya dievaluasi dan dicatat pada setiap percobaan)
-  // Counter A: IP Limit (Maks 30 percobaan per 900 detik)
+  // 6. Hard Rate Limiting: IP-based (Maksimum 30 percobaan per 900 detik)
+  // Menghitung seluruh request login dari IP yang sama untuk membatasi automated brute-force flooding.
+  // Login berhasil tidak menghapus counter IP.
   const hashedIp = await hashString(`v2_ip_${clientIp}_${encryptionSecret}`);
   const ipStorageKey = `v2_ratelimit:ip:${hashedIp}`;
   const ipRateLimit = await checkV2RateLimit(context, ipStorageKey, 30, 900);
 
-  // Counter B: Email Limit (Maks 5 percobaan per 900 detik)
-  const hashedEmail = await hashString(`v2_email_${email}_${encryptionSecret}`);
-  const emailStorageKey = `v2_ratelimit:email:${hashedEmail}`;
-  const emailRateLimit = await checkV2RateLimit(context, emailStorageKey, 5, 900);
-
-  // Jika salah satu counter menolak atau mengalami error -> Tolak login
-  if (!ipRateLimit.allowed || !emailRateLimit.allowed) {
+  if (!ipRateLimit.allowed) {
     return new Response(
       JSON.stringify({
         success: false,
-        message: 'Terlalu banyak percobaan login. Silakan tunggu beberapa menit sebelum mencoba kembali.'
+        message: 'Terlalu banyak percobaan login dari alamat IP Anda. Silakan tunggu beberapa menit sebelum mencoba kembali.'
       }),
       { status: 429, headers: corsHeaders }
     );
@@ -144,6 +146,12 @@ export async function onRequestPost(context) {
     const authResult = await supabaseSignInWithPassword(supabaseUrl, anonKey, email, password);
 
     if (!authResult.success || !authResult.data?.access_token) {
+      // Catat kegagalan autentikasi pada counter email gagal (audit & risk tracking)
+      // Mencegah account lockout DoS: Wali murid sah tidak akan terkunci meskipun pihak ketiga sengaja mencoba password salah.
+      const hashedEmail = await hashString(`v2_email_${email}_${encryptionSecret}`);
+      const emailFailureStorageKey = `v2_ratelimit:email_failed:${hashedEmail}`;
+      await recordV2FailedLogin(context, emailFailureStorageKey, 900);
+
       // Anti-enumeration: Generic failure message
       return new Response(
         JSON.stringify({
