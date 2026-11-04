@@ -202,12 +202,15 @@ export default function PortalLoginV2() {
     setInfoMsg(null);
 
     try {
+      // Pastikan CSRF token berasal dari sesi V2 yang aktif
+      const activeCsrfToken = csrfToken || sessionData?.csrfToken || null;
       const headers = {
+        'Content-Type': 'application/json',
         'Accept': 'application/json'
       };
 
-      if (csrfToken) {
-        headers['x-csrf-token'] = csrfToken;
+      if (activeCsrfToken) {
+        headers['X-Portal-CSRF'] = activeCsrfToken;
       }
 
       const response = await fetch('/api/portal/v2/logout', {
@@ -219,23 +222,25 @@ export default function PortalLoginV2() {
       const data = await response.json().catch(() => ({}));
 
       if (response.ok && data.success) {
+        // Logout sukses di server: KV telah dicabut dan cookie dikosongkan
         setSessionData(null);
         setCsrfToken(null);
         setEmail('');
         setPassword('');
         setInfoMsg('Anda telah berhasil keluar dari akun wali.');
-      } else {
-        // Tetap hapus sesi lokal jika cookie sudah invalid
+      } else if (response.status === 401) {
+        // Sesi sudah tidak valid atau telah kedaluwarsa di server
         setSessionData(null);
         setCsrfToken(null);
-        setInfoMsg('Sesi telah diakhiri.');
+        setInfoMsg('Sesi Anda telah kedaluwarsa.');
+      } else {
+        // HTTP 403 (CSRF mismatch), HTTP 500 (Server failure), dll:
+        // Tampilkan pesan kesalahan dari server dan jangan menyembunyikan kegagalan
+        setErrorMsg(data.message || 'Gagal mengakhiri sesi portal pada server. Silakan coba kembali.');
       }
     } catch (err) {
       console.error('Logout error:', err);
-      // Bersihkan memori klien
-      setSessionData(null);
-      setCsrfToken(null);
-      setInfoMsg('Sesi lokal telah dibersihkan.');
+      setErrorMsg('Gagal terhubung ke server untuk proses logout. Silakan periksa koneksi internet Anda.');
     } finally {
       setIsLoggingOut(false);
     }

@@ -126,7 +126,7 @@ async function startServer() {
     const origin = req.headers.origin;
     res.header('Access-Control-Allow-Origin', origin || '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, X-Portal-CSRF');
     if (req.method === 'OPTIONS') {
       return res.sendStatus(204);
     }
