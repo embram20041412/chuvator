@@ -3,7 +3,8 @@
  * Supabase Auth email/password login endpoint for Parent Portal.
  * Uses ONLY anon/publishable key. Never service_role.
  * Resolves child & tenant access via RPC parent_get_children.
- * Enforces server-side rate limiting, strict origin/CSRF, and secure portal_session_v2 cookie.
+ * Enforces pure edge rate limiting (NO FIRESTORE), strict server secret salt,
+ * trusted Cloudflare client IP, strict origin/CSRF, and secure portal_session_v2 cookie.
  */
 
 import {
@@ -15,11 +16,10 @@ import {
   fetchChildrenViaRpc,
   createPortalV2Session,
   buildV2SessionCookie,
-  getClientIp,
+  getTrustedClientIp,
+  checkV2RateLimit,
   hashString
 } from '../_auth_v2.js';
-
-import { checkRateLimit } from '../_auth.js';
 
 export async function onRequestOptions(context) {
   const corsHeaders = getCorsHeaders(context.request, context.env);
@@ -71,15 +71,28 @@ export async function onRequestPost(context) {
     );
   }
 
-  // 3. Edge Rate Limiting: IP-based and Normalized Email-based
-  // Email identifier is hashed using server secret or salted SHA-256 to avoid storing raw email
-  const clientIp = getClientIp(request);
-  const saltSecret = env.PORTAL_TOKEN_ENCRYPTION_SECRET || 'chuvator-rate-salt';
-  const hashedEmail = await hashString(`v2_email_${email}_${saltSecret}`);
+  // 3. Strict Server-Side Salt & Rate Limiting (NO FIRESTORE)
+  // Must use PORTAL_TOKEN_ENCRYPTION_SECRET as server-side salt.
+  // NO FALLBACK to hardcoded strings, anon keys, or public values.
+  const encryptionSecret = (env.PORTAL_TOKEN_ENCRYPTION_SECRET || '').trim();
+  if (!encryptionSecret) {
+    console.error('FAIL_CLOSED: PORTAL_TOKEN_ENCRYPTION_SECRET tidak dikonfigurasi.');
+    return new Response(
+      JSON.stringify({
+        success: false,
+        message: 'Konfigurasi keamanan server belum lengkap. Hubungi administrator.'
+      }),
+      { status: 500, headers: corsHeaders }
+    );
+  }
+
+  // Extract IP using Cloudflare edge proxy header ('cf-connecting-ip'), non-spoofable
+  const clientIp = getTrustedClientIp(request);
+  const hashedEmail = await hashString(`v2_salt_${email}_${encryptionSecret}`);
   const rateLimitKey = `v2_login_${clientIp}_${hashedEmail}`;
 
   // Limit: max 5 login attempts per 15 minutes (900 seconds)
-  const rateLimitResult = await checkRateLimit(context, rateLimitKey, 5, 900);
+  const rateLimitResult = await checkV2RateLimit(context, rateLimitKey, 5, 900);
   if (!rateLimitResult.allowed) {
     return new Response(
       JSON.stringify({
@@ -146,7 +159,7 @@ export async function onRequestPost(context) {
 
     const linkedChildren = childrenResult.children || [];
 
-    // Rule 9: If RPC returns empty array, reject login with appropriate notice.
+    // Rule: If RPC returns empty array, reject login with appropriate notice.
     // Do NOT auto-create account.
     if (linkedChildren.length === 0) {
       return new Response(

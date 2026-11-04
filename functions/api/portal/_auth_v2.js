@@ -6,17 +6,37 @@
  * - Mandatory strict encryption for sensitive tokens using AES-GCM 256-bit with PORTAL_TOKEN_ENCRYPTION_SECRET.
  * - Symmetrical cookie management for 'portal_session_v2'.
  * - Production-enforced fail-closed session storage (PORTAL_SESSIONS_KV).
+ * - Pure Edge Rate Limiting (Durable Objects > Dedicated KV / Isolated Namespace) WITHOUT Firestore.
+ * - Trusted Cloudflare Client IP extraction ('cf-connecting-ip').
  * - Session validation, auto-refresh of Supabase tokens, and CSRF protection.
  */
 
 import {
   getCorsHeaders,
   verifyCsrf,
-  hashString,
-  getClientIp
+  hashString
 } from './_auth.js';
 
-export { getCorsHeaders, verifyCsrf, hashString, getClientIp };
+export { getCorsHeaders, verifyCsrf, hashString };
+
+/**
+ * Strict Cloudflare Client IP extraction.
+ * 'cf-connecting-ip' is provided and validated directly by Cloudflare edge proxy
+ * and CANNOT be forged by client HTTP headers.
+ * Never fallback to untrusted client-supplied 'x-forwarded-for' in Cloudflare environment.
+ */
+export function getTrustedClientIp(request) {
+  const cfIp = request.headers.get('cf-connecting-ip');
+  if (cfIp && cfIp.trim()) {
+    return cfIp.trim();
+  }
+  // True client IP fallback provided by Cloudflare Enterprise/Worker if cf-connecting-ip is absent
+  const trueClientIp = request.headers.get('true-client-ip');
+  if (trueClientIp && trueClientIp.trim()) {
+    return trueClientIp.trim();
+  }
+  return '127.0.0.1';
+}
 
 /**
  * Clean and normalize Supabase URL
@@ -116,6 +136,87 @@ export async function decryptToken(encryptedString, env) {
     console.error('Decryption failed or invalid key:', err.message);
     return '';
   }
+}
+
+/**
+ * Pure Edge Rate Limiting for Parent Portal v2 (NO FIRESTORE).
+ *
+ * Tiering strategy:
+ * 1. Cloudflare Durable Objects (Atomic counter if env.PORTAL_RATELIMIT_DO or env.PORTAL_V2_RATELIMIT_DO is bound).
+ * 2. Cloudflare KV Namespace:
+ *    - Prefers dedicated env.PORTAL_RATELIMIT_KV if bound.
+ *    - Falls back to env.PORTAL_SESSIONS_KV with isolated prefix 'v2_ratelimit:' so it never collides with session records.
+ * 3. Non-production development: Memory Map fallback.
+ *
+ * In production:
+ * If neither Durable Objects nor KV is available, it FAILS CLOSED (locks request) and does NOT touch Firestore.
+ */
+export async function checkV2RateLimit(context, rawKey, maxAttempts = 5, windowSeconds = 900) {
+  const { env = {} } = context;
+  const isProduction = env.ENVIRONMENT === 'production';
+  const keyHash = await hashString(rawKey);
+
+  // Mode 1: Cloudflare Durable Objects (Atomic counter - strongly recommended for high concurrency)
+  const doBinding = env.PORTAL_V2_RATELIMIT_DO || env.PORTAL_RATELIMIT_DO;
+  if (doBinding) {
+    try {
+      const id = doBinding.idFromName(`v2_rl_${keyHash}`);
+      const stub = doBinding.get(id);
+      const res = await stub.fetch(`https://ratelimit.internal/check?max=${maxAttempts}&window=${windowSeconds}`);
+      if (res.ok) {
+        const data = await res.json();
+        return { allowed: Boolean(data.allowed), count: Number(data.count || 0), atomic: true };
+      }
+      return { allowed: false, count: maxAttempts, error: true };
+    } catch (doErr) {
+      console.error('Durable Object v2 rate limit error:', doErr);
+      return { allowed: false, count: maxAttempts, error: true };
+    }
+  }
+
+  // Mode 2: Cloudflare KV Namespace (Dedicated PORTAL_RATELIMIT_KV or isolated namespace in PORTAL_SESSIONS_KV)
+  const kvBinding = env.PORTAL_RATELIMIT_KV || env.PORTAL_SESSIONS_KV;
+  if (kvBinding) {
+    try {
+      const isolatedKvKey = `v2_ratelimit:${keyHash}`;
+      const currentVal = await kvBinding.get(isolatedKvKey);
+      const count = currentVal ? Number(currentVal) : 0;
+      if (count >= maxAttempts) {
+        return { allowed: false, count, atomic: false };
+      }
+      await kvBinding.put(isolatedKvKey, String(count + 1), { expirationTtl: windowSeconds });
+      return { allowed: true, count: count + 1, atomic: false };
+    } catch (kvErr) {
+      console.error('KV v2 rate limit error:', kvErr);
+      // FAIL-CLOSED: Lock request if rate limit store fails
+      return { allowed: false, count: maxAttempts, error: true };
+    }
+  }
+
+  // Mode 3: Local memory fallback ONLY for non-production development environments
+  if (!isProduction) {
+    globalThis.__chuvator_v2_ratelimits = globalThis.__chuvator_v2_ratelimits || new Map();
+    const now = Date.now();
+    const entry = globalThis.__chuvator_v2_ratelimits.get(keyHash);
+
+    if (entry && entry.expiresAt > now) {
+      if (entry.count >= maxAttempts) {
+        return { allowed: false, count: entry.count, atomic: false };
+      }
+      entry.count += 1;
+      return { allowed: true, count: entry.count, atomic: false };
+    }
+
+    globalThis.__chuvator_v2_ratelimits.set(keyHash, {
+      count: 1,
+      expiresAt: now + windowSeconds * 1000
+    });
+    return { allowed: true, count: 1, atomic: false };
+  }
+
+  // If in production and NO KV/DO is configured -> FAIL-CLOSED without contacting Firestore
+  console.error('FAIL_CLOSED: No valid KV or Durable Object rate limit store configured in production.');
+  return { allowed: false, count: maxAttempts, error: true };
 }
 
 /**
@@ -457,7 +558,7 @@ export async function validatePortalV2Session(context) {
       accessibleTenants: sessionRecord.accessibleTenants || [],
       childrenSummary: sessionRecord.childrenSummary || [],
       csrfToken: sessionRecord.csrfToken,
-      expiresAt: sessionRecord.expiresAt,
+      expiresAt: sessionExpiresAt,
       accessToken: activeAccessToken,
       tokenRefreshed
     }
