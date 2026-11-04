@@ -1,14 +1,15 @@
 /**
- * Cloudflare Pages Function: /api/portal/logout
+ * Cloudflare Pages Function: /api/portal/logout (STAGE 7G.2A-HOTFIX)
  * Endpoint for revoking server-side session and clearing HttpOnly session cookie.
+ * Enforces CSRF validation and fail-closed session revocation.
  */
 
 import {
   getCorsHeaders,
+  verifyCsrf,
   revokePortalSession,
   buildClearSessionCookie,
-  recordAuditLog,
-  parseCookie
+  recordAuditLog
 } from './_auth.js';
 
 export async function onRequestOptions(context) {
@@ -23,11 +24,30 @@ export async function onRequestPost(context) {
   const { request, env = {} } = context;
   const corsHeaders = getCorsHeaders(request, env);
 
-  try {
-    const token = parseCookie(request, 'portal_session');
+  // 1. Strict CSRF & Origin Validation
+  if (!verifyCsrf(request, env)) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        message: 'Permintaan ditolak. Origin tidak diizinkan atau CSRF check gagal.'
+      }),
+      { status: 403, headers: corsHeaders }
+    );
+  }
 
-    // Revoke session server-side in KV / Firestore
-    await revokePortalSession(context);
+  try {
+    // 2. Revoke session server-side in KV or Firestore
+    const revokeResult = await revokePortalSession(context);
+
+    if (!revokeResult.success) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: 'Gagal mengakhiri sesi portal. Silakan coba beberapa saat lagi.'
+        }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
 
     await recordAuditLog(context, {
       action: 'PORTAL_LOGOUT',
@@ -50,12 +70,11 @@ export async function onRequestPost(context) {
       { status: 200, headers: responseHeaders }
     );
   } catch (err) {
-    console.error('Portal Logout Error:', err);
+    console.error('Portal Logout Error:', err.message);
     return new Response(
       JSON.stringify({
         success: false,
-        message: 'Gagal mengakhiri sesi portal.',
-        details: err.message
+        message: 'Gagal mengakhiri sesi portal. Silakan coba beberapa saat lagi.'
       }),
       { status: 500, headers: corsHeaders }
     );

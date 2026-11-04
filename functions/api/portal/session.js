@@ -1,6 +1,6 @@
 /**
- * Cloudflare Pages Function: /api/portal/session
- * Validates the current HttpOnly portal_session cookie and returns session state.
+ * Cloudflare Pages Function: /api/portal/session (STAGE 7G.2A-HOTFIX)
+ * Validates current HttpOnly portal_session cookie and returns session state.
  */
 
 import {
@@ -27,7 +27,7 @@ export async function onRequestGet(context) {
       return new Response(
         JSON.stringify({
           authenticated: false,
-          message: result.reason || 'Sesi tidak valid atau telah kedaluwarsa.'
+          message: 'Sesi tidak valid atau telah kedaluwarsa.'
         }),
         { status: 401, headers: corsHeaders }
       );
@@ -46,12 +46,11 @@ export async function onRequestGet(context) {
       { status: 200, headers: corsHeaders }
     );
   } catch (err) {
-    console.error('Portal Session Validation Error:', err);
+    console.error('Portal Session Validation Error:', err.message);
     return new Response(
       JSON.stringify({
         authenticated: false,
-        message: 'Gagal memverifikasi sesi portal.',
-        details: err.message
+        message: 'Gagal memverifikasi sesi portal.'
       }),
       { status: 500, headers: corsHeaders }
     );

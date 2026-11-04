@@ -1,8 +1,8 @@
 /**
- * Cloudflare Pages Function: /api/portal/login
+ * Cloudflare Pages Function: /api/portal/login (STAGE 7G.2A-HOTFIX)
  * Edge-safe secure authentication endpoint for Portal Wali Murid.
- * Verifies Student ID, Parent Phone, Parent PIN, and/or Birth Date in backend.
- * Issues cryptographically secure HttpOnly session cookies.
+ * Verifies Student ID, Parent Phone, PBKDF2 PIN, and/or Birth Date in backend.
+ * Enforces fail-closed session management, strict CORS/CSRF, and anti-enumeration.
  */
 
 import {
@@ -12,6 +12,8 @@ import {
   normalizePhoneDigits,
   normalizeBirthDate,
   getCorsHeaders,
+  verifyCsrf,
+  verifyPinPbkdf2,
   buildSessionCookie,
   createPortalSession,
   checkRateLimit,
@@ -36,10 +38,22 @@ export async function onRequestOptions(context) {
 export async function onRequestPost(context) {
   const { request, env = {} } = context;
   const corsHeaders = getCorsHeaders(request, env);
+
+  // 1. Strict CSRF & Origin Validation
+  if (!verifyCsrf(request, env)) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        message: 'Permintaan ditolak. Origin tidak diizinkan atau CSRF check gagal.'
+      }),
+      { status: 403, headers: corsHeaders }
+    );
+  }
+
   const clientIp = getClientIp(request);
 
   try {
-    // 1. Parse request body
+    // 2. Parse request body
     const body = await request.json().catch(() => ({}));
     const { studentId, parentPhone, parentPin, birthDate } = body;
 
@@ -48,51 +62,41 @@ export async function onRequestPost(context) {
     const cleanParentPin = String(parentPin || '').trim();
     const cleanBirthDate = normalizeBirthDate(birthDate);
 
-    // Rate Limiting Key: IP + Phone Digits
     const inputPhoneDigits = normalizePhoneDigits(cleanParentPhone);
-    const rateLimitKey = `rl_login_${clientIp}_${inputPhoneDigits}`;
 
-    // 2. Validate basic input presence
+    // Rate Limiting Key: IP + Hashed Phone & Student ID (no raw PII in key)
+    const rateLimitKeyRaw = `${clientIp}_${inputPhoneDigits}_${cleanStudentId}`;
+    const rateLimitKey = await hashString(rateLimitKeyRaw);
+
+    // Generic Failure Response Helper (Prevents Student ID / Phone enumeration)
+    const genericFailure = async (reasonCode) => {
+      await recordAuditLog(context, {
+        action: 'PORTAL_LOGIN_FAILED',
+        studentId: cleanStudentId,
+        phoneDigits: inputPhoneDigits,
+        success: false,
+        failureReason: reasonCode
+      });
+
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: 'Kredensial tidak ditemukan atau verifikasi keamanan gagal.'
+        }),
+        { status: 401, headers: corsHeaders }
+      );
+    };
+
+    // 3. Basic Input Presence Check
     if (!cleanStudentId || !cleanParentPhone) {
-      await recordAuditLog(context, {
-        action: 'PORTAL_LOGIN_FAILED',
-        studentId: cleanStudentId,
-        phoneDigits: inputPhoneDigits,
-        success: false,
-        failureReason: 'missing_id_or_phone'
-      });
-
-      return new Response(
-        JSON.stringify({
-          success: false,
-          message: 'Kredensial tidak lengkap.',
-          details: 'ID Siswa dan Nomor HP Wali wajib diisi.'
-        }),
-        { status: 400, headers: corsHeaders }
-      );
+      return await genericFailure('missing_id_or_phone');
     }
 
-    // Require either parentPin or birthDate for 2FA backend verification
     if (!cleanParentPin && !cleanBirthDate) {
-      await recordAuditLog(context, {
-        action: 'PORTAL_LOGIN_FAILED',
-        studentId: cleanStudentId,
-        phoneDigits: inputPhoneDigits,
-        success: false,
-        failureReason: 'missing_pin_and_birthdate'
-      });
-
-      return new Response(
-        JSON.stringify({
-          success: false,
-          message: 'Kredensial tidak lengkap.',
-          details: 'PIN Akses Wali (6 Digit) atau Tanggal Lahir Siswa wajib diisi.'
-        }),
-        { status: 400, headers: corsHeaders }
-      );
+      return await genericFailure('missing_pin_and_birthdate');
     }
 
-    // 3. Enforce Rate Limiting (Max 5 attempts per 15 minutes)
+    // 4. Fail-Closed Rate Limiting Check (Max 5 attempts per 15 minutes)
     const rateLimit = await checkRateLimit(context, rateLimitKey, 5, 900);
     if (!rateLimit.allowed) {
       await recordAuditLog(context, {
@@ -106,14 +110,13 @@ export async function onRequestPost(context) {
       return new Response(
         JSON.stringify({
           success: false,
-          message: 'Terlalu banyak percobaan login gagal.',
-          details: 'Silakan tunggu beberapa menit sebelum mencoba kembali.'
+          message: 'Terlalu banyak percobaan login. Silakan coba beberapa saat lagi.'
         }),
         { status: 429, headers: corsHeaders }
       );
     }
 
-    // 4. Fetch Google OAuth Access Token for Firestore REST API
+    // 5. Fetch Google Service Account Access Token for Firestore REST API
     const projectId = env.FIREBASE_PROJECT_ID || 'ai-studio-chuasportcorespo-a3f4ecd8-7371-486a-9e89-d74d93ce6065';
     const databaseId = env.FIREBASE_DATABASE_ID || 'ai-studio-chuasportcorespo-a3f4ecd8-7371-486a-9e89-d74d93ce6065';
     const clientEmail = env.FIREBASE_CLIENT_EMAIL || '';
@@ -123,7 +126,7 @@ export async function onRequestPost(context) {
     try {
       accessToken = await getGoogleAccessToken(clientEmail, privateKey);
     } catch (tokenErr) {
-      console.error('Google Auth Token Error:', tokenErr.message);
+      console.error('Google OAuth Token Exchange Error:', tokenErr.message);
     }
 
     const reqHeaders = { 'Content-Type': 'application/json' };
@@ -131,7 +134,7 @@ export async function onRequestPost(context) {
       reqHeaders['Authorization'] = `Bearer ${accessToken}`;
     }
 
-    // 5. Query Firestore for student matching parentPhone & studentId
+    // 6. Query Firestore for candidate student record
     const phoneVariations = generatePhoneVariations(cleanParentPhone);
     const queryPayload = {
       structuredQuery: {
@@ -167,7 +170,6 @@ export async function onRequestPost(context) {
         const fields = parseFirestoreFields(item.document.fields);
         const doc = { id: docId, ...fields };
 
-        // Match Student ID prefix (case-insensitive)
         if (doc.id.toLowerCase().startsWith(cleanStudentId.toLowerCase())) {
           candidateDoc = doc;
           break;
@@ -175,7 +177,7 @@ export async function onRequestPost(context) {
       }
     }
 
-    // Fallback: Direct document fetch by student ID
+    // Direct fetch fallback if query returns empty
     if (!candidateDoc && cleanStudentId.length >= 3) {
       try {
         const getDocUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/students/${encodeURIComponent(cleanStudentId)}`;
@@ -197,86 +199,91 @@ export async function onRequestPost(context) {
           }
         }
       } catch (err) {
-        console.warn('Direct doc fetch fallback warning:', err.message);
+        console.error('Direct doc fetch error:', err.message);
       }
     }
-
-    // 6. Generic Failure Response (Pencegahan Enumerasi ID / Nomor HP)
-    const genericFailure = async (reason) => {
-      await recordAuditLog(context, {
-        action: 'PORTAL_LOGIN_FAILED',
-        studentId: cleanStudentId,
-        phoneDigits: inputPhoneDigits,
-        success: false,
-        failureReason: reason
-      });
-
-      return new Response(
-        JSON.stringify({
-          success: false,
-          message: 'Kredensial tidak ditemukan atau verifikasi keamanan gagal.',
-          details: 'Kombinasi ID Siswa, Nomor HP Wali, PIN, atau Tanggal Lahir tidak cocok.'
-        }),
-        { status: 401, headers: corsHeaders }
-      );
-    };
 
     if (!candidateDoc) {
       return await genericFailure('student_not_found');
     }
 
-    // 7. Verify Phone Number (Strict Normalized Digit Matching)
+    // 7. Verify Phone Digits Match Strictly
     const recordPhoneDigits = normalizePhoneDigits(candidateDoc.parentPhone || candidateDoc.phone);
     if (!recordPhoneDigits || recordPhoneDigits !== inputPhoneDigits) {
       return await genericFailure('phone_mismatch');
     }
 
-    // 8. Verify PIN and/or Birth Date in Backend
-    let credentialVerified = false;
-
-    // A. Check PIN Verification
+    // 8. STRICT AUTHENTICATION FACTORS VERIFICATION (NO BYPASS!)
     const storedPin = String(candidateDoc.parentPin || candidateDoc.parent_pin || candidateDoc.pin || '').trim();
-    if (storedPin && cleanParentPin) {
-      // Support plain-text PIN comparison or SHA-256 hashed PIN comparison
-      const hashedInputPin = await hashString(cleanParentPin);
-      if (storedPin === cleanParentPin || storedPin === hashedInputPin) {
-        credentialVerified = true;
-      } else {
-        return await genericFailure('pin_mismatch');
-      }
-    }
-
-    // B. Check Birth Date Verification
     const storedBirthDate = normalizeBirthDate(candidateDoc.birthDate || candidateDoc.birth_date);
-    if (storedBirthDate && cleanBirthDate) {
-      if (storedBirthDate === cleanBirthDate) {
-        credentialVerified = true;
-      } else if (!credentialVerified) {
-        return await genericFailure('birthdate_mismatch');
+
+    // A. NO STORED FACTORS AVAILABLE -> REJECT IMMEDIATELY!
+    if (!storedPin && !storedBirthDate) {
+      return await genericFailure('no_stored_factors');
+    }
+
+    // B. BOTH FACTORS STORED -> BOTH MUST BE PROVIDED AND BOTH MUST MATCH!
+    if (storedPin && storedBirthDate) {
+      if (!cleanParentPin || !cleanBirthDate) {
+        return await genericFailure('both_factors_required');
+      }
+      const isPinValid = await verifyPinPbkdf2(cleanParentPin, storedPin);
+      const isBirthDateValid = cleanBirthDate === storedBirthDate;
+      if (!isPinValid || !isBirthDateValid) {
+        return await genericFailure('both_factors_failed');
+      }
+    }
+    // C. ONLY PIN STORED -> PIN MUST BE PROVIDED AND MATCH
+    else if (storedPin) {
+      if (!cleanParentPin) {
+        return await genericFailure('pin_required');
+      }
+      const isPinValid = await verifyPinPbkdf2(cleanParentPin, storedPin);
+      if (!isPinValid) {
+        return await genericFailure('pin_failed');
+      }
+    }
+    // D. ONLY BIRTH DATE STORED -> BIRTH DATE MUST BE PROVIDED AND MATCH
+    else if (storedBirthDate) {
+      if (!cleanBirthDate) {
+        return await genericFailure('birthdate_required');
+      }
+      if (cleanBirthDate !== storedBirthDate) {
+        return await genericFailure('birthdate_failed');
       }
     }
 
-    // C. If student record has no PIN or birth date configured in backend data
-    if (!storedPin && !storedBirthDate) {
-      // Fallback: If neither PIN nor birthDate is configured in DB, require cleanBirthDate or cleanParentPin match if available
-      credentialVerified = Boolean(cleanBirthDate || cleanParentPin);
-    }
-
-    if (!credentialVerified) {
-      return await genericFailure('verification_failed');
-    }
-
-    // 9. Create Server-side Session & HttpOnly Cookie
+    // 9. Fail-Closed Session Creation
     const sanitizedStudent = sanitizeStudentProfile(candidateDoc);
 
-    const { sessionToken, expiresAt } = await createPortalSession(context, {
-      studentId: candidateDoc.id,
-      tenantId: candidateDoc.tenantId || '',
-      studentName: sanitizedStudent.studentName
-    });
+    let sessionRes = null;
+    try {
+      sessionRes = await createPortalSession(context, {
+        studentId: candidateDoc.id,
+        tenantId: candidateDoc.tenantId || '',
+        studentName: sanitizedStudent.studentName
+      });
+    } catch (sessionErr) {
+      console.error('Portal Session Creation Fail-Closed:', sessionErr.message);
+      await recordAuditLog(context, {
+        action: 'PORTAL_LOGIN_FAILED',
+        studentId: candidateDoc.id,
+        phoneDigits: inputPhoneDigits,
+        success: false,
+        failureReason: 'session_store_failed'
+      });
+
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: 'Terjadi kesalahan pada server. Silakan coba beberapa saat lagi.'
+        }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
 
     const isSecure = request.url.startsWith('https://') || env.ENVIRONMENT === 'production';
-    const cookieHeaderVal = buildSessionCookie(sessionToken, 86400, isSecure);
+    const cookieHeaderVal = buildSessionCookie(sessionRes.sessionToken, 86400, isSecure);
 
     await recordAuditLog(context, {
       action: 'PORTAL_LOGIN_SUCCESS',
@@ -285,7 +292,7 @@ export async function onRequestPost(context) {
       success: true
     });
 
-    // 10. Return Sanitized Response with Set-Cookie Header
+    // 10. Return Sanitized Student Profile with Set-Cookie Header
     const responseHeaders = {
       ...corsHeaders,
       'Set-Cookie': cookieHeaderVal
@@ -296,17 +303,16 @@ export async function onRequestPost(context) {
         success: true,
         message: 'Autentikasi berhasil',
         student: sanitizedStudent,
-        expiresAt
+        expiresAt: sessionRes.expiresAt
       }),
       { status: 200, headers: responseHeaders }
     );
   } catch (error) {
-    console.error('Portal Login API Error:', error);
+    console.error('Portal Login API Error:', error.message);
     return new Response(
       JSON.stringify({
         success: false,
-        message: 'Terjadi kesalahan internal pada server.',
-        details: error.message
+        message: 'Terjadi kesalahan pada server. Silakan coba beberapa saat lagi.'
       }),
       { status: 500, headers: corsHeaders }
     );

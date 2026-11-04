@@ -1,7 +1,7 @@
 /**
- * Cloudflare Pages Functions Edge Helper Module for Portal Wali Murid
- * Provides cryptographic session management, credential verification,
- * origin checking, rate limiting, audit logging, and data minimization.
+ * Cloudflare Pages Functions Edge Helper Module for Portal Wali Murid (STAGE 7G.2A-HOTFIX)
+ * Provides cryptographic PBKDF2 PIN hashing, fail-closed session management,
+ * strict origin CORS/CSRF validation, fail-closed rate limiting, and data minimization.
  */
 
 // Helper to convert PEM private key to ArrayBuffer for Web Crypto API
@@ -41,6 +41,17 @@ export function bufferToHex(buf) {
   return Array.from(byteArray)
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
+}
+
+// Hex string to Uint8Array decoder
+export function hexToBuffer(hexString) {
+  if (!hexString || typeof hexString !== 'string') return new Uint8Array(0);
+  const cleanHex = hexString.trim();
+  const bytes = new Uint8Array(Math.floor(cleanHex.length / 2));
+  for (let i = 0; i < cleanHex.length; i += 2) {
+    bytes[i / 2] = parseInt(cleanHex.substring(i, i + 2), 16);
+  }
+  return bytes;
 }
 
 /**
@@ -140,7 +151,7 @@ export function parseFirestoreFields(fields) {
 }
 
 /**
- * Normalizes phone numbers to a clean digit string stripped of country prefix (e.g. 081234 -> 81234)
+ * Normalizes phone numbers to clean digits (e.g. 081234 -> 81234)
  */
 export function normalizePhoneDigits(phone) {
   if (!phone || typeof phone !== 'string') return '';
@@ -154,7 +165,7 @@ export function normalizePhoneDigits(phone) {
 }
 
 /**
- * Generates telephone number format permutations for Firestore queries
+ * Generates phone permutations for Firestore runQuery
  */
 export function generatePhoneVariations(phone) {
   if (!phone || typeof phone !== 'string') return [];
@@ -183,19 +194,17 @@ export function generatePhoneVariations(phone) {
 }
 
 /**
- * Normalizes birth dates into standard YYYY-MM-DD string format
+ * Normalizes birth dates into YYYY-MM-DD
  */
 export function normalizeBirthDate(dateVal) {
   if (!dateVal) return '';
   const str = String(dateVal).trim();
   if (!str) return '';
 
-  // Standard YYYY-MM-DD format check
   if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
     return str;
   }
 
-  // Handle ISO string or timestamp
   try {
     const d = new Date(str);
     if (!isNaN(d.getTime())) {
@@ -218,7 +227,75 @@ export async function hashString(str) {
 }
 
 /**
- * Generate a cryptographically random session token (256 bits)
+ * PBKDF2-HMAC-SHA256 Password Hashing Implementation
+ * Format: $pbkdf2-sha256$i=100000$<saltHex>$<hashHex>
+ */
+export async function hashPinPbkdf2(pinText, saltBytes = null, iterations = 100000) {
+  const enc = new TextEncoder();
+  const salt = saltBytes || crypto.getRandomValues(new Uint8Array(16));
+  const pinKey = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(pinText),
+    { name: 'PBKDF2' },
+    false,
+    ['deriveBits']
+  );
+  const derivedBits = await crypto.subtle.deriveBits(
+    {
+      name: 'PBKDF2',
+      salt: salt,
+      iterations: iterations,
+      hash: 'SHA-256'
+    },
+    pinKey,
+    256
+  );
+  const saltHex = bufferToHex(salt);
+  const hashHex = bufferToHex(derivedBits);
+  return `$pbkdf2-sha256$i=${iterations}$${saltHex}$${hashHex}`;
+}
+
+/**
+ * Secure PBKDF2-HMAC-SHA256 Verification with Legacy Transition Support
+ */
+export async function verifyPinPbkdf2(pinText, storedHashString) {
+  if (!pinText || !storedHashString || typeof storedHashString !== 'string') return false;
+
+  const cleanStored = storedHashString.trim();
+
+  // 1. Standard PBKDF2-HMAC-SHA256 Format Verification
+  if (cleanStored.startsWith('$pbkdf2-sha256$')) {
+    const parts = cleanStored.split('$');
+    // parts[0] = "", parts[1] = "pbkdf2-sha256", parts[2] = "i=100000", parts[3] = saltHex, parts[4] = hashHex
+    if (parts.length >= 5) {
+      const iterMatch = parts[2].match(/^i=(\d+)$/);
+      const iterations = iterMatch ? parseInt(iterMatch[1], 10) : 100000;
+      const saltHex = parts[3];
+      const targetHashHex = parts[4];
+      const saltBytes = hexToBuffer(saltHex);
+
+      const computedHashStr = await hashPinPbkdf2(pinText, saltBytes, iterations);
+      const computedHashHex = computedHashStr.split('$')[4];
+      return computedHashHex === targetHashHex;
+    }
+  }
+
+  // 2. Legacy Transition: Plain 6-digit PIN match
+  if (/^\d{6}$/.test(cleanStored)) {
+    return pinText === cleanStored;
+  }
+
+  // 3. Legacy Transition: Plain SHA-256 hex string match (64 hex characters)
+  if (/^[a-f0-9]{64}$/i.test(cleanStored)) {
+    const computedPlainSha256 = await hashString(pinText);
+    return computedPlainSha256.toLowerCase() === cleanStored.toLowerCase();
+  }
+
+  return false;
+}
+
+/**
+ * Generate cryptographically random session token (256 bits)
  */
 export function generateSessionToken() {
   const tokenBytes = new Uint8Array(32);
@@ -236,37 +313,31 @@ export function getClientIp(request) {
 }
 
 /**
- * Origin Validation & Allowed Domain Checking
+ * Strict Origin Validation (No wildcard *, exact match against ALLOWED_ORIGINS + request origin)
  */
 export function getValidatedOrigin(request, env = {}) {
   const reqOrigin = request.headers.get('Origin');
   if (!reqOrigin) return null;
 
-  // Read explicit allowed origins from environment variable if configured
-  const allowedList = env.ALLOWED_ORIGINS
-    ? env.ALLOWED_ORIGINS.split(',').map((o) => o.trim())
-    : [];
+  const allowedSet = new Set();
 
-  if (allowedList.includes(reqOrigin)) {
-    return reqOrigin;
+  try {
+    const reqUrlOrigin = new URL(request.url).origin;
+    if (reqUrlOrigin) allowedSet.add(reqUrlOrigin);
+  } catch {
+    // Ignore URL parse error
   }
 
-  // Domain pattern validation for production AI Studio, Cloudflare Pages, and local dev
-  try {
-    const url = new URL(reqOrigin);
-    const host = url.hostname;
+  if (env.ALLOWED_ORIGINS) {
+    env.ALLOWED_ORIGINS.split(',').forEach((o) => {
+      const trimmed = o.trim();
+      if (trimmed) allowedSet.add(trimmed);
+    });
+  }
 
-    if (
-      host === 'localhost' ||
-      host === '127.0.0.1' ||
-      host.endsWith('.pages.dev') ||
-      host.endsWith('.run.app') ||
-      host.endsWith('.aistudio.google')
-    ) {
-      return reqOrigin;
-    }
-  } catch {
-    // Invalid URL format
+  // Exact match validation
+  if (allowedSet.has(reqOrigin)) {
+    return reqOrigin;
   }
 
   return null;
@@ -287,16 +358,61 @@ export function getCorsHeaders(request, env = {}) {
   if (validatedOrigin) {
     headers['Access-Control-Allow-Origin'] = validatedOrigin;
     headers['Access-Control-Allow-Credentials'] = 'true';
-  } else {
-    // Default fallback without credentials for unknown origins
-    headers['Access-Control-Allow-Origin'] = '*';
   }
 
   return headers;
 }
 
 /**
- * Construct HttpOnly & Secure Cookie header string for portal session
+ * Strict CSRF Validation for POST/PUT/DELETE requests
+ */
+export function verifyCsrf(request, env = {}) {
+  const method = request.method.toUpperCase();
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') {
+    return true;
+  }
+
+  const reqOrigin = request.headers.get('Origin');
+  const reqReferer = request.headers.get('Referer');
+
+  const allowedSet = new Set();
+  try {
+    const reqUrlOrigin = new URL(request.url).origin;
+    if (reqUrlOrigin) allowedSet.add(reqUrlOrigin);
+  } catch {
+    // Ignore
+  }
+
+  if (env.ALLOWED_ORIGINS) {
+    env.ALLOWED_ORIGINS.split(',').forEach((o) => {
+      const trimmed = o.trim();
+      if (trimmed) allowedSet.add(trimmed);
+    });
+  }
+
+  if (reqOrigin) {
+    return allowedSet.has(reqOrigin);
+  }
+
+  if (reqReferer) {
+    try {
+      const refOrigin = new URL(reqReferer).origin;
+      return allowedSet.has(refOrigin);
+    } catch {
+      return false;
+    }
+  }
+
+  const csrfHeader = request.headers.get('X-Portal-CSRF');
+  if (csrfHeader === '1' || csrfHeader === 'true') {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Construct HttpOnly & Secure Cookie header string
  */
 export function buildSessionCookie(token, maxAgeSeconds = 86400, isSecure = true) {
   const flags = [
@@ -315,7 +431,7 @@ export function buildSessionCookie(token, maxAgeSeconds = 86400, isSecure = true
 }
 
 /**
- * Construct Cookie header string to immediately revoke/clear portal session
+ * Construct Cookie header string to immediately clear session
  */
 export function buildClearSessionCookie(isSecure = true) {
   const flags = [
@@ -352,7 +468,7 @@ export function parseCookie(request, cookieName) {
 }
 
 /**
- * Store active portal session in server storage (KV namespace if bound, with Firestore REST API fallback)
+ * FAIL-CLOSED Portal Session Store (Primary: KV if bound, else Firestore REST API)
  */
 export async function createPortalSession(context, sessionData) {
   const { request, env = {} } = context;
@@ -374,18 +490,20 @@ export async function createPortalSession(context, sessionData) {
     isRevoked: false
   };
 
-  // 1. Storage via Cloudflare KV if namespace is bound
+  // Primary Store 1: Cloudflare KV Namespace if bound
   if (env.PORTAL_SESSIONS_KV) {
     try {
       await env.PORTAL_SESSIONS_KV.put(sessionHash, JSON.stringify(fullSessionRecord), {
         expirationTtl: 86400
       });
+      return { sessionToken, sessionHash, expiresAt, fullSessionRecord };
     } catch (kvErr) {
-      console.warn('PORTAL_SESSIONS_KV write failed:', kvErr.message);
+      console.error('PORTAL_SESSIONS_KV session write failed:', kvErr);
+      throw new Error('FAIL_CLOSED: Sesi server gagal disimpan ke KV.');
     }
   }
 
-  // 2. Storage via Firestore REST API (Primary persistent store)
+  // Primary Store 2: Firestore REST API
   try {
     const projectId = env.FIREBASE_PROJECT_ID || 'ai-studio-chuasportcorespo-a3f4ecd8-7371-486a-9e89-d74d93ce6065';
     const databaseId = env.FIREBASE_DATABASE_ID || 'ai-studio-chuasportcorespo-a3f4ecd8-7371-486a-9e89-d74d93ce6065';
@@ -412,20 +530,27 @@ export async function createPortalSession(context, sessionData) {
       }
     };
 
-    await fetch(setDocUrl, {
+    const resp = await fetch(setDocUrl, {
       method: 'PATCH',
       headers: reqHeaders,
       body: JSON.stringify(fieldsPayload)
     });
-  } catch (fsErr) {
-    console.warn('Firestore session storage failed:', fsErr.message);
-  }
 
-  return { sessionToken, sessionHash, expiresAt, fullSessionRecord };
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`Firestore session HTTP error ${resp.status}: ${errText}`);
+    }
+
+    return { sessionToken, sessionHash, expiresAt, fullSessionRecord };
+  } catch (fsErr) {
+    console.error('Firestore session storage failed:', fsErr);
+    // FAIL-CLOSED: Throw error to prevent returning un-persisted session token!
+    throw new Error('FAIL_CLOSED: Sesi server gagal disimpan.');
+  }
 }
 
 /**
- * Validate active portal session token from HttpOnly cookie or Authorization header
+ * FAIL-CLOSED Portal Session Validation
  */
 export async function validatePortalSession(context) {
   const { request, env = {} } = context;
@@ -445,7 +570,6 @@ export async function validatePortalSession(context) {
   const sessionHash = await hashString(token);
   let sessionRecord = null;
 
-  // 1. Check Cloudflare KV namespace if bound
   if (env.PORTAL_SESSIONS_KV) {
     try {
       const kvData = await env.PORTAL_SESSIONS_KV.get(sessionHash);
@@ -453,12 +577,10 @@ export async function validatePortalSession(context) {
         sessionRecord = JSON.parse(kvData);
       }
     } catch (kvErr) {
-      console.warn('PORTAL_SESSIONS_KV read failed:', kvErr.message);
+      console.error('PORTAL_SESSIONS_KV read failed:', kvErr);
+      return { valid: false, reason: 'Session store read error' };
     }
-  }
-
-  // 2. Fallback to Firestore REST API if not found in KV
-  if (!sessionRecord) {
+  } else {
     try {
       const projectId = env.FIREBASE_PROJECT_ID || 'ai-studio-chuasportcorespo-a3f4ecd8-7371-486a-9e89-d74d93ce6065';
       const databaseId = env.FIREBASE_DATABASE_ID || 'ai-studio-chuasportcorespo-a3f4ecd8-7371-486a-9e89-d74d93ce6065';
@@ -475,9 +597,12 @@ export async function validatePortalSession(context) {
       if (resp.ok) {
         const docData = await resp.json();
         sessionRecord = parseFirestoreFields(docData.fields);
+      } else {
+        return { valid: false, reason: `Session fetch HTTP status ${resp.status}` };
       }
     } catch (fsErr) {
-      console.warn('Firestore session fetch failed:', fsErr.message);
+      console.error('Firestore session fetch failed:', fsErr);
+      return { valid: false, reason: 'Session store read error' };
     }
   }
 
@@ -485,12 +610,12 @@ export async function validatePortalSession(context) {
     return { valid: false, reason: 'Session not found or expired' };
   }
 
-  if (sessionRecord.isRevoked) {
+  if (sessionRecord.isRevoked === true) {
     return { valid: false, reason: 'Session has been revoked' };
   }
 
   const nowIso = new Date().toISOString();
-  if (sessionRecord.expiresAt && sessionRecord.expiresAt < nowIso) {
+  if (sessionRecord.expiresAt && sessionRecord.expiresAt <= nowIso) {
     return { valid: false, reason: 'Session expired' };
   }
 
@@ -501,20 +626,24 @@ export async function validatePortalSession(context) {
 }
 
 /**
- * Revoke session in server storage
+ * FAIL-CLOSED Session Revocation
  */
 export async function revokePortalSession(context) {
   const { request, env = {} } = context;
   const token = parseCookie(request, 'portal_session') || (request.headers.get('Authorization') || '').replace('Bearer ', '').trim();
-  if (!token) return true;
+  if (!token) {
+    return { success: false, reason: 'No token provided' };
+  }
 
   const sessionHash = await hashString(token);
 
   if (env.PORTAL_SESSIONS_KV) {
     try {
       await env.PORTAL_SESSIONS_KV.delete(sessionHash);
-    } catch {
-      // Ignore KV delete error
+      return { success: true };
+    } catch (kvErr) {
+      console.error('KV session revocation error:', kvErr);
+      return { success: false, reason: 'KV revocation error' };
     }
   }
 
@@ -535,40 +664,46 @@ export async function revokePortalSession(context) {
       }
     };
 
-    await fetch(updateDocUrl, {
+    const resp = await fetch(updateDocUrl, {
       method: 'PATCH',
       headers: reqHeaders,
       body: JSON.stringify(fieldsPayload)
     });
-  } catch (fsErr) {
-    console.warn('Firestore session revocation error:', fsErr.message);
-  }
 
-  return true;
+    if (!resp.ok) {
+      throw new Error(`Firestore revocation status (${resp.status})`);
+    }
+
+    return { success: true };
+  } catch (fsErr) {
+    console.error('Firestore session revocation error:', fsErr);
+    return { success: false, reason: 'Session revocation error' };
+  }
 }
 
 /**
- * Rate Limiting helper (Cloudflare KV if bound, else Firestore rate limits collection)
+ * FAIL-CLOSED Rate Limiting Helper (KV or Firestore)
  */
-export async function checkRateLimit(context, key, maxAttempts = 5, windowSeconds = 900) {
+export async function checkRateLimit(context, rawKey, maxAttempts = 5, windowSeconds = 900) {
   const { env = {} } = context;
+  const keyHash = await hashString(rawKey);
 
-  // 1. Check via Cloudflare KV if namespace bound
   if (env.PORTAL_RATELIMIT_KV) {
     try {
-      const currentVal = await env.PORTAL_RATELIMIT_KV.get(key);
+      const currentVal = await env.PORTAL_RATELIMIT_KV.get(keyHash);
       const count = currentVal ? Number(currentVal) : 0;
       if (count >= maxAttempts) {
         return { allowed: false, count };
       }
-      await env.PORTAL_RATELIMIT_KV.put(key, String(count + 1), { expirationTtl: windowSeconds });
+      await env.PORTAL_RATELIMIT_KV.put(keyHash, String(count + 1), { expirationTtl: windowSeconds });
       return { allowed: true, count: count + 1 };
     } catch (kvErr) {
-      console.warn('PORTAL_RATELIMIT_KV error:', kvErr.message);
+      console.error('PORTAL_RATELIMIT_KV error:', kvErr);
+      // FAIL-CLOSED: Lock request if rate limit check fails
+      return { allowed: false, count: maxAttempts, error: true };
     }
   }
 
-  // 2. Check via Firestore REST API fallback
   try {
     const projectId = env.FIREBASE_PROJECT_ID || 'ai-studio-chuasportcorespo-a3f4ecd8-7371-486a-9e89-d74d93ce6065';
     const databaseId = env.FIREBASE_DATABASE_ID || 'ai-studio-chuasportcorespo-a3f4ecd8-7371-486a-9e89-d74d93ce6065';
@@ -579,12 +714,11 @@ export async function checkRateLimit(context, key, maxAttempts = 5, windowSecond
     const reqHeaders = { 'Content-Type': 'application/json' };
     if (accessToken) reqHeaders['Authorization'] = `Bearer ${accessToken}`;
 
-    const docId = await hashString(key);
-    const docUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/portal_rate_limits/${encodeURIComponent(docId)}`;
-
+    const docUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/portal_rate_limits/${encodeURIComponent(keyHash)}`;
     const getResp = await fetch(docUrl, { method: 'GET', headers: reqHeaders });
+
     let count = 0;
-    let expiresAt = new Date(Date.now() + windowSeconds * 1000).toISOString();
+    const expiresAt = new Date(Date.now() + windowSeconds * 1000).toISOString();
 
     if (getResp.ok) {
       const docData = await getResp.json();
@@ -600,28 +734,32 @@ export async function checkRateLimit(context, key, maxAttempts = 5, windowSecond
 
     const setPayload = {
       fields: {
-        key: { stringValue: key },
+        keyHash: { stringValue: keyHash },
         count: { integerValue: count + 1 },
         expiresAt: { stringValue: expiresAt }
       }
     };
 
-    await fetch(docUrl, {
+    const updateResp = await fetch(docUrl, {
       method: 'PATCH',
       headers: reqHeaders,
       body: JSON.stringify(setPayload)
     });
 
+    if (!updateResp.ok) {
+      throw new Error(`Firestore rate limit write HTTP status ${updateResp.status}`);
+    }
+
     return { allowed: true, count: count + 1 };
   } catch (fsErr) {
-    console.warn('Firestore rate limit fallback error:', fsErr.message);
-    // Allow request if storage fails to avoid locking out legitimate users
-    return { allowed: true, count: 1 };
+    console.error('Firestore rate limit error:', fsErr);
+    // FAIL-CLOSED: Reject request if rate limit storage fails
+    return { allowed: false, count: maxAttempts, error: true };
   }
 }
 
 /**
- * Record audit log entry in Firestore without storing PINs or secrets
+ * Record Audit Log without saving PII or raw PINs
  */
 export async function recordAuditLog(context, logData) {
   const { request, env = {} } = context;
@@ -635,12 +773,15 @@ export async function recordAuditLog(context, logData) {
     const reqHeaders = { 'Content-Type': 'application/json' };
     if (accessToken) reqHeaders['Authorization'] = `Bearer ${accessToken}`;
 
+    const studentIdHash = logData.studentId ? await hashString(logData.studentId) : '';
+    const phoneHash = logData.phoneDigits ? await hashString(logData.phoneDigits) : '';
+
     const payload = {
       fields: {
         timestamp: { stringValue: new Date().toISOString() },
-        action: { stringValue: logData.action || 'PORTAL_LOGIN' },
-        studentId: { stringValue: logData.studentId || '' },
-        phoneDigits: { stringValue: logData.phoneDigits || '' },
+        action: { stringValue: logData.action || 'PORTAL_AUTH' },
+        studentIdHash: { stringValue: studentIdHash },
+        phoneHash: { stringValue: phoneHash },
         success: { booleanValue: Boolean(logData.success) },
         ip: { stringValue: getClientIp(request) },
         userAgent: { stringValue: request.headers.get('user-agent') || '' },
@@ -655,7 +796,7 @@ export async function recordAuditLog(context, logData) {
       body: JSON.stringify(payload)
     });
   } catch (err) {
-    console.warn('Audit log write error:', err.message);
+    console.error('Audit log write error:', err.message);
   }
 }
 
