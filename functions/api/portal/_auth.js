@@ -1,7 +1,7 @@
 /**
- * Cloudflare Pages Functions Edge Helper Module for Portal Wali Murid (STAGE 7G.2A-HOTFIX)
- * Provides cryptographic PBKDF2 PIN hashing, fail-closed session management,
- * strict origin CORS/CSRF validation, fail-closed rate limiting, and data minimization.
+ * Cloudflare Pages Functions Edge Helper Module for Portal Wali Murid (STAGE 7G.2A.2)
+ * Provides cryptographic PBKDF2 PIN hashing & migration, fail-closed session management,
+ * strict origin & CSRF token validation, fail-closed rate limiting, and data minimization.
  */
 
 // Helper to convert PEM private key to ArrayBuffer for Web Crypto API
@@ -55,10 +55,25 @@ export function hexToBuffer(hexString) {
 }
 
 /**
- * Generate Google OAuth2 Access Token using RS256 Web Crypto in Edge runtime
+ * Constant-time byte comparison against timing side-channel attacks
+ */
+export function timingSafeEqual(aBytes, bBytes) {
+  if (!aBytes || !bBytes || aBytes.length !== bBytes.length) return false;
+  let diff = 0;
+  for (let i = 0; i < aBytes.length; i++) {
+    diff |= aBytes[i] ^ bBytes[i];
+  }
+  return diff === 0;
+}
+
+/**
+ * Generate Google OAuth2 Access Token using RS256 Web Crypto in Edge runtime.
+ * Fails closed if credentials are missing or invalid.
  */
 export async function getGoogleAccessToken(clientEmail, privateKeyPem) {
-  if (!clientEmail || !privateKeyPem) return null;
+  if (!clientEmail || !privateKeyPem) {
+    throw new Error('Google OAuth Credentials Missing: clientEmail and privateKey are required');
+  }
 
   try {
     const cleanPem = privateKeyPem.replace(/\\n/g, '\n').trim();
@@ -110,14 +125,16 @@ export async function getGoogleAccessToken(clientEmail, privateKeyPem) {
     });
 
     if (!tokenResponse.ok) {
-      const errText = await tokenResponse.text();
-      throw new Error(`Google OAuth token exchange failed (${tokenResponse.status}): ${errText}`);
+      throw new Error(`Google OAuth token exchange failed with status ${tokenResponse.status}`);
     }
 
     const tokenData = await tokenResponse.json();
+    if (!tokenData.access_token) {
+      throw new Error('Google OAuth response did not contain access_token');
+    }
     return tokenData.access_token;
   } catch (err) {
-    throw new Error(`Auth Error: ${err.message}`);
+    throw new Error(`Google Access Token Error: ${err.message}`);
   }
 }
 
@@ -256,10 +273,13 @@ export async function hashPinPbkdf2(pinText, saltBytes = null, iterations = 1000
 }
 
 /**
- * Secure PBKDF2-HMAC-SHA256 Verification with Legacy Transition Support
+ * Secure PBKDF2-HMAC-SHA256 Verification with Legacy Transition Support & Timing-Safe Comparison
+ * Returns { verified: boolean, isLegacy: boolean }
  */
 export async function verifyPinPbkdf2(pinText, storedHashString) {
-  if (!pinText || !storedHashString || typeof storedHashString !== 'string') return false;
+  if (!pinText || !storedHashString || typeof storedHashString !== 'string') {
+    return { verified: false, isLegacy: false };
+  }
 
   const cleanStored = storedHashString.trim();
 
@@ -270,28 +290,104 @@ export async function verifyPinPbkdf2(pinText, storedHashString) {
     if (parts.length >= 5) {
       const iterMatch = parts[2].match(/^i=(\d+)$/);
       const iterations = iterMatch ? parseInt(iterMatch[1], 10) : 100000;
+
+      // Bound iterations to prevent CPU exhaustion DoS (10k to 250k)
+      if (isNaN(iterations) || iterations < 10000 || iterations > 250000) {
+        return { verified: false, isLegacy: false };
+      }
+
       const saltHex = parts[3];
       const targetHashHex = parts[4];
+
+      // Validate salt and hash lengths
+      if (!saltHex || saltHex.length < 16 || saltHex.length > 128 || !targetHashHex || targetHashHex.length !== 64) {
+        return { verified: false, isLegacy: false };
+      }
+
       const saltBytes = hexToBuffer(saltHex);
+      const targetHashBytes = hexToBuffer(targetHashHex);
 
       const computedHashStr = await hashPinPbkdf2(pinText, saltBytes, iterations);
       const computedHashHex = computedHashStr.split('$')[4];
-      return computedHashHex === targetHashHex;
+      const computedHashBytes = hexToBuffer(computedHashHex);
+
+      const isMatch = timingSafeEqual(computedHashBytes, targetHashBytes);
+      return { verified: isMatch, isLegacy: false };
     }
   }
 
   // 2. Legacy Transition: Plain 6-digit PIN match
   if (/^\d{6}$/.test(cleanStored)) {
-    return pinText === cleanStored;
+    const enc = new TextEncoder();
+    const pinBytes = enc.encode(pinText);
+    const storedBytes = enc.encode(cleanStored);
+    const isMatch = timingSafeEqual(pinBytes, storedBytes);
+    return { verified: isMatch, isLegacy: true };
   }
 
   // 3. Legacy Transition: Plain SHA-256 hex string match (64 hex characters)
   if (/^[a-f0-9]{64}$/i.test(cleanStored)) {
     const computedPlainSha256 = await hashString(pinText);
-    return computedPlainSha256.toLowerCase() === cleanStored.toLowerCase();
+    const computedBytes = hexToBuffer(computedPlainSha256.toLowerCase());
+    const targetBytes = hexToBuffer(cleanStored.toLowerCase());
+    const isMatch = timingSafeEqual(computedBytes, targetBytes);
+    return { verified: isMatch, isLegacy: true };
   }
 
-  return false;
+  return { verified: false, isLegacy: false };
+}
+
+/**
+ * Automatic background migration helper from legacy PIN to PBKDF2-HMAC-SHA256
+ */
+export async function migrateStudentPinToPbkdf2(context, studentId, plainPin, pinFieldName = 'parentPin') {
+  const { env = {} } = context;
+  try {
+    const projectId = env.FIREBASE_PROJECT_ID;
+    const databaseId = env.FIREBASE_DATABASE_ID || projectId;
+    const clientEmail = env.FIREBASE_CLIENT_EMAIL;
+    const privateKey = env.FIREBASE_PRIVATE_KEY ? env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : '';
+
+    if (!projectId || !clientEmail || !privateKey) {
+      return false;
+    }
+
+    const accessToken = await getGoogleAccessToken(clientEmail, privateKey);
+    if (!accessToken) return false;
+
+    const newPbkdf2Hash = await hashPinPbkdf2(plainPin);
+    const updateUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/students/${encodeURIComponent(studentId)}?updateMask.fieldPaths=${encodeURIComponent(pinFieldName)}`;
+
+    const payload = {
+      fields: {
+        [pinFieldName]: { stringValue: newPbkdf2Hash }
+      }
+    };
+
+    const resp = await fetch(updateUrl, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+      },
+      body: JSON.stringify(payload)
+    });
+
+    if (!resp.ok) {
+      return false;
+    }
+
+    await recordAuditLog(context, {
+      action: 'PORTAL_PIN_MIGRATED_PBKDF2',
+      studentId: studentId,
+      success: true
+    });
+
+    return true;
+  } catch (err) {
+    console.error('PIN Migration error:', err.message);
+    return false;
+  }
 }
 
 /**
@@ -301,6 +397,15 @@ export function generateSessionToken() {
   const tokenBytes = new Uint8Array(32);
   crypto.getRandomValues(tokenBytes);
   return bufferToBase64Url(tokenBytes.buffer);
+}
+
+/**
+ * Generate cryptographically random CSRF token (128 bits)
+ */
+export function generateCsrfToken() {
+  const csrfBytes = new Uint8Array(16);
+  crypto.getRandomValues(csrfBytes);
+  return bufferToBase64Url(csrfBytes.buffer);
 }
 
 /**
@@ -364,9 +469,11 @@ export function getCorsHeaders(request, env = {}) {
 }
 
 /**
- * Strict CSRF Validation for POST/PUT/DELETE requests
+ * Strict CSRF Validation for POST/PUT/DELETE requests.
+ * Checks Origin & Referer strictly against allowed origins.
+ * If expectedCsrfToken is passed, verifies X-Portal-CSRF header matches.
  */
-export function verifyCsrf(request, env = {}) {
+export function verifyCsrf(request, env = {}, expectedCsrfToken = null) {
   const method = request.method.toUpperCase();
   if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') {
     return true;
@@ -390,25 +497,35 @@ export function verifyCsrf(request, env = {}) {
     });
   }
 
+  // 1. Verify Origin strictly if present
   if (reqOrigin) {
-    return allowedSet.has(reqOrigin);
-  }
-
-  if (reqReferer) {
+    if (!allowedSet.has(reqOrigin)) {
+      return false;
+    }
+  } else if (reqReferer) {
+    // 2. Fallback to Referer origin
     try {
       const refOrigin = new URL(reqReferer).origin;
-      return allowedSet.has(refOrigin);
+      if (!allowedSet.has(refOrigin)) {
+        return false;
+      }
     } catch {
+      return false;
+    }
+  } else {
+    // Neither Origin nor Referer -> Reject
+    return false;
+  }
+
+  // 3. Check X-Portal-CSRF header token if session token is required
+  if (expectedCsrfToken) {
+    const headerCsrf = request.headers.get('X-Portal-CSRF');
+    if (!headerCsrf || headerCsrf !== expectedCsrfToken) {
       return false;
     }
   }
 
-  const csrfHeader = request.headers.get('X-Portal-CSRF');
-  if (csrfHeader === '1' || csrfHeader === 'true') {
-    return true;
-  }
-
-  return false;
+  return true;
 }
 
 /**
@@ -474,19 +591,19 @@ export async function createPortalSession(context, sessionData) {
   const { request, env = {} } = context;
   const sessionToken = generateSessionToken();
   const sessionHash = await hashString(sessionToken);
+  const csrfToken = generateCsrfToken();
 
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString(); // 24 Hours
 
   const fullSessionRecord = {
     sessionHash,
+    csrfToken,
     studentId: sessionData.studentId,
     tenantId: sessionData.tenantId || '',
     studentName: sessionData.studentName || '',
     createdAt: now.toISOString(),
     expiresAt,
-    ip: getClientIp(request),
-    userAgent: request.headers.get('user-agent') || '',
     isRevoked: false
   };
 
@@ -496,7 +613,7 @@ export async function createPortalSession(context, sessionData) {
       await env.PORTAL_SESSIONS_KV.put(sessionHash, JSON.stringify(fullSessionRecord), {
         expirationTtl: 86400
       });
-      return { sessionToken, sessionHash, expiresAt, fullSessionRecord };
+      return { sessionToken, sessionHash, csrfToken, expiresAt, fullSessionRecord };
     } catch (kvErr) {
       console.error('PORTAL_SESSIONS_KV session write failed:', kvErr);
       throw new Error('FAIL_CLOSED: Sesi server gagal disimpan ke KV.');
@@ -505,27 +622,36 @@ export async function createPortalSession(context, sessionData) {
 
   // Primary Store 2: Firestore REST API
   try {
-    const projectId = env.FIREBASE_PROJECT_ID || 'ai-studio-chuasportcorespo-a3f4ecd8-7371-486a-9e89-d74d93ce6065';
-    const databaseId = env.FIREBASE_DATABASE_ID || 'ai-studio-chuasportcorespo-a3f4ecd8-7371-486a-9e89-d74d93ce6065';
-    const clientEmail = env.FIREBASE_CLIENT_EMAIL || '';
+    const projectId = env.FIREBASE_PROJECT_ID;
+    const databaseId = env.FIREBASE_DATABASE_ID || projectId;
+    const clientEmail = env.FIREBASE_CLIENT_EMAIL;
     const privateKey = env.FIREBASE_PRIVATE_KEY ? env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : '';
 
+    if (!projectId || !clientEmail || !privateKey) {
+      throw new Error('FIREBASE_CREDENTIALS_MISSING');
+    }
+
     const accessToken = await getGoogleAccessToken(clientEmail, privateKey);
-    const reqHeaders = { 'Content-Type': 'application/json' };
-    if (accessToken) reqHeaders['Authorization'] = `Bearer ${accessToken}`;
+    if (!accessToken) {
+      throw new Error('FIREBASE_OAUTH_TOKEN_FAILED');
+    }
+
+    const reqHeaders = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${accessToken}`
+    };
 
     const setDocUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/portal_sessions/${encodeURIComponent(sessionHash)}`;
 
     const fieldsPayload = {
       fields: {
         sessionHash: { stringValue: sessionHash },
+        csrfToken: { stringValue: csrfToken },
         studentId: { stringValue: fullSessionRecord.studentId },
         tenantId: { stringValue: fullSessionRecord.tenantId },
         studentName: { stringValue: fullSessionRecord.studentName },
         createdAt: { stringValue: fullSessionRecord.createdAt },
         expiresAt: { stringValue: fullSessionRecord.expiresAt },
-        ip: { stringValue: fullSessionRecord.ip },
-        userAgent: { stringValue: fullSessionRecord.userAgent },
         isRevoked: { booleanValue: false }
       }
     };
@@ -537,14 +663,12 @@ export async function createPortalSession(context, sessionData) {
     });
 
     if (!resp.ok) {
-      const errText = await resp.text();
-      throw new Error(`Firestore session HTTP error ${resp.status}: ${errText}`);
+      throw new Error(`Firestore session HTTP error status ${resp.status}`);
     }
 
-    return { sessionToken, sessionHash, expiresAt, fullSessionRecord };
+    return { sessionToken, sessionHash, csrfToken, expiresAt, fullSessionRecord };
   } catch (fsErr) {
-    console.error('Firestore session storage failed:', fsErr);
-    // FAIL-CLOSED: Throw error to prevent returning un-persisted session token!
+    console.error('Firestore session storage failed:', fsErr.message);
     throw new Error('FAIL_CLOSED: Sesi server gagal disimpan.');
   }
 }
@@ -582,14 +706,24 @@ export async function validatePortalSession(context) {
     }
   } else {
     try {
-      const projectId = env.FIREBASE_PROJECT_ID || 'ai-studio-chuasportcorespo-a3f4ecd8-7371-486a-9e89-d74d93ce6065';
-      const databaseId = env.FIREBASE_DATABASE_ID || 'ai-studio-chuasportcorespo-a3f4ecd8-7371-486a-9e89-d74d93ce6065';
-      const clientEmail = env.FIREBASE_CLIENT_EMAIL || '';
+      const projectId = env.FIREBASE_PROJECT_ID;
+      const databaseId = env.FIREBASE_DATABASE_ID || projectId;
+      const clientEmail = env.FIREBASE_CLIENT_EMAIL;
       const privateKey = env.FIREBASE_PRIVATE_KEY ? env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : '';
 
+      if (!projectId || !clientEmail || !privateKey) {
+        return { valid: false, reason: 'Firebase credentials missing' };
+      }
+
       const accessToken = await getGoogleAccessToken(clientEmail, privateKey);
-      const reqHeaders = { 'Content-Type': 'application/json' };
-      if (accessToken) reqHeaders['Authorization'] = `Bearer ${accessToken}`;
+      if (!accessToken) {
+        return { valid: false, reason: 'OAuth token failed' };
+      }
+
+      const reqHeaders = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${accessToken}`
+      };
 
       const getDocUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/portal_sessions/${encodeURIComponent(sessionHash)}`;
       const resp = await fetch(getDocUrl, { method: 'GET', headers: reqHeaders });
@@ -601,7 +735,7 @@ export async function validatePortalSession(context) {
         return { valid: false, reason: `Session fetch HTTP status ${resp.status}` };
       }
     } catch (fsErr) {
-      console.error('Firestore session fetch failed:', fsErr);
+      console.error('Firestore session fetch failed:', fsErr.message);
       return { valid: false, reason: 'Session store read error' };
     }
   }
@@ -648,14 +782,24 @@ export async function revokePortalSession(context) {
   }
 
   try {
-    const projectId = env.FIREBASE_PROJECT_ID || 'ai-studio-chuasportcorespo-a3f4ecd8-7371-486a-9e89-d74d93ce6065';
-    const databaseId = env.FIREBASE_DATABASE_ID || 'ai-studio-chuasportcorespo-a3f4ecd8-7371-486a-9e89-d74d93ce6065';
-    const clientEmail = env.FIREBASE_CLIENT_EMAIL || '';
+    const projectId = env.FIREBASE_PROJECT_ID;
+    const databaseId = env.FIREBASE_DATABASE_ID || projectId;
+    const clientEmail = env.FIREBASE_CLIENT_EMAIL;
     const privateKey = env.FIREBASE_PRIVATE_KEY ? env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : '';
 
+    if (!projectId || !clientEmail || !privateKey) {
+      return { success: false, reason: 'Firebase credentials missing' };
+    }
+
     const accessToken = await getGoogleAccessToken(clientEmail, privateKey);
-    const reqHeaders = { 'Content-Type': 'application/json' };
-    if (accessToken) reqHeaders['Authorization'] = `Bearer ${accessToken}`;
+    if (!accessToken) {
+      return { success: false, reason: 'OAuth token failed' };
+    }
+
+    const reqHeaders = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${accessToken}`
+    };
 
     const updateDocUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/portal_sessions/${encodeURIComponent(sessionHash)}?updateMask.fieldPaths=isRevoked`;
     const fieldsPayload = {
@@ -671,32 +815,50 @@ export async function revokePortalSession(context) {
     });
 
     if (!resp.ok) {
-      throw new Error(`Firestore revocation status (${resp.status})`);
+      throw new Error(`Firestore revocation HTTP status ${resp.status}`);
     }
 
     return { success: true };
   } catch (fsErr) {
-    console.error('Firestore session revocation error:', fsErr);
+    console.error('Firestore session revocation error:', fsErr.message);
     return { success: false, reason: 'Session revocation error' };
   }
 }
 
 /**
- * FAIL-CLOSED Rate Limiting Helper (KV or Firestore)
+ * FAIL-CLOSED Rate Limiting Helper (Durable Objects > KV > Firestore)
  */
 export async function checkRateLimit(context, rawKey, maxAttempts = 5, windowSeconds = 900) {
   const { env = {} } = context;
   const keyHash = await hashString(rawKey);
 
+  // Mode 1: Cloudflare Durable Objects (Atomic counter if bound)
+  if (env.PORTAL_RATELIMIT_DO) {
+    try {
+      const id = env.PORTAL_RATELIMIT_DO.idFromName(keyHash);
+      const stub = env.PORTAL_RATELIMIT_DO.get(id);
+      const res = await stub.fetch(`https://ratelimit.internal/check?max=${maxAttempts}&window=${windowSeconds}`);
+      if (res.ok) {
+        const data = await res.json();
+        return { allowed: Boolean(data.allowed), count: Number(data.count || 0), atomic: true };
+      }
+      return { allowed: false, count: maxAttempts, error: true };
+    } catch (doErr) {
+      console.error('Durable Object rate limit error:', doErr);
+      return { allowed: false, count: maxAttempts, error: true };
+    }
+  }
+
+  // Mode 2: Cloudflare KV Namespace (Read + Put, non-atomic, eventual consistency)
   if (env.PORTAL_RATELIMIT_KV) {
     try {
       const currentVal = await env.PORTAL_RATELIMIT_KV.get(keyHash);
       const count = currentVal ? Number(currentVal) : 0;
       if (count >= maxAttempts) {
-        return { allowed: false, count };
+        return { allowed: false, count, atomic: false };
       }
       await env.PORTAL_RATELIMIT_KV.put(keyHash, String(count + 1), { expirationTtl: windowSeconds });
-      return { allowed: true, count: count + 1 };
+      return { allowed: true, count: count + 1, atomic: false };
     } catch (kvErr) {
       console.error('PORTAL_RATELIMIT_KV error:', kvErr);
       // FAIL-CLOSED: Lock request if rate limit check fails
@@ -704,15 +866,26 @@ export async function checkRateLimit(context, rawKey, maxAttempts = 5, windowSec
     }
   }
 
+  // Mode 3: Firestore REST API (Read + Patch, fail-closed)
   try {
-    const projectId = env.FIREBASE_PROJECT_ID || 'ai-studio-chuasportcorespo-a3f4ecd8-7371-486a-9e89-d74d93ce6065';
-    const databaseId = env.FIREBASE_DATABASE_ID || 'ai-studio-chuasportcorespo-a3f4ecd8-7371-486a-9e89-d74d93ce6065';
-    const clientEmail = env.FIREBASE_CLIENT_EMAIL || '';
+    const projectId = env.FIREBASE_PROJECT_ID;
+    const databaseId = env.FIREBASE_DATABASE_ID || projectId;
+    const clientEmail = env.FIREBASE_CLIENT_EMAIL;
     const privateKey = env.FIREBASE_PRIVATE_KEY ? env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : '';
 
+    if (!projectId || !clientEmail || !privateKey) {
+      return { allowed: false, count: maxAttempts, error: true };
+    }
+
     const accessToken = await getGoogleAccessToken(clientEmail, privateKey);
-    const reqHeaders = { 'Content-Type': 'application/json' };
-    if (accessToken) reqHeaders['Authorization'] = `Bearer ${accessToken}`;
+    if (!accessToken) {
+      return { allowed: false, count: maxAttempts, error: true };
+    }
+
+    const reqHeaders = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${accessToken}`
+    };
 
     const docUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/portal_rate_limits/${encodeURIComponent(keyHash)}`;
     const getResp = await fetch(docUrl, { method: 'GET', headers: reqHeaders });
@@ -720,16 +893,21 @@ export async function checkRateLimit(context, rawKey, maxAttempts = 5, windowSec
     let count = 0;
     const expiresAt = new Date(Date.now() + windowSeconds * 1000).toISOString();
 
-    if (getResp.ok) {
+    if (getResp.status === 404) {
+      count = 0;
+    } else if (getResp.ok) {
       const docData = await getResp.json();
       const fields = parseFirestoreFields(docData.fields);
       if (fields.expiresAt && fields.expiresAt > new Date().toISOString()) {
         count = Number(fields.count || 0);
       }
+    } else {
+      // Non-2xx and non-404 HTTP status from Firestore -> FAIL-CLOSED
+      throw new Error(`Firestore rate limit read HTTP status ${getResp.status}`);
     }
 
     if (count >= maxAttempts) {
-      return { allowed: false, count };
+      return { allowed: false, count, atomic: false };
     }
 
     const setPayload = {
@@ -750,31 +928,41 @@ export async function checkRateLimit(context, rawKey, maxAttempts = 5, windowSec
       throw new Error(`Firestore rate limit write HTTP status ${updateResp.status}`);
     }
 
-    return { allowed: true, count: count + 1 };
+    return { allowed: true, count: count + 1, atomic: false };
   } catch (fsErr) {
-    console.error('Firestore rate limit error:', fsErr);
+    console.error('Firestore rate limit error:', fsErr.message);
     // FAIL-CLOSED: Reject request if rate limit storage fails
     return { allowed: false, count: maxAttempts, error: true };
   }
 }
 
 /**
- * Record Audit Log without saving PII or raw PINs
+ * Record Audit Log without saving PII or raw PINs/tokens
  */
 export async function recordAuditLog(context, logData) {
   const { request, env = {} } = context;
   try {
-    const projectId = env.FIREBASE_PROJECT_ID || 'ai-studio-chuasportcorespo-a3f4ecd8-7371-486a-9e89-d74d93ce6065';
-    const databaseId = env.FIREBASE_DATABASE_ID || 'ai-studio-chuasportcorespo-a3f4ecd8-7371-486a-9e89-d74d93ce6065';
-    const clientEmail = env.FIREBASE_CLIENT_EMAIL || '';
+    const projectId = env.FIREBASE_PROJECT_ID;
+    const databaseId = env.FIREBASE_DATABASE_ID || projectId;
+    const clientEmail = env.FIREBASE_CLIENT_EMAIL;
     const privateKey = env.FIREBASE_PRIVATE_KEY ? env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : '';
 
+    if (!projectId || !clientEmail || !privateKey) {
+      return;
+    }
+
     const accessToken = await getGoogleAccessToken(clientEmail, privateKey);
-    const reqHeaders = { 'Content-Type': 'application/json' };
-    if (accessToken) reqHeaders['Authorization'] = `Bearer ${accessToken}`;
+    if (!accessToken) return;
+
+    const reqHeaders = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${accessToken}`
+    };
 
     const studentIdHash = logData.studentId ? await hashString(logData.studentId) : '';
     const phoneHash = logData.phoneDigits ? await hashString(logData.phoneDigits) : '';
+    const clientIp = getClientIp(request);
+    const ipHash = clientIp ? await hashString(clientIp) : '';
 
     const payload = {
       fields: {
@@ -782,9 +970,9 @@ export async function recordAuditLog(context, logData) {
         action: { stringValue: logData.action || 'PORTAL_AUTH' },
         studentIdHash: { stringValue: studentIdHash },
         phoneHash: { stringValue: phoneHash },
+        ipHash: { stringValue: ipHash },
         success: { booleanValue: Boolean(logData.success) },
-        ip: { stringValue: getClientIp(request) },
-        userAgent: { stringValue: request.headers.get('user-agent') || '' },
+        userAgent: { stringValue: (request.headers.get('user-agent') || '').slice(0, 200) },
         failureReason: { stringValue: logData.failureReason || '' }
       }
     };
@@ -816,3 +1004,4 @@ export function sanitizeStudentProfile(studentDoc) {
     tenantId: studentDoc.tenantId || ''
   };
 }
+

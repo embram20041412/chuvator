@@ -1,5 +1,5 @@
 /**
- * Cloudflare Pages Function: /api/portal/session (STAGE 7G.2A-HOTFIX)
+ * Cloudflare Pages Function: /api/portal/session (STAGE 7G.2A.2)
  * Validates current HttpOnly portal_session cookie and returns session state.
  */
 
@@ -40,6 +40,7 @@ export async function onRequestGet(context) {
           studentId: result.session.studentId,
           tenantId: result.session.tenantId,
           studentName: result.session.studentName,
+          csrfToken: result.session.csrfToken || null,
           expiresAt: result.session.expiresAt
         }
       }),
@@ -56,3 +57,4 @@ export async function onRequestGet(context) {
     );
   }
 }
+

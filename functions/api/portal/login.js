@@ -1,8 +1,8 @@
 /**
- * Cloudflare Pages Function: /api/portal/login (STAGE 7G.2A-HOTFIX)
+ * Cloudflare Pages Function: /api/portal/login (STAGE 7G.2A.2)
  * Edge-safe secure authentication endpoint for Portal Wali Murid.
  * Verifies Student ID, Parent Phone, PBKDF2 PIN, and/or Birth Date in backend.
- * Enforces fail-closed session management, strict CORS/CSRF, and anti-enumeration.
+ * Enforces fail-closed session management, strict CORS/CSRF, anti-enumeration, and PBKDF2 PIN migration.
  */
 
 import {
@@ -14,6 +14,7 @@ import {
   getCorsHeaders,
   verifyCsrf,
   verifyPinPbkdf2,
+  migrateStudentPinToPbkdf2,
   buildSessionCookie,
   createPortalSession,
   checkRateLimit,
@@ -64,7 +65,7 @@ export async function onRequestPost(context) {
 
     const inputPhoneDigits = normalizePhoneDigits(cleanParentPhone);
 
-    // Rate Limiting Key: IP + Hashed Phone & Student ID (no raw PII in key)
+    // Rate Limiting Key: Hashed IP + Hashed Phone & Student ID
     const rateLimitKeyRaw = `${clientIp}_${inputPhoneDigits}_${cleanStudentId}`;
     const rateLimitKey = await hashString(rateLimitKeyRaw);
 
@@ -117,22 +118,40 @@ export async function onRequestPost(context) {
     }
 
     // 5. Fetch Google Service Account Access Token for Firestore REST API
-    const projectId = env.FIREBASE_PROJECT_ID || 'ai-studio-chuasportcorespo-a3f4ecd8-7371-486a-9e89-d74d93ce6065';
-    const databaseId = env.FIREBASE_DATABASE_ID || 'ai-studio-chuasportcorespo-a3f4ecd8-7371-486a-9e89-d74d93ce6065';
-    const clientEmail = env.FIREBASE_CLIENT_EMAIL || '';
+    const projectId = env.FIREBASE_PROJECT_ID;
+    const databaseId = env.FIREBASE_DATABASE_ID || projectId;
+    const clientEmail = env.FIREBASE_CLIENT_EMAIL;
     const privateKey = env.FIREBASE_PRIVATE_KEY ? env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : '';
+
+    if (!projectId || !clientEmail || !privateKey) {
+      console.error('Firebase Service Account environment variables missing');
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: 'Terjadi kesalahan konfigurasi server. Silakan hubungi admin.'
+        }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
 
     let accessToken = null;
     try {
       accessToken = await getGoogleAccessToken(clientEmail, privateKey);
     } catch (tokenErr) {
       console.error('Google OAuth Token Exchange Error:', tokenErr.message);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: 'Gagal melakukan autentikasi server. Silakan coba beberapa saat lagi.'
+        }),
+        { status: 500, headers: corsHeaders }
+      );
     }
 
-    const reqHeaders = { 'Content-Type': 'application/json' };
-    if (accessToken) {
-      reqHeaders['Authorization'] = `Bearer ${accessToken}`;
-    }
+    const reqHeaders = {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${accessToken}`
+    };
 
     // 6. Query Firestore for candidate student record
     const phoneVariations = generatePhoneVariations(cleanParentPhone);
@@ -175,6 +194,15 @@ export async function onRequestPost(context) {
           break;
         }
       }
+    } else {
+      console.error(`Firestore query failed with HTTP status ${firestoreResponse.status}`);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: 'Terjadi kesalahan jaringan database.'
+        }),
+        { status: 500, headers: corsHeaders }
+      );
     }
 
     // Direct fetch fallback if query returns empty
@@ -214,8 +242,11 @@ export async function onRequestPost(context) {
     }
 
     // 8. STRICT AUTHENTICATION FACTORS VERIFICATION (NO BYPASS!)
+    const storedPinField = candidateDoc.parentPin ? 'parentPin' : (candidateDoc.parent_pin ? 'parent_pin' : (candidateDoc.pin ? 'pin' : 'parentPin'));
     const storedPin = String(candidateDoc.parentPin || candidateDoc.parent_pin || candidateDoc.pin || '').trim();
     const storedBirthDate = normalizeBirthDate(candidateDoc.birthDate || candidateDoc.birth_date);
+
+    let pinMigrationNeeded = false;
 
     // A. NO STORED FACTORS AVAILABLE -> REJECT IMMEDIATELY!
     if (!storedPin && !storedBirthDate) {
@@ -227,21 +258,23 @@ export async function onRequestPost(context) {
       if (!cleanParentPin || !cleanBirthDate) {
         return await genericFailure('both_factors_required');
       }
-      const isPinValid = await verifyPinPbkdf2(cleanParentPin, storedPin);
+      const pinResult = await verifyPinPbkdf2(cleanParentPin, storedPin);
       const isBirthDateValid = cleanBirthDate === storedBirthDate;
-      if (!isPinValid || !isBirthDateValid) {
+      if (!pinResult.verified || !isBirthDateValid) {
         return await genericFailure('both_factors_failed');
       }
+      if (pinResult.isLegacy) pinMigrationNeeded = true;
     }
     // C. ONLY PIN STORED -> PIN MUST BE PROVIDED AND MATCH
     else if (storedPin) {
       if (!cleanParentPin) {
         return await genericFailure('pin_required');
       }
-      const isPinValid = await verifyPinPbkdf2(cleanParentPin, storedPin);
-      if (!isPinValid) {
+      const pinResult = await verifyPinPbkdf2(cleanParentPin, storedPin);
+      if (!pinResult.verified) {
         return await genericFailure('pin_failed');
       }
+      if (pinResult.isLegacy) pinMigrationNeeded = true;
     }
     // D. ONLY BIRTH DATE STORED -> BIRTH DATE MUST BE PROVIDED AND MATCH
     else if (storedBirthDate) {
@@ -251,6 +284,13 @@ export async function onRequestPost(context) {
       if (cleanBirthDate !== storedBirthDate) {
         return await genericFailure('birthdate_failed');
       }
+    }
+
+    // AUTOMATIC PIN MIGRATION: Upgrade Legacy Plain / SHA-256 PIN to PBKDF2 in background
+    if (pinMigrationNeeded && cleanParentPin) {
+      context.waitUntil(
+        migrateStudentPinToPbkdf2(context, candidateDoc.id, cleanParentPin, storedPinField)
+      );
     }
 
     // 9. Fail-Closed Session Creation
@@ -292,7 +332,7 @@ export async function onRequestPost(context) {
       success: true
     });
 
-    // 10. Return Sanitized Student Profile with Set-Cookie Header
+    // 10. Return Sanitized Student Profile & Session CSRF Token with Set-Cookie Header
     const responseHeaders = {
       ...corsHeaders,
       'Set-Cookie': cookieHeaderVal
@@ -303,6 +343,7 @@ export async function onRequestPost(context) {
         success: true,
         message: 'Autentikasi berhasil',
         student: sanitizedStudent,
+        csrfToken: sessionRes.csrfToken,
         expiresAt: sessionRes.expiresAt
       }),
       { status: 200, headers: responseHeaders }
@@ -318,3 +359,4 @@ export async function onRequestPost(context) {
     );
   }
 }
+
