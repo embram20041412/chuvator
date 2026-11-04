@@ -289,16 +289,30 @@ export async function onRequestPost(context) {
       console.warn('Gagal membaca academy_attendance:', attErr.message);
     }
 
-    // B. Query attendances collection directly filtered by studentId AND tenantId
+    // B. Query attendances collection directly filtered by studentId AND tenantId (compositeFilter AND)
     try {
       const directAttPayload = {
         structuredQuery: {
           from: [{ collectionId: 'attendances' }],
           where: {
-            fieldFilter: {
-              field: { fieldPath: 'studentId' },
-              op: 'EQUAL',
-              value: { stringValue: sessionStudentId }
+            compositeFilter: {
+              op: 'AND',
+              filters: [
+                {
+                  fieldFilter: {
+                    field: { fieldPath: 'studentId' },
+                    op: 'EQUAL',
+                    value: { stringValue: sessionStudentId }
+                  }
+                },
+                {
+                  fieldFilter: {
+                    field: { fieldPath: 'tenantId' },
+                    op: 'EQUAL',
+                    value: { stringValue: sessionTenantId }
+                  }
+                }
+              ]
             }
           },
           limit: 20
@@ -306,11 +320,33 @@ export async function onRequestPost(context) {
       };
 
       const directAttUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents:runQuery`;
-      const directResp = await fetch(directAttUrl, {
+      let directResp = await fetch(directAttUrl, {
         method: 'POST',
         headers: reqHeaders,
         body: JSON.stringify(directAttPayload)
       });
+
+      // Fallback query by studentId if composite index is pending, then verify tenantId fail-closed
+      if (!directResp.ok) {
+        const fallbackPayload = {
+          structuredQuery: {
+            from: [{ collectionId: 'attendances' }],
+            where: {
+              fieldFilter: {
+                field: { fieldPath: 'studentId' },
+                op: 'EQUAL',
+                value: { stringValue: sessionStudentId }
+              }
+            },
+            limit: 20
+          }
+        };
+        directResp = await fetch(directAttUrl, {
+          method: 'POST',
+          headers: reqHeaders,
+          body: JSON.stringify(fallbackPayload)
+        });
+      }
 
       if (directResp.ok) {
         const directResults = await directResp.json();

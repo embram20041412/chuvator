@@ -748,9 +748,20 @@ export async function validatePortalSession(context) {
     return { valid: false, reason: 'Session has been revoked' };
   }
 
-  const nowIso = new Date().toISOString();
-  if (sessionRecord.expiresAt && sessionRecord.expiresAt <= nowIso) {
-    return { valid: false, reason: 'Session expired' };
+  // Mandatory & Strict session expiration check (STAGE 7G.2A.6)
+  const expiresAtStr = String(sessionRecord.expiresAt || '').trim();
+  if (!expiresAtStr) {
+    return { valid: false, reason: 'Incomplete session: missing expiresAt timestamp' };
+  }
+
+  const expDate = new Date(expiresAtStr);
+  if (isNaN(expDate.getTime())) {
+    return { valid: false, reason: 'Invalid session expiresAt date format' };
+  }
+
+  const nowMs = Date.now();
+  if (expDate.getTime() <= nowMs) {
+    return { valid: false, reason: 'Session has expired' };
   }
 
   // Strict tenant & student identity check
@@ -766,7 +777,8 @@ export async function validatePortalSession(context) {
     session: {
       ...sessionRecord,
       studentId,
-      tenantId
+      tenantId,
+      expiresAt: expiresAtStr
     }
   };
 }

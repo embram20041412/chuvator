@@ -182,17 +182,25 @@ export async function onRequestPost(context) {
     if (firestoreResponse.ok) {
       const queryResults = await firestoreResponse.json();
       const documents = (Array.isArray(queryResults) ? queryResults : []).filter((item) => item.document);
+      const exactMatches = [];
 
       for (const item of documents) {
         const docName = item.document.name || '';
-        const docId = docName.split('/').pop() || '';
+        const docId = (docName.split('/').pop() || '').trim();
         const fields = parseFirestoreFields(item.document.fields);
         const doc = { id: docId, ...fields };
 
-        if (doc.id.toLowerCase().startsWith(cleanStudentId.toLowerCase())) {
-          candidateDoc = doc;
-          break;
+        // EXACT STUDENT DOCUMENT ID MATCHING (STAGE 7G.2A.6 — NO STARTSWITH BYPASS)
+        if (doc.id.toLowerCase() === cleanStudentId.toLowerCase()) {
+          exactMatches.push(doc);
         }
+      }
+
+      if (exactMatches.length === 1) {
+        candidateDoc = exactMatches[0];
+      } else if (exactMatches.length > 1) {
+        console.warn(`Multiple student documents found matching exact ID ${cleanStudentId}`);
+        return await genericFailure('multiple_candidate_docs');
       }
     } else {
       console.error(`Firestore query failed with HTTP status ${firestoreResponse.status}`);
@@ -205,20 +213,21 @@ export async function onRequestPost(context) {
       );
     }
 
-    // Direct fetch fallback if query returns empty
+    // Direct fetch fallback if query returns empty (STRICT EXACT ID MATCHING)
     if (!candidateDoc && cleanStudentId.length >= 3) {
       try {
         const getDocUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents/students/${encodeURIComponent(cleanStudentId)}`;
         const directDocResp = await fetch(getDocUrl, { method: 'GET', headers: reqHeaders });
         if (directDocResp.ok) {
           const docData = await directDocResp.json();
-          const docId = (docData.name || '').split('/').pop() || cleanStudentId;
+          const docId = ((docData.name || '').split('/').pop() || cleanStudentId).trim();
           const fields = parseFirestoreFields(docData.fields);
           const doc = { id: docId, ...fields };
           const docPhoneDigits = normalizePhoneDigits(fields.parentPhone || fields.phone);
 
+          // EXACT MATCH REQUIREMENT (NO STARTSWITH)
           if (
-            doc.id.toLowerCase().startsWith(cleanStudentId.toLowerCase()) &&
+            doc.id.toLowerCase() === cleanStudentId.toLowerCase() &&
             docPhoneDigits &&
             inputPhoneDigits &&
             docPhoneDigits === inputPhoneDigits
