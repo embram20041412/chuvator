@@ -82,6 +82,15 @@ export default function PortalLogin() {
         <p className="text-xs text-slate-500 mt-1.5 leading-relaxed max-w-xs mx-auto">
           Pantau perkembangan latihan, kehadiran, tagihan SPP, dan prestasi ananda secara langsung.
         </p>
+        <div className="mt-3">
+          <a
+            href="/portal"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold hover:bg-emerald-100 transition"
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+            <span>Gunakan Portal Login V2 (Email &amp; Pass) ➔</span>
+          </a>
+        </div>
       </div>
 
       {/* Login Form */}

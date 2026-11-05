@@ -165,9 +165,14 @@ export default function App() {
 
             {/* Portal Wali Murid (Isolated Mobile-First Unified Routing) */}
             <Route element={<PortalLayout />}>
-              <Route path="/portal" element={<PortalLogin />} />
+              {/* Primary Entry Point: Portal V2 Login */}
+              <Route path="/portal" element={<PortalLoginV2 />} />
               <Route path="/portal/dashboard" element={<PortalDashboard />} />
-              <Route path="/portal-v2" element={<PortalLoginV2 />} />
+              {/* V2 Canonical Route Redirect */}
+              <Route path="/portal-v2" element={<Navigate to="/portal" replace />} />
+              {/* V1 Fallback / Rollback Route */}
+              <Route path="/portal/v1" element={<PortalLogin />} />
+              <Route path="/portal-v1" element={<PortalLogin />} />
             </Route>
 
             {/* Super Admin Protected Route */}

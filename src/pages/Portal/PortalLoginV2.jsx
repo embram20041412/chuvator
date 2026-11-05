@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate, Navigate } from 'react-router-dom';
 import {
   GraduationCap,
   Mail,
@@ -17,20 +18,15 @@ import {
 } from 'lucide-react';
 
 /**
- * PortalLoginV2 - Parent Portal Login Page (Fase 2.1)
+ * PortalLoginV2 - Parent Portal Login Page (Fase 2.1 / Fase 5.0 Main Login)
  *
  * Menggunakan Supabase Auth melalui Cloudflare Pages Function V2:
  * - POST /api/portal/v2/login
  * - GET  /api/portal/v2/session
  * - POST /api/portal/v2/logout
- *
- * Prinsip Keamanan Frontend:
- * 1. Tanpa token di localStorage / sessionStorage (Session dikelola via HttpOnly cookie portal_session_v2).
- * 2. Password dihapus dari state React segera setelah pengiriman request.
- * 3. CSRF token hanya disimpan di memory React state untuk request terproteksi (seperti logout).
- * 4. Isolasi total dari Portal V1.
  */
 export default function PortalLoginV2() {
+  const navigate = useNavigate();
   // Form input state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -158,7 +154,8 @@ export default function PortalLoginV2() {
           await checkActiveSession();
         }
 
-        setInfoMsg('Autentikasi berhasil. Sesi portal aktif.');
+        setInfoMsg('Autentikasi berhasil. Mengalihkan ke dashboard...');
+        navigate('/portal/dashboard', { replace: true });
       } else {
         // Pemetaan pesan kesalahan berdasarkan HTTP status code
         switch (response.status) {
@@ -257,130 +254,9 @@ export default function PortalLoginV2() {
     );
   }
 
-  // 2. Tampilan Konfirmasi Sesi Aktif (Jika sudah login)
+  // 2. Jika sudah ada sesi aktif V2, alihkan secara otomatis ke Dashboard V2
   if (sessionData) {
-    const childrenList = sessionData.children || [];
-    const childrenCount = childrenList.length;
-
-    return (
-      <div className="flex-1 flex flex-col justify-between p-6 sm:p-8 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-900 text-slate-100 min-h-screen">
-        {/* Header Sesi Aktif */}
-        <div className="pt-2 text-center">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[11px] font-semibold tracking-wide mb-3">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Sesi Aktif Terverifikasi (V2)</span>
-          </div>
-
-          <div className="w-14 h-14 bg-gradient-to-br from-emerald-500 to-teal-700 text-white rounded-2xl mx-auto flex items-center justify-center shadow-lg shadow-emerald-500/20 mb-3">
-            <UserCheck className="w-7 h-7" />
-          </div>
-
-          <h1 className="text-xl font-bold text-white tracking-tight">
-            Portal Wali Murid
-          </h1>
-          <p className="text-xs text-slate-400 mt-1 font-mono break-all">
-            {sessionData.email}
-          </p>
-        </div>
-
-        {/* Ringkasan Akun & Siswa Terhubung */}
-        <div className="my-6 space-y-4">
-          {/* Card Info Wali */}
-          <div className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700/60 shadow-sm space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-slate-400 flex items-center gap-1.5">
-                <Users className="w-4 h-4 text-emerald-400" />
-                Jumlah Siswa Terhubung
-              </span>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                {childrenCount} Siswa
-              </span>
-            </div>
-          </div>
-
-          {/* Daftar Siswa */}
-          <div className="space-y-2">
-            <p className="text-xs font-bold uppercase tracking-wider text-slate-400 px-1">
-              Daftar Siswa Terdaftar:
-            </p>
-
-            {childrenList.length === 0 ? (
-              <div className="p-4 rounded-xl bg-slate-800/40 border border-slate-800 text-center text-xs text-slate-400">
-                Belum ada data siswa yang dihubungkan ke akun ini.
-              </div>
-            ) : (
-              <div className="space-y-2.5 max-h-64 overflow-y-auto pr-1">
-                {childrenList.map((child, index) => (
-                  <div
-                    key={child.studentId || index}
-                    className="p-3.5 rounded-xl bg-slate-800/70 border border-slate-700/70 hover:border-emerald-500/40 transition-colors"
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                          <h3 className="text-sm font-semibold text-white">
-                            {child.studentName || 'Nama Siswa'}
-                          </h3>
-                        </div>
-                        <div className="text-[11px] text-slate-400 flex items-center gap-1.5 pl-6">
-                          <Building2 className="w-3.5 h-3.5 text-slate-500" />
-                          <span>{child.academyName || 'Akademi Olahraga'}</span>
-                          {child.className && (
-                            <>
-                              <span className="text-slate-600">•</span>
-                              <span className="text-slate-400">{child.className}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      {child.studentId && (
-                        <span className="text-[10px] font-mono text-slate-400 bg-slate-900/80 px-2 py-0.5 rounded border border-slate-700">
-                          ID: {child.studentId.substring(0, 8)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Status Integrasi Tahap 2.2 Info */}
-          <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-500/20 text-emerald-300 text-xs leading-relaxed flex items-start gap-2.5">
-            <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-            <div>
-              <span className="font-semibold text-emerald-200">Autentikasi Supabase Auth V2 Berhasil.</span>
-              <p className="text-[11px] text-emerald-400/80 mt-0.5">
-                Sesi aman dikelola melalui HttpOnly Cookie. Modul Dashboard V2 lengkap akan diaktifkan pada Fase 2.2.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Footer Actions */}
-        <div className="pt-2 pb-4 space-y-2">
-          <button
-            type="button"
-            onClick={handleLogout}
-            disabled={isLoggingOut}
-            className="w-full py-3 px-4 rounded-xl bg-slate-800 hover:bg-slate-700/80 active:bg-slate-800 text-red-300 border border-red-500/30 text-xs font-semibold flex items-center justify-center gap-2 transition shadow-sm disabled:opacity-50 cursor-pointer"
-          >
-            {isLoggingOut ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin text-red-400" />
-                <span>Mengakhiri Sesi...</span>
-              </>
-            ) : (
-              <>
-                <LogOut className="w-4 h-4 text-red-400" />
-                <span>Keluar dari Akun (Logout)</span>
-              </>
-            )}
-          </button>
-        </div>
-      </div>
-    );
+    return <Navigate to="/portal/dashboard" replace />;
   }
 
   // 3. Tampilan Form Login V2 (Ketika belum login / sesi kosong)
