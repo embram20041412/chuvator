@@ -10,6 +10,14 @@ import { onRequestPost as portalV2Login } from './functions/api/portal/v2/login.
 import { onRequestGet as portalV2Session } from './functions/api/portal/v2/session.js';
 // @ts-ignore
 import { onRequestPost as portalV2Logout } from './functions/api/portal/v2/logout.js';
+// @ts-ignore
+import { onRequest as portalBilling } from './functions/api/portal/billing.js';
+// @ts-ignore
+import { onRequest as portalAnnouncements } from './functions/api/portal/announcements.js';
+// @ts-ignore
+import { onRequest as portalSchedule } from './functions/api/portal/schedule.js';
+// @ts-ignore
+import { onRequest as portalEvaluations } from './functions/api/portal/evaluations.js';
 
 dotenv.config();
 
@@ -240,6 +248,10 @@ async function handleCloudflareFunction(
     app.get('/api/portal/v2/session', (req, res) => handleCloudflareFunction(portalV2Session, req, res));
     app.post('/api/portal/v2/login', (req, res) => handleCloudflareFunction(portalV2Login, req, res));
     app.post('/api/portal/v2/logout', (req, res) => handleCloudflareFunction(portalV2Logout, req, res));
+    app.all('/api/portal/billing', (req, res) => handleCloudflareFunction(portalBilling, req, res));
+    app.all('/api/portal/announcements', (req, res) => handleCloudflareFunction(portalAnnouncements, req, res));
+    app.all('/api/portal/schedule', (req, res) => handleCloudflareFunction(portalSchedule, req, res));
+    app.all('/api/portal/evaluations', (req, res) => handleCloudflareFunction(portalEvaluations, req, res));
   }
 
   // POST /api/create-staff : Pembuatan Staff di Supabase
