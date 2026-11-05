@@ -4,36 +4,27 @@
  * 
  * Security Specifications:
  * - Strict Parent Portal V2 session validation via validatePortalV2Session.
- * - Anti-IDOR: Validates studentId ownership against server-verified childrenSummary.
+ * - Dynamic CORS with origin allowlisting and credentials support via getCorsHeaders.
+ * - Anti-IDOR: Validates studentId ownership against server-verified childrenSummary with duplicate detection.
  * - Tenant Isolation: Validates child's tenantId against session accessibleTenants.
  * - Zero fallback to anonKey for authentication.
  * - No unrestricted multi-table joins to academy_classes or coaches (eliminates 42501).
  * - Generic error masking on internal exceptions.
  */
 
-import { validatePortalV2Session } from './_auth_v2.js';
+import { validatePortalV2Session, getCorsHeaders } from './_auth_v2.js';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-const corsHeaders = {
-  'Content-Type': 'application/json',
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, OPTIONS',
-  'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Portal-CSRF, apikey'
-};
-
 export async function onRequest(context) {
   const { request, env = {} } = context;
+  const corsHeaders = getCorsHeaders(request, env);
 
   // 1. Tangani CORS Preflight
   if (request.method === 'OPTIONS') {
     return new Response(null, {
       status: 204,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Portal-CSRF, apikey'
-      }
+      headers: corsHeaders
     });
   }
 
@@ -78,17 +69,26 @@ export async function onRequest(context) {
     const childrenSummary = Array.isArray(session.childrenSummary) ? session.childrenSummary : [];
     const accessibleTenants = Array.isArray(session.accessibleTenants) ? session.accessibleTenants : [];
 
-    // 4. Anti-IDOR: Validasi Kepemilikan Siswa
-    const matchedChild = childrenSummary.find(
+    // 4. Anti-IDOR: Validasi Kepemilikan Siswa & Deteksi Duplikasi
+    const matchingChildren = childrenSummary.filter(
       c => String(c.studentId || c.id || '').toLowerCase() === studentId
     );
 
-    if (!matchedChild) {
+    if (matchingChildren.length === 0) {
       return new Response(
         JSON.stringify({ success: false, error: 'Akses terhadap data siswa ini ditolak' }),
         { status: 403, headers: corsHeaders }
       );
     }
+
+    if (matchingChildren.length > 1) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Ambiguitas data siswa: otorisasi ditolak' }),
+        { status: 403, headers: corsHeaders }
+      );
+    }
+
+    const matchedChild = matchingChildren[0];
 
     // 5. Isolasi Tenant
     const childTenantId = matchedChild.tenantId || '';
