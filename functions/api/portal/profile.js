@@ -1,106 +1,180 @@
 /**
  * Cloudflare Pages Function: /api/portal/profile
- * Edge-safe student profile endpoint for Parent Portal V2.
- * Retrieves student profile with JOIN to academy_classes and coaches.
+ * Parent Portal V2 Fail-Closed Student Profile Endpoint.
+ * 
+ * Security Specifications:
+ * - Strict Parent Portal V2 session validation via validatePortalV2Session.
+ * - Anti-IDOR: Validates studentId ownership against server-verified childrenSummary.
+ * - Tenant Isolation: Validates child's tenantId against session accessibleTenants.
+ * - Zero fallback to anonKey for authentication.
+ * - No unrestricted multi-table joins to academy_classes or coaches (eliminates 42501).
+ * - Generic error masking on internal exceptions.
  */
 
 import { validatePortalV2Session } from './_auth_v2.js';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const corsHeaders = {
+  'Content-Type': 'application/json',
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Portal-CSRF, apikey'
+};
+
 export async function onRequest(context) {
   const { request, env = {} } = context;
 
+  // 1. Tangani CORS Preflight
   if (request.method === 'OPTIONS') {
     return new Response(null, {
+      status: 204,
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Portal-CSRF'
+        'Access-Control-Allow-Methods': 'GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Portal-CSRF, apikey'
       }
     });
   }
 
   try {
-    let authHeader = request.headers.get('Authorization');
-    if (!authHeader) {
-      try {
-        const v2Session = await validatePortalV2Session(context);
-        if (v2Session?.valid && v2Session?.session?.accessToken) {
-          authHeader = `Bearer ${v2Session.session.accessToken}`;
-        }
-      } catch (sessionErr) {
-        console.warn('[profile.js] Session check fallback:', sessionErr.message);
-      }
-    }
-
-    if (!authHeader) {
-      const anonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY;
-      if (anonKey) {
-        authHeader = `Bearer ${anonKey}`;
-      } else {
-        return new Response(JSON.stringify({ error: 'Unauthorized: Sesi tidak valid' }), { status: 401, headers: { 'Access-Control-Allow-Origin': '*' } });
-      }
-    }
-
+    // 2. Validasi Parameter studentId
     const url = new URL(request.url);
-    const studentId = url.searchParams.get('studentId');
+    const rawStudentId = (url.searchParams.get('studentId') || url.searchParams.get('student_id') || '').trim();
 
-    if (!studentId) {
-      return new Response(JSON.stringify({ error: 'Parameter studentId wajib diisi' }), { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } });
+    if (!rawStudentId) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Parameter studentId wajib diisi' }),
+        { status: 400, headers: corsHeaders }
+      );
     }
 
-    const supabaseUrl = env.SUPABASE_URL || env.VITE_SUPABASE_URL || 'https://wqnhlmvvyhpctmaukwyj.supabase.co';
-    const anonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_vKzNAXC9V52eYH0-Gm9Rcg_23lCtz2P';
+    if (!UUID_REGEX.test(rawStudentId)) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Format studentId tidak valid' }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
 
-    // Kueri JOIN untuk mengambil profil siswa, data kelas, dan data pelatih (foto & nama)
-    const queryUrl = `${supabaseUrl}/rest/v1/students?id=eq.${encodeURIComponent(studentId)}&select=*,academy_classes(id,class_name,coach_id,coach_name,coaches(id,name,photo_url))`;
+    const studentId = rawStudentId.toLowerCase();
 
-    const dbResponse = await fetch(queryUrl, {
-      method: 'GET',
-      headers: {
-        'apikey': anonKey,
-        'Authorization': authHeader
+    // 3. Autentikasi Sesi Parent Portal V2 (Strict Fail-Closed)
+    const sessionResult = await validatePortalV2Session(context);
+
+    if (
+      !sessionResult ||
+      !sessionResult.valid ||
+      !sessionResult.session ||
+      !sessionResult.session.accessToken
+    ) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Sesi tidak valid atau telah kedaluwarsa' }),
+        { status: 401, headers: corsHeaders }
+      );
+    }
+
+    const { session } = sessionResult;
+    const { accessToken } = session;
+    const childrenSummary = Array.isArray(session.childrenSummary) ? session.childrenSummary : [];
+    const accessibleTenants = Array.isArray(session.accessibleTenants) ? session.accessibleTenants : [];
+
+    // 4. Anti-IDOR: Validasi Kepemilikan Siswa
+    const matchedChild = childrenSummary.find(
+      c => String(c.studentId || c.id || '').toLowerCase() === studentId
+    );
+
+    if (!matchedChild) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Akses terhadap data siswa ini ditolak' }),
+        { status: 403, headers: corsHeaders }
+      );
+    }
+
+    // 5. Isolasi Tenant
+    const childTenantId = matchedChild.tenantId || '';
+    if (!childTenantId || !accessibleTenants.includes(childTenantId)) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Akses lintas tenant tidak diizinkan' }),
+        { status: 403, headers: corsHeaders }
+      );
+    }
+
+    // 6. Pengambilan Data Profil
+    // matchedChild dari server-side RPC parent_get_children adalah sumber kebenaran utama.
+    let flatData = null;
+    const supabaseUrl = (env.SUPABASE_URL || env.VITE_SUPABASE_URL || 'https://wqnhlmvvyhpctmaukwyj.supabase.co').replace(/\/+$/, '');
+    const anonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY;
+
+    // Optional single-table query ke 'students' (hanya kolom data pribadi, TANPA JOIN)
+    if (supabaseUrl && anonKey && accessToken) {
+      try {
+        const queryUrl = `${supabaseUrl}/rest/v1/students?id=eq.${encodeURIComponent(studentId)}&tenant_id=eq.${encodeURIComponent(childTenantId)}&select=id,name,student_name,birth_date,photo_url,school_name,school_origin,sport_category`;
+        const dbResponse = await fetch(queryUrl, {
+          method: 'GET',
+          headers: {
+            'apikey': anonKey,
+            'Authorization': `Bearer ${accessToken}`
+          }
+        });
+
+        if (dbResponse.ok) {
+          const list = await dbResponse.json().catch(() => []);
+          if (Array.isArray(list) && list.length > 0) {
+            flatData = list[0];
+          }
+        }
+      } catch (dbErr) {
+        // Fallback aman: kegagalan query pelengkap tidak menggagalkan profil yang sudah terverifikasi di sesi
+        console.warn('[profile.js] Flat student query fallback note:', dbErr.message);
       }
-    });
-
-    if (!dbResponse.ok) {
-      const err = await dbResponse.text();
-      throw new Error(`Gagal dari Supabase: ${err}`);
     }
 
-    const data = await dbResponse.json();
-    
-    if (!data || data.length === 0) {
-      return new Response(JSON.stringify({ error: 'Data siswa tidak ditemukan / RLS memblokir akses' }), { status: 404, headers: { 'Access-Control-Allow-Origin': '*' } });
-    }
+    // 7. Konstruksi Data Respons (Kompatibel Penuh dengan PortalDashboard.jsx)
+    const studentData = {
+      id: matchedChild.studentId,
+      studentId: matchedChild.studentId,
+      student_id: matchedChild.studentId,
+      student_name: flatData?.student_name || flatData?.name || matchedChild.studentName || '',
+      studentName: flatData?.student_name || flatData?.name || matchedChild.studentName || '',
+      class_name: matchedChild.className || 'Kelas Reguler',
+      className: matchedChild.className || 'Kelas Reguler',
+      coach_name: matchedChild.coach_name || matchedChild.coachName || null,
+      coachName: matchedChild.coach_name || matchedChild.coachName || null,
+      coach_photo_url: null,
+      coachPhotoUrl: null,
+      photo_url: flatData?.photo_url || matchedChild.photo_url || matchedChild.photoUrl || null,
+      photoUrl: flatData?.photo_url || matchedChild.photo_url || matchedChild.photoUrl || null,
+      sport_category: flatData?.sport_category || 'Badminton',
+      sportCategory: flatData?.sport_category || 'Badminton',
+      birth_date: flatData?.birth_date || null,
+      birthDate: flatData?.birth_date || null,
+      school_name: flatData?.school_name || flatData?.school_origin || '',
+      school_origin: flatData?.school_name || flatData?.school_origin || '',
+      schoolOrigin: flatData?.school_name || flatData?.school_origin || '',
+      tenant_id: childTenantId,
+      tenantId: childTenantId,
+      academy_name: matchedChild.academyName || 'Sport Academy',
+      academyName: matchedChild.academyName || 'Sport Academy'
+    };
 
-    const student = data[0];
-    
-    // Flatten data pelatih agar UI React mudah membacanya
-    if (student.academy_classes) {
-      const cls = student.academy_classes;
-      // Ekstrak nama dan foto pelatih dari relasi JOIN
-      student.coach_name = cls.coaches?.name || cls.coach_name || null;
-      student.coach_photo_url = cls.coaches?.photo_url || null;
-      student.coachName = student.coach_name;
-      student.coachPhotoUrl = student.coach_photo_url;
-      student.class_name = cls.class_name || student.class_name;
-      student.className = student.class_name;
-    }
-
-    student.photoUrl = student.photo_url || student.photoUrl || null;
-    student.studentName = student.student_name || student.name || student.studentName || '';
-
-    return new Response(JSON.stringify({ success: true, data: student, student }), {
-      status: 200,
-      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-    });
+    return new Response(
+      JSON.stringify({
+        success: true,
+        data: studentData,
+        student: studentData
+      }),
+      { status: 200, headers: corsHeaders }
+    );
 
   } catch (error) {
-    return new Response(JSON.stringify({ success: false, error: error.message }), {
-      status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
-    });
+    // Masking error internal, tidak membocorkan detail server/database
+    console.error('[profile.js] Unhandled exception:', error.message);
+    return new Response(
+      JSON.stringify({ success: false, error: 'Terjadi kesalahan internal pada server' }),
+      { status: 500, headers: corsHeaders }
+    );
   }
 }
 
 export const onRequestGet = onRequest;
-export const onRequestPost = onRequest;
 export const onRequestOptions = onRequest;
