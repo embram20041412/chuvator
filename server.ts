@@ -180,8 +180,8 @@ async function handleCloudflareFunction(
       }
     });
 
-    // Cloudflare IP header simulation for local dev
-    if (!headers.get('cf-connecting-ip')) {
+    // Cloudflare IP header simulation strictly for local development (!isProd)
+    if (!isProd && !headers.get('cf-connecting-ip')) {
       const clientIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
       const cleanIp = clientIp.replace(/^::ffff:/, '');
       headers.set('cf-connecting-ip', cleanIp === '::1' ? '127.0.0.1' : cleanIp);
@@ -202,7 +202,7 @@ async function handleCloudflareFunction(
       ...process.env,
       SUPABASE_URL: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || 'https://wqnhlmvvyhpctmaukwyj.supabase.co',
       SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || 'sb_publishable_vKzNAXC9V52eYH0-Gm9Rcg_23lCtz2P',
-      PORTAL_TOKEN_ENCRYPTION_SECRET: process.env.PORTAL_TOKEN_ENCRYPTION_SECRET || 'chuvator_portal_token_encryption_secret_production_2026',
+      PORTAL_TOKEN_ENCRYPTION_SECRET: process.env.PORTAL_TOKEN_ENCRYPTION_SECRET || '',
       ENVIRONMENT: process.env.NODE_ENV || 'development'
     };
 
@@ -234,10 +234,13 @@ async function handleCloudflareFunction(
   }
 }
 
-  // Portal V2 Endpoints mounted to Express app
-  app.get('/api/portal/v2/session', (req, res) => handleCloudflareFunction(portalV2Session, req, res));
-  app.post('/api/portal/v2/login', (req, res) => handleCloudflareFunction(portalV2Login, req, res));
-  app.post('/api/portal/v2/logout', (req, res) => handleCloudflareFunction(portalV2Logout, req, res));
+  // Portal V2 Endpoints mounted to Express app strictly for local development (!isProd).
+  // Production exclusively routes traffic via official Cloudflare Pages Functions.
+  if (!isProd) {
+    app.get('/api/portal/v2/session', (req, res) => handleCloudflareFunction(portalV2Session, req, res));
+    app.post('/api/portal/v2/login', (req, res) => handleCloudflareFunction(portalV2Login, req, res));
+    app.post('/api/portal/v2/logout', (req, res) => handleCloudflareFunction(portalV2Logout, req, res));
+  }
 
   // POST /api/create-staff : Pembuatan Staff di Supabase
   app.post('/api/create-staff', async (req, res) => {
