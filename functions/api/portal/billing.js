@@ -123,48 +123,57 @@ export async function onRequest(context) {
     const tenant = rpcData?.tenant || {};
     const rpcStudent = rpcData?.student || {};
     const sppPayments = Array.isArray(rpcData?.spp_payments) ? rpcData.spp_payments : [];
+    const academyName = rpcStudent.academy_name || rpcStudent.academyName || matchedChild.academyName || 'Chua Sport Academy';
 
     // QRIS Image URL or Base64 Fallback with proper MIME formatting
-    let qrisUrl = tenant.qris_url || null;
-    let qrisBase64 = tenant.qris_image_base64 || null;
+    let qrisUrl = tenant.qris_url || tenant.qrisUrl || null;
+    let qrisBase64 = tenant.qris_image_base64 || tenant.qrisImageBase64 || null;
 
-    if (qrisBase64 && !qrisBase64.startsWith('data:image/')) {
+    if (qrisBase64 && typeof qrisBase64 === 'string' && !qrisBase64.startsWith('data:image/')) {
       qrisBase64 = `data:image/png;base64,${qrisBase64}`;
     }
 
     if (!qrisUrl && qrisBase64) {
       qrisUrl = qrisBase64;
-    } else if (qrisUrl && qrisUrl.startsWith('data:image/')) {
+    } else if (qrisUrl && typeof qrisUrl === 'string' && qrisUrl.startsWith('data:image/')) {
       qrisBase64 = qrisUrl;
     }
 
-    // Parse Bank Accounts (Support JSONB array with accountName, accountNumber, bankName + Single Column Fallbacks)
+    // Parse Bank Accounts (Support JSONB array + Single Column Fallbacks)
     let bankAccounts = [];
-    const rawBankAccounts = tenant.bank_accounts;
+    const rawBankAccounts = tenant.bank_accounts || tenant.bankAccounts;
 
     if (Array.isArray(rawBankAccounts) && rawBankAccounts.length > 0) {
       bankAccounts = rawBankAccounts.map(b => ({
-        bankName: b.bankName || b.bank_name || b.bank || 'Bank',
-        accountNumber: String(b.accountNumber || b.bank_account_number || b.noRekening || ''),
-        accountName: b.accountName || b.bank_account_name || b.atasNama || tenant.name || 'Akademi'
+        bankName: b.bankName || b.bank_name || b.bank || tenant.bank_name || 'Bank',
+        accountNumber: String(b.accountNumber || b.bank_account_number || b.noRekening || tenant.bank_account_number || ''),
+        accountName: b.accountName || b.bank_account_name || b.atasNama || tenant.bank_account_name || academyName
       }));
-    } else if (tenant.bank_name || tenant.bank_account_number) {
+    }
+
+    if (bankAccounts.length === 0 && (tenant.bank_name || tenant.bank_account_number || tenant.bank_account_name)) {
       bankAccounts.push({
-        bankName: tenant.bank_name || 'Bank',
+        bankName: tenant.bank_name || 'Bank Transfer',
         accountNumber: String(tenant.bank_account_number || ''),
-        accountName: tenant.bank_account_name || tenant.name || 'Akademi'
+        accountName: tenant.bank_account_name || academyName
       });
     }
 
     const tenantInfo = {
       id: tenant.id || childTenantId,
       tenant_id: tenant.tenant_id || childTenantId,
-      name: tenant.name || rpcStudent.tenant_name || 'Sport Arena',
+      name: tenant.name || rpcStudent.tenant_name || '',
+      academy_name: academyName,
+      academyName: academyName,
       qris_url: qrisUrl,
       qrisUrl: qrisUrl,
       qris_image_base64: qrisBase64,
+      qrisImageBase64: qrisBase64,
+      bank_name: tenant.bank_name || (bankAccounts[0] ? bankAccounts[0].bankName : ''),
+      bank_account_name: tenant.bank_account_name || (bankAccounts[0] ? bankAccounts[0].accountName : ''),
+      bank_account_number: tenant.bank_account_number || (bankAccounts[0] ? bankAccounts[0].accountNumber : ''),
       bank_accounts: bankAccounts,
-      bankAccounts
+      bankAccounts: bankAccounts
     };
 
     const monthlyFee = Number(rpcStudent.monthly_fee || rpcStudent.spp_monthly_fee || matchedChild.monthlyFee || 0);

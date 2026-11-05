@@ -669,12 +669,6 @@ export default function PortalDashboard() {
     Array.isArray(billingData.billing.details)
   );
 
-  useEffect(() => {
-    if (showQrisModal && !isBillingValid) {
-      setShowQrisModal(false);
-    }
-  }, [showQrisModal, isBillingValid]);
-
   // Logout Handler
   const handleLogout = async () => {
     if (isLoggingOut) return;
@@ -730,7 +724,7 @@ export default function PortalDashboard() {
 
   const studentName = student.student_name || student.studentName || 'Nama Siswa';
   const photoUrl = student.photo_url || student.photoUrl || scheduleData?.student?.photo_url || null;
-  const academyName = student.academy_name || student.academyName || scheduleData?.student?.academy_name || scheduleData?.student?.academyName || billingData?.tenant?.name || scheduleData?.tenant?.name || student.tenantName || 'Sport Academy';
+  const academyName = student.academy_name || student.academyName || scheduleData?.student?.academy_name || scheduleData?.student?.academyName || scheduleData?.classInfo?.academyName || 'Chua Sport Academy';
   const sportCategory = student.sport_category || student.sportCategory || 'Badminton';
   const className = student.class_name || student.className || scheduleData?.student?.class_name || scheduleData?.classInfo?.className || 'Reguler';
   const coachName = student.coach_name || student.coachName || scheduleData?.student?.coach_name || scheduleData?.classInfo?.coachName || null;
@@ -739,30 +733,32 @@ export default function PortalDashboard() {
   const totalAmount = isBillingValid ? billingData.billing.totalAmount : null;
   const billingDetails = isBillingValid ? billingData.billing.details : [];
   const isPaid = isBillingValid ? billingData.billing.isPaidThisMonth : null;
-  const qrisUrl = isBillingValid ? (billingData.tenant?.qris_url || billingData.tenant?.qrisUrl || null) : null;
+  const qrisUrl = billingData?.tenant?.qris_url || billingData?.tenant?.qrisUrl || billingData?.tenant?.qris_image_base64 || billingData?.tenant?.qrisImageBase64 || scheduleData?.tenant?.qris_url || scheduleData?.tenant?.qris_image_base64 || null;
 
   const handleOpenQrisModal = () => {
-    if (isBillingValid && !isLoadingBilling) {
-      setShowQrisModal(true);
-    }
+    setShowQrisModal(true);
   };
 
   const effectiveBankList = Array.isArray(billingData?.tenant?.bank_accounts) && billingData.tenant.bank_accounts.length > 0
     ? billingData.tenant.bank_accounts
-    : (bankAccounts.length > 0 
-      ? bankAccounts 
-      : (Array.isArray(billingData?.bankAccounts) && billingData.bankAccounts.length > 0
-        ? billingData.bankAccounts
-        : (Array.isArray(billingData?.tenant?.bankAccounts) && billingData.tenant.bankAccounts.length > 0
-          ? billingData.tenant.bankAccounts
-          : (bankDetails.number || bankDetails.bank 
-            ? [{ bankName: bankDetails.bank || 'Bank', accountNumber: bankDetails.number || '', accountName: bankDetails.name || '' }] 
+    : (Array.isArray(billingData?.bankAccounts) && billingData.bankAccounts.length > 0
+      ? billingData.bankAccounts
+      : (Array.isArray(billingData?.tenant?.bankAccounts) && billingData.tenant.bankAccounts.length > 0
+        ? billingData.tenant.bankAccounts
+        : (bankAccounts.length > 0 
+          ? bankAccounts 
+          : ((billingData?.tenant?.bank_account_number || billingData?.tenant?.bank_name || bankDetails.number)
+            ? [{
+                bankName: billingData?.tenant?.bank_name || bankDetails.bank || 'Bank Transfer',
+                accountNumber: String(billingData?.tenant?.bank_account_number || bankDetails.number || ''),
+                accountName: billingData?.tenant?.bank_account_name || bankDetails.name || academyName
+              }]
             : []))));
 
   const currentAccount = effectiveBankList[selectedBankIndex] || effectiveBankList[0] || {
-    bankName: bankDetails.bank || billingData?.bankDetails?.bank || '',
-    accountNumber: bankDetails.number || billingData?.bankDetails?.number || '',
-    accountName: bankDetails.name || billingData?.bankDetails?.name || academyName
+    bankName: billingData?.tenant?.bank_name || bankDetails.bank || billingData?.bankDetails?.bank || 'Bank Transfer',
+    accountNumber: String(billingData?.tenant?.bank_account_number || bankDetails.number || billingData?.bankDetails?.number || ''),
+    accountName: billingData?.tenant?.bank_account_name || bankDetails.name || billingData?.bankDetails?.name || academyName
   };
 
   const activeBank = currentAccount.bankName || 'TRANSFER BANK';
@@ -1298,7 +1294,11 @@ export default function PortalDashboard() {
                 >
                   <Calendar className="w-3.5 h-3.5" />
                   <span>
-                    Jadwal Sesi ({scheduleData?.upcoming_sessions ? scheduleData.upcoming_sessions.length : (scheduleData?.schedules?.length || 0)})
+                    Jadwal Sesi ({
+                      (scheduleData?.upcoming_sessions && scheduleData.upcoming_sessions.length > 0)
+                        ? scheduleData.upcoming_sessions.length
+                        : (scheduleData?.schedules?.length || 0)
+                    })
                   </span>
                 </button>
                 <button
@@ -1323,53 +1323,63 @@ export default function PortalDashboard() {
                       <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
                       <span>Memuat jadwal sesi latihan...</span>
                     </div>
-                  ) : (scheduleData?.upcoming_sessions && scheduleData.upcoming_sessions.length > 0) ? (
-                    <div className="space-y-2">
-                      {scheduleData.upcoming_sessions.map((s, idx) => (
-                        <div
-                          key={s.id || idx}
-                          className="p-3 bg-slate-50 hover:bg-blue-50/40 rounded-xl border border-slate-100 transition-colors flex items-center justify-between"
-                        >
-                          <div className="space-y-1">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-extrabold rounded-md uppercase">
-                                {formatSessionDate(s.date)}
-                              </span>
-                              <span className="text-xs font-bold text-slate-800 flex items-center gap-1 font-mono">
-                                <Clock className="w-3 h-3 text-slate-400" />
-                                {s.start_time || s.startTime} - {s.end_time || s.endTime} WIB
-                              </span>
-                            </div>
-                            <p className="text-[11px] text-slate-500 flex items-center gap-1">
-                              <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                              <span className="truncate">{s.court_name || s.courtName || '-'}</span>
-                            </p>
-                          </div>
+                  ) : (() => {
+                    const effectiveSessions = (scheduleData?.upcoming_sessions && scheduleData.upcoming_sessions.length > 0)
+                      ? scheduleData.upcoming_sessions
+                      : (Array.isArray(scheduleData?.schedules) ? scheduleData.schedules : []);
 
-                          <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-lg font-bold shrink-0">
-                            {s.status || 'Terkunci'}
-                          </span>
+                    if (effectiveSessions.length === 0) {
+                      return (
+                        <div className="py-7 px-4 text-center rounded-xl bg-slate-50 border border-slate-100 space-y-1.5">
+                          <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 mx-auto flex items-center justify-center">
+                            <Calendar className="w-4 h-4" />
+                          </div>
+                          <p className="text-xs font-bold text-slate-800">
+                            Belum Ada Jadwal Terdekat
+                          </p>
+                          <p className="text-[11px] text-slate-500 max-w-[260px] mx-auto leading-relaxed">
+                            Belum ada jadwal latihan terdekat yang dikunci oleh pelatih.
+                          </p>
                         </div>
-                      ))}
-                      
-                      <div className="p-2.5 bg-blue-50/70 rounded-xl border border-blue-100 text-[11px] text-blue-800 flex items-start gap-2">
-                        <Activity className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
-                        <span>Pastikan atlet hadir 15 menit sebelum sesi dimulai dengan seragam resmi akademi.</span>
+                      );
+                    }
+
+                    return (
+                      <div className="space-y-2">
+                        {effectiveSessions.map((s, idx) => (
+                          <div
+                            key={s.id || idx}
+                            className="p-3 bg-slate-50 hover:bg-blue-50/40 rounded-xl border border-slate-100 transition-colors flex items-center justify-between"
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-extrabold rounded-md uppercase">
+                                  {s.date ? formatSessionDate(s.date) : (s.day ? String(s.day).toUpperCase() : 'JADWAL RUTIN')}
+                                </span>
+                                <span className="text-xs font-bold text-slate-800 flex items-center gap-1 font-mono">
+                                  <Clock className="w-3 h-3 text-slate-400" />
+                                  {s.start_time || s.startTime || '15:00'} - {s.end_time || s.endTime || '17:00'} WIB
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-slate-500 flex items-center gap-1">
+                                <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                                <span className="truncate">{s.court_name || s.courtName || 'Lapangan Utama'}</span>
+                              </p>
+                            </div>
+
+                            <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-lg font-bold shrink-0">
+                              {s.status || (s.date ? 'Terkunci' : 'Rutin')}
+                            </span>
+                          </div>
+                        ))}
+                        
+                        <div className="p-2.5 bg-blue-50/70 rounded-xl border border-blue-100 text-[11px] text-blue-800 flex items-start gap-2">
+                          <Activity className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
+                          <span>Pastikan atlet hadir 15 menit sebelum sesi dimulai dengan seragam resmi akademi.</span>
+                        </div>
                       </div>
-                    </div>
-                  ) : (
-                    <div className="py-7 px-4 text-center rounded-xl bg-slate-50 border border-slate-100 space-y-1.5">
-                      <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 mx-auto flex items-center justify-center">
-                        <Calendar className="w-4 h-4" />
-                      </div>
-                      <p className="text-xs font-bold text-slate-800">
-                        Belum Ada Jadwal Terdekat
-                      </p>
-                      <p className="text-[11px] text-slate-500 max-w-[260px] mx-auto leading-relaxed">
-                        Belum ada jadwal latihan terdekat yang dikunci oleh pelatih.
-                      </p>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               )}
 
@@ -1968,7 +1978,7 @@ export default function PortalDashboard() {
       </nav>
 
       {/* MODAL QRIS PEMBAYARAN */}
-      {showQrisModal && isBillingValid === true && (
+      {showQrisModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-slate-900 border border-slate-800 text-white rounded-3xl max-w-sm w-full shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200">
             <div className="px-5 py-4 border-b border-slate-800/80 flex items-center justify-between bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-700 text-white">

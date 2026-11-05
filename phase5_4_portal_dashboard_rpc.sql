@@ -178,12 +178,12 @@ BEGIN
     WHERE t.tenant_id = v_student_tenant_id
     LIMIT 1;
 
-    -- 5. RESOLVE ACADEMY BRANDING PRIORITY
+    -- 5. RESOLVE ACADEMY BRANDING PRIORITY (STUDENT ACADEMY NAME FIRST)
     v_resolved_academy_name := COALESCE(
-        NULLIF(trim(v_class_academy_name), ''),
         NULLIF(trim(v_student_academy_name), ''),
+        NULLIF(trim(v_class_academy_name), ''),
         NULLIF(trim(v_tenant_name), ''),
-        'Sport Academy'
+        'Chua Sport Academy'
     );
 
     -- 6. FETCH UPCOMING BOOKINGS (FIX 1: UPPER BTRIM COALESCE IN LUNAS/COMPLETED, MAX 12, ORDER BY b.date ASC, b.start_time ASC, b.id ASC)
@@ -325,7 +325,7 @@ BEGIN
             'coach_name', v_resolved_coach_name,
             'coachName', v_resolved_coach_name,
             'tenant_id', v_student_tenant_id,
-            'tenant_name', COALESCE(v_tenant_name, 'Sport Arena'),
+            'tenant_name', COALESCE(v_tenant_name, ''),
             'academy_name', v_resolved_academy_name,
             'academyName', v_resolved_academy_name,
             'birth_date', v_student_birth_date,
@@ -339,7 +339,7 @@ BEGIN
         'tenant', jsonb_build_object(
             'id', COALESCE(v_tenant_db_id::text, v_student_tenant_id),
             'tenant_id', v_student_tenant_id,
-            'name', COALESCE(v_tenant_name, 'Sport Arena'),
+            'name', COALESCE(v_tenant_name, ''),
             'qris_url', v_tenant_qris_url,
             'qris_image_base64', v_tenant_qris_image_base64,
             'bank_name', v_tenant_bank_name,
