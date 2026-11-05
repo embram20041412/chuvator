@@ -4,6 +4,12 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
+// @ts-ignore
+import { onRequestPost as portalV2Login } from './functions/api/portal/v2/login.js';
+// @ts-ignore
+import { onRequestGet as portalV2Session } from './functions/api/portal/v2/session.js';
+// @ts-ignore
+import { onRequestPost as portalV2Logout } from './functions/api/portal/v2/logout.js';
 
 dotenv.config();
 
@@ -155,147 +161,83 @@ async function startServer() {
     });
   });
 
-  // Local Dev State for Portal V2 Sessions
-  const portalSessions = new Map<string, any>();
+async function handleCloudflareFunction(
+  fn: (context: any) => Promise<Response>,
+  req: express.Request,
+  res: express.Response
+) {
+  try {
+    const protocol = req.protocol || 'http';
+    const host = req.get('host') || 'localhost:3000';
+    const fullUrl = `${protocol}://${host}${req.originalUrl || req.url}`;
 
-  // GET /api/portal/v2/session
-  app.get('/api/portal/v2/session', async (req, res) => {
-    const cookieHeader = req.headers.cookie || '';
-    const match = cookieHeader.match(/portal_session_v2=([^;]+)/);
-    const token = match ? match[1] : req.headers['x-portal-token'];
-
-    if (token && portalSessions.has(String(token))) {
-      const sess = portalSessions.get(String(token));
-      return res.status(200).json({
-        authenticated: true,
-        session: sess
-      });
-    }
-
-    return res.status(401).json({
-      authenticated: false,
-      message: 'Sesi tidak valid atau telah kedaluwarsa.'
+    const headers = new Headers();
+    Object.entries(req.headers).forEach(([k, v]) => {
+      if (Array.isArray(v)) {
+        v.forEach(val => headers.append(k, val));
+      } else if (v !== undefined) {
+        headers.set(k, v);
+      }
     });
-  });
 
-  // POST /api/portal/v2/login
-  app.post('/api/portal/v2/login', async (req, res) => {
-    try {
-      const { email, password } = req.body || {};
-      const cleanEmail = String(email || '').trim().toLowerCase();
-
-      if (!cleanEmail || !password) {
-        return res.status(400).json({
-          success: false,
-          message: 'Email dan kata sandi wajib diisi.'
-        });
-      }
-
-      let user: any = null;
-
-      // Authenticate via Supabase Auth with dev fallback for parent@chuasport.com
-      const { data: authData, error: authErr } = await supabaseServer.auth.signInWithPassword({
-        email: cleanEmail,
-        password: password
-      });
-
-      if (!authErr && authData?.user) {
-        user = authData.user;
-      } else if (cleanEmail.startsWith('parent') || cleanEmail.includes('wali') || cleanEmail === 'parent@chuasport.com') {
-        // Test parent account fallback in dev environment
-        user = {
-          id: 'test-parent-uid-001',
-          email: cleanEmail
-        };
-      }
-
-      if (!user) {
-        return res.status(401).json({
-          success: false,
-          message: 'Email atau kata sandi tidak sesuai.'
-        });
-      }
-
-      // Query linked children from Supabase
-      const { data: pLinks } = await supabaseServer
-        .from('parent_student_links')
-        .select('student_id, tenant_id, status, students(id, name, full_name, class_name), tenants(id, name)')
-        .eq('status', 'active');
-
-      const childrenSummary = (pLinks || []).map((link: any) => ({
-        studentId: link.student_id,
-        studentName: link.students?.full_name || link.students?.name || 'Siswa',
-        tenantId: link.tenant_id,
-        academyName: link.tenants?.name || 'Sport Academy',
-        className: link.students?.class_name || 'Reguler'
-      }));
-
-      // Fallback child if no links exist in mock db
-      if (childrenSummary.length === 0) {
-        childrenSummary.push({
-          studentId: 'synthetic-student-001',
-          studentName: 'Siswa Sintetis Wali',
-          tenantId: 'demo-tenant-1',
-          academyName: 'KEDIRI SPORT ARENA',
-          className: 'Reguler Badminton U-14'
-        });
-      }
-
-      const sessionToken = `sess_v2_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
-      const csrfToken = `csrf_${Math.random().toString(36).substring(2, 12)}`;
-
-      const sessionData = {
-        authUserId: user.id,
-        email: user.email,
-        accessibleTenants: Array.from(new Set(childrenSummary.map((c: any) => c.tenantId))),
-        children: childrenSummary,
-        csrfToken: csrfToken,
-        expiresAt: new Date(Date.now() + 86400 * 1000).toISOString()
-      };
-
-      portalSessions.set(sessionToken, sessionData);
-
-      res.cookie('portal_session_v2', sessionToken, {
-        httpOnly: true,
-        path: '/',
-        maxAge: 86400 * 1000
-      });
-
-      return res.status(200).json({
-        success: true,
-        message: 'Login berhasil.',
-        user: {
-          authUserId: user.id,
-          email: user.email,
-          accessibleTenants: sessionData.accessibleTenants,
-          children: childrenSummary
-        },
-        csrfToken: csrfToken,
-        expiresAt: sessionData.expiresAt
-      });
-    } catch (err: any) {
-      console.error('Local dev portal login error:', err);
-      return res.status(500).json({
-        success: false,
-        message: 'Terjadi kesalahan pada sistem saat memproses login.'
-      });
-    }
-  });
-
-  // POST /api/portal/v2/logout
-  app.post('/api/portal/v2/logout', (req, res) => {
-    const cookieHeader = req.headers.cookie || '';
-    const match = cookieHeader.match(/portal_session_v2=([^;]+)/);
-    if (match) {
-      portalSessions.delete(match[1]);
+    // Cloudflare IP header simulation for local dev
+    if (!headers.get('cf-connecting-ip')) {
+      const clientIp = req.ip || req.socket.remoteAddress || '127.0.0.1';
+      const cleanIp = clientIp.replace(/^::ffff:/, '');
+      headers.set('cf-connecting-ip', cleanIp === '::1' ? '127.0.0.1' : cleanIp);
     }
 
-    res.clearCookie('portal_session_v2', { path: '/' });
-    return res.status(200).json({
-      success: true,
-      message: 'Sesi portal berhasil diakhiri.'
+    const init: RequestInit = {
+      method: req.method,
+      headers,
+    };
+
+    if (req.method !== 'GET' && req.method !== 'HEAD' && req.body) {
+      init.body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body);
+    }
+
+    const webReq = new Request(fullUrl, init);
+
+    const env = {
+      ...process.env,
+      SUPABASE_URL: process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || 'https://wqnhlmvvyhpctmaukwyj.supabase.co',
+      SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || 'sb_publishable_vKzNAXC9V52eYH0-Gm9Rcg_23lCtz2P',
+      PORTAL_TOKEN_ENCRYPTION_SECRET: process.env.PORTAL_TOKEN_ENCRYPTION_SECRET || 'chuvator_portal_token_encryption_secret_production_2026',
+      ENVIRONMENT: process.env.NODE_ENV || 'development'
+    };
+
+    const context = {
+      request: webReq,
+      env,
+    };
+
+    const webRes = await fn(context);
+
+    res.status(webRes.status);
+
+    webRes.headers.forEach((v, k) => {
+      if (k.toLowerCase() === 'set-cookie') {
+        res.append('Set-Cookie', v);
+      } else {
+        res.setHeader(k, v);
+      }
     });
-  });
+
+    const text = await webRes.text();
+    res.send(text);
+  } catch (err: any) {
+    console.error('Express Cloudflare adapter error:', err);
+    res.status(500).json({
+      success: false,
+      message: 'Terjadi kesalahan internal pada server adapter.'
+    });
+  }
+}
+
+  // Portal V2 Endpoints mounted to Express app
+  app.get('/api/portal/v2/session', (req, res) => handleCloudflareFunction(portalV2Session, req, res));
+  app.post('/api/portal/v2/login', (req, res) => handleCloudflareFunction(portalV2Login, req, res));
+  app.post('/api/portal/v2/logout', (req, res) => handleCloudflareFunction(portalV2Logout, req, res));
 
   // POST /api/create-staff : Pembuatan Staff di Supabase
   app.post('/api/create-staff', async (req, res) => {
