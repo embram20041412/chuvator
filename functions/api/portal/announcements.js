@@ -1,175 +1,109 @@
 /**
- * Cloudflare Pages Function: /api/portal/announcements (FASE 3)
+ * Cloudflare Pages Function: /api/portal/announcements (REFACTORED V2 - SUPABASE)
  * Edge-safe announcements endpoint for Portal Wali Murid.
- * Enforces session authentication, CSRF validation, and strict tenant/student isolation.
- * READ-ONLY: Fetches academy announcements for the student's tenant.
+ * Enforces V2 session authentication, CSRF validation, and tenant-based filtering.
+ * 
+ * ACTIVE DATABASE: Supabase/PostgreSQL
+ * REMOVED: Firestore REST API logic.
  */
 
 import {
   getCorsHeaders,
   verifyCsrf,
-  validatePortalV2Session
+  validatePortalV2Session,
+  getCleanSupabaseUrl,
+  getSupabaseAnonKey
 } from './_auth_v2.js';
-import {
-  getGoogleAccessToken,
-  parseFirestoreFields,
-  validatePortalSession
-} from './_auth.js';
 
+// OPTIONS CORS Preflight handler
 export async function onRequestOptions(context) {
   const corsHeaders = getCorsHeaders(context.request, context.env);
-  return new Response(null, {
-    status: 204,
-    headers: corsHeaders
-  });
+  return new Response(null, { status: 204, headers: corsHeaders });
 }
 
+/**
+ * POST /api/portal/announcements
+ */
 export async function onRequestPost(context) {
   const { request, env = {} } = context;
   const corsHeaders = getCorsHeaders(request, env);
 
   try {
-    // 1. Session Validation (V2 first, fallback to V1)
-    let session = null;
-    let csrfToken = null;
-    let authorizedChildren = [];
-
-    const v2Result = await validatePortalV2Session(context);
-    if (v2Result.valid) {
-      session = v2Result.session;
-      csrfToken = session.csrfToken;
-      authorizedChildren = session.children || [];
-    } else {
-      const v1Result = await validatePortalSession(context);
-      if (v1Result.valid) {
-        session = v1Result.session;
-        csrfToken = session.csrfToken;
-        authorizedChildren = [{ studentId: session.studentId, tenantId: session.tenantId }];
-      }
-    }
-
-    if (!session) {
+    // 1. Session Validation via Parent Portal V2 Auth
+    const sessionResult = await validatePortalV2Session(context);
+    if (!sessionResult.valid || !sessionResult.session) {
       return new Response(
-        JSON.stringify({
-          success: false,
-          message: 'Sesi tidak valid atau telah kedaluwarsa. Silakan login kembali.'
-        }),
+        JSON.stringify({ success: false, message: 'Sesi tidak valid. Silakan login kembali.' }),
         { status: 401, headers: corsHeaders }
       );
     }
 
+    const { session } = sessionResult;
+    const supabaseUrl = getCleanSupabaseUrl(env);
+    const anonKey = getSupabaseAnonKey(env);
+
     // 2. Strict CSRF Validation
-    if (!verifyCsrf(request, env, csrfToken)) {
+    if (!verifyCsrf(request, env, session.csrfToken)) {
       return new Response(
-        JSON.stringify({
-          success: false,
-          message: 'Permintaan ditolak. CSRF token atau origin tidak valid.'
-        }),
+        JSON.stringify({ success: false, message: 'Permintaan ditolak. CSRF check gagal.' }),
         { status: 403, headers: corsHeaders }
       );
     }
 
-    // 3. Request Body Student Authorization Check
+    // 3. Request Body Tenant Authorization Check
     const body = await request.json().catch(() => ({}));
-    const reqStudentId = String(body.studentId || '').trim();
     const reqTenantId = String(body.tenantId || '').trim();
 
-    if (!reqStudentId || !reqTenantId) {
+    if (!reqTenantId) {
       return new Response(
-        JSON.stringify({
-          success: false,
-          message: 'Parameter studentId dan tenantId wajib diisi.'
-        }),
+        JSON.stringify({ success: false, message: 'tenantId wajib disertakan.' }),
         { status: 400, headers: corsHeaders }
       );
     }
 
-    // Verify reqStudentId belongs to authorized children
-    const isAuthorized = authorizedChildren.some(child => {
-      const cId = String(child.studentId || child.id || '').trim().toLowerCase();
-      const tId = String(child.tenantId || '').trim().toLowerCase();
-      return cId === reqStudentId.toLowerCase() && (tId === reqTenantId.toLowerCase() || !tId);
-    });
+    // Verify reqTenantId is in authorized tenants from session
+    const isAuthorized = (session.childrenSummary || []).some(
+      c => String(c.tenantId || '').trim().toLowerCase() === reqTenantId.toLowerCase()
+    );
 
     if (!isAuthorized) {
       return new Response(
-        JSON.stringify({
-          success: false,
-          message: 'Akses ditolak. Sesi Anda tidak memiliki otorisasi untuk data siswa/tenant ini.'
-        }),
+        JSON.stringify({ success: false, message: 'Akses ditolak. Sesi Anda tidak memiliki otorisasi untuk tenant ini.' }),
         { status: 403, headers: corsHeaders }
       );
     }
 
-    // 4. Fetch Announcements from Database (Firestore REST or Supabase)
-    const announcements = [];
-    const projectId = env.FIREBASE_PROJECT_ID;
-    const databaseId = env.FIREBASE_DATABASE_ID || projectId;
-    const clientEmail = env.FIREBASE_CLIENT_EMAIL;
-    const privateKey = env.FIREBASE_PRIVATE_KEY ? env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') : '';
-
-    if (projectId && clientEmail && privateKey) {
-      try {
-        const accessToken = await getGoogleAccessToken(clientEmail, privateKey);
-        if (accessToken) {
-          const reqHeaders = {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${accessToken}`
-          };
-
-          const queryPayload = {
-            structuredQuery: {
-              from: [{ collectionId: 'announcements' }],
-              where: {
-                fieldFilter: {
-                  field: { fieldPath: 'tenantId' },
-                  op: 'EQUAL',
-                  value: { stringValue: reqTenantId }
-                }
-              },
-              limit: 20
-            }
-          };
-
-          const runQueryUrl = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/${databaseId}/documents:runQuery`;
-          const resp = await fetch(runQueryUrl, {
-            method: 'POST',
-            headers: reqHeaders,
-            body: JSON.stringify(queryPayload)
-          });
-
-          if (resp.ok) {
-            const results = await resp.json();
-            if (Array.isArray(results)) {
-              for (const item of results) {
-                if (item.document && item.document.fields) {
-                  const docId = item.document.name.split('/').pop();
-                  const parsed = parseFirestoreFields(item.document.fields);
-                  const docTenant = String(parsed.tenantId || parsed.tenant_id || '').trim().toLowerCase();
-
-                  if (docTenant === reqTenantId.toLowerCase()) {
-                    announcements.push({
-                      id: docId,
-                      title: parsed.title || parsed.subject || 'Pengumuman Akademi',
-                      content: parsed.content || parsed.message || parsed.body || '',
-                      category: parsed.category || parsed.tag || 'Umum',
-                      date: parsed.date || parsed.createdAt || parsed.publishDate || '',
-                      isImportant: !!(parsed.isImportant || parsed.important || parsed.isPinned),
-                      author: parsed.author || parsed.createdByName || 'Pengelola Akademi'
-                    });
-                  }
-                }
-              }
-            }
-          }
-        }
-      } catch (dbErr) {
-        console.warn('Gagal membaca database announcements:', dbErr.message);
+    // 4. Fetch Announcements from Supabase
+    // Filter by tenant_id and status='published'
+    const annUrl = `${supabaseUrl}/rest/v1/announcements?tenant_id=eq.${reqTenantId}&status=eq.published&order=publish_date.desc&limit=20`;
+    const annResp = await fetch(annUrl, {
+      method: 'GET',
+      headers: {
+        'apikey': anonKey,
+        'Authorization': `Bearer ${session.accessToken}`,
+        'Accept': 'application/json'
       }
+    });
+
+    if (!annResp.ok) {
+      const errText = await annResp.text().catch(() => 'Unknown error');
+      console.error(`[Announcements] Supabase query failed: ${errText}`);
+      return new Response(
+        JSON.stringify({ success: false, message: 'Gagal memuat pengumuman dari database.' }),
+        { status: 502, headers: corsHeaders }
+      );
     }
 
-    // Sort announcements by date descending
-    announcements.sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+    const rawAnnouncements = await annResp.json();
+    const announcements = rawAnnouncements.map(ann => ({
+      id: ann.id,
+      title: ann.title || 'Pengumuman Akademi',
+      content: ann.content || '',
+      category: ann.category || 'Umum',
+      date: ann.publish_date || ann.created_at || '',
+      isImportant: !!ann.is_important,
+      author: ann.author || 'Pengelola Akademi'
+    }));
 
     return new Response(
       JSON.stringify({
@@ -180,12 +114,9 @@ export async function onRequestPost(context) {
       { status: 200, headers: corsHeaders }
     );
   } catch (error) {
-    console.error('Announcements API error:', error.message);
+    console.error('Portal Announcements API Error:', error.message);
     return new Response(
-      JSON.stringify({
-        success: false,
-        message: 'Terjadi kesalahan internal saat memuat pengumuman.'
-      }),
+      JSON.stringify({ success: false, message: 'Terjadi kesalahan internal saat memuat pengumuman.' }),
       { status: 500, headers: corsHeaders }
     );
   }

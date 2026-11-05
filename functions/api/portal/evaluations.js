@@ -177,16 +177,14 @@ export async function onRequestPost(context) {
     // 6. Normalize & Filter Evaluations - Truth-in-Data (FAIL-CLOSED Publication)
     const normalizedEvaluations = rawEvaluations
       .filter(ev => {
-        // Publication Status Filter:
-        // If status column exists, only allow 'published' or 'approved'.
-        // If status column is missing (null/undefined), we assume published 
-        // because currently Supabase schema doesn't have it yet.
+        // Publication Status Filter (STRICT FAIL-CLOSED):
+        // Only allow evaluations with explicit 'published' or 'approved' status.
+        // Records with NULL, empty, or unknown status are REJECTED.
         const rawStatus = ev.status || ev.publication_status || ev.publicationStatus;
-        if (rawStatus) {
-          const evalStatus = String(rawStatus).toLowerCase().trim();
-          return ['published', 'approved'].includes(evalStatus);
-        }
-        return true; // No status field -> Default to visible for now (operational truth)
+        if (!rawStatus) return false;
+
+        const evalStatus = String(rawStatus).toLowerCase().trim();
+        return ['published', 'approved'].includes(evalStatus);
       })
       .map((ev) => {
         const pScores = ev.pillar_scores || ev.pillarScores || {};
