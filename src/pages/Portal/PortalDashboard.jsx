@@ -11,6 +11,7 @@ import {
   Sparkles, 
   ShieldCheck, 
   ChevronRight,
+  ChevronDown,
   Clock,
   X,
   CheckCircle2,
@@ -18,13 +19,11 @@ import {
   Copy,
   Receipt,
   Loader2,
-  ListOrdered,
   MapPin,
   CalendarDays,
   XCircle,
   Activity,
   Trophy,
-  Award,
   Medal,
   Star,
   Target,
@@ -32,7 +31,10 @@ import {
   Quote,
   Home,
   Users,
-  HeartPulse
+  HeartPulse,
+  Bell,
+  Megaphone,
+  Check
 } from 'lucide-react';
 import { getStudentInitials, calculateAge } from '../../utils/helpers';
 
@@ -121,8 +123,8 @@ const getTournamentMedalStyle = (resultStr) => {
 export default function PortalDashboard() {
   const navigate = useNavigate();
 
-  // 1. Inisialisasi: Profil tampilan aktif dari localStorage (Non-otoritatif)
-  const student = (() => {
+  // 1. Initial State: Stored active student
+  const initialStudent = (() => {
     try {
       const stored = localStorage.getItem('activeStudent');
       return stored ? JSON.parse(stored) : null;
@@ -132,7 +134,11 @@ export default function PortalDashboard() {
     }
   })();
 
-  // Verified Backend Session Identity & CSRF Token State (In-Memory Only)
+  const [student, setStudent] = useState(initialStudent);
+  const [childrenList, setChildrenList] = useState([]);
+  const [showChildSwitcher, setShowChildSwitcher] = useState(false);
+
+  // Verified Backend Session Identity & CSRF Token State
   const [verifiedStudentId, setVerifiedStudentId] = useState(null);
   const [verifiedTenantId, setVerifiedTenantId] = useState(null);
   const [csrfToken, setCsrfToken] = useState(null);
@@ -163,10 +169,15 @@ export default function PortalDashboard() {
   const [evaluationError, setEvaluationError] = useState(null);
   const [activeEvalTab, setActiveEvalTab] = useState('evaluasi'); // 'evaluasi' | 'prestasi'
 
-  // State Bottom Navigation: 'home' | 'billing' | 'schedule' | 'evaluation'
+  // State Pengumuman (Announcements GAP-01)
+  const [announcementsData, setAnnouncementsData] = useState(null);
+  const [isLoadingAnnouncements, setIsLoadingAnnouncements] = useState(true);
+  const [announcementsError, setAnnouncementsError] = useState(null);
+
+  // State Navigation: 'home' | 'billing' | 'schedule' | 'evaluation' | 'announcements'
   const [activeTab, setActiveTab] = useState('home');
 
-  // 2. STRICT SESSION IDENTITY BINDING (GET /api/portal/session)
+  // 2. STRICT SESSION IDENTITY & MULTI-CHILD RESOLUTION (/api/portal/v2/session or /api/portal/session)
   useEffect(() => {
     let isMounted = true;
 
@@ -175,49 +186,76 @@ export default function PortalDashboard() {
       setSessionError(null);
 
       try {
-        const response = await fetch('/api/portal/session', {
+        // Try V2 session first
+        let response = await fetch('/api/portal/v2/session', {
           method: 'GET',
-          headers: {
-            'Accept': 'application/json'
-          },
+          headers: { 'Accept': 'application/json' },
           credentials: 'include'
         });
+
+        let isV2 = true;
+        if (!response.ok) {
+          isV2 = false;
+          response = await fetch('/api/portal/session', {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+            credentials: 'include'
+          });
+        }
 
         if (response.ok) {
           const res = await response.json().catch(() => ({}));
           const sessionObj = res.session || {};
-          const bStudentId = String(sessionObj.studentId || '').trim();
-          const bTenantId = String(sessionObj.tenantId || '').trim();
+          const cList = Array.isArray(sessionObj.children) && sessionObj.children.length > 0
+            ? sessionObj.children
+            : (sessionObj.studentId ? [{
+                studentId: sessionObj.studentId,
+                tenantId: sessionObj.tenantId,
+                studentName: student?.studentName || 'Siswa',
+                className: student?.className || 'Reguler',
+                academyName: student?.academyName || 'Sport Academy'
+              }] : []);
 
-          // STRICT SESSION IDENTITY MATCHING (STAGE 7G.2B.2A.1)
-          if (
-            isMounted &&
-            res.authenticated &&
-            sessionObj.csrfToken &&
-            bStudentId &&
-            bTenantId &&
-            student?.id &&
-            student?.tenantId &&
-            bStudentId.toLowerCase() === String(student.id).trim().toLowerCase() &&
-            bTenantId.toLowerCase() === String(student.tenantId).trim().toLowerCase()
-          ) {
-            setVerifiedStudentId(bStudentId);
-            setVerifiedTenantId(bTenantId);
+          if (isMounted && res.authenticated && sessionObj.csrfToken && cList.length > 0) {
+            setChildrenList(cList);
             setCsrfToken(sessionObj.csrfToken);
+
+            // Select initial student if not set or match against children list
+            let selectedChild = cList[0];
+            if (student?.id) {
+              const matched = cList.find(c => String(c.studentId || c.id).toLowerCase() === String(student.id).toLowerCase());
+              if (matched) selectedChild = matched;
+            }
+
+            const activeSid = String(selectedChild.studentId || selectedChild.id).trim();
+            const activeTid = String(selectedChild.tenantId || '').trim();
+
+            const normalizedStudent = {
+              id: activeSid,
+              studentId: activeSid,
+              tenantId: activeTid,
+              studentName: selectedChild.studentName || selectedChild.name || student?.studentName || 'Nama Siswa',
+              className: selectedChild.className || student?.className || 'Reguler',
+              coachName: selectedChild.coachName || student?.coachName || 'Instruktur Utama',
+              sportCategory: selectedChild.sportCategory || selectedChild.sport || student?.sportCategory || 'Badminton',
+              academyName: selectedChild.academyName || student?.academyName || 'Sport Academy',
+              photoUrl: selectedChild.photoUrl || student?.photoUrl || null,
+              birthDate: selectedChild.birthDate || student?.birthDate || null,
+              schoolOrigin: selectedChild.schoolOrigin || student?.schoolOrigin || ''
+            };
+
+            setStudent(normalizedStudent);
+            localStorage.setItem('activeStudent', JSON.stringify(normalizedStudent));
+
+            setVerifiedStudentId(activeSid);
+            setVerifiedTenantId(activeTid);
             setIsSessionVerified(true);
             setIsVerifyingSession(false);
             return;
-          } else if (res.authenticated && bStudentId && bTenantId) {
-            console.warn('Portal session identity mismatch:', {
-              backendStudentId: bStudentId,
-              backendTenantId: bTenantId,
-              localStudentId: student?.id,
-              localTenantId: student?.tenantId
-            });
           }
         }
 
-        // Session invalid, expired, or identity mismatch
+        // Session invalid, expired, or failed
         if (isMounted) {
           localStorage.removeItem('activeStudent');
           sessionStorage.clear();
@@ -225,7 +263,7 @@ export default function PortalDashboard() {
           setVerifiedTenantId(null);
           setIsSessionVerified(false);
           setCsrfToken(null);
-          setSessionError('Identitas sesi Anda tidak valid atau tidak cocok. Silakan login kembali.');
+          setSessionError('Identitas sesi Anda tidak valid. Silakan login kembali.');
           setIsVerifyingSession(false);
         }
       } catch (err) {
@@ -249,7 +287,33 @@ export default function PortalDashboard() {
     };
   }, []);
 
-  // 3. FETCH BILLING DATA (VERIFIED BACKEND SESSION IDENTITY ONLY)
+  // Multi-Child Switcher Handler
+  const handleSelectChild = (child) => {
+    const activeSid = String(child.studentId || child.id).trim();
+    const activeTid = String(child.tenantId || '').trim();
+
+    const normalizedStudent = {
+      id: activeSid,
+      studentId: activeSid,
+      tenantId: activeTid,
+      studentName: child.studentName || child.name || 'Nama Siswa',
+      className: child.className || 'Reguler',
+      coachName: child.coachName || 'Instruktur Utama',
+      sportCategory: child.sportCategory || child.sport || 'Badminton',
+      academyName: child.academyName || 'Sport Academy',
+      photoUrl: child.photoUrl || null,
+      birthDate: child.birthDate || null,
+      schoolOrigin: child.schoolOrigin || ''
+    };
+
+    setStudent(normalizedStudent);
+    localStorage.setItem('activeStudent', JSON.stringify(normalizedStudent));
+    setVerifiedStudentId(activeSid);
+    setVerifiedTenantId(activeTid);
+    setShowChildSwitcher(false);
+  };
+
+  // 3. FETCH BILLING DATA
   useEffect(() => {
     if (!isSessionVerified || !csrfToken || !verifiedStudentId || !verifiedTenantId) return;
     let isMounted = true;
@@ -294,9 +358,7 @@ export default function PortalDashboard() {
                 ? res.tenant.bankAccounts
                 : (res.bankDetails?.number || res.bankDetails?.bank
                   ? [{ bankName: res.bankDetails.bank || 'Bank', accountNumber: res.bankDetails.number || '', accountName: res.bankDetails.name || '' }]
-                  : (res.tenant?.bankAccountNumber || res.tenant?.bankAccount
-                    ? [{ bankName: res.tenant.bankName || 'Bank', accountNumber: res.tenant.bankAccountNumber || res.tenant.bankAccount || '', accountName: res.tenant.bankAccountName || res.tenant.accountHolder || '' }]
-                    : [])));
+                  : []));
 
             setBankAccounts(list);
             setSelectedBankIndex(0);
@@ -306,12 +368,6 @@ export default function PortalDashboard() {
                 bank: res.bankDetails.bank || '',
                 number: res.bankDetails.number || '',
                 name: res.bankDetails.name || ''
-              });
-            } else if (list.length > 0) {
-              setBankDetails({
-                bank: list[0].bankName || '',
-                number: list[0].accountNumber || '',
-                name: list[0].accountName || ''
               });
             }
             setIsLoadingBilling(false);
@@ -340,7 +396,7 @@ export default function PortalDashboard() {
     };
   }, [isSessionVerified, csrfToken, verifiedStudentId, verifiedTenantId]);
 
-  // 4. FETCH JADWAL & PRESENSI (VERIFIED BACKEND SESSION IDENTITY ONLY)
+  // 4. FETCH JADWAL & PRESENSI
   useEffect(() => {
     if (!isSessionVerified || !csrfToken || !verifiedStudentId || !verifiedTenantId) return;
     let isMounted = true;
@@ -359,8 +415,7 @@ export default function PortalDashboard() {
           credentials: 'include',
           body: JSON.stringify({
             studentId: verifiedStudentId,
-            tenantId: verifiedTenantId,
-            classId: student?.classId || ''
+            tenantId: verifiedTenantId
           })
         });
 
@@ -390,9 +445,9 @@ export default function PortalDashboard() {
     return () => {
       isMounted = false;
     };
-  }, [isSessionVerified, csrfToken, verifiedStudentId, verifiedTenantId, student?.classId]);
+  }, [isSessionVerified, csrfToken, verifiedStudentId, verifiedTenantId]);
 
-  // 5. FETCH EVALUASI & PRESTASI (VERIFIED BACKEND SESSION IDENTITY ONLY)
+  // 5. FETCH EVALUASI & PRESTASI
   useEffect(() => {
     if (!isSessionVerified || !csrfToken || !verifiedStudentId || !verifiedTenantId) return;
     let isMounted = true;
@@ -443,43 +498,93 @@ export default function PortalDashboard() {
     };
   }, [isSessionVerified, csrfToken, verifiedStudentId, verifiedTenantId]);
 
-  // Handler Logout Backend (STAGE 7G.2B.2A.2 STRICT LOGOUT CONFIRMATION)
+  // 6. FETCH PENGUMUMAN AKADEMI (GAP-01)
+  useEffect(() => {
+    if (!isSessionVerified || !csrfToken || !verifiedStudentId || !verifiedTenantId) return;
+    let isMounted = true;
+
+    const fetchAnnouncements = async () => {
+      setIsLoadingAnnouncements(true);
+      setAnnouncementsError(null);
+
+      try {
+        const response = await fetch('/api/portal/announcements', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Portal-CSRF': csrfToken
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            studentId: verifiedStudentId,
+            tenantId: verifiedTenantId
+          })
+        });
+
+        if (response.ok) {
+          const res = await response.json();
+          if (isMounted && res.success) {
+            setAnnouncementsData(res);
+            setIsLoadingAnnouncements(false);
+            return;
+          }
+        }
+
+        if (isMounted) {
+          setAnnouncementsData({ announcements: [] });
+        }
+      } catch (err) {
+        console.error('Announcements fetch error:', err);
+        if (isMounted) {
+          setAnnouncementsData({ announcements: [] });
+        }
+      } finally {
+        if (isMounted) setIsLoadingAnnouncements(false);
+      }
+    };
+
+    fetchAnnouncements();
+    return () => {
+      isMounted = false;
+    };
+  }, [isSessionVerified, csrfToken, verifiedStudentId, verifiedTenantId]);
+
+  // Logout Handler
   const handleLogout = async () => {
     if (isLoggingOut) return;
     setIsLoggingOut(true);
 
     try {
-      const response = await fetch('/api/portal/logout', {
+      const response = await fetch('/api/portal/v2/logout', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           ...(csrfToken ? { 'X-Portal-CSRF': csrfToken } : {})
         },
         credentials: 'include'
-      });
+      }).catch(() => fetch('/api/portal/logout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrfToken ? { 'X-Portal-CSRF': csrfToken } : {})
+        },
+        credentials: 'include'
+      }));
 
-      if (response.ok) {
-        const data = await response.json().catch(() => null);
-        if (data && data.success === true) {
-          localStorage.removeItem('activeStudent');
-          sessionStorage.clear();
-          navigate('/portal', { replace: true });
-          return;
-        }
-        alert(data?.message || 'Gagal memverifikasi konfirmasi logout dari server.');
-      } else {
-        const data = await response.json().catch(() => null);
-        alert(data?.message || 'Gagal memproses logout pada server. Silakan coba lagi.');
-      }
+      localStorage.removeItem('activeStudent');
+      sessionStorage.clear();
+      navigate('/portal', { replace: true });
     } catch (err) {
-      console.error('Logout request error:', err);
-      alert('Gagal terhubung ke server untuk proses logout. Silakan periksa koneksi internet Anda.');
+      console.error('Logout error:', err);
+      localStorage.removeItem('activeStudent');
+      sessionStorage.clear();
+      navigate('/portal', { replace: true });
     } finally {
       setIsLoggingOut(false);
     }
   };
 
-  // TAMPILAN LOADING VERIFIKASI SESI
+  // LOADING STATE
   if (isVerifyingSession) {
     return (
       <div className="flex-1 min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
@@ -492,7 +597,7 @@ export default function PortalDashboard() {
     );
   }
 
-  // JIKA SESI TIDAK VALID ATAU SISWA KOSONG, REDIRECT KE LOGIN PORTAL
+  // REDIRECT IF NOT VERIFIED
   if (!student || !isSessionVerified) {
     return <Navigate to="/portal" replace />;
   }
@@ -505,7 +610,6 @@ export default function PortalDashboard() {
   const coachName = student.coachName || 'Instruktur Utama';
   const age = calculateAge(student.birthDate);
 
-  // Data Keuangan HANYA Berasal dari Respons API /api/portal/billing (STAGE 7G.2B.2A.1 & 7G.2B.2A.2)
   const isBillingValid = Boolean(
     billingData &&
     billingData.success === true &&
@@ -521,7 +625,6 @@ export default function PortalDashboard() {
   const isPaid = isBillingValid ? billingData.billing.isPaidThisMonth : null;
   const qrisUrl = isBillingValid ? (billingData.tenant?.qrisUrl || null) : null;
 
-  // B. PENGAMANAN QRIS MODAL: Otomatis tutup modal jika billing berubah menjadi tidak valid (STAGE 7G.2B.2A.3)
   useEffect(() => {
     if (showQrisModal && !isBillingValid) {
       setShowQrisModal(false);
@@ -534,21 +637,18 @@ export default function PortalDashboard() {
     }
   };
 
-  // Daftar rekening bank efektif (mendukung multi-rekening)
   const effectiveBankList = bankAccounts.length > 0 
     ? bankAccounts 
     : (Array.isArray(billingData?.bankAccounts) && billingData.bankAccounts.length > 0
       ? billingData.bankAccounts
-      : (Array.isArray(billingData?.tenant?.bankAccounts) && billingData.tenant.bankAccounts.length > 0
-        ? billingData.tenant.bankAccounts
-        : (bankDetails.number || bankDetails.bank 
-          ? [{ bankName: bankDetails.bank || 'Bank', accountNumber: bankDetails.number || '', accountName: bankDetails.name || '' }] 
-          : [])));
+      : (bankDetails.number || bankDetails.bank 
+        ? [{ bankName: bankDetails.bank || 'Bank', accountNumber: bankDetails.number || '', accountName: bankDetails.name || '' }] 
+        : []));
 
   const currentAccount = effectiveBankList[selectedBankIndex] || effectiveBankList[0] || {
-    bankName: bankDetails.bank || billingData?.bankDetails?.bank || billingData?.tenant?.bankName || '',
-    accountNumber: bankDetails.number || billingData?.bankDetails?.number || billingData?.tenant?.bankAccountNumber || billingData?.tenant?.bankAccount || '',
-    accountName: bankDetails.name || billingData?.bankDetails?.name || billingData?.tenant?.bankAccountName || billingData?.tenant?.accountHolder || ''
+    bankName: bankDetails.bank || billingData?.bankDetails?.bank || '',
+    accountNumber: bankDetails.number || billingData?.bankDetails?.number || '',
+    accountName: bankDetails.name || billingData?.bankDetails?.name || academyName
   };
 
   const activeBank = currentAccount.bankName || 'TRANSFER BANK';
@@ -565,8 +665,8 @@ export default function PortalDashboard() {
 
   return (
     <div className="flex-1 flex flex-col bg-slate-50 min-h-screen text-slate-800 relative pb-24">
-      {/* 1. HEADER MOBILE-FRIENDLY & TOMBOL KELUAR */}
-      <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 py-3.5 flex items-center justify-between">
+      {/* 1. HEADER & MULTI-CHILD SWITCHER */}
+      <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 py-3 flex items-center justify-between shadow-2xs">
         <div className="flex items-center space-x-2.5">
           <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-xs">
             <GraduationCap className="w-4 h-4" />
@@ -575,21 +675,69 @@ export default function PortalDashboard() {
             <h1 className="text-xs font-black text-slate-900 tracking-tight leading-tight">
               PORTAL WALI MURID
             </h1>
-            <p className="text-[10px] text-slate-400 font-medium truncate max-w-[170px]">
+            <p className="text-[10px] text-slate-400 font-medium truncate max-w-[150px]">
               {academyName}
             </p>
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={handleLogout}
-          className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 text-xs font-semibold rounded-xl border border-slate-200/80 hover:border-rose-200 transition-colors cursor-pointer"
-          title="Keluar dari Portal"
-        >
-          <LogOut className="w-3.5 h-3.5" />
-          <span>Keluar</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          {/* Multi-Child Switcher Trigger */}
+          {childrenList.length > 1 && (
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowChildSwitcher(!showChildSwitcher)}
+                className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-xl border border-blue-200/80 transition-colors cursor-pointer"
+              >
+                <Users className="w-3.5 h-3.5" />
+                <span className="truncate max-w-[90px]">{studentName}</span>
+                <ChevronDown className="w-3 h-3 text-blue-500" />
+              </button>
+
+              {/* Child Switcher Dropdown */}
+              {showChildSwitcher && (
+                <div className="absolute right-0 mt-1.5 w-56 bg-white rounded-2xl shadow-xl border border-slate-200 py-1.5 z-50 animate-in fade-in zoom-in-95 duration-150">
+                  <div className="px-3 py-1.5 border-b border-slate-100">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                      Pilih Siswa ({childrenList.length} Anak)
+                    </p>
+                  </div>
+                  {childrenList.map((c, idx) => {
+                    const cSid = String(c.studentId || c.id).trim();
+                    const isSelected = cSid.toLowerCase() === verifiedStudentId?.toLowerCase();
+                    return (
+                      <button
+                        key={cSid || idx}
+                        type="button"
+                        onClick={() => handleSelectChild(c)}
+                        className={`w-full px-3 py-2 text-left flex items-center justify-between text-xs font-medium hover:bg-slate-50 transition-colors cursor-pointer ${
+                          isSelected ? 'bg-blue-50/70 text-blue-700 font-bold' : 'text-slate-700'
+                        }`}
+                      >
+                        <div className="truncate">
+                          <p className="truncate">{c.studentName || c.name || 'Siswa'}</p>
+                          <p className="text-[10px] text-slate-400 truncate">{c.className || c.academyName || 'Cabang'}</p>
+                        </div>
+                        {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="inline-flex items-center space-x-1 px-2.5 py-1.5 bg-slate-100 hover:bg-rose-50 text-slate-600 hover:text-rose-600 text-xs font-semibold rounded-xl border border-slate-200/80 hover:border-rose-200 transition-colors cursor-pointer"
+            title="Keluar dari Portal"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Keluar</span>
+          </button>
+        </div>
       </header>
 
       {/* CONTAINER BODY UTAMA BERBASIS TAB */}
@@ -600,13 +748,11 @@ export default function PortalDashboard() {
         {/* ============================================================== */}
         {activeTab === 'home' && (
           <div className="space-y-4 animate-in fade-in duration-200">
-            {/* 2. KARTU PROFIL UTAMA (HERO SECTION DENGAN GRADIEN MODERN) */}
+            {/* 2. KARTU PROFIL UTAMA (GROUP 1: PROFIL ANAK & GROUP 7: KELAS/PROGRAM) */}
             <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-700 text-white p-5 shadow-lg shadow-blue-600/15">
-              {/* Subtle Ambient Background Shapes */}
               <div className="absolute -top-10 -right-10 w-36 h-36 bg-white/10 rounded-full blur-xl pointer-events-none" />
               <div className="absolute -bottom-10 -left-10 w-36 h-36 bg-indigo-500/20 rounded-full blur-xl pointer-events-none" />
 
-              {/* Top Badge: Cabang & Akademi */}
               <div className="flex items-center justify-between gap-2 mb-3.5 relative z-10">
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/20 backdrop-blur-md text-white text-[10px] font-extrabold uppercase tracking-wider border border-white/20">
                   <Sparkles className="w-3 h-3 text-amber-300" />
@@ -617,7 +763,6 @@ export default function PortalDashboard() {
                 </span>
               </div>
 
-              {/* Profile Details Row */}
               <div className="flex items-start gap-3.5 relative z-10">
                 {photoUrl ? (
                   <img
@@ -645,12 +790,11 @@ export default function PortalDashboard() {
                 </div>
               </div>
 
-              {/* Metadata Chips: Kelas & Pelatih */}
               <div className="mt-4 pt-3 border-t border-white/15 grid grid-cols-2 gap-2 relative z-10 text-xs">
                 <div className="bg-white/10 backdrop-blur-xs rounded-xl p-2.5 flex items-center gap-2 border border-white/10">
                   <BookOpen className="w-4 h-4 text-blue-200 shrink-0" />
                   <div className="min-w-0">
-                    <p className="text-[9px] uppercase tracking-wider text-blue-200 font-bold">Kelas</p>
+                    <p className="text-[9px] uppercase tracking-wider text-blue-200 font-bold">Kelas &amp; Program</p>
                     <p className="font-bold text-white text-[11px] truncate">{className}</p>
                   </div>
                 </div>
@@ -658,7 +802,7 @@ export default function PortalDashboard() {
                 <div className="bg-white/10 backdrop-blur-xs rounded-xl p-2.5 flex items-center gap-2 border border-white/10">
                   <User className="w-4 h-4 text-blue-200 shrink-0" />
                   <div className="min-w-0">
-                    <p className="text-[9px] uppercase tracking-wider text-blue-200 font-bold">Pelatih</p>
+                    <p className="text-[9px] uppercase tracking-wider text-blue-200 font-bold">Pelatih Utama</p>
                     <p className="font-bold text-white text-[11px] truncate">{coachName}</p>
                   </div>
                 </div>
@@ -767,10 +911,37 @@ export default function PortalDashboard() {
                   <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
                 </div>
               </div>
+
+              {/* Status Pengumuman Terbaru Card (GROUP 8) */}
+              <div
+                onClick={() => setActiveTab('announcements')}
+                className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between group"
+              >
+                <div className="flex items-center space-x-3 min-w-0">
+                  <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100 shrink-0 group-hover:bg-amber-100 transition-colors">
+                    <Bell className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                      Pengumuman Akademi
+                    </p>
+                    <p className="font-black text-slate-800 text-sm truncate">
+                      {announcementsData?.announcements?.length ? `${announcementsData.announcements.length} Pengumuman` : 'Pengumuman Resmi'}
+                    </p>
+                    <p className="text-[11px] text-slate-500 truncate">
+                      {announcementsData?.announcements?.[0]?.title || 'Informasi terbaru dari akademi'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-1 shrink-0 pl-2">
+                  <span className="text-[11px] font-bold text-blue-600 group-hover:underline">Buka</span>
+                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
+                </div>
+              </div>
             </div>
 
             {/* QUICK ACTIONS GRID */}
-            <div className="grid grid-cols-3 gap-2.5 pt-1">
+            <div className="grid grid-cols-4 gap-2 pt-1">
               <button
                 type="button"
                 onClick={() => setActiveTab('billing')}
@@ -779,7 +950,7 @@ export default function PortalDashboard() {
                 <div className="w-8 h-8 rounded-xl bg-amber-50 group-hover:bg-amber-100 text-amber-600 flex items-center justify-center transition-colors">
                   <CreditCard className="w-4 h-4" />
                 </div>
-                <span className="text-[11px] font-bold text-slate-700">Keuangan</span>
+                <span className="text-[10px] font-bold text-slate-700">Keuangan</span>
               </button>
 
               <button
@@ -790,7 +961,7 @@ export default function PortalDashboard() {
                 <div className="w-8 h-8 rounded-xl bg-blue-50 group-hover:bg-blue-100 text-blue-600 flex items-center justify-center transition-colors">
                   <CalendarDays className="w-4 h-4" />
                 </div>
-                <span className="text-[11px] font-bold text-slate-700">Jadwal</span>
+                <span className="text-[10px] font-bold text-slate-700">Jadwal</span>
               </button>
 
               <button
@@ -801,665 +972,120 @@ export default function PortalDashboard() {
                 <div className="w-8 h-8 rounded-xl bg-purple-50 group-hover:bg-purple-100 text-purple-600 flex items-center justify-center transition-colors">
                   <Trophy className="w-4 h-4" />
                 </div>
-                <span className="text-[11px] font-bold text-slate-700">Rapor</span>
+                <span className="text-[10px] font-bold text-slate-700">Rapor</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setActiveTab('announcements')}
+                className="p-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-2xl text-center flex flex-col items-center justify-center space-y-1.5 transition-all shadow-2xs cursor-pointer group active:scale-95"
+              >
+                <div className="w-8 h-8 rounded-xl bg-amber-50 group-hover:bg-amber-100 text-amber-600 flex items-center justify-center transition-colors">
+                  <Bell className="w-4 h-4" />
+                </div>
+                <span className="text-[10px] font-bold text-slate-700">Info</span>
               </button>
             </div>
           </div>
         )}
 
         {/* ============================================================== */}
-        {/* TAB 2: KEUANGAN / SPP ('billing') */}
+        {/* TAB 2: KEUANGAN / SPP ('billing') — GROUP 9 & GROUP 10 */}
         {/* ============================================================== */}
         {activeTab === 'billing' && (
           <div className="space-y-4 animate-in fade-in duration-200">
-            {/* 3. SEKSI ADMINISTRASI SPP DENGAN TOTAL TAGIHAN RIIL */}
-            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3.5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
-                <CreditCard className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                  Administrasi Iuran &amp; Tagihan
-                </h3>
-                <p className="text-[11px] text-slate-400">
-                  Tagihan riil pembinaan atlet
-                </p>
-              </div>
-            </div>
-
-            {isLoadingBilling ? (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-extrabold border border-slate-200">
-                <Loader2 className="w-3 h-3 animate-spin" />
-                <span>MEMUAT</span>
-              </span>
-            ) : !isBillingValid ? (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 text-[10px] font-extrabold border border-rose-200">
-                <AlertCircle className="w-3 h-3 text-rose-600" />
-                <span>GAGAL MUAT</span>
-              </span>
-            ) : (isBillingValid && isPaid === true) ? (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-extrabold border border-emerald-200">
-                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                <span>LUNAS</span>
-              </span>
-            ) : (isBillingValid && isPaid === false) ? (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-extrabold border border-amber-200 animate-pulse">
-                <Clock className="w-3 h-3 text-amber-600" />
-                <span>BELUM LUNAS</span>
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 text-[10px] font-extrabold border border-rose-200">
-                <AlertCircle className="w-3 h-3 text-rose-600" />
-                <span>GAGAL MUAT</span>
-              </span>
-            )}
-          </div>
-
-          {/* Kotak Ringkasan Total Tagihan Riil */}
-          {!isBillingValid && !isLoadingBilling ? (
-            <div className="p-4 bg-rose-50/80 border border-rose-200 rounded-xl space-y-2 text-rose-800 text-xs">
-              <div className="flex items-center gap-2 font-bold">
-                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
-                <span>Gagal Memuat Data Keuangan Resmi</span>
-              </div>
-              <p className="text-[11px] text-rose-700 leading-relaxed">
-                {billingError || 'Data tagihan tidak dapat diverifikasi dari server. Silakan pastikan koneksi internet Anda lancar dan coba lagi.'}
-              </p>
-            </div>
-          ) : (
-            <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                    Total Tagihan Belum Lunas
-                  </p>
-                  <p className="text-xl font-black text-slate-900 mt-0.5">
-                    {isLoadingBilling ? '...' : (isBillingValid && isPaid === false) ? formatRupiah(totalAmount) : (isBillingValid && isPaid === true) ? formatRupiah(0) : '-'}
-                  </p>
-                </div>
-
-                <div className="text-right">
-                  {isLoadingBilling ? (
-                    <div className="flex items-center space-x-1.5 text-slate-400 text-xs">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Menghitung...</span>
-                    </div>
-                  ) : (isBillingValid && isPaid === true) ? (
-                    <span className="inline-block px-2.5 py-1 bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded-lg border border-emerald-200">
-                      Semua Lunas
-                    </span>
-                  ) : (isBillingValid && isPaid === false) ? (
-                    <span className="inline-block px-2.5 py-1 bg-amber-100 text-amber-800 font-bold text-[10px] rounded-lg border border-amber-200/80">
-                      {billingDetails.length} Tagihan Aktif
-                    </span>
-                  ) : null}
-                </div>
-              </div>
-
-              {/* Rincian Komponen Tagihan (Pendaftaran + SPP) */}
-              {isBillingValid && isPaid === false && billingDetails.length > 0 && (
-                <div className="pt-2.5 border-t border-slate-200/70 space-y-1.5 text-xs">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                    Rincian Biaya Belum Dibayar:
-                  </p>
-                  <div className="space-y-1">
-                    {billingDetails.map((item, idx) => (
-                      <div key={idx} className="flex items-center justify-between text-slate-700 text-xs">
-                        <span className="truncate pr-2 font-medium">{item.name}</span>
-                        <span className="font-bold text-slate-900 shrink-0 font-mono">
-                          {formatRupiah(item.amount)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Tombol Lihat QRIS / Bayar (Memicu Modal Pop-up) */}
-          <button
-            type="button"
-            disabled={!isBillingValid || isLoadingBilling}
-            onClick={handleOpenQrisModal}
-            className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-slate-300 disabled:to-slate-400 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
-          >
-            <QrCode className="w-4 h-4" />
-            <span>Lihat QRIS / Bayar</span>
-            <ChevronRight className="w-4 h-4 opacity-80" />
-          </button>
-
-          <p className="text-[10px] text-slate-400 text-center leading-normal">
-            Pembayaran dapat dilakukan melalui scan QRIS resmi atau transfer rekening bank.
-          </p>
-        </div>
-
-        {/* 4. RIWAYAT PEMBAYARAN SPP (JIKA ADA DARI API) */}
-        {billingData?.paymentHistory && billingData.paymentHistory.length > 0 && (
-          <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
-                <Receipt className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                  Riwayat Pembayaran Terakhir
-                </h3>
-                <p className="text-[11px] text-slate-400">Bukti transaksi tersimpan</p>
-              </div>
-            </div>
-
-            <div className="divide-y divide-slate-100 text-xs">
-              {billingData.paymentHistory.slice(0, 3).map((item, idx) => (
-                <div key={item.id || idx} className="py-2.5 flex items-center justify-between">
-                  <div>
-                    <p className="font-bold text-slate-800">{item.itemName || 'Iuran SPP Akademi'}</p>
-                    <p className="text-[10px] text-slate-400">
-                      {item.monthPaid ? `Bulan: ${item.monthPaid}` : 'Pembayaran Terverifikasi'} &bull; {item.paymentMethod || 'QRIS'}
-                    </p>
-                  </div>
-                  <span className="font-bold text-emerald-600 font-mono">
-                    {formatRupiah(item.amount)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-          </div>
-        )}
-
-        {/* ============================================================== */}
-        {/* TAB 3: JADWAL & PRESENSI ('schedule') */}
-        {/* ============================================================== */}
-        {activeTab === 'schedule' && (
-          <div className="space-y-4 animate-in fade-in duration-200">
-            {/* 5. SEKSI INFORMASI SESI LATIHAN & CATATAN PRESENSI */}
+            {/* SEKSI ADMINISTRASI SPP DENGAN TOTAL TAGIHAN RIIL */}
             <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
-                <CalendarDays className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                  Sesi Latihan &amp; Presensi
-                </h3>
-                <p className="text-[11px] text-slate-400">
-                  {scheduleData?.classInfo?.className || className} &bull; {scheduleData?.classInfo?.coachName || coachName}
-                </p>
-              </div>
-            </div>
-
-            {/* Attendance Rate Badge */}
-            {scheduleData?.stats && (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-extrabold border border-emerald-200">
-                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                <span>{scheduleData.stats.attendanceRate} Hadir</span>
-              </span>
-            )}
-          </div>
-
-          {/* Sub-Tabs: Jadwal vs Presensi */}
-          <div className="flex rounded-xl bg-slate-100 p-1 text-xs font-bold">
-            <button
-              type="button"
-              onClick={() => setActiveScheduleTab('jadwal')}
-              className={`flex-1 py-1.5 rounded-lg text-center transition-all cursor-pointer ${
-                activeScheduleTab === 'jadwal'
-                  ? 'bg-white text-blue-600 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              Jadwal Sesi ({scheduleData?.schedules?.length || 0})
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveScheduleTab('presensi')}
-              className={`flex-1 py-1.5 rounded-lg text-center transition-all cursor-pointer ${
-                activeScheduleTab === 'presensi'
-                  ? 'bg-white text-blue-600 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              Catatan Presensi ({scheduleData?.attendances?.length || 0})
-            </button>
-          </div>
-
-          {/* TAB 1: JADWAL LATIHAN */}
-          {activeScheduleTab === 'jadwal' && (
-            <div className="space-y-2.5">
-              {isLoadingSchedule ? (
-                <div className="py-6 flex flex-col items-center justify-center text-slate-400 text-xs space-y-1.5">
-                  <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-                  <span>Memuat jadwal sesi latihan...</span>
-                </div>
-              ) : (scheduleData?.schedules && scheduleData.schedules.length > 0) ? (
-                <div className="space-y-2">
-                  {scheduleData.schedules.map((s, idx) => (
-                    <div
-                      key={idx}
-                      className="p-3 bg-slate-50 hover:bg-blue-50/40 rounded-xl border border-slate-100 transition-colors flex items-center justify-between"
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-extrabold rounded-md uppercase">
-                            {s.day}
-                          </span>
-                          <span className="text-xs font-bold text-slate-800 flex items-center gap-1 font-mono">
-                            <Clock className="w-3 h-3 text-slate-400" />
-                            {s.startTime} - {s.endTime} WIB
-                          </span>
-                        </div>
-                        <p className="text-[11px] text-slate-500 flex items-center gap-1">
-                          <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                          <span className="truncate">{s.courtName || 'Lapangan Utama'}</span>
-                        </p>
-                      </div>
-
-                      <span className="text-[10px] bg-slate-200/80 text-slate-700 px-2.5 py-1 rounded-lg font-bold shrink-0">
-                        Aktif
-                      </span>
-                    </div>
-                  ))}
-                  
-                  <div className="p-2.5 bg-blue-50/70 rounded-xl border border-blue-100 text-[11px] text-blue-800 flex items-start gap-2">
-                    <Activity className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
-                    <span>Pastikan atlet hadir 15 menit sebelum sesi dimulai dengan seragam resmi akademi.</span>
+                  <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
+                    <CreditCard className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      Administrasi Iuran &amp; Tagihan (Read-Only)
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Tagihan riil dari CHUA CORE Financial Engine
+                    </p>
                   </div>
                 </div>
-              ) : (
-                <div className="py-7 px-4 text-center rounded-xl bg-slate-50 border border-slate-100 space-y-1.5">
-                  <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 mx-auto flex items-center justify-center">
-                    <Calendar className="w-4 h-4" />
+
+                {isLoadingBilling ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 text-[10px] font-extrabold border border-slate-200">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    <span>MEMUAT</span>
+                  </span>
+                ) : !isBillingValid ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 text-[10px] font-extrabold border border-rose-200">
+                    <AlertCircle className="w-3 h-3 text-rose-600" />
+                    <span>GAGAL MUAT</span>
+                  </span>
+                ) : (isBillingValid && isPaid === true) ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-extrabold border border-emerald-200">
+                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                    <span>LUNAS</span>
+                  </span>
+                ) : (isBillingValid && isPaid === false) ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-extrabold border border-amber-200 animate-pulse">
+                    <Clock className="w-3 h-3 text-amber-600" />
+                    <span>BELUM LUNAS</span>
+                  </span>
+                ) : null}
+              </div>
+
+              {!isBillingValid && !isLoadingBilling ? (
+                <div className="p-4 bg-rose-50/80 border border-rose-200 rounded-xl space-y-2 text-rose-800 text-xs">
+                  <div className="flex items-center gap-2 font-bold">
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                    <span>Gagal Memuat Data Keuangan Resmi</span>
                   </div>
-                  <p className="text-xs font-bold text-slate-800">
-                    Belum Ada Jadwal Terdaftar
-                  </p>
-                  <p className="text-[11px] text-slate-500 max-w-[240px] mx-auto leading-relaxed">
-                    Pengelola belum memasukkan jadwal sesi latihan untuk kelas ini. Silakan hubungi pelatih atau admin.
+                  <p className="text-[11px] text-rose-700 leading-relaxed">
+                    {billingError || 'Data tagihan tidak dapat diverifikasi dari server.'}
                   </p>
                 </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 2: CATATAN PRESENSI */}
-          {activeScheduleTab === 'presensi' && (
-            <div className="space-y-3">
-              {isLoadingSchedule ? (
-                <div className="py-6 flex flex-col items-center justify-center text-slate-400 text-xs space-y-1.5">
-                  <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-                  <span>Memuat catatan presensi...</span>
-                </div>
               ) : (
-                <>
-                  {/* Statistik Kehadiran Grid */}
-                  {scheduleData?.stats && (
-                    <div className="grid grid-cols-4 gap-1.5 text-center text-xs">
-                      <div className="p-2 bg-emerald-50 border border-emerald-100 rounded-xl">
-                        <p className="text-[9px] uppercase font-bold text-emerald-600">Hadir</p>
-                        <p className="text-sm font-black text-emerald-800 mt-0.5">{scheduleData.stats.hadir}</p>
-                      </div>
-                      <div className="p-2 bg-amber-50 border border-amber-100 rounded-xl">
-                        <p className="text-[9px] uppercase font-bold text-amber-600">Izin</p>
-                        <p className="text-sm font-black text-amber-800 mt-0.5">{scheduleData.stats.izin}</p>
-                      </div>
-                      <div className="p-2 bg-violet-50 border border-violet-100 rounded-xl">
-                        <p className="text-[9px] uppercase font-bold text-violet-600">Sakit</p>
-                        <p className="text-sm font-black text-violet-800 mt-0.5">{scheduleData.stats.sakit}</p>
-                      </div>
-                      <div className="p-2 bg-rose-50 border border-rose-100 rounded-xl">
-                        <p className="text-[9px] uppercase font-bold text-rose-600">Alpha</p>
-                        <p className="text-sm font-black text-rose-800 mt-0.5">{scheduleData.stats.alpha}</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* List Catatan Presensi */}
-                  {scheduleData?.attendances && scheduleData.attendances.length > 0 ? (
-                    <div className="divide-y divide-slate-100 text-xs max-h-64 overflow-y-auto">
-                      {scheduleData.attendances.map((item, idx) => {
-                        const st = String(item.status || '').toLowerCase();
-                        const isHadir = st.includes('hadir');
-                        const isIzin = st.includes('izin');
-                        const isSakit = st.includes('sakit');
-                        const isAlpha = st.includes('alpa') || st.includes('alpha');
-
-                        return (
-                          <div key={item.id || idx} className="py-2.5 flex items-center justify-between">
-                            <div className="space-y-0.5">
-                              <p className="font-bold text-slate-800">
-                                {formatAttendanceDate(item.date)}
-                              </p>
-                              <p className="text-[10px] text-slate-400">
-                                {item.className || className} {item.notes ? `• ${item.notes}` : ''}
-                              </p>
-                            </div>
-
-                            {isHadir && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200 shrink-0">
-                                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                                <span>Hadir</span>
-                              </span>
-                            )}
-                            {isIzin && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 text-[10px] font-bold border border-amber-200 shrink-0">
-                                <Clock className="w-3 h-3 text-amber-600" />
-                                <span>Izin</span>
-                              </span>
-                            )}
-                            {isSakit && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-violet-50 text-violet-700 text-[10px] font-bold border border-violet-200 shrink-0">
-                                <AlertCircle className="w-3 h-3 text-violet-600" />
-                                <span>Sakit</span>
-                              </span>
-                            )}
-                            {isAlpha && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 text-[10px] font-bold border border-rose-200 shrink-0">
-                                <XCircle className="w-3 h-3 text-rose-600" />
-                                <span>Alpha</span>
-                              </span>
-                            )}
-                            {!isHadir && !isIzin && !isSakit && !isAlpha && (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 text-[10px] font-bold shrink-0">
-                                {item.status}
-                              </span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="py-7 px-4 text-center rounded-xl bg-slate-50 border border-slate-100 space-y-1.5">
-                      <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-500 mx-auto flex items-center justify-center">
-                        <CheckCircle2 className="w-4 h-4" />
-                      </div>
-                      <p className="text-xs font-bold text-slate-800">
-                        Belum Ada Rekam Presensi
-                      </p>
-                      <p className="text-[11px] text-slate-500 max-w-[240px] mx-auto leading-relaxed">
-                        Data kehadiran sesi latihan atlet akan tercatat secara otomatis setelah pelatih melakukan absensi.
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-        </div>
-          </div>
-        )}
-
-        {/* ============================================================== */}
-        {/* TAB 4: PRESTASI & EVALUASI PELATIH ('evaluation') */}
-        {/* ============================================================== */}
-        {activeTab === 'evaluation' && (
-          <div className="space-y-4 animate-in fade-in duration-200">
-            {/* 6. SEKSI PRESTASI & EVALUASI PELATIH */}
-            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3.5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
-                <Trophy className="w-4 h-4" />
-              </div>
-              <div>
-                <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                  Prestasi &amp; Evaluasi Pelatih
-                </h3>
-                <p className="text-[11px] text-slate-400">
-                  Rapor performa atlet &amp; catatan kejuaraan
-                </p>
-              </div>
-            </div>
-
-            {/* Overall Score Badge jika ada evaluasi */}
-            {evaluationData?.latestEvaluation ? (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-extrabold border border-blue-200">
-                <TrendingUp className="w-3 h-3 text-blue-600" />
-                <span>Skor {evaluationData.latestEvaluation.overallScore}/100</span>
-              </span>
-            ) : (evaluationData?.achievements && evaluationData.achievements.length > 0) ? (
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-extrabold border border-amber-200">
-                <Medal className="w-3 h-3 text-amber-600" />
-                <span>{evaluationData.achievements.length} Prestasi</span>
-              </span>
-            ) : null}
-          </div>
-
-          {/* Sub-Tabs: Evaluasi vs Prestasi */}
-          <div className="flex rounded-xl bg-slate-100 p-1 text-xs font-bold">
-            <button
-              type="button"
-              onClick={() => setActiveEvalTab('evaluasi')}
-              className={`flex-1 py-1.5 rounded-lg text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                activeEvalTab === 'evaluasi'
-                  ? 'bg-white text-blue-600 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <Target className="w-3.5 h-3.5" />
-              <span>Evaluasi Pelatih ({evaluationData?.evaluations?.length || 0})</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveEvalTab('prestasi')}
-              className={`flex-1 py-1.5 rounded-lg text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                activeEvalTab === 'prestasi'
-                  ? 'bg-white text-amber-600 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <Trophy className="w-3.5 h-3.5" />
-              <span>Prestasi ({evaluationData?.achievements?.length || 0})</span>
-            </button>
-          </div>
-
-          {/* TAB 1: EVALUASI PELATIH */}
-          {activeEvalTab === 'evaluasi' && (
-            <div className="space-y-3">
-              {isLoadingEvaluation ? (
-                <div className="py-6 flex flex-col items-center justify-center text-slate-400 text-xs space-y-1.5">
-                  <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-                  <span>Memuat catatan evaluasi pelatih...</span>
-                </div>
-              ) : evaluationData?.latestEvaluation ? (
-                <div className="space-y-3">
-                  {/* Kartu Rapor Utama */}
-                  <div className="bg-gradient-to-br from-slate-50 to-blue-50/30 rounded-xl p-3.5 border border-slate-200 space-y-3">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                            Rapor Evaluasi Terkini
-                          </span>
-                          <span className="text-[10px] text-slate-400">&bull;</span>
-                          <span className="text-[11px] font-bold text-slate-700">
-                            {formatAttendanceDate(evaluationData.latestEvaluation.date)}
-                          </span>
-                        </div>
-                        <p className="text-xs font-black text-slate-800 mt-0.5">
-                          {evaluationData.latestEvaluation.evaluator || coachName}
-                        </p>
-                        <p className="text-[10px] text-slate-500">
-                          {evaluationData.latestEvaluation.className || className} &bull; {evaluationData.latestEvaluation.sport || sportCategory}
-                          {evaluationData.latestEvaluation.subPosition ? ` • Posisi: ${evaluationData.latestEvaluation.subPosition}` : (evaluationData.latestEvaluation.playerRole ? ` • ${evaluationData.latestEvaluation.playerRole}` : '')}
-                          {evaluationData.latestEvaluation.playingRole ? ` (${evaluationData.latestEvaluation.playingRole})` : ''}
-                        </p>
-                      </div>
-
-                      {/* Grade Badge */}
-                      {(() => {
-                        const grade = getEvaluationGrade(evaluationData.latestEvaluation.overallScore);
-                        return (
-                          <div className="text-right shrink-0">
-                            <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black border ${grade.badge}`}>
-                              {grade.label}
-                            </span>
-                            <p className="text-xs font-mono font-black text-slate-900 mt-0.5">
-                              {evaluationData.latestEvaluation.overallScore} <span className="text-[10px] text-slate-400 font-normal">/ 100</span>
-                            </p>
-                          </div>
-                        );
-                      })()}
-                    </div>
-
-                    {/* Pilar-Pilar Evaluasi: Teknik, Fisik, Mental, Taktik, Teamwork, Health */}
-                    <div className="grid grid-cols-2 gap-2 pt-1">
-                      {/* Teknik */}
-                      <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs space-y-1">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-bold text-slate-600 flex items-center gap-1">
-                            <Target className="w-3 h-3 text-blue-500" />
-                            Teknik
-                          </span>
-                          <span className="font-mono font-bold text-slate-800">
-                            {evaluationData.latestEvaluation.pillarScores?.teknik ?? 75}
-                          </span>
-                        </div>
-                        <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                          <div
-                            className="bg-blue-500 h-full rounded-full transition-all duration-500"
-                            style={{ width: `${Math.min(100, Math.max(10, evaluationData.latestEvaluation.pillarScores?.teknik ?? 75))}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Fisik */}
-                      <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs space-y-1">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-bold text-slate-600 flex items-center gap-1">
-                            <Activity className="w-3 h-3 text-emerald-500" />
-                            Fisik
-                          </span>
-                          <span className="font-mono font-bold text-slate-800">
-                            {evaluationData.latestEvaluation.pillarScores?.fisik ?? 75}
-                          </span>
-                        </div>
-                        <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                          <div
-                            className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-                            style={{ width: `${Math.min(100, Math.max(10, evaluationData.latestEvaluation.pillarScores?.fisik ?? 75))}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Mental */}
-                      <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs space-y-1">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-bold text-slate-600 flex items-center gap-1">
-                            <Star className="w-3 h-3 text-purple-500" />
-                            Mental
-                          </span>
-                          <span className="font-mono font-bold text-slate-800">
-                            {evaluationData.latestEvaluation.pillarScores?.mental ?? 75}
-                          </span>
-                        </div>
-                        <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                          <div
-                            className="bg-purple-500 h-full rounded-full transition-all duration-500"
-                            style={{ width: `${Math.min(100, Math.max(10, evaluationData.latestEvaluation.pillarScores?.mental ?? 75))}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Taktik */}
-                      <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs space-y-1">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="font-bold text-slate-600 flex items-center gap-1">
-                            <TrendingUp className="w-3 h-3 text-amber-500" />
-                            Taktik
-                          </span>
-                          <span className="font-mono font-bold text-slate-800">
-                            {evaluationData.latestEvaluation.pillarScores?.taktik ?? 75}
-                          </span>
-                        </div>
-                        <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                          <div
-                            className="bg-amber-500 h-full rounded-full transition-all duration-500"
-                            style={{ width: `${Math.min(100, Math.max(10, evaluationData.latestEvaluation.pillarScores?.taktik ?? 75))}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Kerja Sama (Jika Ada) */}
-                      {evaluationData.latestEvaluation.pillarScores?.teamwork != null && (
-                        <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs space-y-1">
-                          <div className="flex items-center justify-between text-[11px]">
-                            <span className="font-bold text-slate-600 flex items-center gap-1">
-                              <Users className="w-3 h-3 text-emerald-500" />
-                              Kerja Sama
-                            </span>
-                            <span className="font-mono font-bold text-slate-800">
-                              {evaluationData.latestEvaluation.pillarScores.teamwork}
-                            </span>
-                          </div>
-                          <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                            <div
-                              className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-                              style={{ width: `${Math.min(100, Math.max(10, evaluationData.latestEvaluation.pillarScores.teamwork))}%` }}
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Kesehatan & Dev (Jika Ada) */}
-                      {evaluationData.latestEvaluation.pillarScores?.health != null && (
-                        <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs space-y-1">
-                          <div className="flex items-center justify-between text-[11px]">
-                            <span className="font-bold text-slate-600 flex items-center gap-1">
-                              <HeartPulse className="w-3 h-3 text-teal-500" />
-                              Kesehatan
-                            </span>
-                            <span className="font-mono font-bold text-slate-800">
-                              {evaluationData.latestEvaluation.pillarScores.health}
-                            </span>
-                          </div>
-                          <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                            <div
-                              className="bg-teal-500 h-full rounded-full transition-all duration-500"
-                              style={{ width: `${Math.min(100, Math.max(10, evaluationData.latestEvaluation.pillarScores.health))}%` }}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Catatan Pelatih */}
-                    {evaluationData.latestEvaluation.coachNote && (
-                      <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3 text-xs space-y-1">
-                        <div className="flex items-center gap-1.5 text-amber-800 font-bold text-[11px]">
-                          <Quote className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                          <span>Catatan &amp; Arahan Pelatih:</span>
-                        </div>
-                        <p className="text-slate-700 italic text-[11px] leading-relaxed pl-5">
-                          &ldquo;{evaluationData.latestEvaluation.coachNote}&rdquo;
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Riwayat Evaluasi Sebelumnya (jika lebih dari 1) */}
-                  {evaluationData.evaluations.length > 1 && (
-                    <div className="space-y-1.5 pt-1">
+                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
                       <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                        Riwayat Rapor Sebelumnya ({evaluationData.evaluations.length - 1})
+                        Total Tagihan Belum Lunas
                       </p>
-                      <div className="divide-y divide-slate-100 text-xs max-h-48 overflow-y-auto">
-                        {evaluationData.evaluations.slice(1).map((ev, idx) => (
-                          <div key={ev.id || idx} className="py-2 flex items-center justify-between">
-                            <div className="space-y-0.5">
-                              <p className="font-bold text-slate-800 text-[11px]">
-                                {formatAttendanceDate(ev.date)} &bull; {ev.evaluator || 'Pelatih'}
-                              </p>
-                              <p className="text-[10px] text-slate-400 truncate max-w-[200px]">
-                                {ev.coachNote || 'Evaluasi latihan berkala'}
-                              </p>
-                            </div>
-                            <span className="font-mono font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md text-[10px]">
-                              Skor {ev.overallScore}
+                      <p className="text-xl font-black text-slate-900 mt-0.5">
+                        {isLoadingBilling ? '...' : (isBillingValid && isPaid === false) ? formatRupiah(totalAmount) : (isBillingValid && isPaid === true) ? formatRupiah(0) : '-'}
+                      </p>
+                    </div>
+
+                    <div className="text-right">
+                      {isLoadingBilling ? (
+                        <div className="flex items-center space-x-1.5 text-slate-400 text-xs">
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Menghitung...</span>
+                        </div>
+                      ) : (isBillingValid && isPaid === true) ? (
+                        <span className="inline-block px-2.5 py-1 bg-emerald-100 text-emerald-800 font-bold text-[10px] rounded-lg border border-emerald-200">
+                          Semua Lunas
+                        </span>
+                      ) : (isBillingValid && isPaid === false) ? (
+                        <span className="inline-block px-2.5 py-1 bg-amber-100 text-amber-800 font-bold text-[10px] rounded-lg border border-amber-200/80">
+                          {billingDetails.length} Tagihan Aktif
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {/* Rincian Komponen Tagihan */}
+                  {isBillingValid && isPaid === false && billingDetails.length > 0 && (
+                    <div className="pt-2.5 border-t border-slate-200/70 space-y-1.5 text-xs">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                        Rincian Biaya Belum Dibayar:
+                      </p>
+                      <div className="space-y-1">
+                        {billingDetails.map((item, idx) => (
+                          <div key={idx} className="flex items-center justify-between text-slate-700 text-xs">
+                            <span className="truncate pr-2 font-medium">{item.name}</span>
+                            <span className="font-bold text-slate-900 shrink-0 font-mono">
+                              {formatRupiah(item.amount)}
                             </span>
                           </div>
                         ))}
@@ -1467,88 +1093,638 @@ export default function PortalDashboard() {
                     </div>
                   )}
                 </div>
-              ) : (
-                <div className="py-7 px-4 text-center rounded-xl bg-slate-50 border border-slate-100 space-y-1.5">
-                  <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-500 mx-auto flex items-center justify-center">
-                    <Target className="w-4 h-4" />
+              )}
+
+              <button
+                type="button"
+                disabled={!isBillingValid || isLoadingBilling}
+                onClick={handleOpenQrisModal}
+                className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-slate-300 disabled:to-slate-400 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
+              >
+                <QrCode className="w-4 h-4" />
+                <span>Lihat Informasi QRIS / Rekening Transfer</span>
+                <ChevronRight className="w-4 h-4 opacity-80" />
+              </button>
+
+              <p className="text-[10px] text-slate-400 text-center leading-normal">
+                Parent Portal V2 bersifat Read-Only. Pembayaran dilakukan via QRIS atau Transfer Bank langsung ke rekening akademi.
+              </p>
+            </div>
+
+            {/* GROUP 10: RIWAYAT PEMBAYARAN SPP */}
+            {billingData?.paymentHistory && billingData.paymentHistory.length > 0 && (
+              <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
+                    <Receipt className="w-4 h-4" />
                   </div>
-                  <p className="text-xs font-bold text-slate-800">
-                    Belum Ada Catatan Evaluasi
-                  </p>
-                  <p className="text-[11px] text-slate-500 max-w-[240px] mx-auto leading-relaxed">
-                    Evaluasi pilar teknik, fisik, dan mental atlet akan ditampilkan di sini setelah pelatih merilis rapor latihan.
-                  </p>
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      Riwayat Pembayaran (Group 10)
+                    </h3>
+                    <p className="text-[11px] text-slate-400">Bukti transaksi tersimpan dari Financial Core</p>
+                  </div>
+                </div>
+
+                <div className="divide-y divide-slate-100 text-xs">
+                  {billingData.paymentHistory.map((item, idx) => (
+                    <div key={item.id || idx} className="py-2.5 flex items-center justify-between">
+                      <div>
+                        <p className="font-bold text-slate-800">{item.description || item.itemName || 'Iuran SPP Akademi'}</p>
+                        <p className="text-[10px] text-slate-400">
+                          {formatAttendanceDate(item.paymentDate)} &bull; {item.paymentMethod || 'Transfer / QRIS'}
+                        </p>
+                      </div>
+                      <span className="font-bold text-emerald-600 font-mono">
+                        {formatRupiah(item.amount)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ============================================================== */}
+        {/* TAB 3: JADWAL & PRESENSI ('schedule') — GROUP 2, GROUP 3, GROUP 4 */}
+        {/* ============================================================== */}
+        {activeTab === 'schedule' && (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
+                    <CalendarDays className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      Jadwal Latihan &amp; Presensi
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      {scheduleData?.classInfo?.className || className} &bull; Coach {scheduleData?.classInfo?.coachName || coachName}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sub-Tabs: Jadwal vs Presensi */}
+              <div className="flex rounded-xl bg-slate-100 p-1 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setActiveScheduleTab('jadwal')}
+                  className={`flex-1 py-1.5 rounded-lg text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    activeScheduleTab === 'jadwal'
+                      ? 'bg-white text-blue-600 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>Jadwal Sesi ({scheduleData?.schedules?.length || 0})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveScheduleTab('presensi')}
+                  className={`flex-1 py-1.5 rounded-lg text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    activeScheduleTab === 'presensi'
+                      ? 'bg-white text-blue-600 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Catatan Presensi ({scheduleData?.attendances?.length || 0})</span>
+                </button>
+              </div>
+
+              {/* GROUP 2: JADWAL LATIHAN */}
+              {activeScheduleTab === 'jadwal' && (
+                <div className="space-y-2.5">
+                  {isLoadingSchedule ? (
+                    <div className="py-6 flex flex-col items-center justify-center text-slate-400 text-xs space-y-1.5">
+                      <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                      <span>Memuat jadwal sesi latihan...</span>
+                    </div>
+                  ) : (scheduleData?.schedules && scheduleData.schedules.length > 0) ? (
+                    <div className="space-y-2">
+                      {scheduleData.schedules.map((s, idx) => (
+                        <div
+                          key={idx}
+                          className="p-3 bg-slate-50 hover:bg-blue-50/40 rounded-xl border border-slate-100 transition-colors flex items-center justify-between"
+                        >
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5">
+                              <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-extrabold rounded-md uppercase">
+                                {s.day}
+                              </span>
+                              <span className="text-xs font-bold text-slate-800 flex items-center gap-1 font-mono">
+                                <Clock className="w-3 h-3 text-slate-400" />
+                                {s.startTime} - {s.endTime} WIB
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 flex items-center gap-1">
+                              <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
+                              <span className="truncate">{s.courtName || 'Lapangan Utama'}</span>
+                            </p>
+                          </div>
+
+                          <span className="text-[10px] bg-slate-200/80 text-slate-700 px-2.5 py-1 rounded-lg font-bold shrink-0">
+                            Aktif
+                          </span>
+                        </div>
+                      ))}
+                      
+                      <div className="p-2.5 bg-blue-50/70 rounded-xl border border-blue-100 text-[11px] text-blue-800 flex items-start gap-2">
+                        <Activity className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
+                        <span>Pastikan atlet hadir 15 menit sebelum sesi dimulai dengan seragam resmi akademi.</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="py-7 px-4 text-center rounded-xl bg-slate-50 border border-slate-100 space-y-1.5">
+                      <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 mx-auto flex items-center justify-center">
+                        <Calendar className="w-4 h-4" />
+                      </div>
+                      <p className="text-xs font-bold text-slate-800">
+                        Belum Ada Jadwal Terdaftar
+                      </p>
+                      <p className="text-[11px] text-slate-500 max-w-[240px] mx-auto leading-relaxed">
+                        Pengelola belum memasukkan jadwal sesi latihan untuk kelas ini.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* GROUP 3: KEHADIRAN & GROUP 4: RIWAYAT AKTIVITAS */}
+              {activeScheduleTab === 'presensi' && (
+                <div className="space-y-3">
+                  {isLoadingSchedule ? (
+                    <div className="py-6 flex flex-col items-center justify-center text-slate-400 text-xs space-y-1.5">
+                      <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                      <span>Memuat catatan presensi...</span>
+                    </div>
+                  ) : (
+                    <>
+                      {scheduleData?.stats && (
+                        <div className="grid grid-cols-4 gap-1.5 text-center text-xs">
+                          <div className="p-2 bg-emerald-50 border border-emerald-100 rounded-xl">
+                            <p className="text-[9px] uppercase font-bold text-emerald-600">Hadir</p>
+                            <p className="text-sm font-black text-emerald-800 mt-0.5">{scheduleData.stats.hadir}</p>
+                          </div>
+                          <div className="p-2 bg-amber-50 border border-amber-100 rounded-xl">
+                            <p className="text-[9px] uppercase font-bold text-amber-600">Izin</p>
+                            <p className="text-sm font-black text-amber-800 mt-0.5">{scheduleData.stats.izin}</p>
+                          </div>
+                          <div className="p-2 bg-violet-50 border border-violet-100 rounded-xl">
+                            <p className="text-[9px] uppercase font-bold text-violet-600">Sakit</p>
+                            <p className="text-sm font-black text-violet-800 mt-0.5">{scheduleData.stats.sakit}</p>
+                          </div>
+                          <div className="p-2 bg-rose-50 border border-rose-100 rounded-xl">
+                            <p className="text-[9px] uppercase font-bold text-rose-600">Alpha</p>
+                            <p className="text-sm font-black text-rose-800 mt-0.5">{scheduleData.stats.alpha}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {scheduleData?.attendances && scheduleData.attendances.length > 0 ? (
+                        <div className="divide-y divide-slate-100 text-xs max-h-64 overflow-y-auto">
+                          {scheduleData.attendances.map((item, idx) => {
+                            const st = String(item.status || '').toLowerCase();
+                            const isHadir = st.includes('hadir');
+                            const isIzin = st.includes('izin');
+                            const isSakit = st.includes('sakit');
+                            const isAlpha = st.includes('alpa') || st.includes('alpha');
+
+                            return (
+                              <div key={item.id || idx} className="py-2.5 flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                  <p className="font-bold text-slate-800">
+                                    {formatAttendanceDate(item.date)}
+                                  </p>
+                                  <p className="text-[10px] text-slate-400">
+                                    {item.className || className} {item.notes ? `• ${item.notes}` : ''}
+                                  </p>
+                                </div>
+
+                                {isHadir && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 text-[10px] font-bold border border-emerald-200 shrink-0">
+                                    <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                                    <span>Hadir</span>
+                                  </span>
+                                )}
+                                {isIzin && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 text-[10px] font-bold border border-amber-200 shrink-0">
+                                    <Clock className="w-3 h-3 text-amber-600" />
+                                    <span>Izin</span>
+                                  </span>
+                                )}
+                                {isSakit && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-violet-50 text-violet-700 text-[10px] font-bold border border-violet-200 shrink-0">
+                                    <AlertCircle className="w-3 h-3 text-violet-600" />
+                                    <span>Sakit</span>
+                                  </span>
+                                )}
+                                {isAlpha && (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-50 text-rose-700 text-[10px] font-bold border border-rose-200 shrink-0">
+                                    <XCircle className="w-3 h-3 text-rose-600" />
+                                    <span>Alpha</span>
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="py-7 px-4 text-center rounded-xl bg-slate-50 border border-slate-100 space-y-1.5">
+                          <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-500 mx-auto flex items-center justify-center">
+                            <CheckCircle2 className="w-4 h-4" />
+                          </div>
+                          <p className="text-xs font-bold text-slate-800">
+                            Belum Ada Rekam Presensi
+                          </p>
+                          <p className="text-[11px] text-slate-500 max-w-[240px] mx-auto leading-relaxed">
+                            Data kehadiran sesi latihan atlet akan tercatat secara otomatis setelah pelatih melakukan absensi.
+                          </p>
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               )}
             </div>
-          )}
+          </div>
+        )}
 
-          {/* TAB 2: PRESTASI & PENGHARGAAN ATLET */}
-          {activeEvalTab === 'prestasi' && (
-            <div className="space-y-2.5">
-              {isLoadingEvaluation ? (
-                <div className="py-6 flex flex-col items-center justify-center text-slate-400 text-xs space-y-1.5">
-                  <Loader2 className="w-5 h-5 animate-spin text-amber-600" />
-                  <span>Memuat daftar prestasi atlet...</span>
+        {/* ============================================================== */}
+        {/* TAB 4: PRESTASI & EVALUASI PELATIH ('evaluation') — GROUP 5 & GROUP 6 */}
+        {/* ============================================================== */}
+        {activeTab === 'evaluation' && (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
+                    <Trophy className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                      Prestasi &amp; Evaluasi Pelatih
+                    </h3>
+                    <p className="text-[11px] text-slate-400">
+                      Rapor performa 4-6 pilar atlet &amp; kejuaraan
+                    </p>
+                  </div>
                 </div>
-              ) : (evaluationData?.achievements && evaluationData.achievements.length > 0) ? (
-                <div className="space-y-2">
-                  {evaluationData.achievements.map((ach, idx) => {
-                    const style = getTournamentMedalStyle(ach.result);
-                    return (
-                      <div
-                        key={ach.id || idx}
-                        className={`p-3 rounded-xl border ${style.border} ${style.bg} transition-all flex items-start justify-between gap-3`}
-                      >
-                        <div className="flex items-start gap-2.5 min-w-0">
-                          <div className={`w-8 h-8 rounded-xl bg-white flex items-center justify-center border ${style.border} shrink-0 shadow-2xs`}>
-                            <Trophy className={`w-4 h-4 ${style.iconColor}`} />
-                          </div>
-                          <div className="min-w-0 space-y-0.5">
-                            <h4 className="text-xs font-bold text-slate-900 leading-snug">
-                              {ach.name}
-                            </h4>
-                            <p className="text-[10px] text-slate-500 flex items-center gap-1.5">
-                              <span>{ach.date}</span>
-                              {ach.category && (
-                                <>
-                                  <span>&bull;</span>
-                                  <span>{ach.category}</span>
-                                </>
-                              )}
+
+                {evaluationData?.latestEvaluation ? (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-extrabold border border-blue-200">
+                    <TrendingUp className="w-3 h-3 text-blue-600" />
+                    <span>Skor {evaluationData.latestEvaluation.overallScore}/100</span>
+                  </span>
+                ) : null}
+              </div>
+
+              {/* Sub-Tabs: Evaluasi vs Prestasi */}
+              <div className="flex rounded-xl bg-slate-100 p-1 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setActiveEvalTab('evaluasi')}
+                  className={`flex-1 py-1.5 rounded-lg text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    activeEvalTab === 'evaluasi'
+                      ? 'bg-white text-blue-600 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Target className="w-3.5 h-3.5" />
+                  <span>Evaluasi Pelatih ({evaluationData?.evaluations?.length || 0})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveEvalTab('prestasi')}
+                  className={`flex-1 py-1.5 rounded-lg text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                    activeEvalTab === 'prestasi'
+                      ? 'bg-white text-amber-600 shadow-xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  <Trophy className="w-3.5 h-3.5" />
+                  <span>Prestasi ({evaluationData?.achievements?.length || 0})</span>
+                </button>
+              </div>
+
+              {/* GROUP 5: PERKEMBANGAN & GROUP 6: HASIL EVALUASI */}
+              {activeEvalTab === 'evaluasi' && (
+                <div className="space-y-3">
+                  {isLoadingEvaluation ? (
+                    <div className="py-6 flex flex-col items-center justify-center text-slate-400 text-xs space-y-1.5">
+                      <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                      <span>Memuat catatan evaluasi pelatih...</span>
+                    </div>
+                  ) : evaluationData?.latestEvaluation ? (
+                    <div className="space-y-3">
+                      {/* Kartu Rapor Utama */}
+                      <div className="bg-gradient-to-br from-slate-50 to-blue-50/30 rounded-xl p-3.5 border border-slate-200 space-y-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                                Rapor Evaluasi Terkini
+                              </span>
+                              <span className="text-[10px] text-slate-400">&bull;</span>
+                              <span className="text-[11px] font-bold text-slate-700">
+                                {formatAttendanceDate(evaluationData.latestEvaluation.date)}
+                              </span>
+                            </div>
+                            <p className="text-xs font-black text-slate-800 mt-0.5">
+                              {evaluationData.latestEvaluation.evaluator || coachName}
                             </p>
-                            {ach.notes && (
-                              <p className="text-[10px] text-slate-600 italic mt-1">
-                                {ach.notes}
-                              </p>
-                            )}
+                            <p className="text-[10px] text-slate-500">
+                              {evaluationData.latestEvaluation.className || className} &bull; {evaluationData.latestEvaluation.sport || sportCategory}
+                            </p>
+                          </div>
+
+                          {(() => {
+                            const grade = getEvaluationGrade(evaluationData.latestEvaluation.overallScore);
+                            return (
+                              <div className="text-right shrink-0">
+                                <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black border ${grade.badge}`}>
+                                  {grade.label}
+                                </span>
+                                <p className="text-xs font-mono font-black text-slate-900 mt-0.5">
+                                  {evaluationData.latestEvaluation.overallScore} <span className="text-[10px] text-slate-400 font-normal">/ 100</span>
+                                </p>
+                              </div>
+                            );
+                          })()}
+                        </div>
+
+                        {/* Pilar-Pilar Perkembangan Anak */}
+                        <div className="grid grid-cols-2 gap-2 pt-1">
+                          <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs space-y-1">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="font-bold text-slate-600 flex items-center gap-1">
+                                <Target className="w-3 h-3 text-blue-500" />
+                                Teknik
+                              </span>
+                              <span className="font-mono font-bold text-slate-800">
+                                {evaluationData.latestEvaluation.pillarScores?.teknik ?? 75}
+                              </span>
+                            </div>
+                            <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                              <div
+                                className="bg-blue-500 h-full rounded-full transition-all duration-500"
+                                style={{ width: `${Math.min(100, Math.max(10, evaluationData.latestEvaluation.pillarScores?.teknik ?? 75))}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs space-y-1">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="font-bold text-slate-600 flex items-center gap-1">
+                                <Activity className="w-3 h-3 text-emerald-500" />
+                                Fisik
+                              </span>
+                              <span className="font-mono font-bold text-slate-800">
+                                {evaluationData.latestEvaluation.pillarScores?.fisik ?? 75}
+                              </span>
+                            </div>
+                            <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                              <div
+                                className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                                style={{ width: `${Math.min(100, Math.max(10, evaluationData.latestEvaluation.pillarScores?.fisik ?? 75))}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs space-y-1">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="font-bold text-slate-600 flex items-center gap-1">
+                                <Star className="w-3 h-3 text-purple-500" />
+                                Mental
+                              </span>
+                              <span className="font-mono font-bold text-slate-800">
+                                {evaluationData.latestEvaluation.pillarScores?.mental ?? 75}
+                              </span>
+                            </div>
+                            <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                              <div
+                                className="bg-purple-500 h-full rounded-full transition-all duration-500"
+                                style={{ width: `${Math.min(100, Math.max(10, evaluationData.latestEvaluation.pillarScores?.mental ?? 75))}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs space-y-1">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="font-bold text-slate-600 flex items-center gap-1">
+                                <TrendingUp className="w-3 h-3 text-amber-500" />
+                                Taktik
+                              </span>
+                              <span className="font-mono font-bold text-slate-800">
+                                {evaluationData.latestEvaluation.pillarScores?.taktik ?? 75}
+                              </span>
+                            </div>
+                            <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                              <div
+                                className="bg-amber-500 h-full rounded-full transition-all duration-500"
+                                style={{ width: `${Math.min(100, Math.max(10, evaluationData.latestEvaluation.pillarScores?.taktik ?? 75))}%` }}
+                              />
+                            </div>
                           </div>
                         </div>
 
-                        {/* Rank Badge */}
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border shrink-0 ${style.badge}`}>
-                          {ach.result}
+                        {/* Catatan Pelatih */}
+                        {evaluationData.latestEvaluation.coachNote && (
+                          <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3 text-xs space-y-1">
+                            <div className="flex items-center gap-1.5 text-amber-800 font-bold text-[11px]">
+                              <Quote className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                              <span>Catatan &amp; Arahan Pelatih:</span>
+                            </div>
+                            <p className="text-slate-700 italic text-[11px] leading-relaxed pl-5">
+                              &ldquo;{evaluationData.latestEvaluation.coachNote}&rdquo;
+                            </p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Riwayat Evaluasi Sebelumnya */}
+                      {evaluationData.evaluations.length > 1 && (
+                        <div className="space-y-1.5 pt-1">
+                          <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                            Riwayat Rapor Sebelumnya ({evaluationData.evaluations.length - 1})
+                          </p>
+                          <div className="divide-y divide-slate-100 text-xs max-h-48 overflow-y-auto">
+                            {evaluationData.evaluations.slice(1).map((ev, idx) => (
+                              <div key={ev.id || idx} className="py-2 flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                  <p className="font-bold text-slate-800 text-[11px]">
+                                    {formatAttendanceDate(ev.date)} &bull; {ev.evaluator || 'Pelatih'}
+                                  </p>
+                                  <p className="text-[10px] text-slate-400 truncate max-w-[200px]">
+                                    {ev.coachNote || 'Evaluasi latihan berkala'}
+                                  </p>
+                                </div>
+                                <span className="font-mono font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md text-[10px]">
+                                  Skor {ev.overallScore}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="py-7 px-4 text-center rounded-xl bg-slate-50 border border-slate-100 space-y-1.5">
+                      <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-500 mx-auto flex items-center justify-center">
+                        <Target className="w-4 h-4" />
+                      </div>
+                      <p className="text-xs font-bold text-slate-800">
+                        Belum Ada Catatan Evaluasi
+                      </p>
+                      <p className="text-[11px] text-slate-500 max-w-[240px] mx-auto leading-relaxed">
+                        Evaluasi pilar teknik, fisik, dan mental atlet akan ditampilkan di sini setelah pelatih merilis rapor latihan.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB PRESTASI */}
+              {activeEvalTab === 'prestasi' && (
+                <div className="space-y-2.5">
+                  {isLoadingEvaluation ? (
+                    <div className="py-6 flex flex-col items-center justify-center text-slate-400 text-xs space-y-1.5">
+                      <Loader2 className="w-5 h-5 animate-spin text-amber-600" />
+                      <span>Memuat daftar prestasi atlet...</span>
+                    </div>
+                  ) : (evaluationData?.achievements && evaluationData.achievements.length > 0) ? (
+                    <div className="space-y-2">
+                      {evaluationData.achievements.map((ach, idx) => {
+                        const style = getTournamentMedalStyle(ach.result);
+                        return (
+                          <div
+                            key={ach.id || idx}
+                            className={`p-3 rounded-xl border ${style.border} ${style.bg} transition-all flex items-start justify-between gap-3`}
+                          >
+                            <div className="flex items-start gap-2.5 min-w-0">
+                              <div className={`w-8 h-8 rounded-xl bg-white flex items-center justify-center border ${style.border} shrink-0 shadow-2xs`}>
+                                <Trophy className={`w-4 h-4 ${style.iconColor}`} />
+                              </div>
+                              <div className="min-w-0 space-y-0.5">
+                                <h4 className="text-xs font-bold text-slate-900 leading-snug">
+                                  {ach.name}
+                                </h4>
+                                <p className="text-[10px] text-slate-500 flex items-center gap-1.5">
+                                  <span>{ach.date}</span>
+                                  {ach.category && (
+                                    <>
+                                      <span>&bull;</span>
+                                      <span>{ach.category}</span>
+                                    </>
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border shrink-0 ${style.badge}`}>
+                              {ach.result}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="py-7 px-4 text-center rounded-xl bg-slate-50 border border-slate-100 space-y-1.5">
+                      <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-500 mx-auto flex items-center justify-center">
+                        <Trophy className="w-4 h-4" />
+                      </div>
+                      <p className="text-xs font-bold text-slate-800">
+                        Belum Ada Catatan Prestasi Turnamen
+                      </p>
+                      <p className="text-[11px] text-slate-500 max-w-[240px] mx-auto leading-relaxed">
+                        Daftar kejuaraan, medali, dan piagam yang diraih atlet akan tampil secara otomatis di sini.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ============================================================== */}
+        {/* TAB 5: PENGUMUMAN AKADEMI ('announcements') — GROUP 8 */}
+        {/* ============================================================== */}
+        {activeTab === 'announcements' && (
+          <div className="space-y-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3.5">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
+                  <Megaphone className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                    Pengumuman Akademi (Group 8)
+                  </h3>
+                  <p className="text-[11px] text-slate-400">Informasi resmi dari pengelola cabang {academyName}</p>
+                </div>
+              </div>
+
+              {isLoadingAnnouncements ? (
+                <div className="py-6 flex flex-col items-center justify-center text-slate-400 text-xs space-y-1.5">
+                  <Loader2 className="w-5 h-5 animate-spin text-amber-600" />
+                  <span>Memuat pengumuman akademi...</span>
+                </div>
+              ) : (announcementsData?.announcements && announcementsData.announcements.length > 0) ? (
+                <div className="space-y-3">
+                  {announcementsData.announcements.map((ann, idx) => (
+                    <div
+                      key={ann.id || idx}
+                      className="p-4 rounded-xl border border-slate-200/90 bg-slate-50/50 space-y-2 hover:border-amber-300 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-800 text-[9px] font-extrabold uppercase">
+                              {ann.category || 'Umum'}
+                            </span>
+                            {ann.isImportant && (
+                              <span className="px-2 py-0.5 rounded bg-rose-100 text-rose-800 text-[9px] font-extrabold uppercase">
+                                Penting
+                              </span>
+                            )}
+                          </div>
+                          <h4 className="text-xs font-bold text-slate-900 mt-1">{ann.title}</h4>
+                        </div>
+                        <span className="text-[10px] text-slate-400 shrink-0">
+                          {formatAttendanceDate(ann.date)}
                         </span>
                       </div>
-                    );
-                  })}
+
+                      <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-line">
+                        {ann.content}
+                      </p>
+
+                      <div className="pt-2 border-t border-slate-200/50 flex items-center justify-between text-[10px] text-slate-400">
+                        <span>Oleh: {ann.author || 'Pengelola Akademi'}</span>
+                        <span>{academyName}</span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ) : (
-                <div className="py-7 px-4 text-center rounded-xl bg-slate-50 border border-slate-100 space-y-1.5">
-                  <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-500 mx-auto flex items-center justify-center">
-                    <Trophy className="w-4 h-4" />
+                <div className="py-8 px-4 text-center rounded-xl bg-slate-50 border border-slate-100 space-y-2">
+                  <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 mx-auto flex items-center justify-center">
+                    <Bell className="w-5 h-5" />
                   </div>
                   <p className="text-xs font-bold text-slate-800">
-                    Belum Ada Catatan Prestasi Turnamen
+                    Belum Ada Pengumuman Terbaru
                   </p>
                   <p className="text-[11px] text-slate-500 max-w-[240px] mx-auto leading-relaxed">
-                    Daftar kejuaraan, medali, dan piagam yang diraih atlet akan tampil secara otomatis di sini.
+                    Pengumuman resmi terkait latihan, libur, turnamen, dan iuran akan muncul di sini.
                   </p>
                 </div>
               )}
             </div>
-          )}
-        </div>
           </div>
         )}
 
@@ -1563,82 +1739,95 @@ export default function PortalDashboard() {
         <p>CHUA SPORT CORE &bull; Sistem Terpadu Manajemen Akademi</p>
       </footer>
 
-      {/* 7. FIXED BOTTOM NAVIGATION BAR (MAX-W-[480PX]) */}
-      <nav className="fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto z-50 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-4 py-2 flex justify-around items-center shadow-2xl">
+      {/* FIXED BOTTOM NAVIGATION BAR (5 TABS) */}
+      <nav className="fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto z-50 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-2 py-2 flex justify-around items-center shadow-2xl">
         {/* Tab 1: Beranda */}
         <button
           type="button"
           onClick={() => setActiveTab('home')}
-          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all cursor-pointer ${
+          className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all cursor-pointer ${
             activeTab === 'home'
               ? 'text-blue-400 font-bold'
               : 'text-slate-400 hover:text-slate-200 font-medium'
           }`}
         >
-          <Home className={`w-5 h-5 mb-0.5 transition-transform ${activeTab === 'home' ? 'text-blue-400 scale-110' : 'text-slate-400'}`} />
-          <span className="text-[10px] tracking-tight">Beranda</span>
+          <Home className={`w-4 h-4 mb-0.5 transition-transform ${activeTab === 'home' ? 'text-blue-400 scale-110' : 'text-slate-400'}`} />
+          <span className="text-[9px] tracking-tight">Beranda</span>
         </button>
 
         {/* Tab 2: Keuangan */}
         <button
           type="button"
           onClick={() => setActiveTab('billing')}
-          className={`relative flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all cursor-pointer ${
+          className={`relative flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all cursor-pointer ${
             activeTab === 'billing'
               ? 'text-blue-400 font-bold'
               : 'text-slate-400 hover:text-slate-200 font-medium'
           }`}
         >
           <div className="relative">
-            <CreditCard className={`w-5 h-5 mb-0.5 transition-transform ${activeTab === 'billing' ? 'text-blue-400 scale-110' : 'text-slate-400'}`} />
+            <CreditCard className={`w-4 h-4 mb-0.5 transition-transform ${activeTab === 'billing' ? 'text-blue-400 scale-110' : 'text-slate-400'}`} />
             {isBillingValid === true && isPaid === false && (
               <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-500 animate-pulse ring-2 ring-slate-900" />
             )}
           </div>
-          <span className="text-[10px] tracking-tight">Keuangan</span>
+          <span className="text-[9px] tracking-tight">Keuangan</span>
         </button>
 
         {/* Tab 3: Jadwal */}
         <button
           type="button"
           onClick={() => setActiveTab('schedule')}
-          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all cursor-pointer ${
+          className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all cursor-pointer ${
             activeTab === 'schedule'
               ? 'text-blue-400 font-bold'
               : 'text-slate-400 hover:text-slate-200 font-medium'
           }`}
         >
-          <CalendarDays className={`w-5 h-5 mb-0.5 transition-transform ${activeTab === 'schedule' ? 'text-blue-400 scale-110' : 'text-slate-400'}`} />
-          <span className="text-[10px] tracking-tight">Jadwal</span>
+          <CalendarDays className={`w-4 h-4 mb-0.5 transition-transform ${activeTab === 'schedule' ? 'text-blue-400 scale-110' : 'text-slate-400'}`} />
+          <span className="text-[9px] tracking-tight">Jadwal</span>
         </button>
 
         {/* Tab 4: Rapor */}
         <button
           type="button"
           onClick={() => setActiveTab('evaluation')}
-          className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all cursor-pointer ${
+          className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all cursor-pointer ${
             activeTab === 'evaluation'
               ? 'text-blue-400 font-bold'
               : 'text-slate-400 hover:text-slate-200 font-medium'
           }`}
         >
-          <Trophy className={`w-5 h-5 mb-0.5 transition-transform ${activeTab === 'evaluation' ? 'text-blue-400 scale-110' : 'text-slate-400'}`} />
-          <span className="text-[10px] tracking-tight">Rapor</span>
+          <Trophy className={`w-4 h-4 mb-0.5 transition-transform ${activeTab === 'evaluation' ? 'text-blue-400 scale-110' : 'text-slate-400'}`} />
+          <span className="text-[9px] tracking-tight">Rapor</span>
+        </button>
+
+        {/* Tab 5: Info / Pengumuman */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('announcements')}
+          className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all cursor-pointer ${
+            activeTab === 'announcements'
+              ? 'text-blue-400 font-bold'
+              : 'text-slate-400 hover:text-slate-200 font-medium'
+          }`}
+        >
+          <Bell className={`w-4 h-4 mb-0.5 transition-transform ${activeTab === 'announcements' ? 'text-blue-400 scale-110' : 'text-slate-400'}`} />
+          <span className="text-[9px] tracking-tight">Info</span>
         </button>
       </nav>
 
-      {/* 6. MODAL QRIS PEMBAYARAN DENGAN RINCIAN BIAYA RIIL */}
+      {/* MODAL QRIS PEMBAYARAN */}
       {showQrisModal && isBillingValid === true && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200">
           <div className="bg-slate-900 border border-slate-800 text-white rounded-3xl max-w-sm w-full shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200">
-            {/* Modal Header */}
             <div className="px-5 py-4 border-b border-slate-800/80 flex items-center justify-between bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-700 text-white">
               <div className="flex items-center space-x-2">
                 <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center text-white">
                   <QrCode className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-bold text-sm leading-tight">QRIS Pembayaran</h3>
+                  <h3 className="font-bold text-sm leading-tight">Informasi Pembayaran (Read-Only)</h3>
                   <p className="text-[10px] text-blue-100">{academyName}</p>
                 </div>
               </div>
@@ -1653,9 +1842,7 @@ export default function PortalDashboard() {
               </button>
             </div>
 
-            {/* Modal Body */}
             <div className="p-5 overflow-y-auto space-y-3.5">
-              {/* Total Tagihan Box */}
               <div className="bg-slate-800/70 p-3.5 rounded-2xl border border-slate-700/60 text-center">
                 <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
                   Total Tagihan Riil
@@ -1668,7 +1855,6 @@ export default function PortalDashboard() {
                 </p>
               </div>
 
-              {/* Rincian Komponen Biaya (array details) */}
               {billingDetails && billingDetails.length > 0 && (
                 <div className="bg-slate-800/90 p-3.5 rounded-2xl border border-slate-700/70 space-y-2 text-xs">
                   <div className="flex items-center justify-between">
@@ -1693,7 +1879,6 @@ export default function PortalDashboard() {
                 </div>
               )}
 
-              {/* QRIS Image Area */}
               <div className="bg-white p-4 rounded-2xl shadow-inner flex flex-col items-center justify-center">
                 {qrisUrl ? (
                   <>
@@ -1723,7 +1908,6 @@ export default function PortalDashboard() {
                 )}
               </div>
 
-              {/* Info Alternatif Transfer Bank */}
               <div className="bg-slate-800/90 p-3.5 rounded-2xl border border-slate-700/80 space-y-3 text-left text-xs">
                 <div className="flex items-center justify-between">
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
@@ -1734,7 +1918,6 @@ export default function PortalDashboard() {
                   </span>
                 </div>
 
-                {/* Pilihan Multi-Rekening (Jika tenant memiliki > 1 rekening) */}
                 {effectiveBankList.length > 1 && (
                   <div className="space-y-1.5 pt-0.5">
                     <div className="flex items-center justify-between text-[10px]">
@@ -1803,7 +1986,6 @@ export default function PortalDashboard() {
                     </button>
                   </div>
 
-                  {/* Teks nama pemilik rekening (a.n. Nama Pemilik) tepat di bawah kolom nomor rekening */}
                   <p className="text-[11px] text-slate-300 pt-0.5 font-medium">
                     a.n. <strong className="text-white font-semibold">{activeAccountName || academyName}</strong>
                   </p>
@@ -1811,11 +1993,10 @@ export default function PortalDashboard() {
               </div>
 
               <p className="text-[10px] text-slate-400 text-center leading-normal">
-                Dapat dibayar menggunakan GoPay, OVO, DANA, BCA Mobile, Livin', atau seluruh aplikasi mobile banking di Indonesia.
+                Transfer dapat dilakukan dari aplikasi mobile banking seluruh bank di Indonesia.
               </p>
             </div>
 
-            {/* Modal Actions */}
             <div className="p-4 border-t border-slate-800/80 bg-slate-900 flex items-center justify-end">
               <button
                 type="button"
