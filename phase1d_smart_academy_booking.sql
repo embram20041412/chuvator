@@ -95,7 +95,7 @@ BEGIN
         court_name TEXT
     ) ON COMMIT DROP;
 
-    DELETE FROM _planned_slots;
+    DELETE FROM _planned_slots WHERE true;
 
     -- Loop tanggal menggunakan generate_series
     FOR v_current_date IN 
