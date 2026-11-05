@@ -56,6 +56,12 @@ BEGIN
     FROM public.users_staff
     WHERE uid = v_auth_uid AND tenant_id = p_tenant_id AND status = 'active';
 
+    IF v_staff_role IS NULL THEN
+        SELECT 'owner', name, COALESCE(email, v_auth_uid || '@tenant.local') INTO v_staff_role, v_staff_name, v_staff_email
+        FROM public.tenants
+        WHERE id = p_tenant_id AND owner_uid = v_auth_uid;
+    END IF;
+
     IF v_staff_role IS NULL OR v_staff_role NOT IN ('owner', 'admin') THEN
         RAISE EXCEPTION '403 REJECTED: Payment verification strictly prohibited for role %', COALESCE(v_staff_role, 'NONE') USING ERRCODE = '42501';
     END IF;
