@@ -45,7 +45,8 @@ test('5. Payment Integrity - Verified spp_payments columns without payment_date'
 
 test('6. Unambiguous Dual Tenant Lookup using tenants.id or tenants.tenant_id', () => {
   assert.match(rpcSqlContent, /FROM public\.tenants t/);
-  assert.match(rpcSqlContent, /WHERE t\.id::text = v_student_tenant_id OR t\.tenant_id = v_student_tenant_id/);
+  assert.match(rpcSqlContent, /WHERE t\.tenant_id = v_student_tenant_id/);
+  assert.match(rpcSqlContent, /WHERE t\.id::text = v_student_tenant_id/);
 });
 
 test('7. Separate qris_url and qris_image_base64 fields in RPC response', () => {

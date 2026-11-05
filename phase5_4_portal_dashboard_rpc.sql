@@ -155,28 +155,54 @@ BEGIN
     -- Resolve Coach Identity
     v_resolved_coach_name := COALESCE(v_coach_name_from_table, v_class_coach_name, v_student_coach_name, NULL);
 
-    -- 4. UNAMBIGUOUS TENANT LOOKUP (DUAL MATCH: t.id OR t.tenant_id)
-    SELECT 
-        t.id,
-        t.name,
-        t.qris_url,
-        t.qris_image_base64,
-        t.bank_name,
-        t.bank_account_name,
-        t.bank_account_number,
-        t.bank_accounts
-    INTO 
-        v_tenant_db_id,
-        v_tenant_name,
-        v_tenant_qris_url,
-        v_tenant_qris_image_base64,
-        v_tenant_bank_name,
-        v_tenant_bank_account_name,
-        v_tenant_bank_account_number,
-        v_tenant_bank_accounts
-    FROM public.tenants t
-    WHERE t.id::text = v_student_tenant_id OR t.tenant_id = v_student_tenant_id
-    LIMIT 1;
+    -- 4. DETERMINISTIC TENANT LOOKUP (PRIORITY MATCH: t.tenant_id FIRST, THEN t.id)
+    IF EXISTS (SELECT 1 FROM public.tenants t WHERE t.tenant_id = v_student_tenant_id) THEN
+        SELECT 
+            t.id,
+            t.name,
+            t.qris_url,
+            t.qris_image_base64,
+            t.bank_name,
+            t.bank_account_name,
+            t.bank_account_number,
+            t.bank_accounts
+        INTO 
+            v_tenant_db_id,
+            v_tenant_name,
+            v_tenant_qris_url,
+            v_tenant_qris_image_base64,
+            v_tenant_bank_name,
+            v_tenant_bank_account_name,
+            v_tenant_bank_account_number,
+            v_tenant_bank_accounts
+        FROM public.tenants t
+        WHERE t.tenant_id = v_student_tenant_id
+        ORDER BY t.id ASC
+        LIMIT 1;
+    ELSIF EXISTS (SELECT 1 FROM public.tenants t WHERE t.id::text = v_student_tenant_id) THEN
+        SELECT 
+            t.id,
+            t.name,
+            t.qris_url,
+            t.qris_image_base64,
+            t.bank_name,
+            t.bank_account_name,
+            t.bank_account_number,
+            t.bank_accounts
+        INTO 
+            v_tenant_db_id,
+            v_tenant_name,
+            v_tenant_qris_url,
+            v_tenant_qris_image_base64,
+            v_tenant_bank_name,
+            v_tenant_bank_account_name,
+            v_tenant_bank_account_number,
+            v_tenant_bank_accounts
+        FROM public.tenants t
+        WHERE t.id::text = v_student_tenant_id
+        ORDER BY t.id ASC
+        LIMIT 1;
+    END IF;
 
     -- 5. RESOLVE ACADEMY BRANDING PRIORITY (STUDENT ACADEMY NAME FIRST)
     v_resolved_academy_name := COALESCE(
@@ -220,7 +246,7 @@ BEGIN
     v_upcoming_sessions := COALESCE(v_upcoming_sessions, '[]'::jsonb);
     v_schedules := COALESCE(v_class_schedules, '[]'::jsonb);
 
-    -- 7. FETCH ACADEMY ATTENDANCE (FIX 2: SAFE ATTENDANCE JSONB EXTRACTION)
+    -- 7. FETCH ACADEMY ATTENDANCE (SAFE ATTENDANCE JSONB EXTRACTION & EXACT-RECORD DEDUPLICATION)
     SELECT jsonb_agg(
         jsonb_build_object(
             'id', att.id,
@@ -242,44 +268,54 @@ BEGIN
     )
     INTO v_attendance
     FROM (
-        -- Single-student attendance
-        SELECT
-            a.id,
-            a.date,
-            a.status,
-            a.notes,
-            a.class_name,
-            a.coach_name
-        FROM public.academy_attendance a
-        WHERE a.tenant_id = v_student_tenant_id
-          AND a.student_id = v_student_id
+        SELECT DISTINCT ON (att_inner.id)
+            att_inner.id,
+            att_inner.date,
+            att_inner.status,
+            att_inner.notes,
+            att_inner.class_name,
+            att_inner.coach_name
+        FROM (
+            -- Single-student attendance
+            SELECT
+                a.id,
+                a.date,
+                a.status,
+                a.notes,
+                a.class_name,
+                a.coach_name
+            FROM public.academy_attendance a
+            WHERE a.tenant_id = v_student_tenant_id
+              AND a.student_id = v_student_id
 
-        UNION ALL
+            UNION ALL
 
-        -- Class-session attendance stored in students_data JSONB
-        SELECT
-            a.id,
-            a.date,
-            elem.value->>'status' AS status,
-            COALESCE(elem.value->>'notes', a.notes) AS notes,
-            a.class_name,
-            a.coach_name
-        FROM public.academy_attendance a
-        CROSS JOIN LATERAL jsonb_array_elements(
-            CASE
-                WHEN jsonb_typeof(a.students_data) = 'array'
-                THEN a.students_data
-                ELSE '[]'::jsonb
-            END
-        ) AS elem(value)
-        WHERE a.tenant_id = v_student_tenant_id
-          AND a.class_id = v_student_class_id
-          AND a.student_id IS NULL
-          AND (
-              elem.value->>'studentId' = v_student_id::text
-              OR elem.value->>'student_id' = v_student_id::text
-              OR elem.value->>'id' = v_student_id::text
-          )
+            -- Class-session attendance stored in students_data JSONB
+            SELECT
+                a.id,
+                a.date,
+                elem.value->>'status' AS status,
+                COALESCE(elem.value->>'notes', a.notes) AS notes,
+                a.class_name,
+                a.coach_name
+            FROM public.academy_attendance a
+            CROSS JOIN LATERAL jsonb_array_elements(
+                CASE
+                    WHEN jsonb_typeof(a.students_data) = 'array'
+                    THEN a.students_data
+                    ELSE '[]'::jsonb
+                END
+            ) AS elem(value)
+            WHERE a.tenant_id = v_student_tenant_id
+              AND a.class_id = v_student_class_id
+              AND a.student_id IS NULL
+              AND (
+                  elem.value->>'studentId' = v_student_id::text
+                  OR elem.value->>'student_id' = v_student_id::text
+                  OR elem.value->>'id' = v_student_id::text
+              )
+        ) att_inner
+        ORDER BY att_inner.id, att_inner.date DESC
     ) att;
 
     v_attendance := COALESCE(v_attendance, '[]'::jsonb);
