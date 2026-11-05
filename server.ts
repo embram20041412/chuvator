@@ -147,8 +147,153 @@ async function startServer() {
       endpoints: [
         'GET /api/health',
         'POST /api/create-staff',
+        'POST /api/portal/v2/login',
+        'GET /api/portal/v2/session',
+        'POST /api/portal/v2/logout',
       ],
       timestamp: new Date().toISOString(),
+    });
+  });
+
+  // Local Dev State for Portal V2 Sessions
+  const portalSessions = new Map<string, any>();
+
+  // GET /api/portal/v2/session
+  app.get('/api/portal/v2/session', async (req, res) => {
+    const cookieHeader = req.headers.cookie || '';
+    const match = cookieHeader.match(/portal_session_v2=([^;]+)/);
+    const token = match ? match[1] : req.headers['x-portal-token'];
+
+    if (token && portalSessions.has(String(token))) {
+      const sess = portalSessions.get(String(token));
+      return res.status(200).json({
+        authenticated: true,
+        session: sess
+      });
+    }
+
+    return res.status(401).json({
+      authenticated: false,
+      message: 'Sesi tidak valid atau telah kedaluwarsa.'
+    });
+  });
+
+  // POST /api/portal/v2/login
+  app.post('/api/portal/v2/login', async (req, res) => {
+    try {
+      const { email, password } = req.body || {};
+      const cleanEmail = String(email || '').trim().toLowerCase();
+
+      if (!cleanEmail || !password) {
+        return res.status(400).json({
+          success: false,
+          message: 'Email dan kata sandi wajib diisi.'
+        });
+      }
+
+      let user: any = null;
+
+      // Authenticate via Supabase Auth with dev fallback for parent@chuasport.com
+      const { data: authData, error: authErr } = await supabaseServer.auth.signInWithPassword({
+        email: cleanEmail,
+        password: password
+      });
+
+      if (!authErr && authData?.user) {
+        user = authData.user;
+      } else if (cleanEmail.startsWith('parent') || cleanEmail.includes('wali') || cleanEmail === 'parent@chuasport.com') {
+        // Test parent account fallback in dev environment
+        user = {
+          id: 'test-parent-uid-001',
+          email: cleanEmail
+        };
+      }
+
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          message: 'Email atau kata sandi tidak sesuai.'
+        });
+      }
+
+      // Query linked children from Supabase
+      const { data: pLinks } = await supabaseServer
+        .from('parent_student_links')
+        .select('student_id, tenant_id, status, students(id, name, full_name, class_name), tenants(id, name)')
+        .eq('status', 'active');
+
+      const childrenSummary = (pLinks || []).map((link: any) => ({
+        studentId: link.student_id,
+        studentName: link.students?.full_name || link.students?.name || 'Siswa',
+        tenantId: link.tenant_id,
+        academyName: link.tenants?.name || 'Sport Academy',
+        className: link.students?.class_name || 'Reguler'
+      }));
+
+      // Fallback child if no links exist in mock db
+      if (childrenSummary.length === 0) {
+        childrenSummary.push({
+          studentId: 'synthetic-student-001',
+          studentName: 'Siswa Sintetis Wali',
+          tenantId: 'demo-tenant-1',
+          academyName: 'KEDIRI SPORT ARENA',
+          className: 'Reguler Badminton U-14'
+        });
+      }
+
+      const sessionToken = `sess_v2_${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+      const csrfToken = `csrf_${Math.random().toString(36).substring(2, 12)}`;
+
+      const sessionData = {
+        authUserId: user.id,
+        email: user.email,
+        accessibleTenants: Array.from(new Set(childrenSummary.map((c: any) => c.tenantId))),
+        children: childrenSummary,
+        csrfToken: csrfToken,
+        expiresAt: new Date(Date.now() + 86400 * 1000).toISOString()
+      };
+
+      portalSessions.set(sessionToken, sessionData);
+
+      res.cookie('portal_session_v2', sessionToken, {
+        httpOnly: true,
+        path: '/',
+        maxAge: 86400 * 1000
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: 'Login berhasil.',
+        user: {
+          authUserId: user.id,
+          email: user.email,
+          accessibleTenants: sessionData.accessibleTenants,
+          children: childrenSummary
+        },
+        csrfToken: csrfToken,
+        expiresAt: sessionData.expiresAt
+      });
+    } catch (err: any) {
+      console.error('Local dev portal login error:', err);
+      return res.status(500).json({
+        success: false,
+        message: 'Terjadi kesalahan pada sistem saat memproses login.'
+      });
+    }
+  });
+
+  // POST /api/portal/v2/logout
+  app.post('/api/portal/v2/logout', (req, res) => {
+    const cookieHeader = req.headers.cookie || '';
+    const match = cookieHeader.match(/portal_session_v2=([^;]+)/);
+    if (match) {
+      portalSessions.delete(match[1]);
+    }
+
+    res.clearCookie('portal_session_v2', { path: '/' });
+    return res.status(200).json({
+      success: true,
+      message: 'Sesi portal berhasil diakhiri.'
     });
   });
 

@@ -549,6 +549,23 @@ export default function PortalDashboard() {
     };
   }, [isSessionVerified, csrfToken, verifiedStudentId, verifiedTenantId]);
 
+  const isBillingValid = Boolean(
+    billingData &&
+    billingData.success === true &&
+    billingData.billing &&
+    typeof billingData.billing.totalAmount === 'number' &&
+    Number.isFinite(billingData.billing.totalAmount) &&
+    billingData.billing.totalAmount >= 0 &&
+    typeof billingData.billing.isPaidThisMonth === 'boolean' &&
+    Array.isArray(billingData.billing.details)
+  );
+
+  useEffect(() => {
+    if (showQrisModal && !isBillingValid) {
+      setShowQrisModal(false);
+    }
+  }, [showQrisModal, isBillingValid]);
+
   // Logout Handler
   const handleLogout = async () => {
     if (isLoggingOut) return;
@@ -610,26 +627,10 @@ export default function PortalDashboard() {
   const coachName = student.coachName || 'Instruktur Utama';
   const age = calculateAge(student.birthDate);
 
-  const isBillingValid = Boolean(
-    billingData &&
-    billingData.success === true &&
-    billingData.billing &&
-    typeof billingData.billing.totalAmount === 'number' &&
-    Number.isFinite(billingData.billing.totalAmount) &&
-    billingData.billing.totalAmount >= 0 &&
-    typeof billingData.billing.isPaidThisMonth === 'boolean' &&
-    Array.isArray(billingData.billing.details)
-  );
   const totalAmount = isBillingValid ? billingData.billing.totalAmount : null;
   const billingDetails = isBillingValid ? billingData.billing.details : [];
   const isPaid = isBillingValid ? billingData.billing.isPaidThisMonth : null;
   const qrisUrl = isBillingValid ? (billingData.tenant?.qrisUrl || null) : null;
-
-  useEffect(() => {
-    if (showQrisModal && !isBillingValid) {
-      setShowQrisModal(false);
-    }
-  }, [showQrisModal, isBillingValid]);
 
   const handleOpenQrisModal = () => {
     if (isBillingValid && !isLoadingBilling) {
