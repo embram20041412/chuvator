@@ -698,7 +698,7 @@ export default function PortalDashboard() {
   }
 
   const studentName = student.studentName || 'Nama Siswa';
-  const photoUrl = student.photoUrl || null;
+  const photoUrl = student.photo_url || student.photoUrl || null;
   const academyName = billingData?.tenant?.name || student.academyName || 'Sport Academy';
   const sportCategory = student.sportCategory || 'Badminton';
   const className = student.className || 'Reguler';
@@ -708,7 +708,7 @@ export default function PortalDashboard() {
   const totalAmount = isBillingValid ? billingData.billing.totalAmount : null;
   const billingDetails = isBillingValid ? billingData.billing.details : [];
   const isPaid = isBillingValid ? billingData.billing.isPaidThisMonth : null;
-  const qrisUrl = isBillingValid ? (billingData.tenant?.qrisUrl || null) : null;
+  const qrisUrl = isBillingValid ? (billingData.tenant?.qris_url || billingData.tenant?.qrisUrl || null) : null;
 
   const handleOpenQrisModal = () => {
     if (isBillingValid && !isLoadingBilling) {
@@ -716,13 +716,17 @@ export default function PortalDashboard() {
     }
   };
 
-  const effectiveBankList = bankAccounts.length > 0 
-    ? bankAccounts 
-    : (Array.isArray(billingData?.bankAccounts) && billingData.bankAccounts.length > 0
-      ? billingData.bankAccounts
-      : (bankDetails.number || bankDetails.bank 
-        ? [{ bankName: bankDetails.bank || 'Bank', accountNumber: bankDetails.number || '', accountName: bankDetails.name || '' }] 
-        : []));
+  const effectiveBankList = Array.isArray(billingData?.tenant?.bank_accounts) && billingData.tenant.bank_accounts.length > 0
+    ? billingData.tenant.bank_accounts
+    : (bankAccounts.length > 0 
+      ? bankAccounts 
+      : (Array.isArray(billingData?.bankAccounts) && billingData.bankAccounts.length > 0
+        ? billingData.bankAccounts
+        : (Array.isArray(billingData?.tenant?.bankAccounts) && billingData.tenant.bankAccounts.length > 0
+          ? billingData.tenant.bankAccounts
+          : (bankDetails.number || bankDetails.bank 
+            ? [{ bankName: bankDetails.bank || 'Bank', accountNumber: bankDetails.number || '', accountName: bankDetails.name || '' }] 
+            : []))));
 
   const currentAccount = effectiveBankList[selectedBankIndex] || effectiveBankList[0] || {
     bankName: bankDetails.bank || billingData?.bankDetails?.bank || '',
@@ -843,17 +847,20 @@ export default function PortalDashboard() {
               </div>
 
               <div className="flex items-start gap-3.5 relative z-10">
-                {photoUrl ? (
-                  <img
-                    src={photoUrl}
-                    alt={studentName}
-                    className="w-16 h-16 rounded-2xl object-cover border-2 border-white/60 shadow-md bg-white shrink-0"
-                  />
-                ) : (
-                  <div className="w-16 h-16 rounded-2xl bg-white/20 backdrop-blur-md text-white font-black text-xl flex items-center justify-center shrink-0 border-2 border-white/40 shadow-md">
-                    {getStudentInitials(studentName)}
-                  </div>
-                )}
+                <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-white/60 shadow-md bg-white/20 shrink-0 flex items-center justify-center">
+                  {photoUrl ? (
+                    <img
+                      src={photoUrl}
+                      alt="Profil"
+                      className="w-full h-full object-cover rounded-full"
+                      crossOrigin="anonymous"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-white font-black text-xl">
+                      {getStudentInitials(studentName)}
+                    </div>
+                  )}
+                </div>
 
                 <div className="min-w-0 flex-1">
                   <h2 className="text-base sm:text-lg font-black text-white leading-tight break-words">
@@ -882,7 +889,7 @@ export default function PortalDashboard() {
                   <User className="w-4 h-4 text-blue-200 shrink-0" />
                   <div className="min-w-0">
                     <p className="text-[9px] uppercase tracking-wider text-blue-200 font-bold">Pelatih Utama</p>
-                    <p className="font-bold text-white text-[11px] truncate">{coachName || 'Belum ada pelatih'}</p>
+                    <p className="font-bold text-white text-[11px] truncate">{coachName || 'Belum Ditugaskan'}</p>
                   </div>
                 </div>
               </div>
@@ -1241,7 +1248,7 @@ export default function PortalDashboard() {
                       Jadwal Latihan &amp; Presensi
                     </h3>
                     <p className="text-[11px] text-slate-400">
-                      {scheduleData?.classInfo?.className || className} &bull; {coachName ? `Coach ${coachName}` : 'Belum ada pelatih'}
+                      {scheduleData?.classInfo?.className || className} &bull; {coachName ? `Coach ${coachName}` : 'Belum Ditugaskan'}
                     </p>
                   </div>
                 </div>

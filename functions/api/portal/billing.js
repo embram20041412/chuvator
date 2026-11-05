@@ -100,13 +100,23 @@ export async function onRequest(context) {
     let tenantInfo = {
       id: tenantId,
       name: 'Sport Academy',
-      qrisUrl: null
+      qris_url: null,
+      qrisUrl: null,
+      bank_accounts: []
     };
     let bankAccounts = [];
 
     if (tenantId && tenantId !== 'global') {
       try {
-        const tenantResp = await fetch(`${supabaseUrl}/rest/v1/tenants?id=eq.${tenantId}&select=id,name,qris_url,bank_name,bank_account_name,bank_account_number,bank_accounts`, {
+        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(tenantId);
+        let tenantQuery = `${supabaseUrl}/rest/v1/tenants?select=id,tenant_id,name,qris_url,qris_image_base64,bank_name,bank_account_name,bank_account_number,bank_accounts`;
+        if (isUuid) {
+          tenantQuery += `&or=(id.eq.${tenantId},tenant_id.eq.${tenantId})`;
+        } else {
+          tenantQuery += `&tenant_id=eq.${encodeURIComponent(tenantId)}`;
+        }
+
+        const tenantResp = await fetch(tenantQuery, {
           method: 'GET',
           headers: {
             'apikey': anonKey,
@@ -117,10 +127,14 @@ export async function onRequest(context) {
           const tenants = await tenantResp.json().catch(() => []);
           const t = tenants[0];
           if (t) {
+            const rawQris = t.qris_url || t.qris_image_base64 || null;
             tenantInfo = {
               id: t.id,
+              tenant_id: t.tenant_id || t.id,
               name: t.name || 'Sport Academy',
-              qrisUrl: t.qris_url || null
+              qris_url: rawQris,
+              qrisUrl: rawQris,
+              bank_accounts: []
             };
             if (Array.isArray(t.bank_accounts) && t.bank_accounts.length > 0) {
               bankAccounts = t.bank_accounts.map(b => ({
@@ -135,6 +149,8 @@ export async function onRequest(context) {
                 accountName: t.bank_account_name || t.name
               });
             }
+            tenantInfo.bank_accounts = bankAccounts;
+            tenantInfo.bankAccounts = bankAccounts;
           }
         }
       } catch (tenantErr) {
@@ -205,7 +221,7 @@ export async function onRequest(context) {
       success: true,
       fallback: true,
       message: 'Data penagihan dimuat dengan mode aman.',
-      tenant: { id: 'global', name: 'Sport Academy', qrisUrl: null },
+      tenant: { id: 'global', name: 'Sport Academy', qris_url: null, qrisUrl: null, bank_accounts: [] },
       bankDetails: { bank: 'Transfer Bank', number: '', name: 'Sport Academy' },
       bankAccounts: [],
       billing: {

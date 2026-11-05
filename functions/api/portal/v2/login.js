@@ -240,13 +240,17 @@ export async function onRequestPost(context) {
     });
     const accessibleTenants = Array.from(tenantSet);
 
-    // Minimize children summary for the session (only fields returned by RPC)
+    // Minimize children summary for the session (including photo and coach if returned by RPC)
     const childrenSummary = linkedChildren.map(child => ({
       studentId: child.student_id || child.id,
       studentName: child.student_name || child.full_name || child.name || '',
       tenantId: child.tenant_id || '',
       academyName: child.academy_name || child.tenant_name || '',
-      className: child.class_name || ''
+      className: child.class_name || '',
+      photo_url: child.photo_url || child.photoUrl || null,
+      photoUrl: child.photo_url || child.photoUrl || null,
+      coach_name: child.coach_name || child.coachName || null,
+      coachName: child.coach_name || child.coachName || null
     }));
 
     // 9. Create secure server-side v2 session (Strict AES-256-GCM + KV)
