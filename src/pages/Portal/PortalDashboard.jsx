@@ -589,16 +589,23 @@ export default function PortalDashboard() {
 
         if (response.ok) {
           const res = await response.json().catch(() => null);
-          if (isMounted && res && res.success && res.student) {
+          const studentProfile = res?.data || res?.student;
+          if (isMounted && res && res.success && studentProfile) {
+            const academyClass = studentProfile.academy_classes || {};
+            const coach = academyClass.coaches || {};
+            const resolvedCoachName = studentProfile.coach_name || studentProfile.coachName || coach.name || academyClass.coach_name || null;
+            const resolvedClassName = studentProfile.class_name || studentProfile.className || academyClass.class_name || null;
+            const resolvedPhotoUrl = studentProfile.photo_url || studentProfile.photoUrl || null;
+
             setStudent(prev => {
               if (!prev) return prev;
               return {
                 ...prev,
-                studentName: res.student.student_name || res.student.studentName || prev.studentName,
-                className: res.student.class_name || res.student.className || prev.className,
-                coachName: res.student.coach_name || res.student.coachName || prev.coachName || null,
-                sportCategory: res.student.sport_category || res.student.sportCategory || prev.sportCategory,
-                photoUrl: res.student.photo_url || res.student.photoUrl || prev.photoUrl
+                studentName: studentProfile.student_name || studentProfile.studentName || prev.studentName,
+                className: resolvedClassName || prev.className,
+                coachName: resolvedCoachName || prev.coachName || null,
+                sportCategory: studentProfile.sport_category || studentProfile.sportCategory || prev.sportCategory,
+                photoUrl: resolvedPhotoUrl || prev.photoUrl
               };
             });
           }
