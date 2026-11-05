@@ -1,7 +1,7 @@
 /**
  * Cloudflare Pages Function: /api/portal/profile
- * Parent Portal V2 Fail-Closed Student Profile Endpoint.
- * Connects to database RPC `public.portal_get_student_dashboard`.
+ * Parent Portal V2 Fail-Closed Student Profile Endpoint (FASE 5.4).
+ * Connects directly to database RPC `public.portal_get_student_dashboard`.
  */
 
 import { validatePortalV2Session, getCorsHeaders } from './_auth_v2.js';
@@ -57,6 +57,7 @@ export async function onRequest(context) {
     }
 
     const { session } = sessionResult;
+    const { accessToken } = session;
     const childrenSummary = Array.isArray(session.childrenSummary) ? session.childrenSummary : [];
     const accessibleTenants = Array.isArray(session.accessibleTenants) ? session.accessibleTenants : [];
 
@@ -102,7 +103,7 @@ export async function onRequest(context) {
           headers: {
             'Content-Type': 'application/json',
             'apikey': anonKey,
-            'Authorization': `Bearer ${anonKey}`
+            'Authorization': `Bearer ${accessToken}`
           },
           body: JSON.stringify({
             p_student_id: studentId,
@@ -147,9 +148,9 @@ export async function onRequest(context) {
       schoolOrigin: rpcStudent.school_name || rpcStudent.school_origin || '',
       tenant_id: childTenantId,
       tenantId: childTenantId,
-      tenant_name: rpcStudent.tenant_name || rpcTenant.name || matchedChild.academyName || 'Sport Academy',
-      academy_name: rpcStudent.tenant_name || rpcTenant.name || matchedChild.academyName || 'Sport Academy',
-      academyName: rpcStudent.tenant_name || rpcTenant.name || matchedChild.academyName || 'Sport Academy'
+      tenant_name: rpcStudent.tenant_name || rpcTenant.name || 'Sport Arena',
+      academy_name: rpcStudent.academy_name || matchedChild.academyName || 'Sport Academy',
+      academyName: rpcStudent.academy_name || matchedChild.academyName || 'Sport Academy'
     };
 
     return new Response(

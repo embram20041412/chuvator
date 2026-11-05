@@ -1,88 +1,123 @@
 /**
  * Cloudflare Pages Function: /api/portal/schedule
- * Edge-safe schedule and attendance endpoint for Parent Portal V2.
- * Connects directly to database RPC `public.portal_get_student_dashboard`.
+ * Edge-safe schedule and attendance endpoint for Parent Portal V2 (FASE 5.4).
+ * Strict Session V2, Anti-IDOR, CSRF verification & Supabase RPC portal_get_student_dashboard integration.
  */
 
-import { validatePortalV2Session } from './_auth_v2.js';
+import { validatePortalV2Session, verifyCsrf, getCorsHeaders } from './_auth_v2.js';
 
 export async function onRequest(context) {
   const { request, env = {} } = context;
+  const corsHeaders = getCorsHeaders(request, env);
 
-  // Tangani Preflight CORS
+  // 1. Tangani Preflight CORS
   if (request.method === 'OPTIONS') {
     return new Response(null, {
       status: 204,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Portal-CSRF, apikey'
-      }
+      headers: corsHeaders
     });
   }
 
-  const corsHeaders = {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*'
-  };
-
   try {
-    const supabaseUrl = (env.SUPABASE_URL || env.VITE_SUPABASE_URL || 'https://wqnhlmvvyhpctmaukwyj.supabase.co').replace(/\/+$/, '');
-    const anonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_vKzNAXC9V52eYH0-Gm9Rcg_23lCtz2P';
+    // 2. Strict CSRF Verification for POST
+    if (request.method === 'POST') {
+      const csrfHeader = request.headers.get('X-Portal-CSRF');
+      if (!verifyCsrf(request, env, csrfHeader)) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'CSRF token atau origin tidak valid' }),
+          { status: 403, headers: corsHeaders }
+        );
+      }
+    }
 
-    let studentId = '';
-    let tenantId = null;
+    // 3. Strict Parent Portal V2 Session Validation
+    const sessionResult = await validatePortalV2Session(context);
+
+    if (
+      !sessionResult ||
+      !sessionResult.valid ||
+      !sessionResult.session ||
+      !sessionResult.session.accessToken
+    ) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Sesi tidak valid atau telah kedaluwarsa' }),
+        { status: 401, headers: corsHeaders }
+      );
+    }
+
+    const { session } = sessionResult;
+    const { accessToken } = session;
+    const childrenSummary = Array.isArray(session.childrenSummary) ? session.childrenSummary : [];
+    const accessibleTenants = Array.isArray(session.accessibleTenants) ? session.accessibleTenants : [];
+
+    // Parse Body / SearchParams for requested student & tenant
+    let rawStudentId = '';
+    let rawTenantId = '';
 
     if (request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
-      tenantId = body.tenantId || body.tenant_id || tenantId;
-      studentId = body.studentId || body.student_id || '';
+      rawStudentId = body.studentId || body.student_id || '';
+      rawTenantId = body.tenantId || body.tenant_id || '';
     } else {
       const url = new URL(request.url);
-      tenantId = url.searchParams.get('tenantId') || url.searchParams.get('tenant_id') || tenantId;
-      studentId = url.searchParams.get('studentId') || url.searchParams.get('student_id') || '';
+      rawStudentId = url.searchParams.get('studentId') || url.searchParams.get('student_id') || '';
+      rawTenantId = url.searchParams.get('tenantId') || url.searchParams.get('tenant_id') || '';
     }
 
-    // Tangani pencarian siswa & tenant dari cookie sesi jika tidak dikirim eksplisit
-    if (!studentId || !tenantId || tenantId === 'global') {
-      try {
-        const v2SessionResult = await validatePortalV2Session(context);
-        if (v2SessionResult && v2SessionResult.valid && v2SessionResult.session) {
-          const firstChild = v2SessionResult.session.childrenSummary?.[0];
-          if (!studentId) studentId = firstChild?.studentId || firstChild?.id || '';
-          if (!tenantId || tenantId === 'global') tenantId = firstChild?.tenantId || firstChild?.tenant_id || tenantId;
-        }
-      } catch (e) {
-        console.warn('[schedule.js] Session check fallback note:', e.message);
-      }
+    // Default to first child if not specified
+    const firstChild = childrenSummary[0] || {};
+    const studentId = (rawStudentId || firstChild.studentId || firstChild.id || '').toLowerCase();
+
+    // 4. Anti-IDOR: Verify student belongs to authenticated parent
+    const matchingChildren = childrenSummary.filter(
+      c => String(c.studentId || c.id || '').toLowerCase() === studentId
+    );
+
+    if (matchingChildren.length === 0) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Akses terhadap data siswa ini ditolak' }),
+        { status: 403, headers: corsHeaders }
+      );
     }
 
-    // Panggil RPC portal_get_student_dashboard dengan Bearer anonKey
+    const matchedChild = matchingChildren[0];
+    const childTenantId = matchedChild.tenantId || matchedChild.tenant_id || rawTenantId || firstChild.tenantId || '';
+
+    // 5. Tenant Isolation Validation
+    if (!childTenantId || !accessibleTenants.includes(childTenantId)) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Akses lintas tenant tidak diizinkan' }),
+        { status: 403, headers: corsHeaders }
+      );
+    }
+
+    // 6. Call Supabase RPC portal_get_student_dashboard with Validated Access Token
+    const supabaseUrl = (env.SUPABASE_URL || env.VITE_SUPABASE_URL || 'https://wqnhlmvvyhpctmaukwyj.supabase.co').replace(/\/+$/, '');
+    const anonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_vKzNAXC9V52eYH0-Gm9Rcg_23lCtz2P';
+
     let rpcData = null;
-    if (studentId) {
-      try {
-        const rpcResp = await fetch(`${supabaseUrl}/rest/v1/rpc/portal_get_student_dashboard`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': anonKey,
-            'Authorization': `Bearer ${anonKey}`
-          },
-          body: JSON.stringify({
-            p_student_id: studentId,
-            p_tenant_id: (tenantId && tenantId !== 'global') ? tenantId : null
-          })
-        });
+    try {
+      const rpcResp = await fetch(`${supabaseUrl}/rest/v1/rpc/portal_get_student_dashboard`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': anonKey,
+          'Authorization': `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          p_student_id: studentId,
+          p_tenant_id: childTenantId
+        })
+      });
 
-        if (rpcResp.ok) {
-          rpcData = await rpcResp.json().catch(() => null);
-        } else {
-          const errText = await rpcResp.text().catch(() => '');
-          console.warn(`[schedule.js] RPC portal_get_student_dashboard HTTP ${rpcResp.status}: ${errText}`);
-        }
-      } catch (rpcErr) {
-        console.warn('[schedule.js] RPC fetch exception:', rpcErr.message);
+      if (rpcResp.ok) {
+        rpcData = await rpcResp.json().catch(() => null);
+      } else {
+        const errText = await rpcResp.text().catch(() => '');
+        console.warn(`[schedule.js] RPC portal_get_student_dashboard HTTP ${rpcResp.status}: ${errText}`);
       }
+    } catch (rpcErr) {
+      console.warn('[schedule.js] RPC fetch exception:', rpcErr.message);
     }
 
     const student = rpcData?.student || {};
@@ -118,10 +153,10 @@ export async function onRequest(context) {
       student,
       tenant,
       classInfo: {
-        id: student.class_id || '',
-        className: student.class_name || 'Kelas Reguler',
+        id: student.class_id || matchedChild.classId || '',
+        className: student.class_name || matchedChild.className || 'Kelas Reguler',
         sport: student.sport_category || student.sport || 'Badminton',
-        coachName: student.coach_name || null
+        coachName: student.coach_name || matchedChild.coachName || null
       },
       schedules,
       upcoming_sessions,
@@ -142,18 +177,10 @@ export async function onRequest(context) {
     });
   } catch (error) {
     console.error('[schedule.js] Unhandled exception:', error.message);
-    return new Response(JSON.stringify({
-      success: true,
-      fallback: true,
-      classInfo: { className: 'Kelas Reguler', sport: 'Badminton', coachName: null },
-      schedules: [],
-      upcoming_sessions: [],
-      attendances: [],
-      stats: { totalSessions: 0, hadir: 0, izin: 0, sakit: 0, alpha: 0, attendanceRate: '100%' }
-    }), {
-      status: 200,
-      headers: corsHeaders
-    });
+    return new Response(
+      JSON.stringify({ success: false, error: 'Terjadi kesalahan internal pada server' }),
+      { status: 500, headers: corsHeaders }
+    );
   }
 }
 

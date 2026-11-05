@@ -730,7 +730,7 @@ export default function PortalDashboard() {
 
   const studentName = student.student_name || student.studentName || 'Nama Siswa';
   const photoUrl = student.photo_url || student.photoUrl || scheduleData?.student?.photo_url || null;
-  const academyName = billingData?.tenant?.name || scheduleData?.tenant?.name || student.tenantName || student.tenant_name || student.academyName || 'Sport Academy';
+  const academyName = student.academy_name || student.academyName || scheduleData?.student?.academy_name || scheduleData?.student?.academyName || billingData?.tenant?.name || scheduleData?.tenant?.name || student.tenantName || 'Sport Academy';
   const sportCategory = student.sport_category || student.sportCategory || 'Badminton';
   const className = student.class_name || student.className || scheduleData?.student?.class_name || scheduleData?.classInfo?.className || 'Reguler';
   const coachName = student.coach_name || student.coachName || scheduleData?.student?.coach_name || scheduleData?.classInfo?.coachName || null;
