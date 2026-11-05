@@ -395,3 +395,5 @@ $$;
 -- Security Grants
 REVOKE ALL ON FUNCTION public.portal_get_student_dashboard(UUID, TEXT) FROM PUBLIC, anon, service_role;
 GRANT EXECUTE ON FUNCTION public.portal_get_student_dashboard(UUID, TEXT) TO authenticated;
+
+
