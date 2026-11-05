@@ -169,7 +169,13 @@ export async function onRequest(context) {
 
     const monthlyFee = Number(rpcStudent.monthly_fee || rpcStudent.spp_monthly_fee || matchedChild.monthlyFee || 0);
     const latestPayment = sppPayments[0];
-    const isPaid = latestPayment ? (latestPayment.status === 'LUNAS' || latestPayment.verification_status === 'verified') : false;
+
+    const isPaid = latestPayment
+      ? (
+          latestPayment.is_paid === true ||
+          String(latestPayment.status || '').trim().toUpperCase() === 'LUNAS'
+        )
+      : false;
     const totalAmount = isPaid ? 0 : monthlyFee;
     const statusText = isPaid ? 'LUNAS' : (monthlyFee > 0 ? 'BELUM LUNAS' : 'BEBAS BIAYA');
 

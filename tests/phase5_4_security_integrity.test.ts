@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-// Helper to load SQL file
+// Helper to load SQL & Proxy files
 const rpcSqlContent = fs.readFileSync(path.join(process.cwd(), 'phase5_4_portal_dashboard_rpc.sql'), 'utf-8');
 const billingJsContent = fs.readFileSync(path.join(process.cwd(), 'functions/api/portal/billing.js'), 'utf-8');
 const scheduleJsContent = fs.readFileSync(path.join(process.cwd(), 'functions/api/portal/schedule.js'), 'utf-8');
@@ -57,6 +57,12 @@ test('8. Verified Class Archive Filter (is_archived IS NOT TRUE)', () => {
   assert.doesNotMatch(rpcSqlContent, /c\.status <> 'archived'/);
 });
 
+test('9. Billing Proxy Status Normalization - Uses is_paid boolean and normalized status LUNAS without verification_status', () => {
+  assert.match(billingJsContent, /latestPayment\.is_paid === true/);
+  assert.match(billingJsContent, /String\(latestPayment\.status \|\| ''\)\.trim\(\)\.toUpperCase\(\) === 'LUNAS'/);
+  assert.doesNotMatch(billingJsContent, /verification_status === 'verified'/);
+});
+
 // ============================================================================
 // PART B: BEHAVIORAL UNIT TESTS (MOCKED RUNTIME LOGIC)
 // ============================================================================
@@ -75,7 +81,27 @@ test('UNIT: Booking Status Allowlist Filter', () => {
   assert.equal(allowlist.has('BOOKED'), false);
 });
 
-test('9. Behavioral Unit Test - Parent-Student Tenant Isolation', () => {
+test('UNIT: Billing Payment Status Determination Logic (FASE 5.4-G)', () => {
+  const evaluateIsPaid = (latestPayment?: { is_paid?: boolean; status?: string }) => {
+    return latestPayment
+      ? (
+          latestPayment.is_paid === true ||
+          String(latestPayment.status || '').trim().toUpperCase() === 'LUNAS'
+        )
+      : false;
+  };
+
+  // Condition 1: is_paid = true, status bukan LUNAS -> dianggap lunas (true)
+  assert.equal(evaluateIsPaid({ is_paid: true, status: 'VERIFIED' }), true);
+
+  // Condition 2: is_paid = false, status "Lunas" -> dianggap lunas (true)
+  assert.equal(evaluateIsPaid({ is_paid: false, status: 'Lunas' }), true);
+
+  // Condition 3: is_paid = false, status "BELUM LUNAS" -> dianggap belum lunas (false)
+  assert.equal(evaluateIsPaid({ is_paid: false, status: 'BELUM LUNAS' }), false);
+});
+
+test('10. Behavioral Unit Test - Parent-Student Tenant Isolation', () => {
   const parentLinks = [
     { parentAccountId: 'p-1', studentId: 'student-100', tenantId: 'tenant-a', status: 'active' },
     { parentAccountId: 'p-1', studentId: 'student-200', tenantId: 'tenant-b', status: 'active' }
@@ -97,7 +123,7 @@ test('9. Behavioral Unit Test - Parent-Student Tenant Isolation', () => {
   assert.equal(verifyParentLink('p-1', 'student-100', 'tenant-b'), false);
 });
 
-test('10. API Proxy Contract - Verify RPC name and Bearer Token in Functions', () => {
+test('11. API Proxy Contract - Verify RPC name and Bearer Token in Functions', () => {
   assert.match(billingJsContent, /portal_get_student_dashboard/);
   assert.match(scheduleJsContent, /portal_get_student_dashboard/);
   assert.match(profileJsContent, /portal_get_student_dashboard/);
@@ -107,7 +133,7 @@ test('10. API Proxy Contract - Verify RPC name and Bearer Token in Functions', (
   assert.match(profileJsContent, /'Authorization': `Bearer \${accessToken}`/);
 });
 
-test('11. Explicit Database Runtime Integration Status Disclosure', () => {
+test('12. Explicit Database Runtime Integration Status Disclosure', () => {
   console.log('[DATABASE TEST DISCLOSURE] Live database connection to Supabase PostgreSQL is UNCONNECTED/UNEXECUTED in AI Studio sandbox environment. Static schema assertions and unit logic tests passed 100%.');
   assert.ok(true);
 });
