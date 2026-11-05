@@ -578,7 +578,8 @@ export default function PortalDashboard() {
 
     const fetchProfile = async () => {
       try {
-        const response = await fetch(`/api/portal/profile?studentId=${encodeURIComponent(verifiedStudentId)}`, {
+        const activeStudentId = student?.id || student?.studentId || verifiedStudentId;
+        const response = await fetch('/api/portal/profile?studentId=' + encodeURIComponent(activeStudentId), {
           method: 'GET',
           headers: {
             'Accept': 'application/json',

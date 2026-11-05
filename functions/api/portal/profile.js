@@ -9,22 +9,17 @@ import { validatePortalV2Session } from './_auth_v2.js';
 export async function onRequest(context) {
   const { request, env = {} } = context;
 
-  // 1. Tangani CORS Preflight
   if (request.method === 'OPTIONS') {
     return new Response(null, {
-      status: 204,
       headers: {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-        'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Portal-CSRF, apikey'
+        'Access-Control-Allow-Headers': 'Authorization, Content-Type, X-Portal-CSRF'
       }
     });
   }
 
   try {
     let authHeader = request.headers.get('Authorization');
-
-    // Cek session cookie v2 jika Authorization header tidak dikirim langsung oleh browser
     if (!authHeader) {
       try {
         const v2Session = await validatePortalV2Session(context);
@@ -36,34 +31,26 @@ export async function onRequest(context) {
       }
     }
 
-    const supabaseUrl = (env.SUPABASE_URL || env.VITE_SUPABASE_URL || 'https://wqnhlmvvyhpctmaukwyj.supabase.co').replace(/\/+$/, '');
-    const anonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_vKzNAXC9V52eYH0-Gm9Rcg_23lCtz2P';
-
     if (!authHeader) {
-      authHeader = `Bearer ${anonKey}`;
+      const anonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY;
+      if (anonKey) {
+        authHeader = `Bearer ${anonKey}`;
+      } else {
+        return new Response(JSON.stringify({ error: 'Unauthorized: Sesi tidak valid' }), { status: 401, headers: { 'Access-Control-Allow-Origin': '*' } });
+      }
     }
 
-    // 2. Ambil studentId dari parameter URL atau body
     const url = new URL(request.url);
-    let studentId = url.searchParams.get('studentId') || url.searchParams.get('student_id');
-
-    if (!studentId && request.method === 'POST') {
-      const body = await request.json().catch(() => ({}));
-      studentId = body.studentId || body.student_id;
-    }
+    const studentId = url.searchParams.get('studentId');
 
     if (!studentId) {
-      return new Response(JSON.stringify({ success: false, error: 'Parameter studentId wajib diisi' }), { 
-        status: 400, 
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*' 
-        } 
-      });
+      return new Response(JSON.stringify({ error: 'Parameter studentId wajib diisi' }), { status: 400, headers: { 'Access-Control-Allow-Origin': '*' } });
     }
 
-    // 3. Kueri Supabase: Ambil data siswa dan relasi JOIN ke academy_classes dan coaches
-    // Ini akan mengambil foto profil siswa (photo_url) sekaligus nama pelatihnya.
+    const supabaseUrl = env.SUPABASE_URL || env.VITE_SUPABASE_URL || 'https://wqnhlmvvyhpctmaukwyj.supabase.co';
+    const anonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_vKzNAXC9V52eYH0-Gm9Rcg_23lCtz2P';
+
+    // Kueri JOIN untuk mengambil profil siswa, data kelas, dan data pelatih (foto & nama)
     const queryUrl = `${supabaseUrl}/rest/v1/students?id=eq.${encodeURIComponent(studentId)}&select=*,academy_classes(id,class_name,coach_id,coach_name,coaches(id,name,photo_url))`;
 
     const dbResponse = await fetch(queryUrl, {
@@ -75,67 +62,41 @@ export async function onRequest(context) {
     });
 
     if (!dbResponse.ok) {
-      const err = await dbResponse.text().catch(() => '');
-      throw new Error(`Gagal mengambil data profil dari Supabase: ${err}`);
+      const err = await dbResponse.text();
+      throw new Error(`Gagal dari Supabase: ${err}`);
     }
 
-    const data = await dbResponse.json().catch(() => []);
+    const data = await dbResponse.json();
     
     if (!data || data.length === 0) {
-      return new Response(JSON.stringify({ success: false, error: 'Data siswa tidak ditemukan atau akses ditolak RLS' }), { 
-        status: 404, 
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*' 
-        } 
-      });
+      return new Response(JSON.stringify({ error: 'Data siswa tidak ditemukan / RLS memblokir akses' }), { status: 404, headers: { 'Access-Control-Allow-Origin': '*' } });
     }
 
-    const raw = data[0];
-    const academyClass = raw.academy_classes || {};
-    const coach = academyClass.coaches || {};
-    const coachName = coach.name || academyClass.coach_name || raw.coach_name || raw.coachName || null;
-    const className = academyClass.class_name || raw.class_name || raw.className || 'Kelas Reguler';
-    const photoUrl = raw.photo_url || raw.photoUrl || null;
+    const student = data[0];
+    
+    // Flatten data pelatih agar UI React mudah membacanya
+    if (student.academy_classes) {
+      const cls = student.academy_classes;
+      // Ekstrak nama dan foto pelatih dari relasi JOIN
+      student.coach_name = cls.coaches?.name || cls.coach_name || null;
+      student.coach_photo_url = cls.coaches?.photo_url || null;
+      student.coachName = student.coach_name;
+      student.coachPhotoUrl = student.coach_photo_url;
+      student.class_name = cls.class_name || student.class_name;
+      student.className = student.class_name;
+    }
 
-    const studentObj = {
-      ...raw,
-      id: raw.id,
-      student_id: raw.id,
-      studentName: raw.student_name || raw.name || '',
-      student_name: raw.student_name || raw.name || '',
-      className,
-      class_name: className,
-      coachName,
-      coach_name: coachName,
-      photoUrl,
-      photo_url: photoUrl,
-      sportCategory: raw.sport_category || raw.sport || 'Badminton',
-      sport_category: raw.sport_category || raw.sport || 'Badminton',
-      birthDate: raw.birth_date || null,
-      birth_date: raw.birth_date || null
-    };
+    student.photoUrl = student.photo_url || student.photoUrl || null;
+    student.studentName = student.student_name || student.name || student.studentName || '';
 
-    // 4. Kembalikan data sukses ke frontend (menyertakan data dan student)
-    return new Response(JSON.stringify({ 
-      success: true, 
-      data: studentObj,
-      student: studentObj 
-    }), {
+    return new Response(JSON.stringify({ success: true, data: student, student }), {
       status: 200,
-      headers: { 
-        'Content-Type': 'application/json', 
-        'Access-Control-Allow-Origin': '*' 
-      }
+      headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
     });
 
   } catch (error) {
     return new Response(JSON.stringify({ success: false, error: error.message }), {
-      status: 500, 
-      headers: { 
-        'Content-Type': 'application/json', 
-        'Access-Control-Allow-Origin': '*' 
-      }
+      status: 500, headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' }
     });
   }
 }
