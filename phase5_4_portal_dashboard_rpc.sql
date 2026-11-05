@@ -155,7 +155,7 @@ BEGIN
     -- Resolve Coach Identity
     v_resolved_coach_name := COALESCE(v_coach_name_from_table, v_class_coach_name, v_student_coach_name, NULL);
 
-    -- 4. UNAMBIGUOUS TENANT LOOKUP (VERIFIED SCHEMA: tenants.tenant_id)
+    -- 4. UNAMBIGUOUS TENANT LOOKUP (DUAL MATCH: t.id OR t.tenant_id)
     SELECT 
         t.id,
         t.name,
@@ -175,7 +175,7 @@ BEGIN
         v_tenant_bank_account_number,
         v_tenant_bank_accounts
     FROM public.tenants t
-    WHERE t.tenant_id = v_student_tenant_id
+    WHERE t.id::text = v_student_tenant_id OR t.tenant_id = v_student_tenant_id
     LIMIT 1;
 
     -- 5. RESOLVE ACADEMY BRANDING PRIORITY (STUDENT ACADEMY NAME FIRST)
@@ -186,7 +186,7 @@ BEGIN
         'Chua Sport Academy'
     );
 
-    -- 6. FETCH UPCOMING BOOKINGS (FIX 1: UPPER BTRIM COALESCE IN LUNAS/COMPLETED, MAX 12, ORDER BY b.date ASC, b.start_time ASC, b.id ASC)
+    -- 6. FETCH UPCOMING BOOKINGS (MATCHES STUDENT CLASS BOOKINGS, MAX 12, EXCLUDES CANCELLED/VOID)
     IF v_student_class_id IS NOT NULL THEN
         SELECT jsonb_agg(
             jsonb_build_object(
@@ -210,7 +210,7 @@ BEGIN
               AND b.tenant_id = v_student_tenant_id
               AND b.date >= CURRENT_DATE
               AND (b.is_void IS NOT TRUE)
-              AND UPPER(BTRIM(COALESCE(b.status, ''))) IN ('LUNAS', 'COMPLETED')
+              AND (b.status IS NULL OR UPPER(BTRIM(b.status)) NOT IN ('DIBATALKAN', 'BATAL', 'CANCELLED', 'VOID'))
             ORDER BY b.date ASC, b.start_time ASC, b.id ASC
             LIMIT 12
         ) b

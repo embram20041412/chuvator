@@ -26,8 +26,9 @@ test('2. Bookings class_id Data Type & Casting - Explicit ::text cast on both si
   assert.match(rpcSqlContent, /WHERE b\.class_id::text = v_student_class_id::text/);
 });
 
-test('3. Booking Status Audit - Fail-closed UPPER BTRIM COALESCE IN LUNAS/COMPLETED', () => {
-  assert.match(rpcSqlContent, /UPPER\(BTRIM\(COALESCE\(b\.status, ''\)\)\) IN \('LUNAS', 'COMPLETED'\)/);
+test('3. Booking Status Audit - Active bookings filter excluding cancelled and void', () => {
+  assert.match(rpcSqlContent, /AND \(b\.is_void IS NOT TRUE\)/);
+  assert.match(rpcSqlContent, /UPPER\(BTRIM\(b\.status\)\) NOT IN \('DIBATALKAN', 'BATAL', 'CANCELLED', 'VOID'\)/);
 });
 
 test('4. Safe Attendance Query - Single student & Class-session LATERAL jsonb_array_elements over students_data', () => {
@@ -42,9 +43,9 @@ test('5. Payment Integrity - Verified spp_payments columns without payment_date'
   assert.doesNotMatch(rpcSqlContent, /p\.payment_date/);
 });
 
-test('6. Unambiguous Tenant Lookup using tenants.tenant_id', () => {
+test('6. Unambiguous Dual Tenant Lookup using tenants.id or tenants.tenant_id', () => {
   assert.match(rpcSqlContent, /FROM public\.tenants t/);
-  assert.match(rpcSqlContent, /WHERE t\.tenant_id = v_student_tenant_id/);
+  assert.match(rpcSqlContent, /WHERE t\.id::text = v_student_tenant_id OR t\.tenant_id = v_student_tenant_id/);
 });
 
 test('7. Separate qris_url and qris_image_base64 fields in RPC response', () => {
@@ -67,18 +68,19 @@ test('9. Billing Proxy Status Normalization - Uses is_paid boolean and normalize
 // PART B: BEHAVIORAL UNIT TESTS (MOCKED RUNTIME LOGIC)
 // ============================================================================
 
-test('UNIT: Booking Status Allowlist Filter', () => {
-  const allowlist = new Set([
-    'LUNAS',
-    'COMPLETED'
-  ]);
+test('UNIT: Active Bookings Filter Logic', () => {
+  const isBookingActive = (b: { is_void?: boolean; status?: string | null }) => {
+    if (b.is_void === true) return false;
+    if (!b.status) return true;
+    const s = String(b.status).trim().toUpperCase();
+    return !['DIBATALKAN', 'BATAL', 'CANCELLED', 'VOID'].includes(s);
+  };
 
-  assert.equal(allowlist.has('LUNAS'), true);
-  assert.equal(allowlist.has('COMPLETED'), true);
-  assert.equal(allowlist.has('DIBATALKAN'), false);
-  assert.equal(allowlist.has('DRAFT'), false);
-  assert.equal(allowlist.has(''), false);
-  assert.equal(allowlist.has('BOOKED'), false);
+  assert.equal(isBookingActive({ is_void: false, status: 'Lunas' }), true);
+  assert.equal(isBookingActive({ is_void: false, status: 'Booked' }), true);
+  assert.equal(isBookingActive({ is_void: false, status: null }), true);
+  assert.equal(isBookingActive({ is_void: false, status: 'Dibatalkan' }), false);
+  assert.equal(isBookingActive({ is_void: true, status: 'Lunas' }), false);
 });
 
 test('UNIT: Billing Payment Status Determination Logic (FASE 5.4-G)', () => {
