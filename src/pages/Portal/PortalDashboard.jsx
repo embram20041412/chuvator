@@ -626,7 +626,10 @@ export default function PortalDashboard() {
                 className: resolvedClassName || prev.className,
                 coachName: resolvedCoachName || prev.coachName || null,
                 sportCategory: studentProfile.sport_category || studentProfile.sportCategory || prev.sportCategory,
-                photoUrl: resolvedPhotoUrl || prev.photoUrl
+                photoUrl: resolvedPhotoUrl || prev.photoUrl,
+                photo_url: resolvedPhotoUrl || prev.photo_url,
+                tenantName: studentProfile.tenant_name || studentProfile.academy_name || prev.tenantName,
+                academyName: studentProfile.tenant_name || studentProfile.academy_name || prev.academyName
               };
             });
           }
@@ -725,12 +728,12 @@ export default function PortalDashboard() {
     return <Navigate to="/portal" replace />;
   }
 
-  const studentName = student.studentName || 'Nama Siswa';
-  const photoUrl = student.photo_url || student.photoUrl || null;
-  const academyName = billingData?.tenant?.name || student.academyName || 'Sport Academy';
-  const sportCategory = student.sportCategory || 'Badminton';
-  const className = student.className || 'Reguler';
-  const coachName = student.coachName || student.coach_name || scheduleData?.classInfo?.coachName || null;
+  const studentName = student.student_name || student.studentName || 'Nama Siswa';
+  const photoUrl = student.photo_url || student.photoUrl || scheduleData?.student?.photo_url || null;
+  const academyName = billingData?.tenant?.name || scheduleData?.tenant?.name || student.tenantName || student.tenant_name || student.academyName || 'Sport Academy';
+  const sportCategory = student.sport_category || student.sportCategory || 'Badminton';
+  const className = student.class_name || student.className || scheduleData?.student?.class_name || scheduleData?.classInfo?.className || 'Reguler';
+  const coachName = student.coach_name || student.coachName || scheduleData?.student?.coach_name || scheduleData?.classInfo?.coachName || null;
   const age = calculateAge(student.birthDate);
 
   const totalAmount = isBillingValid ? billingData.billing.totalAmount : null;

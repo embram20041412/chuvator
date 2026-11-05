@@ -1,15 +1,7 @@
 /**
  * Cloudflare Pages Function: /api/portal/profile
  * Parent Portal V2 Fail-Closed Student Profile Endpoint.
- * 
- * Security Specifications:
- * - Strict Parent Portal V2 session validation via validatePortalV2Session.
- * - Dynamic CORS with origin allowlisting and credentials support via getCorsHeaders.
- * - Anti-IDOR: Validates studentId ownership against server-verified childrenSummary with duplicate detection.
- * - Tenant Isolation: Validates child's tenantId against session accessibleTenants.
- * - Zero fallback to anonKey for authentication.
- * - No unrestricted multi-table joins to academy_classes or coaches (eliminates 42501).
- * - Generic error masking on internal exceptions.
+ * Connects to database RPC `public.portal_get_student_dashboard`.
  */
 
 import { validatePortalV2Session, getCorsHeaders } from './_auth_v2.js';
@@ -65,7 +57,6 @@ export async function onRequest(context) {
     }
 
     const { session } = sessionResult;
-    const { accessToken } = session;
     const childrenSummary = Array.isArray(session.childrenSummary) ? session.childrenSummary : [];
     const accessibleTenants = Array.isArray(session.accessibleTenants) ? session.accessibleTenants : [];
 
@@ -91,7 +82,7 @@ export async function onRequest(context) {
     const matchedChild = matchingChildren[0];
 
     // 5. Isolasi Tenant
-    const childTenantId = matchedChild.tenantId || '';
+    const childTenantId = matchedChild.tenantId || matchedChild.tenant_id || '';
     if (!childTenantId || !accessibleTenants.includes(childTenantId)) {
       return new Response(
         JSON.stringify({ success: false, error: 'Akses lintas tenant tidak diizinkan' }),
@@ -99,75 +90,81 @@ export async function onRequest(context) {
       );
     }
 
-    // 6. Pengambilan Data Profil
-    // matchedChild dari server-side RPC parent_get_children adalah sumber kebenaran utama.
-    let flatData = null;
+    // 6. Pengambilan Data Profil via RPC portal_get_student_dashboard
+    let rpcData = null;
     const supabaseUrl = (env.SUPABASE_URL || env.VITE_SUPABASE_URL || 'https://wqnhlmvvyhpctmaukwyj.supabase.co').replace(/\/+$/, '');
     const anonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY;
 
-    // Optional single-table query ke 'students' (hanya kolom data pribadi, TANPA JOIN)
-    if (supabaseUrl && anonKey && accessToken) {
+    if (supabaseUrl && anonKey) {
       try {
-        const queryUrl = `${supabaseUrl}/rest/v1/students?id=eq.${encodeURIComponent(studentId)}&tenant_id=eq.${encodeURIComponent(childTenantId)}&select=id,name,student_name,birth_date,photo_url,school_name,school_origin,sport_category`;
-        const dbResponse = await fetch(queryUrl, {
-          method: 'GET',
+        const rpcResp = await fetch(`${supabaseUrl}/rest/v1/rpc/portal_get_student_dashboard`, {
+          method: 'POST',
           headers: {
+            'Content-Type': 'application/json',
             'apikey': anonKey,
-            'Authorization': `Bearer ${accessToken}`
-          }
+            'Authorization': `Bearer ${anonKey}`
+          },
+          body: JSON.stringify({
+            p_student_id: studentId,
+            p_tenant_id: childTenantId || null
+          })
         });
 
-        if (dbResponse.ok) {
-          const list = await dbResponse.json().catch(() => []);
-          if (Array.isArray(list) && list.length > 0) {
-            flatData = list[0];
-          }
+        if (rpcResp.ok) {
+          rpcData = await rpcResp.json().catch(() => null);
+        } else {
+          const errText = await rpcResp.text().catch(() => '');
+          console.warn(`[profile.js] RPC portal_get_student_dashboard HTTP ${rpcResp.status}: ${errText}`);
         }
-      } catch (dbErr) {
-        // Fallback aman: kegagalan query pelengkap tidak menggagalkan profil yang sudah terverifikasi di sesi
-        console.warn('[profile.js] Flat student query fallback note:', dbErr.message);
+      } catch (rpcErr) {
+        console.warn('[profile.js] RPC fetch exception:', rpcErr.message);
       }
     }
 
-    // 7. Konstruksi Data Respons (Kompatibel Penuh dengan PortalDashboard.jsx)
+    const rpcStudent = rpcData?.student || {};
+    const rpcTenant = rpcData?.tenant || {};
+
     const studentData = {
       id: matchedChild.studentId,
       studentId: matchedChild.studentId,
       student_id: matchedChild.studentId,
-      student_name: flatData?.student_name || flatData?.name || matchedChild.studentName || '',
-      studentName: flatData?.student_name || flatData?.name || matchedChild.studentName || '',
-      class_name: matchedChild.className || 'Kelas Reguler',
-      className: matchedChild.className || 'Kelas Reguler',
-      coach_name: matchedChild.coach_name || matchedChild.coachName || null,
-      coachName: matchedChild.coach_name || matchedChild.coachName || null,
-      coach_photo_url: null,
-      coachPhotoUrl: null,
-      photo_url: flatData?.photo_url || matchedChild.photo_url || matchedChild.photoUrl || null,
-      photoUrl: flatData?.photo_url || matchedChild.photo_url || matchedChild.photoUrl || null,
-      sport_category: flatData?.sport_category || 'Badminton',
-      sportCategory: flatData?.sport_category || 'Badminton',
-      birth_date: flatData?.birth_date || null,
-      birthDate: flatData?.birth_date || null,
-      school_name: flatData?.school_name || flatData?.school_origin || '',
-      school_origin: flatData?.school_name || flatData?.school_origin || '',
-      schoolOrigin: flatData?.school_name || flatData?.school_origin || '',
+      student_name: rpcStudent.student_name || rpcStudent.name || matchedChild.studentName || '',
+      studentName: rpcStudent.student_name || rpcStudent.name || matchedChild.studentName || '',
+      class_name: rpcStudent.class_name || matchedChild.className || 'Kelas Reguler',
+      className: rpcStudent.class_name || matchedChild.className || 'Kelas Reguler',
+      coach_name: rpcStudent.coach_name || matchedChild.coach_name || matchedChild.coachName || null,
+      coachName: rpcStudent.coach_name || matchedChild.coach_name || matchedChild.coachName || null,
+      coach_photo_url: rpcStudent.coach_photo_url || null,
+      coachPhotoUrl: rpcStudent.coach_photo_url || null,
+      photo_url: rpcStudent.photo_url || matchedChild.photo_url || matchedChild.photoUrl || null,
+      photoUrl: rpcStudent.photo_url || matchedChild.photo_url || matchedChild.photoUrl || null,
+      sport_category: rpcStudent.sport_category || rpcStudent.sport || 'Badminton',
+      sportCategory: rpcStudent.sport_category || rpcStudent.sport || 'Badminton',
+      birth_date: rpcStudent.birth_date || null,
+      birthDate: rpcStudent.birth_date || null,
+      school_name: rpcStudent.school_name || rpcStudent.school_origin || '',
+      school_origin: rpcStudent.school_name || rpcStudent.school_origin || '',
+      schoolOrigin: rpcStudent.school_name || rpcStudent.school_origin || '',
       tenant_id: childTenantId,
       tenantId: childTenantId,
-      academy_name: matchedChild.academyName || 'Sport Academy',
-      academyName: matchedChild.academyName || 'Sport Academy'
+      tenant_name: rpcStudent.tenant_name || rpcTenant.name || matchedChild.academyName || 'Sport Academy',
+      academy_name: rpcStudent.tenant_name || rpcTenant.name || matchedChild.academyName || 'Sport Academy',
+      academyName: rpcStudent.tenant_name || rpcTenant.name || matchedChild.academyName || 'Sport Academy'
     };
 
     return new Response(
       JSON.stringify({
         success: true,
         data: studentData,
-        student: studentData
+        student: studentData,
+        tenant: rpcTenant,
+        evaluations: Array.isArray(rpcData?.evaluations) ? rpcData.evaluations : [],
+        attendance: Array.isArray(rpcData?.attendance) ? rpcData.attendance : []
       }),
       { status: 200, headers: corsHeaders }
     );
 
   } catch (error) {
-    // Masking error internal, tidak membocorkan detail server/database
     console.error('[profile.js] Unhandled exception:', error.message);
     return new Response(
       JSON.stringify({ success: false, error: 'Terjadi kesalahan internal pada server' }),

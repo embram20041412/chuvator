@@ -1,7 +1,7 @@
 /**
  * Cloudflare Pages Function: /api/portal/schedule
  * Edge-safe schedule and attendance endpoint for Parent Portal V2.
- * Native Fetch API to Supabase REST with fail-safe error handling.
+ * Connects directly to database RPC `public.portal_get_student_dashboard`.
  */
 
 import { validatePortalV2Session } from './_auth_v2.js';
@@ -30,9 +30,8 @@ export async function onRequest(context) {
     const supabaseUrl = (env.SUPABASE_URL || env.VITE_SUPABASE_URL || 'https://wqnhlmvvyhpctmaukwyj.supabase.co').replace(/\/+$/, '');
     const anonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_vKzNAXC9V52eYH0-Gm9Rcg_23lCtz2P';
 
-    let authHeader = request.headers.get('Authorization') || '';
     let studentId = '';
-    let tenantId = 'global';
+    let tenantId = null;
 
     if (request.method === 'POST') {
       const body = await request.json().catch(() => ({}));
@@ -44,166 +43,56 @@ export async function onRequest(context) {
       studentId = url.searchParams.get('studentId') || url.searchParams.get('student_id') || '';
     }
 
-    if (!authHeader) {
+    // Tangani pencarian siswa & tenant dari cookie sesi jika tidak dikirim eksplisit
+    if (!studentId || !tenantId || tenantId === 'global') {
       try {
         const v2SessionResult = await validatePortalV2Session(context);
         if (v2SessionResult && v2SessionResult.valid && v2SessionResult.session) {
-          authHeader = `Bearer ${v2SessionResult.session.accessToken}`;
-          if (!studentId) {
-            const firstChild = v2SessionResult.session.childrenSummary?.[0];
-            studentId = firstChild?.studentId || '';
-          }
-          if (!tenantId || tenantId === 'global') {
-            const firstChild = v2SessionResult.session.childrenSummary?.[0];
-            tenantId = firstChild?.tenantId || tenantId;
-          }
+          const firstChild = v2SessionResult.session.childrenSummary?.[0];
+          if (!studentId) studentId = firstChild?.studentId || firstChild?.id || '';
+          if (!tenantId || tenantId === 'global') tenantId = firstChild?.tenantId || firstChild?.tenant_id || tenantId;
         }
       } catch (e) {
-        console.warn('[schedule.js] Session check fallback:', e.message);
+        console.warn('[schedule.js] Session check fallback note:', e.message);
       }
     }
 
-    const effectiveAuthHeader = authHeader || `Bearer ${anonKey}`;
-
-    // 1. Ambil data siswa & kelas dari Supabase dengan JOIN ke academy_classes dan coaches
-    let studentRecord = null;
-    let className = 'Kelas Reguler';
-    let sportCategory = 'Badminton';
-    let coachName = null;
-
+    // Panggil RPC portal_get_student_dashboard dengan Bearer anonKey
+    let rpcData = null;
     if (studentId) {
       try {
-        const joinedUrl = `${supabaseUrl}/rest/v1/students?id=eq.${studentId}&select=*,academy_classes(class_name,coach_id,coach_name,coaches(name))`;
-        let stResp = await fetch(joinedUrl, {
-          method: 'GET',
+        const rpcResp = await fetch(`${supabaseUrl}/rest/v1/rpc/portal_get_student_dashboard`, {
+          method: 'POST',
           headers: {
+            'Content-Type': 'application/json',
             'apikey': anonKey,
-            'Authorization': effectiveAuthHeader
-          }
+            'Authorization': `Bearer ${anonKey}`
+          },
+          body: JSON.stringify({
+            p_student_id: studentId,
+            p_tenant_id: (tenantId && tenantId !== 'global') ? tenantId : null
+          })
         });
 
-        if (!stResp.ok) {
-          stResp = await fetch(`${supabaseUrl}/rest/v1/students?id=eq.${studentId}&select=*`, {
-            method: 'GET',
-            headers: {
-              'apikey': anonKey,
-              'Authorization': effectiveAuthHeader
-            }
-          });
+        if (rpcResp.ok) {
+          rpcData = await rpcResp.json().catch(() => null);
+        } else {
+          const errText = await rpcResp.text().catch(() => '');
+          console.warn(`[schedule.js] RPC portal_get_student_dashboard HTTP ${rpcResp.status}: ${errText}`);
         }
-
-        if (stResp.ok) {
-          const students = await stResp.json().catch(() => []);
-          studentRecord = students[0] || null;
-          if (studentRecord) {
-            const academyClass = studentRecord.academy_classes || {};
-            const coach = academyClass.coaches || {};
-            className = academyClass.class_name || studentRecord.class_name || studentRecord.className || className;
-            sportCategory = studentRecord.sport_category || studentRecord.sport || sportCategory;
-            coachName = coach.name || academyClass.coach_name || studentRecord.coach_name || studentRecord.coachName || null;
-          }
-        }
-      } catch (stErr) {
-        console.warn('[schedule.js] Student query warning:', stErr.message);
+      } catch (rpcErr) {
+        console.warn('[schedule.js] RPC fetch exception:', rpcErr.message);
       }
     }
 
-    const studentClassId = studentRecord?.class_id || studentRecord?.classId || '';
+    const student = rpcData?.student || {};
+    const tenant = rpcData?.tenant || {};
+    const upcoming_sessions = Array.isArray(rpcData?.upcoming_sessions) ? rpcData.upcoming_sessions : [];
+    const schedules = Array.isArray(rpcData?.schedules) ? rpcData.schedules : [];
+    const attendances = Array.isArray(rpcData?.attendance)
+      ? rpcData.attendance
+      : (Array.isArray(rpcData?.attendances) ? rpcData.attendances : []);
 
-    // 2. Query tabel `bookings` untuk mengambil jadwal latihan terdekat (date >= today)
-    let upcoming_sessions = [];
-    const today = new Date().toISOString().split('T')[0];
-
-    if (studentClassId) {
-      try {
-        const bkResp = await fetch(
-          `${supabaseUrl}/rest/v1/bookings?class_id=eq.${studentClassId}&date=gte.${today}&status=not.in.(%22Dibatalkan%22,%22Cancelled%22,%22VOID%22)&order=date.asc,start_time.asc&limit=10`,
-          {
-            method: 'GET',
-            headers: {
-              'apikey': anonKey,
-              'Authorization': effectiveAuthHeader
-            }
-          }
-        );
-
-        if (bkResp.ok) {
-          const rawBookings = await bkResp.json().catch(() => []);
-          if (Array.isArray(rawBookings) && rawBookings.length > 0) {
-            upcoming_sessions = rawBookings.map(b => ({
-              id: b.id,
-              date: b.date || '',
-              startTime: b.start_time || b.startTime || '',
-              endTime: b.end_time || b.endTime || '',
-              start_time: b.start_time || b.startTime || '',
-              end_time: b.end_time || b.endTime || '',
-              courtName: b.court_name || b.courtName || 'Lapangan Utama',
-              court_name: b.court_name || b.courtName || 'Lapangan Utama',
-              status: b.status || 'Aktif',
-              classId: b.class_id || studentClassId
-            }));
-          }
-        }
-      } catch (bkErr) {
-        console.warn('[schedule.js] Bookings query warning:', bkErr.message);
-      }
-    }
-
-    // Format jadwal latihan default/rutin
-    const schedules = [
-      {
-        day: 'Selasa',
-        startTime: '16:00',
-        endTime: '18:00',
-        courtName: 'Lapangan Utama',
-        courtId: 'c-1'
-      },
-      {
-        day: 'Kamis',
-        startTime: '16:00',
-        endTime: '18:00',
-        courtName: 'Lapangan Utama',
-        courtId: 'c-1'
-      },
-      {
-        day: 'Sabtu',
-        startTime: '08:00',
-        endTime: '10:00',
-        courtName: 'Lapangan Utama',
-        courtId: 'c-1'
-      }
-    ];
-
-    // 3. Ambil data presensi jika tersedia
-    let attendances = [];
-    if (studentId) {
-      try {
-        const attResp = await fetch(`${supabaseUrl}/rest/v1/academy_attendance?student_id=eq.${studentId}&order=date.desc&limit=20`, {
-          method: 'GET',
-          headers: {
-            'apikey': anonKey,
-            'Authorization': effectiveAuthHeader
-          }
-        });
-        if (attResp.ok) {
-          const rawAtt = await attResp.json().catch(() => []);
-          if (Array.isArray(rawAtt) && rawAtt.length > 0) {
-            attendances = rawAtt.map(a => ({
-              id: a.id,
-              date: a.date || '',
-              className: a.class_name || className,
-              coachName: a.coach_name || coachName,
-              status: a.status || 'Hadir',
-              notes: a.notes || ''
-            }));
-          }
-        }
-      } catch (attErr) {
-        console.warn('[schedule.js] Attendance query warning:', attErr.message);
-      }
-    }
-
-    // Rekap statistik presensi
     const totalSessions = attendances.length;
     let hadirCount = 0;
     let izinCount = 0;
@@ -226,11 +115,13 @@ export async function onRequest(context) {
     const finalResponse = {
       success: true,
       message: 'Data jadwal & presensi berhasil dimuat',
+      student,
+      tenant,
       classInfo: {
-        id: studentClassId || '',
-        className,
-        sport: sportCategory,
-        coachName
+        id: student.class_id || '',
+        className: student.class_name || 'Kelas Reguler',
+        sport: student.sport_category || student.sport || 'Badminton',
+        coachName: student.coach_name || null
       },
       schedules,
       upcoming_sessions,
@@ -254,25 +145,11 @@ export async function onRequest(context) {
     return new Response(JSON.stringify({
       success: true,
       fallback: true,
-      classInfo: {
-        className: 'Kelas Reguler',
-        sport: 'Badminton',
-        coachName: null
-      },
-      schedules: [
-        { day: 'Selasa', startTime: '16:00', endTime: '18:00', courtName: 'Lapangan Utama' },
-        { day: 'Kamis', startTime: '16:00', endTime: '18:00', courtName: 'Lapangan Utama' }
-      ],
+      classInfo: { className: 'Kelas Reguler', sport: 'Badminton', coachName: null },
+      schedules: [],
       upcoming_sessions: [],
       attendances: [],
-      stats: {
-        totalSessions: 0,
-        hadir: 0,
-        izin: 0,
-        sakit: 0,
-        alpha: 0,
-        attendanceRate: '100%'
-      }
+      stats: { totalSessions: 0, hadir: 0, izin: 0, sakit: 0, alpha: 0, attendanceRate: '100%' }
     }), {
       status: 200,
       headers: corsHeaders
