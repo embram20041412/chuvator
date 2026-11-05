@@ -306,6 +306,23 @@ export default function PortalDashboard() {
       schoolOrigin: child.schoolOrigin || ''
     };
 
+    // Immediately clear previous child's evaluations & portal states to prevent stale flash
+    setEvaluationData(null);
+    setIsLoadingEvaluation(true);
+    setEvaluationError(null);
+
+    setBillingData(null);
+    setIsLoadingBilling(true);
+    setBillingError(null);
+
+    setScheduleData(null);
+    setIsLoadingSchedule(true);
+    setScheduleError(null);
+
+    setAnnouncementsData(null);
+    setIsLoadingAnnouncements(true);
+    setAnnouncementsError(null);
+
     setStudent(normalizedStudent);
     localStorage.setItem('activeStudent', JSON.stringify(normalizedStudent));
     setVerifiedStudentId(activeSid);
@@ -451,6 +468,8 @@ export default function PortalDashboard() {
   useEffect(() => {
     if (!isSessionVerified || !csrfToken || !verifiedStudentId || !verifiedTenantId) return;
     let isMounted = true;
+    const targetStudentId = verifiedStudentId;
+    const targetTenantId = verifiedTenantId;
 
     const fetchEvaluations = async () => {
       setIsLoadingEvaluation(true);
@@ -465,30 +484,33 @@ export default function PortalDashboard() {
           },
           credentials: 'include',
           body: JSON.stringify({
-            studentId: verifiedStudentId,
-            tenantId: verifiedTenantId
+            studentId: targetStudentId,
+            tenantId: targetTenantId
           })
         });
 
         if (response.ok) {
           const res = await response.json();
-          if (isMounted && res.success) {
+          // Verify response still matches active target student (prevent stale out-of-order responses)
+          if (isMounted && res.success && targetStudentId === verifiedStudentId) {
             setEvaluationData(res);
             setIsLoadingEvaluation(false);
             return;
           }
         }
 
-        if (isMounted) {
+        if (isMounted && targetStudentId === verifiedStudentId) {
           setEvaluationError('Gagal memuat evaluasi pelatih dari server.');
         }
       } catch (err) {
         console.error('Evaluations fetch error:', err);
-        if (isMounted) {
+        if (isMounted && targetStudentId === verifiedStudentId) {
           setEvaluationError('Gagal terhubung ke server evaluasi.');
         }
       } finally {
-        if (isMounted) setIsLoadingEvaluation(false);
+        if (isMounted && targetStudentId === verifiedStudentId) {
+          setIsLoadingEvaluation(false);
+        }
       }
     };
 
@@ -1420,6 +1442,11 @@ export default function PortalDashboard() {
                       <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
                       <span>Memuat catatan evaluasi pelatih...</span>
                     </div>
+                  ) : evaluationError ? (
+                    <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+                      <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                      <span>{evaluationError}</span>
+                    </div>
                   ) : evaluationData?.latestEvaluation ? (
                     <div className="space-y-3">
                       {/* Kartu Rapor Utama */}
@@ -1432,30 +1459,36 @@ export default function PortalDashboard() {
                               </span>
                               <span className="text-[10px] text-slate-400">&bull;</span>
                               <span className="text-[11px] font-bold text-slate-700">
-                                {formatAttendanceDate(evaluationData.latestEvaluation.date)}
+                                {evaluationData.latestEvaluation.date ? formatAttendanceDate(evaluationData.latestEvaluation.date) : 'Belum tersedia'}
                               </span>
                             </div>
                             <p className="text-xs font-black text-slate-800 mt-0.5">
-                              {evaluationData.latestEvaluation.evaluator || coachName}
+                              {evaluationData.latestEvaluation.evaluator || 'Pelatih'}
                             </p>
                             <p className="text-[10px] text-slate-500">
-                              {evaluationData.latestEvaluation.className || className} &bull; {evaluationData.latestEvaluation.sport || sportCategory}
+                              {evaluationData.latestEvaluation.className || className || 'Reguler'} &bull; {evaluationData.latestEvaluation.sport || sportCategory || 'Olahraga'}
                             </p>
                           </div>
 
-                          {(() => {
-                            const grade = getEvaluationGrade(evaluationData.latestEvaluation.overallScore);
-                            return (
-                              <div className="text-right shrink-0">
-                                <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black border ${grade.badge}`}>
-                                  {grade.label}
-                                </span>
-                                <p className="text-xs font-mono font-black text-slate-900 mt-0.5">
-                                  {evaluationData.latestEvaluation.overallScore} <span className="text-[10px] text-slate-400 font-normal">/ 100</span>
-                                </p>
-                              </div>
-                            );
-                          })()}
+                          {evaluationData.latestEvaluation.overallScore !== null && evaluationData.latestEvaluation.overallScore !== undefined ? (
+                            (() => {
+                              const grade = getEvaluationGrade(evaluationData.latestEvaluation.overallScore);
+                              return (
+                                <div className="text-right shrink-0">
+                                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black border ${grade.badge}`}>
+                                    {grade.label}
+                                  </span>
+                                  <p className="text-xs font-mono font-black text-slate-900 mt-0.5">
+                                    {evaluationData.latestEvaluation.overallScore} <span className="text-[10px] text-slate-400 font-normal">/ 100</span>
+                                  </p>
+                                </div>
+                              );
+                            })()
+                          ) : (
+                            <div className="text-right shrink-0">
+                              <span className="text-[10px] text-slate-400 italic">Nilai belum tersedia</span>
+                            </div>
+                          )}
                         </div>
 
                         {/* Pilar-Pilar Perkembangan Anak */}
@@ -1467,15 +1500,19 @@ export default function PortalDashboard() {
                                 Teknik
                               </span>
                               <span className="font-mono font-bold text-slate-800">
-                                {evaluationData.latestEvaluation.pillarScores?.teknik ?? 75}
+                                {evaluationData.latestEvaluation.pillarScores?.teknik !== null && evaluationData.latestEvaluation.pillarScores?.teknik !== undefined
+                                  ? evaluationData.latestEvaluation.pillarScores.teknik
+                                  : <span className="text-[10px] font-normal text-slate-400 italic">-</span>}
                               </span>
                             </div>
-                            <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                              <div
-                                className="bg-blue-500 h-full rounded-full transition-all duration-500"
-                                style={{ width: `${Math.min(100, Math.max(10, evaluationData.latestEvaluation.pillarScores?.teknik ?? 75))}%` }}
-                              />
-                            </div>
+                            {evaluationData.latestEvaluation.pillarScores?.teknik !== null && evaluationData.latestEvaluation.pillarScores?.teknik !== undefined && (
+                              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                <div
+                                  className="bg-blue-500 h-full rounded-full transition-all duration-500"
+                                  style={{ width: `${Math.min(100, Math.max(0, evaluationData.latestEvaluation.pillarScores.teknik))}%` }}
+                                />
+                              </div>
+                            )}
                           </div>
 
                           <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs space-y-1">
@@ -1485,15 +1522,19 @@ export default function PortalDashboard() {
                                 Fisik
                               </span>
                               <span className="font-mono font-bold text-slate-800">
-                                {evaluationData.latestEvaluation.pillarScores?.fisik ?? 75}
+                                {evaluationData.latestEvaluation.pillarScores?.fisik !== null && evaluationData.latestEvaluation.pillarScores?.fisik !== undefined
+                                  ? evaluationData.latestEvaluation.pillarScores.fisik
+                                  : <span className="text-[10px] font-normal text-slate-400 italic">-</span>}
                               </span>
                             </div>
-                            <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                              <div
-                                className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-                                style={{ width: `${Math.min(100, Math.max(10, evaluationData.latestEvaluation.pillarScores?.fisik ?? 75))}%` }}
-                              />
-                            </div>
+                            {evaluationData.latestEvaluation.pillarScores?.fisik !== null && evaluationData.latestEvaluation.pillarScores?.fisik !== undefined && (
+                              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                <div
+                                  className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                                  style={{ width: `${Math.min(100, Math.max(0, evaluationData.latestEvaluation.pillarScores.fisik))}%` }}
+                                />
+                              </div>
+                            )}
                           </div>
 
                           <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs space-y-1">
@@ -1503,15 +1544,19 @@ export default function PortalDashboard() {
                                 Mental
                               </span>
                               <span className="font-mono font-bold text-slate-800">
-                                {evaluationData.latestEvaluation.pillarScores?.mental ?? 75}
+                                {evaluationData.latestEvaluation.pillarScores?.mental !== null && evaluationData.latestEvaluation.pillarScores?.mental !== undefined
+                                  ? evaluationData.latestEvaluation.pillarScores.mental
+                                  : <span className="text-[10px] font-normal text-slate-400 italic">-</span>}
                               </span>
                             </div>
-                            <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                              <div
-                                className="bg-purple-500 h-full rounded-full transition-all duration-500"
-                                style={{ width: `${Math.min(100, Math.max(10, evaluationData.latestEvaluation.pillarScores?.mental ?? 75))}%` }}
-                              />
-                            </div>
+                            {evaluationData.latestEvaluation.pillarScores?.mental !== null && evaluationData.latestEvaluation.pillarScores?.mental !== undefined && (
+                              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                <div
+                                  className="bg-purple-500 h-full rounded-full transition-all duration-500"
+                                  style={{ width: `${Math.min(100, Math.max(0, evaluationData.latestEvaluation.pillarScores.mental))}%` }}
+                                />
+                              </div>
+                            )}
                           </div>
 
                           <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs space-y-1">
@@ -1521,20 +1566,24 @@ export default function PortalDashboard() {
                                 Taktik
                               </span>
                               <span className="font-mono font-bold text-slate-800">
-                                {evaluationData.latestEvaluation.pillarScores?.taktik ?? 75}
+                                {evaluationData.latestEvaluation.pillarScores?.taktik !== null && evaluationData.latestEvaluation.pillarScores?.taktik !== undefined
+                                  ? evaluationData.latestEvaluation.pillarScores.taktik
+                                  : <span className="text-[10px] font-normal text-slate-400 italic">-</span>}
                               </span>
                             </div>
-                            <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                              <div
-                                className="bg-amber-500 h-full rounded-full transition-all duration-500"
-                                style={{ width: `${Math.min(100, Math.max(10, evaluationData.latestEvaluation.pillarScores?.taktik ?? 75))}%` }}
-                              />
-                            </div>
+                            {evaluationData.latestEvaluation.pillarScores?.taktik !== null && evaluationData.latestEvaluation.pillarScores?.taktik !== undefined && (
+                              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                <div
+                                  className="bg-amber-500 h-full rounded-full transition-all duration-500"
+                                  style={{ width: `${Math.min(100, Math.max(0, evaluationData.latestEvaluation.pillarScores.taktik))}%` }}
+                                />
+                              </div>
+                            )}
                           </div>
                         </div>
 
                         {/* Catatan Pelatih */}
-                        {evaluationData.latestEvaluation.coachNote && (
+                        {evaluationData.latestEvaluation.coachNote ? (
                           <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3 text-xs space-y-1">
                             <div className="flex items-center gap-1.5 text-amber-800 font-bold text-[11px]">
                               <Quote className="w-3.5 h-3.5 text-amber-600 shrink-0" />
@@ -1543,6 +1592,10 @@ export default function PortalDashboard() {
                             <p className="text-slate-700 italic text-[11px] leading-relaxed pl-5">
                               &ldquo;{evaluationData.latestEvaluation.coachNote}&rdquo;
                             </p>
+                          </div>
+                        ) : (
+                          <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-[11px] text-slate-400 italic">
+                            Belum ada catatan khusus dari pelatih.
                           </div>
                         )}
                       </div>
@@ -1558,14 +1611,14 @@ export default function PortalDashboard() {
                               <div key={ev.id || idx} className="py-2 flex items-center justify-between">
                                 <div className="space-y-0.5">
                                   <p className="font-bold text-slate-800 text-[11px]">
-                                    {formatAttendanceDate(ev.date)} &bull; {ev.evaluator || 'Pelatih'}
+                                    {ev.date ? formatAttendanceDate(ev.date) : 'Tanggal tidak tersedia'} &bull; {ev.evaluator || 'Pelatih'}
                                   </p>
                                   <p className="text-[10px] text-slate-400 truncate max-w-[200px]">
                                     {ev.coachNote || 'Evaluasi latihan berkala'}
                                   </p>
                                 </div>
                                 <span className="font-mono font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md text-[10px]">
-                                  Skor {ev.overallScore}
+                                  {ev.overallScore !== null && ev.overallScore !== undefined ? `Skor ${ev.overallScore}` : 'Nilai pending'}
                                 </span>
                               </div>
                             ))}
