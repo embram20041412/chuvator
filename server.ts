@@ -18,6 +18,8 @@ import { onRequest as portalAnnouncements } from './functions/api/portal/announc
 import { onRequest as portalSchedule } from './functions/api/portal/schedule.js';
 // @ts-ignore
 import { onRequest as portalEvaluations } from './functions/api/portal/evaluations.js';
+// @ts-ignore
+import { onRequest as portalProfile } from './functions/api/portal/profile.js';
 
 dotenv.config();
 
@@ -252,6 +254,7 @@ async function handleCloudflareFunction(
     app.all('/api/portal/announcements', (req, res) => handleCloudflareFunction(portalAnnouncements, req, res));
     app.all('/api/portal/schedule', (req, res) => handleCloudflareFunction(portalSchedule, req, res));
     app.all('/api/portal/evaluations', (req, res) => handleCloudflareFunction(portalEvaluations, req, res));
+    app.all('/api/portal/profile', (req, res) => handleCloudflareFunction(portalProfile, req, res));
   }
 
   // POST /api/create-staff : Pembuatan Staff di Supabase

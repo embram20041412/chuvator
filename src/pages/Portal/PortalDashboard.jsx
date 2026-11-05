@@ -236,7 +236,7 @@ export default function PortalDashboard() {
               tenantId: activeTid,
               studentName: selectedChild.studentName || selectedChild.name || student?.studentName || 'Nama Siswa',
               className: selectedChild.className || student?.className || 'Reguler',
-              coachName: selectedChild.coachName || student?.coachName || 'Instruktur Utama',
+              coachName: selectedChild.coachName || selectedChild.coach_name || student?.coachName || student?.coach_name || null,
               sportCategory: selectedChild.sportCategory || selectedChild.sport || student?.sportCategory || 'Badminton',
               academyName: selectedChild.academyName || student?.academyName || 'Sport Academy',
               photoUrl: selectedChild.photoUrl || student?.photoUrl || null,
@@ -298,7 +298,7 @@ export default function PortalDashboard() {
       tenantId: activeTid,
       studentName: child.studentName || child.name || 'Nama Siswa',
       className: child.className || 'Reguler',
-      coachName: child.coachName || 'Instruktur Utama',
+      coachName: child.coachName || child.coach_name || null,
       sportCategory: child.sportCategory || child.sport || 'Badminton',
       academyName: child.academyName || 'Sport Academy',
       photoUrl: child.photoUrl || null,
@@ -571,6 +571,62 @@ export default function PortalDashboard() {
     };
   }, [isSessionVerified, csrfToken, verifiedStudentId, verifiedTenantId]);
 
+  // 7. FETCH PROFIL SISWA (Untuk Menarik Nama Pelatih Asli)
+  useEffect(() => {
+    if (!isSessionVerified || !verifiedStudentId) return;
+    let isMounted = true;
+
+    const fetchProfile = async () => {
+      try {
+        const response = await fetch(`/api/portal/profile?studentId=${encodeURIComponent(verifiedStudentId)}`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+            ...(csrfToken ? { 'X-Portal-CSRF': csrfToken } : {})
+          },
+          credentials: 'include'
+        });
+
+        if (response.ok) {
+          const res = await response.json().catch(() => null);
+          if (isMounted && res && res.success && res.student) {
+            setStudent(prev => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                studentName: res.student.student_name || res.student.studentName || prev.studentName,
+                className: res.student.class_name || res.student.className || prev.className,
+                coachName: res.student.coach_name || res.student.coachName || prev.coachName || null,
+                sportCategory: res.student.sport_category || res.student.sportCategory || prev.sportCategory,
+                photoUrl: res.student.photo_url || res.student.photoUrl || prev.photoUrl
+              };
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Profile fetch note:', err.message);
+      }
+    };
+
+    fetchProfile();
+    return () => {
+      isMounted = false;
+    };
+  }, [isSessionVerified, csrfToken, verifiedStudentId]);
+
+  // Sync Coach Name dari Jadwal jika profil belum memiliki nama pelatih
+  useEffect(() => {
+    if (scheduleData?.classInfo?.coachName) {
+      setStudent(prev => {
+        if (!prev) return prev;
+        if (!prev.coachName || prev.coachName !== scheduleData.classInfo.coachName) {
+          return { ...prev, coachName: scheduleData.classInfo.coachName };
+        }
+        return prev;
+      });
+    }
+  }, [scheduleData]);
+
   const isBillingValid = Boolean(
     billingData &&
     billingData.success === true &&
@@ -646,7 +702,7 @@ export default function PortalDashboard() {
   const academyName = billingData?.tenant?.name || student.academyName || 'Sport Academy';
   const sportCategory = student.sportCategory || 'Badminton';
   const className = student.className || 'Reguler';
-  const coachName = student.coachName || 'Instruktur Utama';
+  const coachName = student.coachName || student.coach_name || scheduleData?.classInfo?.coachName || null;
   const age = calculateAge(student.birthDate);
 
   const totalAmount = isBillingValid ? billingData.billing.totalAmount : null;
@@ -826,7 +882,7 @@ export default function PortalDashboard() {
                   <User className="w-4 h-4 text-blue-200 shrink-0" />
                   <div className="min-w-0">
                     <p className="text-[9px] uppercase tracking-wider text-blue-200 font-bold">Pelatih Utama</p>
-                    <p className="font-bold text-white text-[11px] truncate">{coachName}</p>
+                    <p className="font-bold text-white text-[11px] truncate">{coachName || 'Belum ada pelatih'}</p>
                   </div>
                 </div>
               </div>
@@ -1185,7 +1241,7 @@ export default function PortalDashboard() {
                       Jadwal Latihan &amp; Presensi
                     </h3>
                     <p className="text-[11px] text-slate-400">
-                      {scheduleData?.classInfo?.className || className} &bull; Coach {scheduleData?.classInfo?.coachName || coachName}
+                      {scheduleData?.classInfo?.className || className} &bull; {coachName ? `Coach ${coachName}` : 'Belum ada pelatih'}
                     </p>
                   </div>
                 </div>
@@ -1632,10 +1688,10 @@ export default function PortalDashboard() {
                         <Target className="w-4 h-4" />
                       </div>
                       <p className="text-xs font-bold text-slate-800">
-                        Belum Ada Catatan Evaluasi
+                        Belum ada evaluasi dirilis oleh pelatih
                       </p>
                       <p className="text-[11px] text-slate-500 max-w-[240px] mx-auto leading-relaxed">
-                        Evaluasi pilar teknik, fisik, dan mental atlet akan ditampilkan di sini setelah pelatih merilis rapor latihan.
+                        Evaluasi pilar teknik, fisik, mental, dan taktik atlet akan ditampilkan di sini setelah pelatih merilis rapor latihan resmi.
                       </p>
                     </div>
                   )}
@@ -1692,7 +1748,7 @@ export default function PortalDashboard() {
                         <Trophy className="w-4 h-4" />
                       </div>
                       <p className="text-xs font-bold text-slate-800">
-                        Belum Ada Catatan Prestasi Turnamen
+                        Belum ada catatan prestasi
                       </p>
                       <p className="text-[11px] text-slate-500 max-w-[240px] mx-auto leading-relaxed">
                         Daftar kejuaraan, medali, dan piagam yang diraih atlet akan tampil secara otomatis di sini.

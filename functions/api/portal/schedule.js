@@ -65,28 +65,42 @@ export async function onRequest(context) {
 
     const effectiveAuthHeader = authHeader || `Bearer ${anonKey}`;
 
-    // 1. Ambil data siswa & kelas dari Supabase
+    // 1. Ambil data siswa & kelas dari Supabase dengan JOIN ke academy_classes dan coaches
     let studentRecord = null;
     let className = 'Kelas Reguler';
     let sportCategory = 'Badminton';
-    let coachName = 'Instruktur Utama';
+    let coachName = null;
 
     if (studentId) {
       try {
-        const stResp = await fetch(`${supabaseUrl}/rest/v1/students?id=eq.${studentId}&select=*`, {
+        const joinedUrl = `${supabaseUrl}/rest/v1/students?id=eq.${studentId}&select=*,academy_classes(class_name,coach_id,coach_name,coaches(name))`;
+        let stResp = await fetch(joinedUrl, {
           method: 'GET',
           headers: {
             'apikey': anonKey,
             'Authorization': effectiveAuthHeader
           }
         });
+
+        if (!stResp.ok) {
+          stResp = await fetch(`${supabaseUrl}/rest/v1/students?id=eq.${studentId}&select=*`, {
+            method: 'GET',
+            headers: {
+              'apikey': anonKey,
+              'Authorization': effectiveAuthHeader
+            }
+          });
+        }
+
         if (stResp.ok) {
           const students = await stResp.json().catch(() => []);
           studentRecord = students[0] || null;
           if (studentRecord) {
-            className = studentRecord.class_name || studentRecord.className || className;
+            const academyClass = studentRecord.academy_classes || {};
+            const coach = academyClass.coaches || {};
+            className = academyClass.class_name || studentRecord.class_name || studentRecord.className || className;
             sportCategory = studentRecord.sport_category || studentRecord.sport || sportCategory;
-            coachName = studentRecord.coach_name || studentRecord.coachName || coachName;
+            coachName = coach.name || academyClass.coach_name || studentRecord.coach_name || studentRecord.coachName || null;
           }
         }
       } catch (stErr) {
@@ -201,7 +215,7 @@ export async function onRequest(context) {
       classInfo: {
         className: 'Kelas Reguler',
         sport: 'Badminton',
-        coachName: 'Instruktur Utama'
+        coachName: null
       },
       schedules: [
         { day: 'Selasa', startTime: '16:00', endTime: '18:00', courtName: 'Lapangan Utama' },

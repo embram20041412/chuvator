@@ -1,7 +1,12 @@
 /**
  * Cloudflare Pages Function: /api/portal/evaluations
  * Edge-safe athlete evaluations and achievements endpoint for Parent Portal V2.
- * Native Fetch API to Supabase REST with fail-safe error handling.
+ * Pure Cloudflare Pages Functions standard with native Fetch API to Supabase REST.
+ * 
+ * ZERO DUMMY DATA:
+ * - If no evaluations in database, returns evaluations: [] and latestEvaluation: null.
+ * - If no achievements in database, returns achievements: [].
+ * - No fake 85 score, no fake Juara 2 Perak medal.
  */
 
 import { validatePortalV2Session } from './_auth_v2.js';
@@ -65,7 +70,7 @@ export async function onRequest(context) {
 
     const effectiveAuthHeader = authHeader || `Bearer ${anonKey}`;
 
-    // 1. Ambil data rapor evaluasi dari Supabase jika studentId ada
+    // 1. Ambil data rapor evaluasi dari Supabase tabel academy_evaluations
     let evaluationsList = [];
     if (studentId) {
       try {
@@ -76,78 +81,110 @@ export async function onRequest(context) {
             'Authorization': effectiveAuthHeader
           }
         });
+
         if (evalResp.ok) {
           const rawEvals = await evalResp.json().catch(() => []);
           if (Array.isArray(rawEvals) && rawEvals.length > 0) {
-            evaluationsList = rawEvals.map(ev => {
-              const pScores = ev.pillar_scores || ev.pillarScores || {};
-              return {
-                id: ev.id,
-                date: ev.date || (ev.created_at ? String(ev.created_at).substring(0, 10) : null),
-                evaluator: ev.evaluator || ev.coach_name || 'Head Coach',
-                className: ev.class_name || 'Kelas Reguler',
-                sport: ev.sport || 'Badminton',
-                playerRole: ev.player_role || ev.main_position || 'Atlet',
-                overallScore: typeof ev.overall_score === 'number' ? ev.overall_score : 85,
-                pillarScores: {
-                  teknik: typeof pScores.teknik === 'number' ? pScores.teknik : 85,
-                  fisik: typeof pScores.fisik === 'number' ? pScores.fisik : 80,
-                  mental: typeof pScores.mental === 'number' ? pScores.mental : 88,
-                  taktik: typeof pScores.taktik === 'number' ? pScores.taktik : 82
-                },
-                coachNote: ev.coach_note || 'Perkembangan teknik pukulan dan kelincahan footwork menunjukkan peningkatan positif.'
-              };
-            });
+            evaluationsList = rawEvals
+              .filter(ev => {
+                // Filter status publikasi jika kolom status ada
+                const rawStatus = ev.status || ev.publication_status;
+                if (rawStatus) {
+                  const s = String(rawStatus).toLowerCase().trim();
+                  return ['published', 'approved'].includes(s);
+                }
+                return true;
+              })
+              .map(ev => {
+                const pScores = ev.pillar_scores || ev.pillarScores || {};
+                const teknik = typeof pScores.teknik === 'number' ? pScores.teknik : (typeof ev.technical_score === 'number' ? ev.technical_score : null);
+                const fisik = typeof pScores.fisik === 'number' ? pScores.fisik : (typeof ev.physical_score === 'number' ? ev.physical_score : null);
+                const mental = typeof pScores.mental === 'number' ? pScores.mental : (typeof ev.mental_score === 'number' ? ev.mental_score : null);
+                const taktik = typeof pScores.taktik === 'number' ? pScores.taktik : (typeof ev.tactical_score === 'number' ? ev.tactical_score : null);
+
+                return {
+                  id: ev.id,
+                  date: ev.date || (ev.created_at ? String(ev.created_at).substring(0, 10) : null),
+                  evaluator: ev.evaluator || ev.coach_name || 'Pelatih',
+                  className: ev.class_name || 'Kelas Reguler',
+                  sport: ev.sport || 'Badminton',
+                  playerRole: ev.player_role || ev.main_position || null,
+                  overallScore: typeof ev.overall_score === 'number' ? ev.overall_score : null,
+                  pillarScores: {
+                    teknik,
+                    fisik,
+                    mental,
+                    taktik
+                  },
+                  coachNote: ev.coach_note || ev.notes || null,
+                  createdAt: ev.created_at || null
+                };
+              });
           }
+        } else {
+          console.warn('[evaluations.js] Supabase academy_evaluations query status:', evalResp.status);
         }
       } catch (evalErr) {
-        console.warn('[evaluations.js] Evaluations query warning:', evalErr.message);
+        console.warn('[evaluations.js] Evaluations query error:', evalErr.message);
       }
     }
 
-    // Default rapor jika belum ada evaluasi
-    if (evaluationsList.length === 0) {
-      evaluationsList = [
-        {
-          id: 'eval-default-1',
-          date: new Date().toISOString().substring(0, 10),
-          evaluator: 'Head Coach',
-          className: 'Kelas Reguler',
-          sport: 'Badminton',
-          playerRole: 'Tunggal Putra/Putri',
-          overallScore: 85,
-          pillarScores: {
-            teknik: 86,
-            fisik: 82,
-            mental: 88,
-            taktik: 84
-          },
-          coachNote: 'Disiplin latihan sangat baik. Terus tingkatkan akurasi smash dan stamina fisik pada set penentu.'
+    // 2. Ambil data prestasi atlet dari kolom tournaments di tabel students
+    let achievementsList = [];
+    let studentInfo = {
+      id: studentId,
+      studentName: '',
+      className: ''
+    };
+
+    if (studentId) {
+      try {
+        const studentResp = await fetch(`${supabaseUrl}/rest/v1/students?id=eq.${studentId}&select=tournaments,student_name,name,class_name`, {
+          method: 'GET',
+          headers: {
+            'apikey': anonKey,
+            'Authorization': effectiveAuthHeader
+          }
+        });
+
+        if (studentResp.ok) {
+          const studentData = await studentResp.json().catch(() => []);
+          const st = studentData[0];
+          if (st) {
+            studentInfo.studentName = st.student_name || st.name || '';
+            studentInfo.className = st.class_name || '';
+
+            const rawTournaments = Array.isArray(st.tournaments) ? st.tournaments : [];
+            rawTournaments.forEach(t => {
+              const achName = t.name || t.title || t.tournamentName;
+              const achResult = t.result || t.rank || t.achievement;
+              if (achName && achResult) {
+                achievementsList.push({
+                  id: t.id || null,
+                  name: achName,
+                  date: t.date || t.year || null,
+                  result: achResult,
+                  category: t.category || t.sport || null,
+                  notes: t.notes || t.description || null
+                });
+              }
+            });
+
+            achievementsList.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+          }
         }
-      ];
+      } catch (stErr) {
+        console.warn('[evaluations.js] Students query error:', stErr.message);
+      }
     }
 
-    const achievementsList = [
-      {
-        id: 'ach-1',
-        name: 'Kejuaraan Bulutangkis Antar Pelajar Se-Jawa Barat',
-        date: '2026',
-        result: 'Juara 2 (Perak)',
-        category: 'Tunggal Taruna',
-        notes: 'Pencapaian luar biasa di babak final regional'
-      }
-    ];
-
+    // Response murni tanpa data palsu: jika kosong, kembalikan array kosong []
     const finalResponse = {
       success: true,
       evaluations: evaluationsList,
-      latestEvaluation: evaluationsList[0] || null,
+      latestEvaluation: evaluationsList.length > 0 ? evaluationsList[0] : null,
       achievements: achievementsList,
-      student: {
-        id: studentId,
-        studentName: 'Atlet Binaan',
-        className: 'Kelas Reguler'
-      }
+      student: studentInfo
     };
 
     return new Response(JSON.stringify(finalResponse), {
@@ -158,11 +195,10 @@ export async function onRequest(context) {
     console.error('[evaluations.js] Unhandled exception:', error.message);
     return new Response(JSON.stringify({
       success: true,
-      fallback: true,
       evaluations: [],
       latestEvaluation: null,
       achievements: [],
-      student: { id: '', studentName: 'Atlet Binaan', className: 'Kelas Reguler' }
+      student: { id: '', studentName: '', className: '' }
     }), {
       status: 200,
       headers: corsHeaders
