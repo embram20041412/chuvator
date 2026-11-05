@@ -72,6 +72,26 @@ const formatAttendanceDate = (dateStr) => {
 };
 
 /**
+ * Helper to format session date into uppercase Indonesian locale (e.g. "JUMAT, 17 NOV 2026")
+ */
+const formatSessionDate = (dateStr) => {
+  if (!dateStr) return '-';
+  try {
+    const d = new Date(dateStr + (dateStr.includes('T') ? '' : 'T00:00:00'));
+    if (isNaN(d.getTime())) return String(dateStr).toUpperCase();
+    const formatted = new Intl.DateTimeFormat('id-ID', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    }).format(d);
+    return formatted.toUpperCase();
+  } catch {
+    return String(dateStr).toUpperCase();
+  }
+};
+
+/**
  * Helper to determine evaluation score label and style
  */
 const getEvaluationGrade = (score) => {
@@ -1274,7 +1294,9 @@ export default function PortalDashboard() {
                   }`}
                 >
                   <Calendar className="w-3.5 h-3.5" />
-                  <span>Jadwal Sesi ({scheduleData?.schedules?.length || 0})</span>
+                  <span>
+                    Jadwal Sesi ({scheduleData?.upcoming_sessions ? scheduleData.upcoming_sessions.length : (scheduleData?.schedules?.length || 0)})
+                  </span>
                 </button>
                 <button
                   type="button"
@@ -1298,31 +1320,31 @@ export default function PortalDashboard() {
                       <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
                       <span>Memuat jadwal sesi latihan...</span>
                     </div>
-                  ) : (scheduleData?.schedules && scheduleData.schedules.length > 0) ? (
+                  ) : (scheduleData?.upcoming_sessions && scheduleData.upcoming_sessions.length > 0) ? (
                     <div className="space-y-2">
-                      {scheduleData.schedules.map((s, idx) => (
+                      {scheduleData.upcoming_sessions.map((s, idx) => (
                         <div
-                          key={idx}
+                          key={s.id || idx}
                           className="p-3 bg-slate-50 hover:bg-blue-50/40 rounded-xl border border-slate-100 transition-colors flex items-center justify-between"
                         >
                           <div className="space-y-1">
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
                               <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-extrabold rounded-md uppercase">
-                                {s.day}
+                                {formatSessionDate(s.date)}
                               </span>
                               <span className="text-xs font-bold text-slate-800 flex items-center gap-1 font-mono">
                                 <Clock className="w-3 h-3 text-slate-400" />
-                                {s.startTime} - {s.endTime} WIB
+                                {s.start_time || s.startTime} - {s.end_time || s.endTime} WIB
                               </span>
                             </div>
                             <p className="text-[11px] text-slate-500 flex items-center gap-1">
                               <MapPin className="w-3 h-3 text-slate-400 shrink-0" />
-                              <span className="truncate">{s.courtName || 'Lapangan Utama'}</span>
+                              <span className="truncate">{s.court_name || s.courtName || '-'}</span>
                             </p>
                           </div>
 
-                          <span className="text-[10px] bg-slate-200/80 text-slate-700 px-2.5 py-1 rounded-lg font-bold shrink-0">
-                            Aktif
+                          <span className="text-[10px] bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-lg font-bold shrink-0">
+                            {s.status || 'Terkunci'}
                           </span>
                         </div>
                       ))}
@@ -1338,10 +1360,10 @@ export default function PortalDashboard() {
                         <Calendar className="w-4 h-4" />
                       </div>
                       <p className="text-xs font-bold text-slate-800">
-                        Belum Ada Jadwal Terdaftar
+                        Belum Ada Jadwal Terdekat
                       </p>
-                      <p className="text-[11px] text-slate-500 max-w-[240px] mx-auto leading-relaxed">
-                        Pengelola belum memasukkan jadwal sesi latihan untuk kelas ini.
+                      <p className="text-[11px] text-slate-500 max-w-[260px] mx-auto leading-relaxed">
+                        Belum ada jadwal latihan terdekat yang dikunci oleh pelatih.
                       </p>
                     </div>
                   )}

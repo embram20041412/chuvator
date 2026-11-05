@@ -108,7 +108,48 @@ export async function onRequest(context) {
       }
     }
 
-    // 2. Format jadwal latihan default/aktif
+    const studentClassId = studentRecord?.class_id || studentRecord?.classId || '';
+
+    // 2. Query tabel `bookings` untuk mengambil jadwal latihan terdekat (date >= today)
+    let upcoming_sessions = [];
+    const today = new Date().toISOString().split('T')[0];
+
+    if (studentClassId) {
+      try {
+        const bkResp = await fetch(
+          `${supabaseUrl}/rest/v1/bookings?class_id=eq.${studentClassId}&date=gte.${today}&status=not.in.(%22Dibatalkan%22,%22Cancelled%22,%22VOID%22)&order=date.asc,start_time.asc&limit=10`,
+          {
+            method: 'GET',
+            headers: {
+              'apikey': anonKey,
+              'Authorization': effectiveAuthHeader
+            }
+          }
+        );
+
+        if (bkResp.ok) {
+          const rawBookings = await bkResp.json().catch(() => []);
+          if (Array.isArray(rawBookings) && rawBookings.length > 0) {
+            upcoming_sessions = rawBookings.map(b => ({
+              id: b.id,
+              date: b.date || '',
+              startTime: b.start_time || b.startTime || '',
+              endTime: b.end_time || b.endTime || '',
+              start_time: b.start_time || b.startTime || '',
+              end_time: b.end_time || b.endTime || '',
+              courtName: b.court_name || b.courtName || 'Lapangan Utama',
+              court_name: b.court_name || b.courtName || 'Lapangan Utama',
+              status: b.status || 'Aktif',
+              classId: b.class_id || studentClassId
+            }));
+          }
+        }
+      } catch (bkErr) {
+        console.warn('[schedule.js] Bookings query warning:', bkErr.message);
+      }
+    }
+
+    // Format jadwal latihan default/rutin
     const schedules = [
       {
         day: 'Selasa',
@@ -186,12 +227,13 @@ export async function onRequest(context) {
       success: true,
       message: 'Data jadwal & presensi berhasil dimuat',
       classInfo: {
-        id: studentRecord?.class_id || '',
+        id: studentClassId || '',
         className,
         sport: sportCategory,
         coachName
       },
       schedules,
+      upcoming_sessions,
       attendances,
       stats: {
         totalSessions,
@@ -221,6 +263,7 @@ export async function onRequest(context) {
         { day: 'Selasa', startTime: '16:00', endTime: '18:00', courtName: 'Lapangan Utama' },
         { day: 'Kamis', startTime: '16:00', endTime: '18:00', courtName: 'Lapangan Utama' }
       ],
+      upcoming_sessions: [],
       attendances: [],
       stats: {
         totalSessions: 0,
