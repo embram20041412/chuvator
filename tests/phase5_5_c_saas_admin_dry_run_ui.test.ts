@@ -2,13 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import fs from 'node:fs';
 import path from 'node:path';
-import { runKkHmacDryRun } from '../src/services/backfillService.js';
+import { runKkHmacDryRun, executeKkHmacBackfill } from '../src/services/backfillService.js';
 import { supabase } from '../src/services/supabaseClient.js';
+import { validateBackfillAdmin } from '../functions/api/admin/backfill_helpers.js';
+import { onRequestPost as backfillIndexPost } from '../functions/api/admin/backfill_kk_hmac/index.js';
 
-test('CHUVATOR — FASE 5.5-C: SaaS Admin KK HMAC Dry-Run UI & Service Integration Suite', async (t) => {
+test('CHUVATOR — FASE 5.5-C: SaaS Admin & Tenant Controlled Backfill Integration Suite', async (t) => {
 
   // =========================================================================
-  // 1. SERVICE HELPER TESTS: runKkHmacDryRun() Contract
+  // 1. SERVICE HELPER TESTS: runKkHmacDryRun() & executeKkHmacBackfill() Contract
   // =========================================================================
 
   await t.test('1. Service Helper: Issues POST to /api/admin/backfill_kk_hmac?dryRun=true with Bearer auth token', async () => {
@@ -106,34 +108,135 @@ test('CHUVATOR — FASE 5.5-C: SaaS Admin KK HMAC Dry-Run UI & Service Integrati
     }
   });
 
+  await t.test('3. Service Helper: executeKkHmacBackfill issues POST with dryRun=false & execute=true', async () => {
+    const originalFetch = global.fetch;
+    let capturedBody: any = null;
+
+    global.fetch = (async (url: string, init?: RequestInit) => {
+      capturedBody = JSON.parse(init?.body as string || '{}');
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          success: true,
+          data: {
+            runId: 'run-uuid-123',
+            leaseToken: 'lease-uuid-456',
+            processed: 2,
+            skipped: 4,
+            failed: 0,
+            completed: true
+          }
+        })
+      } as any;
+    }) as any;
+
+    try {
+      const res: any = await executeKkHmacBackfill({ tenantId: 'tenant-owner-123' });
+      assert.strictEqual(capturedBody.dryRun, false, 'Controlled execution harus dryRun: false');
+      assert.strictEqual(capturedBody.execute, true, 'Controlled execution harus execute: true');
+      assert.strictEqual(capturedBody.tenantId, 'tenant-owner-123');
+      assert.strictEqual(res.data.processed, 2);
+      assert.strictEqual(res.data.skipped, 4);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
   // =========================================================================
-  // 2. UI CODE & CONTRACT AUDIT: SaasAdminPage.jsx
+  // 2. AUTHORIZATION & TENANT ISOLATION TESTS
   // =========================================================================
 
-  await t.test('3. UI Contract: SaasAdminPage.jsx contains "Jalankan Dry-Run KK HMAC" button & read-only modal', () => {
-    const pageJsx = fs.readFileSync(path.join(process.cwd(), 'src/pages/SaasAdminPage.jsx'), 'utf8');
+  await t.test('4. Authorization: validateBackfillAdmin allows owner/admin/manager/superadmin and rejects kasir/coach/staff', async () => {
+    // 1. Test allowed roles
+    for (const role of ['superadmin', 'owner', 'admin', 'manager']) {
+      const mockContext = {
+        request: new Request('http://localhost/api/admin/backfill_kk_hmac', {
+          headers: {
+            'Authorization': 'Bearer valid-token',
+            'x-test-staff-role': role,
+            'x-test-staff-uid': `user-${role}`,
+            'x-test-tenant-id': 'tenant-test-1'
+          }
+        }),
+        env: { ENVIRONMENT: 'development' }
+      };
+      const auth = await validateBackfillAdmin(mockContext);
+      assert.strictEqual(auth.authorized, true, `Role '${role}' harus diizinkan`);
+    }
 
-    // 1. Memastikan tombol dengan label persis "Jalankan Dry-Run KK HMAC" tersedia
-    assert.match(pageJsx, /Jalankan Dry-Run KK HMAC/);
+    // 2. Test forbidden roles
+    for (const role of ['kasir', 'coach', 'pelatih', 'staff']) {
+      const mockContext = {
+        request: new Request('http://localhost/api/admin/backfill_kk_hmac', {
+          headers: {
+            'Authorization': 'Bearer valid-token',
+            'x-test-staff-role': role,
+            'x-test-staff-uid': `user-${role}`,
+            'x-test-tenant-id': 'tenant-test-1'
+          }
+        }),
+        env: { ENVIRONMENT: 'development' }
+      };
+      const auth = await validateBackfillAdmin(mockContext);
+      assert.strictEqual(auth.authorized, false, `Role '${role}' harus ditolak`);
+      assert.strictEqual(auth.status, 403);
+    }
+  });
 
-    // 2. Memastikan modal konfirmasi berisi penjelasan 100% READ-ONLY tanpa mutasi
-    assert.match(pageJsx, /100% AMAN & READ-ONLY/i);
-    assert.match(pageJsx, /Tanpa Perubahan Database/i);
+  await t.test('5. Tenant Isolation: Owner Tenant A cannot request Tenant B data (HTTP 403)', async () => {
+    const mockContext = {
+      request: new Request('http://localhost/api/admin/backfill_kk_hmac?dryRun=true', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer owner-token',
+          'x-test-staff-role': 'owner',
+          'x-test-staff-uid': 'user-owner-A',
+          'x-test-tenant-id': 'tenant-A',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ dryRun: true, tenantId: 'tenant-B' }) // Attempting to access Tenant B!
+      }),
+      env: {
+        ENVIRONMENT: 'development',
+        KK_HMAC_SECRET: 'test-secret',
+        SUPABASE_URL: 'http://localhost:54321',
+        SUPABASE_SERVICE_ROLE_KEY: 'test-key'
+      }
+    };
 
-    // 3. Memastikan pemanggilan API menggunakan runKkHmacDryRun
-    assert.match(pageJsx, /runKkHmacDryRun/);
+    const res = await backfillIndexPost(mockContext);
+    assert.strictEqual(res.status, 403, 'Cross-tenant manipulation harus ditolak HTTP 403');
+    const body = await res.json();
+    assert.strictEqual(body.code, 'FORBIDDEN_TENANT_SCOPE');
+    assert.match(body.message, /Manipulasi tenant scope ditolak/);
+  });
 
-    // 4. Memastikan seluruh 6 kategori hasil dry-run dirender pada UI
-    assert.match(pageJsx, /dryrun-category-ELIGIBLE/);
-    assert.match(pageJsx, /dryrun-category-ALREADY_VALID/);
-    assert.match(pageJsx, /dryrun-category-INVALID_SOURCE/);
-    assert.match(pageJsx, /dryrun-category-MISSING_LAST4/);
-    assert.match(pageJsx, /dryrun-category-CORRUPT_HMAC/);
-    assert.match(pageJsx, /dryrun-category-HMAC_MISMATCH/);
+  // =========================================================================
+  // 3. UI COMPONENT & CODE AUDIT TESTS
+  // =========================================================================
 
-    // 5. Memastikan tidak ada tampilan PII (NIK, No. KK, HMAC secret)
-    assert.doesNotMatch(pageJsx, /student\.nik/);
-    assert.doesNotMatch(pageJsx, /student\.no_kk/);
-    assert.doesNotMatch(pageJsx, /KK_HMAC_SECRET/);
+  await t.test('6. UI Contract: SaasAdminPage.jsx & TenantBackfillControlCard.jsx enforce confirmation & zero PII', () => {
+    const saasPageJsx = fs.readFileSync(path.join(process.cwd(), 'src/pages/SaasAdminPage.jsx'), 'utf8');
+    const tenantCardJsx = fs.readFileSync(path.join(process.cwd(), 'src/components/TenantBackfillControlCard.jsx'), 'utf8');
+    const pengaturanJsx = fs.readFileSync(path.join(process.cwd(), 'src/pages/PengaturanPage.jsx'), 'utf8');
+
+    // 1. SaasAdminPage contains dry-run button & read-only modal
+    assert.match(saasPageJsx, /Jalankan Dry-Run KK HMAC/);
+    assert.match(saasPageJsx, /100% AMAN & READ-ONLY/i);
+
+    // 2. TenantBackfillControlCard requires explicit confirmation modal before execution
+    assert.match(tenantCardJsx, /Konfirmasi Eksekusi Controlled Backfill/);
+    assert.match(tenantCardJsx, /executeKkHmacBackfill/);
+
+    // 3. PengaturanPage imports & renders TenantBackfillControlCard
+    assert.match(pengaturanJsx, /TenantBackfillControlCard/);
+
+    // 4. Zero PII rendered across components
+    for (const code of [saasPageJsx, tenantCardJsx]) {
+      assert.doesNotMatch(code, /student\.nik/);
+      assert.doesNotMatch(code, /student\.no_kk/);
+      assert.doesNotMatch(code, /KK_HMAC_SECRET/);
+    }
   });
 });

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../config/supabase';
 import useArenaData from '../hooks/useArenaData';
+import TenantBackfillControlCard from '../components/TenantBackfillControlCard';
 import { updateTenantProfile, updateCourt, updateCourtsBatch } from '../services/supabaseArenaService';
 import { logoutUser } from '../services/authService';
 import { 
@@ -1689,6 +1690,13 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
       {activeTab === 'staf' && (
         <div className="space-y-3.5 text-left animate-fadeIn mt-3.5">
           
+          {/* CARD AUDIT & CONTROLLED BACKFILL KK HMAC */}
+          <TenantBackfillControlCard
+            tenantId={tenant?.id || userProfile?.tenantId || 'global'}
+            tenantName={tenant?.name || 'Tenant Admin'}
+            userRole={userProfile?.role || 'owner'}
+          />
+
           {/* CARD 1: FORM TERBITKAN UNDANGAN STAFF (NO PASSWORD FIELD) */}
           <div className="bg-white dark:bg-slate-900 rounded-xl p-3.5 sm:p-4 shadow-2xs border border-slate-200/80 dark:border-white/10 space-y-3.5">
             <div className="flex items-center justify-between border-b border-slate-100 dark:border-white/10 pb-2.5">

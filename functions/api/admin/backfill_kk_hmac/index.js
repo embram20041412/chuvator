@@ -7,7 +7,7 @@
 
 import { getCorsHeaders } from '../../portal/_auth_v2.js';
 import { normalizeKK, computeHMAC } from '../../tenant/_auth_staff.js';
-import { validateSuperadmin, performDryRunAnalysis } from '../backfill_helpers.js';
+import { validateBackfillAdmin, performDryRunAnalysis } from '../backfill_helpers.js';
 
 export async function onRequestOptions(context) {
   const corsHeaders = getCorsHeaders(context.request, context.env);
@@ -19,8 +19,17 @@ export async function onRequestPost(context) {
   const corsHeaders = getCorsHeaders(request, env);
 
   try {
-    // 1. Otorisasi Superadmin
-    const auth = await validateSuperadmin(context);
+    const url = new URL(request.url);
+    let body = {};
+    try {
+      const rawText = await request.text();
+      body = rawText ? JSON.parse(rawText) : {};
+    } catch (e) {
+      body = {};
+    }
+
+    // 1. Otorisasi Peran Administratif (Superadmin, Owner, Admin, Manager)
+    const auth = await validateBackfillAdmin(context);
     if (!auth.authorized) {
       return new Response(
         JSON.stringify({ success: false, message: auth.message }),
@@ -51,21 +60,7 @@ export async function onRequestPost(context) {
       );
     }
 
-    const url = new URL(request.url);
-    const body = await request.json().catch(() => ({}));
     const isDryRun = url.searchParams.get('dryRun') === 'true' || body.dryRun === true;
-
-    // Requirement C: Endpoint strictly locked in Dry-Run READ-ONLY mode.
-    if (!isDryRun) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          code: 'DRY_RUN_ONLY_MODE',
-          message: 'Endpoint ini dikunci secara ketat dalam mode Dry-Run READ-ONLY. Eksekusi mutasi backfill langsung belum diaktifkan.'
-        }),
-        { status: 400, headers: corsHeaders }
-      );
-    }
 
     // Requirement D: Server-authoritative tenant isolation
     const userRole = auth.user?.role;
@@ -92,7 +87,7 @@ export async function onRequestPost(context) {
           JSON.stringify({
             success: false,
             code: 'FORBIDDEN_TENANT_SCOPE',
-            message: 'Manipulasi tenant scope ditolak. Anda hanya diizinkan mengakses data tenant terdaftar Anda.'
+            message: 'Akses ditolak. Manipulasi tenant scope ditolak. Anda hanya diizinkan mengakses data tenant terdaftar Anda.'
           }),
           { status: 403, headers: corsHeaders }
         );
@@ -103,24 +98,50 @@ export async function onRequestPost(context) {
     // -------------------------------------------------------------------------
     // 3. MODE DRY-RUN: 100% Read-Only, Zero INSERT, Zero UPDATE, Zero Locks, Zero RPC
     // -------------------------------------------------------------------------
-    const analysis = await performDryRunAnalysis(supabaseUrl, serviceRoleKey, secret, requestedTenantId);
+    if (isDryRun) {
+      const analysis = await performDryRunAnalysis(supabaseUrl, serviceRoleKey, secret, requestedTenantId);
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        mode: 'DRY_RUN',
-        message: 'Analisis simulasi selesai (100% read-only, tanpa perubahan database).',
-        data: {
-          ...analysis,
-          timestamp: new Date().toISOString()
-        }
-      }),
-      { status: 200, headers: corsHeaders }
-    );
+      return new Response(
+        JSON.stringify({
+          success: true,
+          mode: 'DRY_RUN',
+          message: 'Analisis simulasi selesai (100% read-only, tanpa perubahan database).',
+          data: {
+            ...analysis,
+            timestamp: new Date().toISOString()
+          }
+        }),
+        { status: 200, headers: corsHeaders }
+      );
+    }
+
+    // Mandatory check: If non-dryRun is requested without explicit execute: true or active runId, reject with 400 DRY_RUN_ONLY_MODE
+    if (!isDryRun && body.execute !== true && !body.runId) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          code: 'DRY_RUN_ONLY_MODE',
+          message: 'Mode eksekusi aktif memerlukan konfirmasi (execute: true). Permintaan tanpa dryRun=true ditolak dalam mode Dry-Run READ-ONLY.'
+        }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
 
     // -------------------------------------------------------------------------
     // 4. ACTIVE EXECUTION (FENCING LEASE TOKEN + DATABASE-AUTHORITATIVE CURSOR)
     // -------------------------------------------------------------------------
+    // DILARANG menerima kursor arbitrer dari client. Kursor harus dibaca dari DB.
+    if (body.cursor !== undefined) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          code: 'CLIENT_CURSOR_REJECTED',
+          message: 'Kursor klien ditolak. Siklus resume harus membaca kursor secara eksklusif dari database (last_cursor).'
+        }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
     const batchSize = Math.min(Number(body.batchSize) || 50, 50);
     const requestRunId = body.runId || null;
     let runId = requestRunId;
@@ -129,21 +150,6 @@ export async function onRequestPost(context) {
     let dbCursor = null;
 
     if (requestRunId) {
-      // -----------------------------------------------------------------------
-      // RESUME PRE-EXISTING RUN:
-      // Baca langsung state resmi dari database: cursor dan tenant terikat permanen!
-      // DILARANG menerima kursor arbitrer dari client.
-      // -----------------------------------------------------------------------
-      if (body.cursor !== undefined) {
-        return new Response(
-          JSON.stringify({
-            success: false,
-            code: 'CLIENT_CURSOR_REJECTED',
-            message: 'Kursor klien ditolak. Siklus resume harus membaca kursor secara eksklusif dari database (last_cursor).'
-          }),
-          { status: 400, headers: corsHeaders }
-        );
-      }
 
       const getRunUrl = `${supabaseUrl}/rest/v1/backfill_kk_runs?run_id=eq.${encodeURIComponent(requestRunId)}&select=run_id,tenant_id,status,lease_token,lease_expires_at,last_cursor`;
       const runResp = await fetch(getRunUrl, {

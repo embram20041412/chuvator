@@ -6,6 +6,33 @@
 import { validateStaffSession, normalizeKK, computeHMAC } from '../tenant/_auth_staff.js';
 import { getCleanSupabaseUrl, getSupabaseAnonKey } from '../portal/_auth_v2.js';
 
+export async function validateBackfillAdmin(context) {
+  const authResult = await validateStaffSession(context);
+  if (!authResult.valid) {
+    return {
+      authorized: false,
+      status: 401,
+      message: authResult.message || 'Sesi staf tidak valid atau telah kedaluwarsa.'
+    };
+  }
+
+  const user = authResult.user;
+  const allowedRoles = new Set(['superadmin', 'owner', 'admin', 'manager']);
+
+  if (!allowedRoles.has(user.role)) {
+    return {
+      authorized: false,
+      status: 403,
+      message: `Akses ditolak. Peran '${user.role}' tidak memiliki wewenang administratif untuk mengelola data atau backfill siswa.`
+    };
+  }
+
+  return {
+    authorized: true,
+    user
+  };
+}
+
 export async function validateSuperadmin(context) {
   const authResult = await validateStaffSession(context);
   if (!authResult.valid) {

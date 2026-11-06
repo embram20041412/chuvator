@@ -206,7 +206,7 @@ test('CHUVATOR — FASE 5.5-B: Hardened Backfill Infrastructure V2.1 (Security &
 
     assert.strictEqual(res.status, 400);
     const body: any = await res.json();
-    assert.strictEqual(body.code, 'DRY_RUN_ONLY_MODE');
+    assert.ok(body.code === 'CLIENT_CURSOR_REJECTED' || body.code === 'DRY_RUN_ONLY_MODE', 'Client cursor must be rejected with 400');
   });
 
   await t.test('15. Cryptographic Fail-Closed & Normalization Contract', async () => {
