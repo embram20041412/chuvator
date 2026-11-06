@@ -156,6 +156,14 @@ GRANT SELECT, INSERT ON TABLE public.backfill_kk_audit TO service_role;
 -- Serialisasi: Penguncian FOR UPDATE pada run aktif sebelum pembuatan run baru.
 -- -----------------------------------------------------------------------------
 
+
+
+
+-- -----------------------------------------------------------------------------
+-- 5. RPC: acquire_backfill_kk_lease (DENGAN LEASE FENCING TOKEN & TENANT BINDING)
+-- Serialisasi: Transaction-level advisory lock + Penguncian FOR UPDATE pada run aktif.
+-- -----------------------------------------------------------------------------
+
 CREATE OR REPLACE FUNCTION public.acquire_backfill_kk_lease(
     p_tenant_id TEXT,
     p_created_by TEXT,
@@ -172,6 +180,9 @@ DECLARE
     v_new_token UUID;
     v_expires_at TIMESTAMPTZ;
 BEGIN
+    -- 0. Lock transaksi global akuisisi lease untuk mencegah race condition antar-worker saat belum ada baris run
+    PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('chuvator_backfill_lease_acquisition'));
+
     -- 1. Validasi tenant_id wajib ada
     IF p_tenant_id IS NULL OR p_tenant_id = '' THEN
         RETURN pg_catalog.jsonb_build_object(
@@ -214,7 +225,7 @@ BEGIN
 
     -- 4. Terbitkan lease run baru dengan fencing token unik
     v_new_token := pg_catalog.gen_random_uuid();
-    v_expires_at := pg_catalog.now() + (pg_catalog.greatest(p_lease_seconds, 30) || ' seconds')::pg_catalog.interval;
+    v_expires_at := pg_catalog.now() + (GREATEST(p_lease_seconds, 30) || ' seconds')::pg_catalog.interval;
     
     INSERT INTO public.backfill_kk_runs (
         tenant_id,
@@ -266,7 +277,7 @@ DECLARE
 BEGIN
     UPDATE public.backfill_kk_runs
     SET heartbeat_at = pg_catalog.now(),
-        lease_expires_at = pg_catalog.now() + (pg_catalog.greatest(p_lease_seconds, 30) || ' seconds')::pg_catalog.interval,
+        lease_expires_at = pg_catalog.now() + (GREATEST(p_lease_seconds, 30) || ' seconds')::pg_catalog.interval,
         updated_at = pg_catalog.now()
     WHERE run_id = p_run_id
       AND lease_token = p_lease_token
