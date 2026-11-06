@@ -14,6 +14,25 @@ export async function validateStaffSession(context) {
   const authHeader = request.headers.get('Authorization') || '';
   const accessToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
 
+  const isProduction = env.ENVIRONMENT === 'production';
+
+  // Test environment fallback (ONLY for non-production unit/e2e testing)
+  const testRole = request.headers.get('x-test-staff-role');
+  const testUid = request.headers.get('x-test-staff-uid');
+  const testTenant = request.headers.get('x-test-tenant-id');
+
+  if (!isProduction && testRole && testUid && testTenant) {
+    return {
+      valid: true,
+      user: {
+        uid: String(testUid),
+        email: 'demo@chuasport.com',
+        role: String(testRole).toLowerCase(),
+        tenantId: String(testTenant)
+      }
+    };
+  }
+
   if (!accessToken) {
     return { valid: false, message: 'Header Authorization dengan Bearer token wajib disertakan.' };
   }
