@@ -69,6 +69,10 @@ export async function checkCryptoEngineStatus(secret) {
 /**
  * Perform 100% Read-Only Dry-Run Analysis
  * Zero INSERT, Zero UPDATE, Zero Run record, Zero Audit record.
+ * @param {string} supabaseUrl
+ * @param {string} serviceRoleKey
+ * @param {string} secret
+ * @param {string|null} [tenantFilter=null]
  */
 export async function performDryRunAnalysis(supabaseUrl, serviceRoleKey, secret, tenantFilter = null) {
   // Sumber KK harus berasal dari kolom no_kk yang sudah terverifikasi (BUKAN nik_kk)

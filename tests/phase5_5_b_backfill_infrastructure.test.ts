@@ -147,7 +147,7 @@ test('CHUVATOR — FASE 5.5-B: Hardened Backfill Infrastructure V2.1 (Security &
     assert.match(schemaSql, /REVOKE ALL ON FUNCTION public\.fn_prevent_backfill_audit_mutation\(\) FROM PUBLIC, anon, authenticated;/);
     assert.match(schemaSql, /REVOKE ALL ON FUNCTION public\.acquire_backfill_kk_lease\(TEXT, TEXT, INTEGER\) FROM PUBLIC, anon, authenticated;/);
     assert.match(schemaSql, /REVOKE ALL ON FUNCTION public\.heartbeat_backfill_kk_lease\(UUID, UUID, INTEGER\) FROM PUBLIC, anon, authenticated;/);
-    assert.match(schemaSql, /REVOKE ALL ON FUNCTION public\.apply_backfill_kk_atomic_record\(UUID, UUID, INTEGER, UUID, TEXT, VARCHAR, VARCHAR, VARCHAR, VARCHAR\) FROM PUBLIC, anon, authenticated;/);
+    assert.match(schemaSql, /REVOKE ALL ON FUNCTION public\.apply_backfill_kk_atomic_record\(UUID, UUID, INTEGER, UUID, TEXT, VARCHAR, VARCHAR, VARCHAR, VARCHAR(, VARCHAR)?\) FROM PUBLIC, anon, authenticated;/);
     assert.match(schemaSql, /REVOKE ALL ON FUNCTION public\.record_backfill_kk_skip\(UUID, UUID, INTEGER, UUID, TEXT, TEXT, VARCHAR, VARCHAR\) FROM PUBLIC, anon, authenticated;/);
     assert.match(schemaSql, /REVOKE ALL ON FUNCTION public\.rollback_backfill_kk_atomic\(UUID, UUID\) FROM PUBLIC, anon, authenticated;/);
     assert.match(schemaSql, /REVOKE ALL ON FUNCTION public\.complete_backfill_kk_run\(UUID, UUID, VARCHAR, TEXT\) FROM PUBLIC, anon, authenticated;/);

@@ -307,7 +307,8 @@ CREATE OR REPLACE FUNCTION public.apply_backfill_kk_atomic_record(
     p_expected_old_hmac VARCHAR(64),
     p_expected_old_last4 VARCHAR(4),
     p_new_hmac VARCHAR(64),
-    p_new_last4 VARCHAR(4)
+    p_new_last4 VARCHAR(4),
+    p_expected_no_kk VARCHAR(16)
 )
 RETURNS pg_catalog.jsonb
 LANGUAGE plpgsql
@@ -316,10 +317,20 @@ SET search_path = ''
 AS $$
 DECLARE
     v_run RECORD;
+    v_curr_no_kk VARCHAR(16);
     v_curr_hmac VARCHAR(64);
     v_curr_last4 VARCHAR(4);
     v_curr_tenant TEXT;
 BEGIN
+    -- 0. Validasi Wajib Parameter p_expected_no_kk (16 digit angka murni)
+    IF p_expected_no_kk IS NULL OR pg_catalog.trim(p_expected_no_kk) = '' OR p_expected_no_kk !~ '^[0-9]{16}$' THEN
+        RETURN pg_catalog.jsonb_build_object(
+            'success', false,
+            'code', 'INVALID_EXPECTED_NO_KK',
+            'message', 'Parameter p_expected_no_kk wajib diisi dengan tepat 16 digit angka murni.'
+        );
+    END IF;
+
     -- 1. Kunci Baris Run dengan FOR UPDATE (Eliminasi Deadlock Lock-Upgrade)
     SELECT run_id, tenant_id, lease_token, status, lease_expires_at INTO v_run
     FROM public.backfill_kk_runs
@@ -348,8 +359,8 @@ BEGIN
     END IF;
 
     -- 2. Kunci baris siswa untuk update dengan isolasi tenant (Lock Order Level 2)
-    SELECT tenant_id, kk_hmac, kk_last4 
-    INTO v_curr_tenant, v_curr_hmac, v_curr_last4
+    SELECT tenant_id, no_kk, kk_hmac, kk_last4 
+    INTO v_curr_tenant, v_curr_no_kk, v_curr_hmac, v_curr_last4
     FROM public.students
     WHERE id = p_student_id AND tenant_id = p_tenant_id
     FOR UPDATE;
@@ -358,7 +369,15 @@ BEGIN
         RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'STUDENT_NOT_FOUND', 'message', 'Siswa tidak ditemukan.');
     END IF;
 
-    -- 3. Optimistic Concurrency Control (OCC)
+    -- 3. Validation of Source KK Mutability (Mandatory Unconditional Check)
+    IF v_curr_no_kk IS DISTINCT FROM p_expected_no_kk THEN
+        RETURN pg_catalog.jsonb_build_object(
+            'success', false,
+            'code', 'SOURCE_KK_MUTATED',
+            'message', 'Nomor KK siswa telah diubah oleh admin saat proses backfill berjalan. Generasi HMAC dibatalkan.'
+        );
+    END IF;
+
     IF (v_curr_hmac IS DISTINCT FROM p_expected_old_hmac) OR (v_curr_last4 IS DISTINCT FROM p_expected_old_last4) THEN
         RETURN pg_catalog.jsonb_build_object(
             'success', false,
@@ -703,14 +722,14 @@ GRANT EXECUTE ON FUNCTION public.fn_prevent_backfill_audit_mutation() TO service
 -- RPC functions
 REVOKE ALL ON FUNCTION public.acquire_backfill_kk_lease(TEXT, TEXT, INTEGER) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.heartbeat_backfill_kk_lease(UUID, UUID, INTEGER) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.apply_backfill_kk_atomic_record(UUID, UUID, INTEGER, UUID, TEXT, VARCHAR, VARCHAR, VARCHAR, VARCHAR) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.apply_backfill_kk_atomic_record(UUID, UUID, INTEGER, UUID, TEXT, VARCHAR, VARCHAR, VARCHAR, VARCHAR, VARCHAR) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.record_backfill_kk_skip(UUID, UUID, INTEGER, UUID, TEXT, TEXT, VARCHAR, VARCHAR) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.rollback_backfill_kk_atomic(UUID, UUID) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.complete_backfill_kk_run(UUID, UUID, VARCHAR, TEXT) FROM PUBLIC, anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION public.acquire_backfill_kk_lease(TEXT, TEXT, INTEGER) TO service_role;
 GRANT EXECUTE ON FUNCTION public.heartbeat_backfill_kk_lease(UUID, UUID, INTEGER) TO service_role;
-GRANT EXECUTE ON FUNCTION public.apply_backfill_kk_atomic_record(UUID, UUID, INTEGER, UUID, TEXT, VARCHAR, VARCHAR, VARCHAR, VARCHAR) TO service_role;
+GRANT EXECUTE ON FUNCTION public.apply_backfill_kk_atomic_record(UUID, UUID, INTEGER, UUID, TEXT, VARCHAR, VARCHAR, VARCHAR, VARCHAR, VARCHAR) TO service_role;
 GRANT EXECUTE ON FUNCTION public.record_backfill_kk_skip(UUID, UUID, INTEGER, UUID, TEXT, TEXT, VARCHAR, VARCHAR) TO service_role;
 GRANT EXECUTE ON FUNCTION public.rollback_backfill_kk_atomic(UUID, UUID) TO service_role;
 GRANT EXECUTE ON FUNCTION public.complete_backfill_kk_run(UUID, UUID, VARCHAR, TEXT) TO service_role;

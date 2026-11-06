@@ -74,13 +74,17 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 BEGIN
-    -- Setiap kali no_kk mengalami perubahan nilai (OLD.no_kk IS DISTINCT FROM NEW.no_kk),
-    -- WAJIB menginvalidasi kk_hmac dan kk_last4 menjadi NULL secara tanpa syarat.
-    -- Trigger database tidak boleh mempercayai nilai HMAC arbitrer yang dikirim bersamaan dengan perubahan no_kk.
-    IF (OLD.no_kk IS DISTINCT FROM NEW.no_kk) THEN
+    -- 1. Operasi INSERT: Selalu set kk_hmac dan kk_last4 ke NULL.
+    -- Database trigger tidak mempercayai nilai HMAC arbitrer yang dikirim saat pembuatan baris siswa baru.
+    IF (TG_OP = 'INSERT') THEN
+        NEW.kk_hmac := NULL;
+        NEW.kk_last4 := NULL;
+    -- 2. Operasi UPDATE: Jika no_kk berubah, selalu set kk_hmac dan kk_last4 ke NULL.
+    ELSIF (TG_OP = 'UPDATE' AND OLD.no_kk IS DISTINCT FROM NEW.no_kk) THEN
         NEW.kk_hmac := NULL;
         NEW.kk_last4 := NULL;
     END IF;
+
     RETURN NEW;
 END;
 $$;
@@ -90,7 +94,7 @@ GRANT EXECUTE ON FUNCTION public.fn_invalidate_student_kk_hmac() TO service_role
 
 DROP TRIGGER IF EXISTS trg_invalidate_student_kk_hmac ON public.students;
 CREATE TRIGGER trg_invalidate_student_kk_hmac
-    BEFORE UPDATE ON public.students
+    BEFORE INSERT OR UPDATE ON public.students
     FOR EACH ROW
     EXECUTE FUNCTION public.fn_invalidate_student_kk_hmac();
 

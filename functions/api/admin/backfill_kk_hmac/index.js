@@ -382,7 +382,8 @@ export async function onRequestPost(context) {
             p_expected_old_hmac: currHmac,
             p_expected_old_last4: currLast4,
             p_new_hmac: currHmac,
-            p_new_last4: computedLast4
+            p_new_last4: computedLast4,
+            p_expected_no_kk: rawKK
           })
         }).catch(() => null);
 
@@ -408,7 +409,8 @@ export async function onRequestPost(context) {
           p_expected_old_hmac: null,
           p_expected_old_last4: currLast4,
           p_new_hmac: computedHmac,
-          p_new_last4: computedLast4
+          p_new_last4: computedLast4,
+          p_expected_no_kk: rawKK
         })
       }).catch(() => null);
 
