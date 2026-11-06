@@ -232,9 +232,9 @@ test('CHUVATOR — FASE 5.5-B: Hardened Backfill Infrastructure V2.1 (Security &
       if (String(url).includes('/rest/v1/students')) {
         return new Response(
           JSON.stringify([
-            { id: '11111111-1111-1111-1111-111111111111', tenant_id: 't-1', nik_kk: '1234567890123456', kk_hmac: null, kk_last4: null },
-            { id: '22222222-2222-2222-2222-222222222222', tenant_id: 't-1', nik_kk: '12345', kk_hmac: null, kk_last4: null },
-            { id: '33333333-3333-3333-3333-333333333333', tenant_id: 't-2', nik_kk: '9999999999999999', kk_hmac: 'a'.repeat(64), kk_last4: '9999' }
+            { id: '11111111-1111-1111-1111-111111111111', tenant_id: 't-1', no_kk: '1234567890123456', kk_hmac: null, kk_last4: null },
+            { id: '22222222-2222-2222-2222-222222222222', tenant_id: 't-1', no_kk: '12345', kk_hmac: null, kk_last4: null },
+            { id: '33333333-3333-3333-3333-333333333333', tenant_id: 't-2', no_kk: '9999999999999999', kk_hmac: 'a'.repeat(64), kk_last4: '9999' }
           ]),
           { status: 200, headers: { 'Content-Type': 'application/json' } }
         );

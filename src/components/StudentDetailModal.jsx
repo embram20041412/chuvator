@@ -343,7 +343,11 @@ export default function StudentDetailModal({
                     </p>
                     <p className="flex items-center space-x-1.5">
                       <FileText className="w-3.5 h-3.5 text-[#354944]" />
-                      <span>NIK/KK: <strong className="text-[#333333] font-mono">{currentStudent.nikKk || '-'}</strong></span>
+                      <span>NIK Siswa: <strong className="text-[#333333] font-mono">{currentStudent.nik || '-'}</strong></span>
+                    </p>
+                    <p className="flex items-center space-x-1.5">
+                      <FileText className="w-3.5 h-3.5 text-[#354944]" />
+                      <span>Nomor KK: <strong className="text-[#333333] font-mono">{currentStudent.noKk || currentStudent.no_kk || '-'}</strong></span>
                     </p>
                     <p className="flex items-center space-x-1.5">
                       <School className="w-3.5 h-3.5 text-[#354944]" />

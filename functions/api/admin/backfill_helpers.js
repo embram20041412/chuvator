@@ -71,7 +71,8 @@ export async function checkCryptoEngineStatus(secret) {
  * Zero INSERT, Zero UPDATE, Zero Run record, Zero Audit record.
  */
 export async function performDryRunAnalysis(supabaseUrl, serviceRoleKey, secret, tenantFilter = null) {
-  let queryUrl = `${supabaseUrl}/rest/v1/students?select=id,tenant_id,nik_kk,kk_hmac,kk_last4&order=id.asc`;
+  // Sumber KK harus berasal dari kolom no_kk yang sudah terverifikasi (BUKAN nik_kk)
+  let queryUrl = `${supabaseUrl}/rest/v1/students?select=id,tenant_id,no_kk,nik_kk,kk_hmac,kk_last4&order=id.asc`;
   if (tenantFilter && tenantFilter !== 'global') {
     queryUrl += `&tenant_id=eq.${encodeURIComponent(tenantFilter)}`;
   }
@@ -95,6 +96,7 @@ export async function performDryRunAnalysis(supabaseUrl, serviceRoleKey, secret,
     totalStudents: students.length,
     validSourceKK: 0,
     invalidSourceKK: 0,
+    unverifiedLegacyNikKk: 0,
     nullOrEmptyHmac: 0,
     validFormatHmac: 0,
     corruptHmac: 0,
@@ -105,7 +107,8 @@ export async function performDryRunAnalysis(supabaseUrl, serviceRoleKey, secret,
   };
 
   for (const s of students) {
-    const rawKK = s.nik_kk;
+    // Membaca no_kk (Nomor KK terverifikasi)
+    const rawKK = s.no_kk;
     const cleanKK = normalizeKK(rawKK);
     const hasValidSourceKK = Boolean(cleanKK);
 
@@ -113,6 +116,9 @@ export async function performDryRunAnalysis(supabaseUrl, serviceRoleKey, secret,
       summary.validSourceKK++;
     } else {
       summary.invalidSourceKK++;
+      if (!rawKK && s.nik_kk) {
+        summary.unverifiedLegacyNikKk++;
+      }
     }
 
     const currHmac = s.kk_hmac ? String(s.kk_hmac).trim() : null;

@@ -133,6 +133,8 @@ export function mapStudentFromSupabase(row) {
     studentName: rawStudentName,
     name: rawStudentName,
     birthDate: toDateOrNull(row.birth_date),
+    nik: row.nik || '',
+    noKk: row.no_kk || '',
     nikKk: row.nik_kk || '',
     schoolOrigin: row.school_origin || '',
     academyId: toUuidOrNull(row.academy_id),
@@ -734,7 +736,8 @@ export async function createStudent(payload) {
     tenant_id: payload.tenantId,
     student_name: finalStudentName,
     birth_date: safeBirthDate,
-    nik_kk: (payload.nikKk || '').trim(),
+    nik: (payload.nik || '').trim() || null,
+    no_kk: (payload.noKk || '').trim() || null,
     school_origin: (payload.schoolOrigin || '').trim(),
     academy_id: safeAcademyId,
     academy_name: payload.academyName || '',
@@ -793,7 +796,20 @@ export async function updateStudent(studentId, updateFields) {
   if (updateFields.birthDate !== undefined) {
     mapped.birth_date = toDateOrNull(updateFields.birthDate);
   }
-  if (updateFields.nikKk !== undefined) mapped.nik_kk = (updateFields.nikKk || '').trim();
+  if (updateFields.nik !== undefined) {
+    mapped.nik = (updateFields.nik || '').trim() || null;
+  }
+  if (updateFields.noKk !== undefined) {
+    mapped.no_kk = (updateFields.noKk || '').trim() || null;
+    // Invalidate HMAC if no_kk is modified, unless explicit new valid HMAC is supplied
+    if (updateFields.kkHmac !== undefined) {
+      mapped.kk_hmac = updateFields.kkHmac;
+      mapped.kk_last4 = updateFields.kkLast4 || null;
+    } else {
+      mapped.kk_hmac = null;
+      mapped.kk_last4 = null;
+    }
+  }
   if (updateFields.schoolOrigin !== undefined) mapped.school_origin = (updateFields.schoolOrigin || '').trim();
   if (updateFields.academyId !== undefined) {
     mapped.academy_id = toUuidOrNull(updateFields.academyId);

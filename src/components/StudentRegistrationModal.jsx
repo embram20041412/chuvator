@@ -46,7 +46,8 @@ export default function StudentRegistrationModal({
   const [studentName, setStudentName] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [onlyAgeAppropriate, setOnlyAgeAppropriate] = useState(true);
-  const [nikKk, setNikKk] = useState('');
+  const [nik, setNik] = useState('');
+  const [noKk, setNoKk] = useState('');
   const [schoolOrigin, setSchoolOrigin] = useState('');
   const [parentName, setParentName] = useState('');
   const [parentPhone, setParentPhone] = useState('');
@@ -160,7 +161,8 @@ export default function StudentRegistrationModal({
     if (studentToEdit && isOpen) {
       setStudentName(studentToEdit.studentName || '');
       setBirthDate(studentToEdit.birthDate || '');
-      setNikKk(studentToEdit.nikKk || '');
+      setNik(studentToEdit.nik || '');
+      setNoKk(studentToEdit.noKk || '');
       setSchoolOrigin(studentToEdit.schoolOrigin || '');
       setParentName(studentToEdit.parentName || '');
       setParentPhone(studentToEdit.parentPhone || '');
@@ -180,7 +182,8 @@ export default function StudentRegistrationModal({
       // Reset form ONLY when opening modal
       setStudentName('');
       setBirthDate('');
-      setNikKk('');
+      setNik('');
+      setNoKk('');
       setSchoolOrigin('');
       setParentName('');
       setParentPhone('');
@@ -350,6 +353,19 @@ export default function StudentRegistrationModal({
       return;
     }
 
+    const trimmedNik = nik.trim();
+    const trimmedNoKk = noKk.trim();
+
+    if (trimmedNik && !/^\d{16}$/.test(trimmedNik)) {
+      setErrorMsg('NIK Siswa harus berupa 16 digit angka.');
+      return;
+    }
+
+    if (trimmedNoKk && !/^\d{16}$/.test(trimmedNoKk)) {
+      setErrorMsg('Nomor Kartu Keluarga (KK) harus berupa 16 digit angka.');
+      return;
+    }
+
     setIsSaving(true);
 
     try {
@@ -373,7 +389,8 @@ export default function StudentRegistrationModal({
         studentName: studentName.trim(),
         photoUrl: finalPhotoUrl,
         birthDate,
-        nikKk: nikKk.trim(),
+        nik: trimmedNik || null,
+        noKk: trimmedNoKk || null,
         schoolOrigin: schoolOrigin.trim(),
         parentName: parentName.trim(),
         parentPhone: parentPhone.trim(),
@@ -611,18 +628,38 @@ export default function StudentRegistrationModal({
                 </div>
 
                 <div>
-                  <label htmlFor="nikKk" className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
-                    No. Induk Kependudukan (NIK) / No. KK
+                  <label htmlFor="nik" className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                    NIK Siswa (16 Digit) / NIK Siswa (Nomor Induk Kependudukan)
                   </label>
                   <div className="relative">
                     <FileText className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
                     <input
-                      id="nikKk"
-                      name="nikKk"
+                      id="nik"
+                      name="nik"
                       type="text"
-                      value={nikKk}
-                      onChange={(e) => setNikKk(e.target.value)}
-                      placeholder="16 digit NIK atau Nomor Kartu Keluarga"
+                      maxLength={16}
+                      value={nik}
+                      onChange={(e) => setNik(e.target.value.replace(/\D/g, '').slice(0, 16))}
+                      placeholder="16 digit NIK Siswa (Akta / KIA)"
+                      className="w-full pl-9 pr-3.5 py-2 text-xs bg-gray-50 dark:bg-[#1a2925] border border-gray-200 dark:border-white/10 rounded-xl focus:bg-white dark:focus:bg-[#162320] focus:outline-none focus:border-[#354944] focus:ring-1 focus:ring-[#354944] font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="noKk" className="block text-xs font-bold text-gray-700 dark:text-gray-300 uppercase mb-1">
+                    Nomor Kartu Keluarga (Nomor KK) / Nomor Kartu Keluarga / KK
+                  </label>
+                  <div className="relative">
+                    <FileText className="w-4 h-4 text-[#354944] absolute left-3 top-3" />
+                    <input
+                      id="noKk"
+                      name="noKk"
+                      type="text"
+                      maxLength={16}
+                      value={noKk}
+                      onChange={(e) => setNoKk(e.target.value.replace(/\D/g, '').slice(0, 16))}
+                      placeholder="16 digit Nomor KK (untuk verifikasi Portal Wali)"
                       className="w-full pl-9 pr-3.5 py-2 text-xs bg-gray-50 dark:bg-[#1a2925] border border-gray-200 dark:border-white/10 rounded-xl focus:bg-white dark:focus:bg-[#162320] focus:outline-none focus:border-[#354944] focus:ring-1 focus:ring-[#354944] font-mono"
                     />
                   </div>

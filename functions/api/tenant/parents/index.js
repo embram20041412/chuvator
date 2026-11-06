@@ -70,9 +70,9 @@ export async function onRequestPost(context) {
     const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY || env.VITE_SUPABASE_ANON_KEY;
     const anonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY;
 
-    // 6. Validation: Check if students match Tenant and KK
+    // 6. Validation: Check if students match Tenant and KK (Strict Verification)
     if (supabaseUrl && anonKey && !studentIds[0].startsWith('student-demo-')) {
-      const studentCheckUrl = `${supabaseUrl}/rest/v1/students?id=in.(${studentIds.map(id => `"${id}"`).join(',')})&select=id,tenant_id,kk_hmac`;
+      const studentCheckUrl = `${supabaseUrl}/rest/v1/students?id=in.(${studentIds.map(id => `"${id}"`).join(',')})&select=id,name,tenant_id,kk_hmac`;
       const studentCheckResp = await fetch(studentCheckUrl, {
         method: 'GET',
         headers: {
@@ -82,21 +82,51 @@ export async function onRequestPost(context) {
         }
       }).catch(() => null);
 
-      if (studentCheckResp && studentCheckResp.ok) {
-        const foundStudents = await studentCheckResp.json().catch(() => []);
-        for (const s of foundStudents) {
-          if (role !== 'superadmin' && s.tenant_id && s.tenant_id !== staffTenantId) {
-            return new Response(
-              JSON.stringify({ success: false, message: 'Siswa harus berasal dari tenant yang sama.' }),
-              { status: 403, headers: corsHeaders }
-            );
-          }
-          if (s.kk_hmac && s.kk_hmac !== kkHmac) {
-            return new Response(
-              JSON.stringify({ success: false, message: 'Identitas KK siswa tidak cocok dengan nomor KK yang diberikan.' }),
-              { status: 400, headers: corsHeaders }
-            );
-          }
+      if (!studentCheckResp || !studentCheckResp.ok) {
+        return new Response(
+          JSON.stringify({ success: false, message: 'Gagal memverifikasi data siswa ke database.' }),
+          { status: 500, headers: corsHeaders }
+        );
+      }
+
+      const foundStudents = await studentCheckResp.json().catch(() => []);
+      if (!Array.isArray(foundStudents) || foundStudents.length !== studentIds.length) {
+        return new Response(
+          JSON.stringify({ success: false, message: 'Sebagian atau seluruh data siswa yang dipilih tidak ditemukan di database.' }),
+          { status: 404, headers: corsHeaders }
+        );
+      }
+
+      for (const s of foundStudents) {
+        if (role !== 'superadmin' && s.tenant_id && s.tenant_id !== staffTenantId) {
+          return new Response(
+            JSON.stringify({ success: false, message: 'Siswa harus berasal dari tenant yang sama.' }),
+            { status: 403, headers: corsHeaders }
+          );
+        }
+
+        // VERIFIKASI WAJIB: Jika HMAC siswa belum ada, tolak seketika (jangan lewati!)
+        if (!s.kk_hmac) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              code: 'STUDENT_HMAC_UNAVAILABLE',
+              message: `Data Nomor KK untuk siswa '${s.name || s.id}' belum memiliki hash Nomor KK (HMAC) valid di sistem. Harap perbarui data Nomor KK siswa sebelum membuat akun wali.`
+            }),
+            { status: 400, headers: corsHeaders }
+          );
+        }
+
+        // VERIFIKASI WAJIB: Nilai HMAC siswa harus cocok persis dengan HMAC nomor KK yang diinput
+        if (s.kk_hmac !== kkHmac) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              code: 'HMAC_MISMATCH',
+              message: `Nomor KK tidak cocok dengan data siswa '${s.name || s.id}'.`
+            }),
+            { status: 400, headers: corsHeaders }
+          );
         }
       }
     }

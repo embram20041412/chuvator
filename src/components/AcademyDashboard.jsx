@@ -583,8 +583,14 @@ export default function AcademyDashboard({
                         <p className="font-semibold text-xs text-slate-800 hover:text-[#C89D32] transition-colors">
                           {st.studentName || st.name}
                         </p>
-                        {st.nikKk && (
-                          <p className="text-[9px] text-slate-400 font-mono">NIK: {st.nikKk}</p>
+                        {st.nik && (
+                          <p className="text-[9px] text-slate-400 font-mono">NIK: {st.nik}</p>
+                        )}
+                        {st.noKk && (
+                          <p className="text-[9px] text-slate-400 font-mono">KK: {st.noKk}</p>
+                        )}
+                        {!st.nik && !st.noKk && st.nikKk && (
+                          <p className="text-[9px] text-slate-400 font-mono">ID: {st.nikKk}</p>
                         )}
                       </td>
 

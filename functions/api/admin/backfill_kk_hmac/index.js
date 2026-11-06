@@ -240,7 +240,8 @@ export async function onRequestPost(context) {
     }
 
     // 4.2. Baca batch siswa menggunakan Keyset Pagination dengan kursor resmi DB
-    let fetchUrl = `${supabaseUrl}/rest/v1/students?select=id,tenant_id,nik_kk,kk_hmac,kk_last4&order=id.asc&limit=${batchSize}`;
+    // Sumber KK harus berasal dari kolom no_kk yang sudah terverifikasi (BUKAN nik_kk)
+    let fetchUrl = `${supabaseUrl}/rest/v1/students?select=id,tenant_id,no_kk,kk_hmac,kk_last4&order=id.asc&limit=${batchSize}`;
     if (dbCursor) {
       fetchUrl += `&id=gt.${encodeURIComponent(dbCursor)}`;
     }
@@ -274,15 +275,16 @@ export async function onRequestPost(context) {
     for (const student of studentsBatch) {
       const studentId = student.id;
       const tenantId = student.tenant_id;
-      const rawKK = student.nik_kk;
+      const rawKK = student.no_kk;
       const cleanKK = normalizeKK(rawKK);
       const currHmac = student.kk_hmac ? String(student.kk_hmac).trim() : null;
       const currLast4 = student.kk_last4 ? String(student.kk_last4).trim() : null;
 
       lastProcessedId = studentId;
 
-      // Kasus A: KK sumber tidak valid (< 16 digit, bukan angka, atau null)
+      // Kasus A: KK sumber tidak ada / belum diverifikasi (null/kosong) atau format tidak valid
       if (!cleanKK) {
+        const reason = !rawKK ? 'UNVERIFIED_NO_KK' : 'INVALID_SOURCE_KK';
         await fetch(`${supabaseUrl}/rest/v1/rpc/record_backfill_kk_skip`, {
           method: 'POST',
           headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
@@ -292,7 +294,7 @@ export async function onRequestPost(context) {
             p_batch_id: 1,
             p_student_id: studentId,
             p_tenant_id: tenantId,
-            p_reason: 'INVALID_SOURCE_KK',
+            p_reason: reason,
             p_old_hmac: currHmac,
             p_old_last4: currLast4
           })

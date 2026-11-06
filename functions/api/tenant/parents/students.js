@@ -81,31 +81,14 @@ export async function onRequestGet(context) {
       if (resp && resp.ok) {
         students = await resp.json().catch(() => []);
       } else {
-        // Fallback query if kk_hmac column does not exist on database yet
-        let fallbackUrl = `${supabaseUrl}/rest/v1/students?select=id,name,birth_date`;
-        if (role !== 'superadmin') {
-          fallbackUrl += `&tenant_id=eq.${encodeURIComponent(tenantId)}`;
-        }
-
-        const fbResp = await fetch(fallbackUrl, {
-          method: 'GET',
-          headers: {
-            'apikey': anonKey,
-            'Authorization': `Bearer ${anonKey}`,
-            'Accept': 'application/json'
-          }
-        }).catch(() => null);
-
-        if (fbResp && fbResp.ok) {
-          const rawStudents = await fbResp.json().catch(() => []);
-          students = rawStudents.map(s => ({ ...s, kk_last4: kkLast4 }));
-        }
+        // PERLINDUNGAN KEAMANAN: Jangan pernah fallback mengambil seluruh siswa tenant!
+        students = [];
       }
     }
 
-    // Demo/test environment fallback mock data if no DB students found
-    const isProduction = env.ENVIRONMENT === 'production';
-    if (students.length === 0 && (!isProduction || tenantId.startsWith('demo-'))) {
+    // Demo/test environment mock data: DILARANG KERAS di environment production
+    const isProduction = env.ENVIRONMENT === 'production' || env.NODE_ENV === 'production';
+    if (!isProduction && students.length === 0 && tenantId && tenantId.startsWith('demo-')) {
       students = [
         {
           id: `student-demo-${normalizedKK.slice(-4)}-1`,
