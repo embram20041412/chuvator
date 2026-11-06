@@ -787,6 +787,49 @@ export async function createStudent(payload) {
   return mapStudentFromSupabase(data);
 }
 
+// Whitelist resmi kolom database public.students yang diizinkan untuk di-UPDATE oleh authenticated user.
+// Kolom terproteksi (id, tenant_id, created_at, nik_kk, kk_hmac, kk_last4) DILARANG keras dimasukkan ke payload update.
+export const ALLOWED_STUDENT_UPDATE_COLUMNS = new Set([
+  'student_name',
+  'birth_date',
+  'nik',
+  'no_kk',
+  'school_origin',
+  'academy_id',
+  'academy_name',
+  'class_id',
+  'class_name',
+  'coach_name',
+  'sport_category',
+  'player_role',
+  'parent_name',
+  'parent_phone',
+  'phone',
+  'contact_phone',
+  'province',
+  'regency',
+  'district',
+  'village',
+  'address_detail',
+  'join_date',
+  'registration_fee',
+  'registration_fee_paid',
+  'is_registration_fee_paid',
+  'registration_fee_paid_at',
+  'monthly_fee',
+  'payment_status',
+  'spp_status',
+  'last_paid_month',
+  'last_paid_date',
+  'last_spp_paid_at',
+  'height',
+  'weight',
+  'photo_url',
+  'tournaments',
+  'growth_history',
+  'updated_at'
+]);
+
 export async function updateStudent(studentId, updateFields) {
   if (!studentId) throw new Error('Student ID wajib disertakan.');
   const mapped = {};
@@ -801,14 +844,9 @@ export async function updateStudent(studentId, updateFields) {
   }
   if (updateFields.noKk !== undefined) {
     mapped.no_kk = (updateFields.noKk || '').trim() || null;
-    // Invalidate HMAC if no_kk is modified, unless explicit new valid HMAC is supplied
-    if (updateFields.kkHmac !== undefined) {
-      mapped.kk_hmac = updateFields.kkHmac;
-      mapped.kk_last4 = updateFields.kkLast4 || null;
-    } else {
-      mapped.kk_hmac = null;
-      mapped.kk_last4 = null;
-    }
+    // Catatan Keamanan & Integritas Trigger:
+    // Kolom kk_hmac dan kk_last4 SAMA SEKALI TIDAK dimasukkan ke payload update pengguna.
+    // Database trigger trg_invalidate_student_kk_hmac secara otomatis meng-NULL-kan HMAC saat no_kk berubah.
   }
   if (updateFields.schoolOrigin !== undefined) mapped.school_origin = (updateFields.schoolOrigin || '').trim();
   if (updateFields.academyId !== undefined) {
@@ -856,15 +894,29 @@ export async function updateStudent(studentId, updateFields) {
   if (updateFields.growthHistory !== undefined) mapped.growth_history = updateFields.growthHistory;
   mapped.updated_at = new Date().toISOString();
 
+  // Murni menyaring payload hanya untuk kolom yang diizinkan (whitelisted)
+  const sanitizedPayload = {};
+  for (const [key, value] of Object.entries(mapped)) {
+    if (ALLOWED_STUDENT_UPDATE_COLUMNS.has(key)) {
+      sanitizedPayload[key] = value;
+    }
+  }
+
   const { data, error } = await supabase
     .from('students')
-    .update(mapped)
+    .update(sanitizedPayload)
     .eq('id', studentId)
     .select()
     .single();
 
   if (error) {
     console.error('[Supabase updateStudent Error]:', error);
+    if (error.code === '42501' || String(error.message || '').includes('permission denied')) {
+      const customErr = new Error('Akses ditolak (42501): Pengguna tidak memiliki izin UPDATE untuk satu atau lebih kolom siswa yang dikirimkan.');
+      customErr.code = '42501';
+      customErr.originalError = error;
+      throw customErr;
+    }
     throw error;
   }
   return mapStudentFromSupabase(data);

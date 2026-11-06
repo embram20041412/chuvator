@@ -361,9 +361,9 @@ test('CHUVATOR — FASE 5.5-B: Pemisahan Identitas NIK dan Nomor KK', async (t) 
   await t.test('12. Invalidation Konsistensi Nomor KK: Perubahan no_kk otomatis menginvalidasi HMAC di database & service', () => {
     const serviceJs = fs.readFileSync(path.join(process.cwd(), 'src/services/supabaseAcademyService.js'), 'utf8');
 
-    // 1. Pada level service: updateFields.noKk mereset kk_hmac dan kk_last4 ke null jika tidak ada hash baru
-    assert.match(serviceJs, /mapped\.kk_hmac\s*=\s*null;/);
-    assert.match(serviceJs, /mapped\.kk_last4\s*=\s*null;/);
+    // 1. Pada level service: payload UPDATE tidak boleh secara eksplisit menyertakan kk_hmac / kk_last4 agar tidak memicu error 42501 (dihandle otomatis oleh trigger DB)
+    assert.doesNotMatch(serviceJs, /sanitizedPayload\.kk_hmac/);
+    assert.doesNotMatch(serviceJs, /sanitizedPayload\.kk_last4/);
 
     // 2. Pada level database: Trigger BEFORE INSERT OR UPDATE atomik
     assert.match(migrationSql, /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.fn_invalidate_student_kk_hmac\(\)/i);
