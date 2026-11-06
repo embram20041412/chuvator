@@ -179,7 +179,7 @@ test('CHUVATOR — FASE 5.5-B: Hardened Backfill Infrastructure V2.1 (Security &
   // 6. RESUME, CURSOR & CRYPTO HARDENING
   // =========================================================================
 
-  await t.test('14. Resume Protection: Client-Supplied Cursor Strictly Rejected', async () => {
+  await t.test('14. Active Execution Lock: Non-dryRun requests strictly rejected in Dry-Run Only Mode', async () => {
     const req = new Request('http://localhost:3000/api/admin/backfill_kk_hmac', {
       method: 'POST',
       headers: {
@@ -206,7 +206,7 @@ test('CHUVATOR — FASE 5.5-B: Hardened Backfill Infrastructure V2.1 (Security &
 
     assert.strictEqual(res.status, 400);
     const body: any = await res.json();
-    assert.strictEqual(body.code, 'CLIENT_CURSOR_REJECTED');
+    assert.strictEqual(body.code, 'DRY_RUN_ONLY_MODE');
   });
 
   await t.test('15. Cryptographic Fail-Closed & Normalization Contract', async () => {

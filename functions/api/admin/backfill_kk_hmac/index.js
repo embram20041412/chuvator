@@ -54,27 +54,69 @@ export async function onRequestPost(context) {
     const url = new URL(request.url);
     const body = await request.json().catch(() => ({}));
     const isDryRun = url.searchParams.get('dryRun') === 'true' || body.dryRun === true;
-    const requestedTenantId = body.tenantId || url.searchParams.get('tenantId') || 'global';
 
-    // -------------------------------------------------------------------------
-    // 3. MODE DRY-RUN: 100% Read-Only, Zero INSERT, Zero UPDATE, Zero Locks
-    // -------------------------------------------------------------------------
-    if (isDryRun) {
-      const analysis = await performDryRunAnalysis(supabaseUrl, serviceRoleKey, secret, requestedTenantId);
-
+    // Requirement C: Endpoint strictly locked in Dry-Run READ-ONLY mode.
+    if (!isDryRun) {
       return new Response(
         JSON.stringify({
-          success: true,
-          mode: 'DRY_RUN',
-          message: 'Analisis simulasi selesai (100% read-only, tanpa perubahan database).',
-          data: {
-            ...analysis,
-            timestamp: new Date().toISOString()
-          }
+          success: false,
+          code: 'DRY_RUN_ONLY_MODE',
+          message: 'Endpoint ini dikunci secara ketat dalam mode Dry-Run READ-ONLY. Eksekusi mutasi backfill langsung belum diaktifkan.'
         }),
-        { status: 200, headers: corsHeaders }
+        { status: 400, headers: corsHeaders }
       );
     }
+
+    // Requirement D: Server-authoritative tenant isolation
+    const userRole = auth.user?.role;
+    const userTenantId = auth.user?.tenantId;
+    const clientRequestedTenantId = body.tenantId || url.searchParams.get('tenantId') || null;
+
+    let requestedTenantId = 'global';
+
+    if (userRole === 'superadmin') {
+      requestedTenantId = clientRequestedTenantId || 'global';
+    } else {
+      if (!userTenantId || userTenantId === 'global') {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            code: 'FORBIDDEN_TENANT_SCOPE',
+            message: 'Akses scope global atau tanpa tenant yang valid ditolak untuk pengguna non-superadmin.'
+          }),
+          { status: 403, headers: corsHeaders }
+        );
+      }
+      if (clientRequestedTenantId && clientRequestedTenantId !== userTenantId) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            code: 'FORBIDDEN_TENANT_SCOPE',
+            message: 'Manipulasi tenant scope ditolak. Anda hanya diizinkan mengakses data tenant terdaftar Anda.'
+          }),
+          { status: 403, headers: corsHeaders }
+        );
+      }
+      requestedTenantId = userTenantId;
+    }
+
+    // -------------------------------------------------------------------------
+    // 3. MODE DRY-RUN: 100% Read-Only, Zero INSERT, Zero UPDATE, Zero Locks, Zero RPC
+    // -------------------------------------------------------------------------
+    const analysis = await performDryRunAnalysis(supabaseUrl, serviceRoleKey, secret, requestedTenantId);
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        mode: 'DRY_RUN',
+        message: 'Analisis simulasi selesai (100% read-only, tanpa perubahan database).',
+        data: {
+          ...analysis,
+          timestamp: new Date().toISOString()
+        }
+      }),
+      { status: 200, headers: corsHeaders }
+    );
 
     // -------------------------------------------------------------------------
     // 4. ACTIVE EXECUTION (FENCING LEASE TOKEN + DATABASE-AUTHORITATIVE CURSOR)

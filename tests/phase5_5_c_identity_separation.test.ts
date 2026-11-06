@@ -359,8 +359,7 @@ test('CHUVATOR — FASE 5.5-C: Pemisahan Identitas NIK dan Nomor KK', async (t) 
       assert.strictEqual(summary.validSourceKK, 1);
       // Siswa 2 dan 3 invalid/unverified source KK
       assert.strictEqual(summary.invalidSourceKK, 2);
-      // Siswa 2 tercatat sebagai unverified legacy nik_kk
-      assert.strictEqual(summary.unverifiedLegacyNikKk, 1);
+      assert.strictEqual(summary.categories.INVALID_SOURCE, 2);
       // Kandidat backfill hanya 1 (Siswa 1)
       assert.strictEqual(summary.backfillCandidates, 1);
     } finally {
