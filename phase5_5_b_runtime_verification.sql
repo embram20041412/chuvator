@@ -1,122 +1,150 @@
 -- =============================================================================
 -- CHUVATOR — FASE 5.5-B (HARDENING V10)
 -- RUNTIME VERIFICATION SCRIPT (READ-ONLY)
--- Purpose: Exhaustive schema integrity audit using PostgreSQL catalogs.
+-- Purpose: Strict schema integrity audit based on V10 baseline.
 -- =============================================================================
 
 WITH 
 -- -----------------------------------------------------------------------------
--- 1. Expected Schema Definitions
+-- 1. Expected Metadata
 -- -----------------------------------------------------------------------------
-expected_columns AS (
-    SELECT 'students'::text AS tbl, 'kk_hmac'::text AS col, 'character varying'::text AS dtype, 64::int AS len
-    UNION ALL
-    SELECT 'students'::text, 'kk_last4'::text, 'character varying'::text, 4::int
-),
-expected_indexes AS (
-    SELECT 'students'::text AS tbl, 'idx_students_tenant_kk_hmac'::text AS name, ARRAY['tenant_id', 'kk_hmac']::text[] AS cols
-),
-expected_constraints AS (
-    SELECT 'parent_accounts'::text AS tbl, 'uq_parent_accounts_tenant_email'::text AS name, ARRAY['tenant_id', 'email']::text[] AS cols
-    UNION ALL
-    SELECT 'parent_accounts'::text, 'uq_parent_accounts_tenant_auth_uid'::text, ARRAY['tenant_id', 'auth_uid']::text[]
-    UNION ALL
-    SELECT 'parent_student_links'::text, 'uq_parent_student_links_composite'::text, ARRAY['tenant_id', 'parent_account_id', 'student_id']::text[]
+expected AS (
+    SELECT 'COLUMN'::text AS type, 'students.kk_hmac'::text AS obj, 'students'::text AS tbl, 'kk_hmac'::text AS name, ARRAY['tenant_id']::text[] AS cols
+    UNION ALL SELECT 'COLUMN', 'students.kk_last4', 'students', 'kk_last4', NULL
+    UNION ALL SELECT 'INDEX', 'students.idx_students_tenant_kk_hmac', 'students', 'idx_students_tenant_kk_hmac', ARRAY['tenant_id', 'kk_hmac']
+    UNION ALL SELECT 'CONSTRAINT', 'parent_accounts.uq_parent_accounts_tenant_email', 'parent_accounts', 'uq_parent_accounts_tenant_email', ARRAY['tenant_id', 'email']
+    UNION ALL SELECT 'CONSTRAINT', 'parent_accounts.uq_parent_accounts_tenant_auth_uid', 'parent_accounts', 'uq_parent_accounts_tenant_auth_uid', ARRAY['tenant_id', 'auth_uid']
+    UNION ALL SELECT 'CONSTRAINT', 'parent_student_links.uq_parent_student_links_composite', 'parent_student_links', 'uq_parent_student_links_composite', ARRAY['tenant_id', 'parent_account_id', 'student_id']
 ),
 
 -- -----------------------------------------------------------------------------
--- 2. Audit Logic
+-- 2. Actual Catalog Data
 -- -----------------------------------------------------------------------------
-column_audit AS (
+actual_columns AS (
+    SELECT table_name, column_name, data_type, character_maximum_length, is_nullable
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+),
+actual_indexes AS (
     SELECT 
-        'COLUMN' AS type,
-        e.tbl || '.' || e.col AS object_name,
-        CASE 
-            WHEN c.column_name IS NULL THEN 'FAIL (Missing Column)'
-            WHEN c.data_type != e.dtype THEN 'FAIL (Type mismatch: expected ' || e.dtype || ', got ' || c.data_type || ')'
-            WHEN c.character_maximum_length IS DISTINCT FROM e.len THEN 'FAIL (Length mismatch: expected ' || e.len || ', got ' || COALESCE(c.character_maximum_length::text, 'NULL') || ')'
-            WHEN c.is_nullable != 'YES' THEN 'FAIL (Must be nullable)'
-            ELSE 'PASS'
-        END AS status
-    FROM expected_columns e
-    LEFT JOIN information_schema.columns c ON c.table_schema = 'public' AND c.table_name = e.tbl AND c.column_name = e.col
+        c_tbl.relname AS table_name,
+        c_idx.relname AS index_name,
+        am.amname, i.*
+    FROM pg_index i
+    JOIN pg_class c_idx ON c_idx.oid = i.indexrelid
+    JOIN pg_class c_tbl ON c_tbl.oid = i.indrelid
+    JOIN pg_namespace n ON n.oid = c_idx.relnamespace
+    JOIN pg_am am ON am.oid = c_idx.relam
+    WHERE n.nspname = 'public'
 ),
-index_audit AS (
-    SELECT
-        'INDEX' AS type,
-        e.tbl || '.' || e.name AS object_name,
-        CASE 
-            WHEN i.indexrelid IS NULL THEN 'FAIL (Missing Index)'
-            WHEN am.amname != 'btree' THEN 'FAIL (Access method not btree)'
-            WHEN i.indisunique = false THEN 'FAIL (Must be unique)'
-            WHEN i.indisvalid = false OR i.indisready = false OR i.indislive = false OR i.indimmediate = false THEN 'FAIL (Operational state invalid)'
-            WHEN i.indisexclusion = true THEN 'FAIL (Is exclusion index)'
-            WHEN i.indpred IS NOT NULL THEN 'FAIL (Is partial index)'
-            WHEN i.indexprs IS NOT NULL THEN 'FAIL (Is expression index)'
-            WHEN i.indnatts != i.indnkeyatts THEN 'FAIL (Contains INCLUDE columns)'
-            WHEN i.indnkeyatts != array_length(e.cols, 1) THEN 'FAIL (Column count mismatch)'
-            WHEN (
-                SELECT array_agg(a.attname::text ORDER BY x.pos)
-                FROM generate_series(0, i.indnkeyatts - 1) AS x(pos)
-                JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = i.indkey[x.pos]
-            ) IS DISTINCT FROM e.cols THEN 'FAIL (Column order or identity mismatch)'
-            ELSE 'PASS'
-        END AS status
-    FROM expected_indexes e
-    LEFT JOIN (
-        pg_index i 
-        JOIN pg_class c_idx ON c_idx.oid = i.indexrelid
-        JOIN pg_class c_tbl ON c_tbl.oid = i.indrelid
-        JOIN pg_namespace n ON n.oid = c_idx.relnamespace
-        JOIN pg_am am ON am.oid = c_idx.relam
-    ) ON n.nspname = 'public' AND c_idx.relname = e.name AND c_tbl.relname = e.tbl
+actual_constraints AS (
+    SELECT 
+        c_tbl.relname AS table_name,
+        con.conname,
+        con.contype, con.convalidated, con.condeferrable, con.condeferred, con.conkey, con.conrelid,
+        i.indisunique AS idx_unique,
+        i.indisvalid AS idx_valid,
+        i.indisready AS idx_ready,
+        i.indislive AS idx_live,
+        i.indimmediate AS idx_immediate,
+        i.indnatts AS idx_natts,
+        i.indnkeyatts AS idx_nkeyatts,
+        i.indkey AS idx_key,
+        am.amname AS idx_am
+    FROM pg_constraint con
+    JOIN pg_class c_tbl ON c_tbl.oid = con.conrelid
+    JOIN pg_namespace n ON n.oid = con.connamespace
+    LEFT JOIN pg_index i ON i.indexrelid = con.conindid
+    LEFT JOIN pg_am am ON am.oid = (SELECT relam FROM pg_class WHERE oid = i.indexrelid)
+    WHERE n.nspname = 'public' AND con.contype = 'u'
 ),
-constraint_audit AS (
-    SELECT
-        'CONSTRAINT' AS type,
-        e.tbl || '.' || e.name AS object_name,
-        CASE 
-            WHEN con.oid IS NULL THEN 'FAIL (Missing Constraint)'
-            WHEN con.contype != 'u' THEN 'FAIL (Not a UNIQUE constraint)'
-            WHEN con.convalidated = false THEN 'FAIL (Not validated)'
-            WHEN con.condeferrable = true OR con.condeferred = true THEN 'FAIL (Deferrable/Deferred detected)'
-            WHEN i.indexrelid IS NULL THEN 'FAIL (Missing backing index)'
-            WHEN i.indisvalid = false OR i.indisready = false OR i.indislive = false OR i.indimmediate = false THEN 'FAIL (Backing index state invalid)'
-            WHEN i.indnatts != i.indnkeyatts THEN 'FAIL (Backing index contains INCLUDE columns)'
-            WHEN (i.indkey::int2[])[1:i.indnkeyatts] IS DISTINCT FROM con.conkey THEN 'FAIL (Indkey vs Conkey alignment mismatch)'
-            WHEN (
-                SELECT array_agg(a.attname::text ORDER BY x.pos)
-                FROM unnest(con.conkey) WITH ORDINALITY AS x(colnum, pos)
-                JOIN pg_attribute a ON a.attrelid = con.conrelid AND a.attnum = x.colnum
-            ) IS DISTINCT FROM e.cols THEN 'FAIL (Column order or identity mismatch)'
-            ELSE 'PASS'
+
+-- -----------------------------------------------------------------------------
+-- 3. Audit Execution
+-- -----------------------------------------------------------------------------
+audit_results AS (
+    SELECT 
+        e.type, e.obj AS object_name,
+        CASE
+            WHEN e.type = 'COLUMN' THEN (
+                SELECT CASE 
+                    WHEN COUNT(*) = 0 THEN 'FAIL (Missing)'
+                    WHEN COUNT(*) > 1 THEN 'FAIL (Duplicate definition in catalog)'
+                    ELSE (
+                        SELECT CASE
+                            WHEN data_type != 'character varying' THEN 'FAIL (Type mismatch: expected character varying, got ' || data_type || ')'
+                            WHEN character_maximum_length IS DISTINCT FROM (CASE WHEN e.name = 'kk_hmac' THEN 64 ELSE 4 END) THEN 'FAIL (Length mismatch)'
+                            WHEN is_nullable != 'YES' THEN 'FAIL (Must be nullable)'
+                            ELSE 'PASS'
+                        END
+                        FROM actual_columns WHERE table_name = e.tbl AND column_name = e.name
+                    )
+                END
+                FROM actual_columns WHERE table_name = e.tbl AND column_name = e.name
+            )
+            WHEN e.type = 'INDEX' THEN (
+                SELECT CASE
+                    WHEN COUNT(*) = 0 THEN 'FAIL (Missing)'
+                    WHEN COUNT(*) > 1 THEN 'FAIL (Multiple indexes with same name in public)'
+                    ELSE (
+                        SELECT CASE
+                            WHEN table_name != 'students' THEN 'FAIL (Attached to wrong table: ' || table_name || ')'
+                            WHEN amname != 'btree' THEN 'FAIL (Not btree)'
+                            WHEN indisvalid = false OR indisready = false OR indislive = false THEN 'FAIL (Operational state invalid)'
+                            WHEN indpred IS NOT NULL OR indexprs IS NOT NULL THEN 'FAIL (Partial or Expression index detected)'
+                            WHEN indnatts != indnkeyatts THEN 'FAIL (Contains INCLUDE columns)'
+                            WHEN indnkeyatts != 2 THEN 'FAIL (Key count mismatch: expected 2, got ' || indnkeyatts || ')'
+                            WHEN (
+                                SELECT array_agg(a.attname::text ORDER BY x.pos)
+                                FROM generate_series(0, indnkeyatts - 1) AS x(pos)
+                                JOIN pg_attribute a ON a.attrelid = indrelid AND a.attnum = indkey[x.pos]
+                            ) IS DISTINCT FROM e.cols THEN 'FAIL (Column sequence mismatch)'
+                            ELSE 'PASS'
+                        END
+                        FROM actual_indexes WHERE table_name = e.tbl AND index_name = e.name
+                    )
+                END
+                FROM actual_indexes WHERE table_name = e.tbl AND index_name = e.name
+            )
+            WHEN e.type = 'CONSTRAINT' THEN (
+                SELECT CASE
+                    WHEN COUNT(*) = 0 THEN 'FAIL (Missing)'
+                    WHEN COUNT(*) > 1 THEN 'FAIL (Duplicate constraints with same name in public)'
+                    ELSE (
+                        SELECT CASE
+                            WHEN table_name != e.tbl THEN 'FAIL (Attached to wrong table)'
+                            WHEN contype != 'u' THEN 'FAIL (Not a UNIQUE constraint)'
+                            WHEN convalidated = false THEN 'FAIL (Constraint not validated)'
+                            WHEN condeferrable = true OR condeferred = true THEN 'FAIL (Deferrable/Deferred not allowed)'
+                            WHEN idx_am IS DISTINCT FROM 'btree' THEN 'FAIL (Backing index missing or not btree)'
+                            WHEN idx_unique = false THEN 'FAIL (Backing index not unique)'
+                            WHEN idx_valid = false OR idx_ready = false OR idx_live = false OR idx_immediate = false THEN 'FAIL (Backing index operational state invalid)'
+                            WHEN idx_natts != idx_nkeyatts THEN 'FAIL (Backing index has INCLUDE columns)'
+                            WHEN (idx_key::int2[])[1:idx_nkeyatts] IS DISTINCT FROM conkey THEN 'FAIL (Backing index key alignment mismatch)'
+                            WHEN (
+                                SELECT array_agg(a.attname::text ORDER BY x.pos)
+                                FROM unnest(conkey) WITH ORDINALITY AS x(colnum, pos)
+                                JOIN pg_attribute a ON a.attrelid = conrelid AND a.attnum = x.colnum
+                            ) IS DISTINCT FROM e.cols THEN 'FAIL (Column sequence mismatch)'
+                            ELSE 'PASS'
+                        END
+                        FROM actual_constraints WHERE table_name = e.tbl AND conname = e.name
+                    )
+                END
+                FROM actual_constraints WHERE table_name = e.tbl AND conname = e.name
+            )
         END AS status
-    FROM expected_constraints e
-    LEFT JOIN (
-        pg_constraint con
-        JOIN pg_class c_tbl ON c_tbl.oid = con.conrelid
-        JOIN pg_namespace n ON n.oid = con.connamespace
-        JOIN pg_index i ON i.indexrelid = con.conindid
-    ) ON n.nspname = 'public' AND con.conname = e.name AND c_tbl.relname = e.tbl
-),
-all_checks AS (
-    SELECT * FROM column_audit
-    UNION ALL
-    SELECT * FROM index_audit
-    UNION ALL
-    SELECT * FROM constraint_audit
+    FROM expected e
 )
 
 -- -----------------------------------------------------------------------------
--- 3. Final Output & Global Summary
+-- 4. Final Output
 -- -----------------------------------------------------------------------------
-SELECT * FROM all_checks
+SELECT type, object_name, status FROM audit_results
 UNION ALL
 SELECT 
-    'SUMMARY' AS type,
-    'Global Integrity' AS object_name,
-    CASE 
-        WHEN EXISTS (SELECT 1 FROM all_checks WHERE status LIKE 'FAIL%') THEN 'FAIL (See details above)'
-        ELSE 'PASS (100%)'
-    END AS status
-ORDER BY type, object_name;
+    'SUMMARY' AS type, 
+    'Overall Integrity' AS object_name, 
+    CASE WHEN COUNT(*) FILTER (WHERE status = 'PASS') = 6 THEN 'PASS (All 6 objects verified)' ELSE 'FAIL (One or more objects failed audit)' END
+FROM audit_results
+ORDER BY type DESC, object_name;
