@@ -94,6 +94,7 @@ test('CHUVATOR — FASE 5.5-B: Hardened Backfill Infrastructure V2.1 (Security &
     assert.match(schemaSql, /pg_catalog\.gen_random_uuid\(\)/);
     assert.match(schemaSql, /pg_catalog\.jsonb_build_object\(/);
     assert.match(schemaSql, /(GREATEST|pg_catalog\.greatest)\(/);
+    assert.match(schemaSql, /pg_catalog\.btrim\(/);
     assert.match(schemaSql, /pg_catalog\.interval/);
   });
 

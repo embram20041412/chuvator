@@ -334,7 +334,7 @@ DECLARE
     v_curr_tenant TEXT;
 BEGIN
     -- 0. Validasi Wajib Parameter p_expected_no_kk (16 digit angka murni)
-    IF p_expected_no_kk IS NULL OR pg_catalog.trim(p_expected_no_kk) = '' OR p_expected_no_kk !~ '^[0-9]{16}$' THEN
+    IF p_expected_no_kk IS NULL OR pg_catalog.btrim(p_expected_no_kk) = '' OR p_expected_no_kk !~ '^[0-9]{16}$' THEN
         RETURN pg_catalog.jsonb_build_object(
             'success', false,
             'code', 'INVALID_EXPECTED_NO_KK',
