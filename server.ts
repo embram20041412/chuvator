@@ -24,6 +24,12 @@ import { onRequest as portalProfile } from './functions/api/portal/profile.js';
 import { onRequestGet as searchStudentsByKK } from './functions/api/tenant/parents/students.js';
 // @ts-ignore
 import { onRequestPost as createParentAccount } from './functions/api/tenant/parents/index.js';
+// @ts-ignore
+import { onRequestPost as backfillKkHmac } from './functions/api/admin/backfill_kk_hmac/index.js';
+// @ts-ignore
+import { onRequestGet as backfillKkStatus } from './functions/api/admin/backfill_kk_hmac/status.js';
+// @ts-ignore
+import { onRequestPost as backfillKkRollback } from './functions/api/admin/backfill_kk_hmac/rollback.js';
 
 dotenv.config();
 
@@ -263,6 +269,11 @@ async function handleCloudflareFunction(
     // Parent Management (FASE 5.5-B)
     app.get('/api/tenant/parents/students', (req, res) => handleCloudflareFunction(searchStudentsByKK, req, res));
     app.post('/api/tenant/parents', (req, res) => handleCloudflareFunction(createParentAccount, req, res));
+
+    // Persistent KK_HMAC Backfill Infrastructure (FASE 5.5-B)
+    app.post('/api/admin/backfill_kk_hmac', (req, res) => handleCloudflareFunction(backfillKkHmac, req, res));
+    app.get('/api/admin/backfill_kk_hmac/status', (req, res) => handleCloudflareFunction(backfillKkStatus, req, res));
+    app.post('/api/admin/backfill_kk_hmac/rollback', (req, res) => handleCloudflareFunction(backfillKkRollback, req, res));
   }
 
   // POST /api/create-staff : Pembuatan Staff di Supabase
