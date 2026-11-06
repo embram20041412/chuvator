@@ -180,6 +180,18 @@ export async function onRequestPost(context) {
         );
       }
 
+      // Validasi Pemilikan Tenant atas Run (Non-superadmin hanya diizinkan mengakses run tenant miliknya)
+      if (userRole !== 'superadmin' && existingRun.tenant_id !== userTenantId) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            code: 'FORBIDDEN_TENANT_SCOPE',
+            message: 'Akses ditolak. Siklus run ini milik tenant lain dan tidak dapat diakses oleh sesi Anda.'
+          }),
+          { status: 403, headers: corsHeaders }
+        );
+      }
+
       // Validasi Tenant Immutability: Tenant tidak boleh diganti saat resume!
       if (requestedTenantId && requestedTenantId !== 'global' && requestedTenantId !== existingRun.tenant_id) {
         return new Response(
