@@ -24,6 +24,7 @@ const FinancePage = lazy(() => import('./pages/FinancePage'));
 const IntelligencePage = lazy(() => import('./pages/IntelligencePage'));
 const PengaturanPage = lazy(() => import('./pages/PengaturanPage'));
 const StaffManagementPage = lazy(() => import('./pages/StaffManagementPage'));
+const ParentManagementPage = lazy(() => import('./pages/ParentManagementPage'));
 const AcceptInvitationPage = lazy(() => import('./pages/AcceptInvitationPage'));
 const PortalDashboard = lazy(() => import('./pages/Portal/PortalDashboard'));
 
@@ -286,6 +287,14 @@ export default function App() {
                 element={
                   <ProtectedRoute userProfile={userProfile} allowedRoles={['owner', 'superadmin', 'admin']}>
                     <StaffManagementPage userProfile={userProfile} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/parents"
+                element={
+                  <ProtectedRoute userProfile={userProfile} allowedRoles={['owner', 'superadmin', 'admin']}>
+                    <ParentManagementPage userProfile={userProfile} />
                   </ProtectedRoute>
                 }
               />

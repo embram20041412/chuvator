@@ -11,7 +11,8 @@ import {
   ChevronDown,
   ShieldCheck,
   Sun,
-  Moon
+  Moon,
+  Users
 } from 'lucide-react';
 import { supabase } from '../config/supabase';
 import { logoutUser } from '../services/authService';
@@ -35,6 +36,7 @@ const ALL_NAV_ITEMS = [
   { path: '/booking', label: 'Booking', name: 'Booking', icon: Booking3DIcon },
   { path: '/kasir', label: 'Kasir', name: 'Kasir', icon: Kasir3DIcon },
   { path: '/akademi', label: 'Akademi', name: 'Akademi', icon: Akademi3DIcon },
+  { path: '/parents', label: 'Wali Murid', name: 'Wali Murid', icon: Users },
   { path: '/events', label: 'Event & Turnamen', name: 'Event & Turnamen', icon: Event3DIcon },
   { path: '/keuangan', label: 'Keuangan', name: 'Keuangan', icon: Keuangan3DIcon },
   { path: '/intelligence', label: 'AI Insight', name: 'AI Insight', icon: AIInsight3DIcon },

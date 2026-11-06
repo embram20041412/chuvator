@@ -3,8 +3,8 @@
  * Creates a Parent account, invites them via Supabase Auth, and links students.
  */
 
-import { getCorsHeaders } from '../portal/_auth_v2.js';
-import { validateStaffSession, normalizeKK, computeHMAC } from './_auth_staff.js';
+import { getCorsHeaders } from '../../portal/_auth_v2.js';
+import { validateStaffSession, normalizeKK, computeHMAC } from '../_auth_staff.js';
 
 export async function onRequestOptions(context) {
   const corsHeaders = getCorsHeaders(context.request, context.env);
