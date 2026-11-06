@@ -114,7 +114,20 @@ test('FASE 5.5-B: Final Directed Technical Integrity Checks (V10)', async (t) =>
     assert.match(sqlContent, /GROUP BY tenant_id, parent_account_id, student_id/);
   });
 
-  await t.test('14. Runtime Validation Status', () => {
+  await t.test('15. Expression Unique Index Recognition on lower(email) persists', () => {
+    assert.match(sqlContent, /v_found_expr_idx_name TEXT;/);
+    assert.match(sqlContent, /c_tbl\.relname = 'parent_accounts'/);
+    assert.match(sqlContent, /i\.indkey\[1\] = 0/);
+    assert.match(sqlContent, /pg_get_expr\(i\.indexprs, i\.indrelid\)/);
+    assert.match(sqlContent, /'loweremail'/);
+  });
+
+  await t.test('16. Candidate Search Precedes Name Collision Check (4.1, 4.2, 4.3)', () => {
+    assert.match(sqlContent, /v_found_idx_name <> 'uq_parent_accounts_tenant_auth_uid'/);
+    assert.match(sqlContent, /v_found_idx_name <> 'uq_parent_student_links_composite'/);
+  });
+
+  await t.test('17. Runtime Validation Status', () => {
     console.log('\n[STATUS] PostgreSQL Integration Test (Runtime) NOT AVAILABLE in this environment.');
     console.log('[STATUS] Validation is 100% STATIC (Regex-based Integrity).\n');
   });

@@ -151,6 +151,7 @@ DECLARE
     v_null_clause TEXT;
     v_found_con_name TEXT;
     v_found_idx_name TEXT;
+    v_found_expr_idx_name TEXT;
     
     -- Dynamic Query Templates
     v_con_query_base TEXT;
@@ -226,29 +227,75 @@ BEGIN
 
     -- -------------------------------------------------------------------------
     -- 4.1. parent_accounts (tenant_id, email)
+    -- Supports both standard unique constraint on (tenant_id, email) AND
+    -- case-insensitive expression unique index on (tenant_id, lower(email)).
     -- -------------------------------------------------------------------------
-    v_found_con_name := NULL; v_found_idx_name := NULL;
+    v_found_con_name := NULL; v_found_idx_name := NULL; v_found_expr_idx_name := NULL;
     
+    -- Check 4.1.A: Existing valid constraint on (tenant_id, email)
     EXECUTE format(v_con_query_base, 'parent_accounts', 2, 'ARRAY[''tenant_id'', ''email'']', 'ARRAY[''tenant_id'', ''email'']') INTO v_found_con_name;
 
     IF v_found_con_name IS NULL THEN
-        -- Name collision check (Hardened V10: relation level AND table-specific constraint)
-        IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relname = 'uq_parent_accounts_tenant_email')
-        OR EXISTS (
-            SELECT 1 FROM pg_constraint con 
-            JOIN pg_class c ON c.oid = con.conrelid
-            JOIN pg_namespace n ON n.oid = con.connamespace 
-            WHERE n.nspname = 'public' AND c.relname = 'parent_accounts' AND con.conname = 'uq_parent_accounts_tenant_email'
-        ) THEN
-            RAISE EXCEPTION 'MIGRASI DIBATALKAN: Nama uq_parent_accounts_tenant_email sudah digunakan tetapi definisinya tidak sesuai.';
-        END IF;
+        -- Check 4.1.B: Existing valid expression UNIQUE INDEX on (tenant_id, lower(email))
+        -- Case-insensitive email uniqueness per tenant is strictly superior (RFC 5321).
+        -- PostgreSQL does not allow expression indexes in ADD CONSTRAINT UNIQUE USING INDEX,
+        -- so the unique index itself is the complete and canonical database enforcement.
+        SELECT c_idx.relname INTO v_found_expr_idx_name
+        FROM pg_index i
+        JOIN pg_class c_idx ON c_idx.oid = i.indexrelid
+        JOIN pg_class c_tbl ON c_tbl.oid = i.indrelid
+        JOIN pg_namespace n_idx ON n_idx.oid = c_idx.relnamespace
+        JOIN pg_namespace n_tbl ON n_tbl.oid = c_tbl.relnamespace
+        JOIN pg_am am ON am.oid = c_idx.relam
+        WHERE n_tbl.nspname = 'public' AND n_idx.nspname = 'public' 
+          AND c_tbl.relname = 'parent_accounts'
+          AND i.indisunique = true AND i.indisvalid = true AND i.indisready = true AND i.indislive = true
+          AND i.indimmediate = true AND i.indisexclusion = false AND i.indpred IS NULL
+          AND am.amname = 'btree' AND i.indnkeyatts = 2 AND i.indnatts = 2
+          AND (
+              SELECT a.attname::text 
+              FROM pg_attribute a 
+              WHERE a.attrelid = i.indrelid AND a.attnum = i.indkey[0]
+          ) = 'tenant_id'
+          AND i.indkey[1] = 0
+          AND replace(replace(replace(replace(lower(pg_get_expr(i.indexprs, i.indrelid)), ' ', ''), '(', ''), ')', ''), '::text', '') = 'loweremail'
+        ORDER BY (c_idx.relname = 'uq_parent_accounts_tenant_email') DESC, c_idx.relname
+        LIMIT 1;
 
-        EXECUTE format(v_idx_query_base, 'parent_accounts', 2, 'ARRAY[''tenant_id'', ''email'']') INTO v_found_idx_name;
+        -- If no expression index satisfies the invariant, proceed with column index or constraint creation
+        IF v_found_expr_idx_name IS NULL THEN
+            -- Check 4.1.C: Candidate direct-column unique index search
+            EXECUTE format(v_idx_query_base, 'parent_accounts', 2, 'ARRAY[''tenant_id'', ''email'']') INTO v_found_idx_name;
 
-        IF v_found_idx_name IS NOT NULL THEN
-            EXECUTE format('ALTER TABLE public.parent_accounts ADD CONSTRAINT uq_parent_accounts_tenant_email UNIQUE USING INDEX %I', v_found_idx_name);
-        ELSE
-            ALTER TABLE public.parent_accounts ADD CONSTRAINT uq_parent_accounts_tenant_email UNIQUE (tenant_id, email);
+            IF v_found_idx_name IS NOT NULL THEN
+                -- If candidate index name differs from target, guard against collision with target name
+                IF v_found_idx_name <> 'uq_parent_accounts_tenant_email' AND (
+                    EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relname = 'uq_parent_accounts_tenant_email')
+                    OR EXISTS (
+                        SELECT 1 FROM pg_constraint con 
+                        JOIN pg_class c ON c.oid = con.conrelid
+                        JOIN pg_namespace n ON n.oid = con.connamespace 
+                        WHERE n.nspname = 'public' AND c.relname = 'parent_accounts' AND con.conname = 'uq_parent_accounts_tenant_email'
+                    )
+                ) THEN
+                    RAISE EXCEPTION 'MIGRASI DIBATALKAN: Nama uq_parent_accounts_tenant_email sudah digunakan tetapi definisinya tidak sesuai.';
+                END IF;
+
+                EXECUTE format('ALTER TABLE public.parent_accounts ADD CONSTRAINT uq_parent_accounts_tenant_email UNIQUE USING INDEX %I', v_found_idx_name);
+            ELSE
+                -- Name collision check before creating brand new constraint
+                IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relname = 'uq_parent_accounts_tenant_email')
+                OR EXISTS (
+                    SELECT 1 FROM pg_constraint con 
+                    JOIN pg_class c ON c.oid = con.conrelid
+                    JOIN pg_namespace n ON n.oid = con.connamespace 
+                    WHERE n.nspname = 'public' AND c.relname = 'parent_accounts' AND con.conname = 'uq_parent_accounts_tenant_email'
+                ) THEN
+                    RAISE EXCEPTION 'MIGRASI DIBATALKAN: Nama uq_parent_accounts_tenant_email sudah digunakan tetapi definisinya tidak sesuai.';
+                END IF;
+
+                ALTER TABLE public.parent_accounts ADD CONSTRAINT uq_parent_accounts_tenant_email UNIQUE (tenant_id, email);
+            END IF;
         END IF;
     END IF;
 
@@ -260,21 +307,33 @@ BEGIN
     EXECUTE format(v_con_query_base, 'parent_accounts', 2, 'ARRAY[''tenant_id'', ''auth_uid'']', 'ARRAY[''tenant_id'', ''auth_uid'']') INTO v_found_con_name;
 
     IF v_found_con_name IS NULL THEN
-        IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relname = 'uq_parent_accounts_tenant_auth_uid')
-        OR EXISTS (
-            SELECT 1 FROM pg_constraint con 
-            JOIN pg_class c ON c.oid = con.conrelid
-            JOIN pg_namespace n ON n.oid = con.connamespace 
-            WHERE n.nspname = 'public' AND c.relname = 'parent_accounts' AND con.conname = 'uq_parent_accounts_tenant_auth_uid'
-        ) THEN
-            RAISE EXCEPTION 'MIGRASI DIBATALKAN: Nama uq_parent_accounts_tenant_auth_uid sudah digunakan tetapi definisinya tidak sesuai.';
-        END IF;
-
         EXECUTE format(v_idx_query_base, 'parent_accounts', 2, 'ARRAY[''tenant_id'', ''auth_uid'']') INTO v_found_idx_name;
 
         IF v_found_idx_name IS NOT NULL THEN
+            IF v_found_idx_name <> 'uq_parent_accounts_tenant_auth_uid' AND (
+                EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relname = 'uq_parent_accounts_tenant_auth_uid')
+                OR EXISTS (
+                    SELECT 1 FROM pg_constraint con 
+                    JOIN pg_class c ON c.oid = con.conrelid
+                    JOIN pg_namespace n ON n.oid = con.connamespace 
+                    WHERE n.nspname = 'public' AND c.relname = 'parent_accounts' AND con.conname = 'uq_parent_accounts_tenant_auth_uid'
+                )
+            ) THEN
+                RAISE EXCEPTION 'MIGRASI DIBATALKAN: Nama uq_parent_accounts_tenant_auth_uid sudah digunakan tetapi definisinya tidak sesuai.';
+            END IF;
+
             EXECUTE format('ALTER TABLE public.parent_accounts ADD CONSTRAINT uq_parent_accounts_tenant_auth_uid UNIQUE USING INDEX %I', v_found_idx_name);
         ELSE
+            IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relname = 'uq_parent_accounts_tenant_auth_uid')
+            OR EXISTS (
+                SELECT 1 FROM pg_constraint con 
+                JOIN pg_class c ON c.oid = con.conrelid
+                JOIN pg_namespace n ON n.oid = con.connamespace 
+                WHERE n.nspname = 'public' AND c.relname = 'parent_accounts' AND con.conname = 'uq_parent_accounts_tenant_auth_uid'
+            ) THEN
+                RAISE EXCEPTION 'MIGRASI DIBATALKAN: Nama uq_parent_accounts_tenant_auth_uid sudah digunakan tetapi definisinya tidak sesuai.';
+            END IF;
+
             ALTER TABLE public.parent_accounts ADD CONSTRAINT uq_parent_accounts_tenant_auth_uid UNIQUE (tenant_id, auth_uid);
         END IF;
     END IF;
@@ -287,21 +346,33 @@ BEGIN
     EXECUTE format(v_con_query_base, 'parent_student_links', 3, 'ARRAY[''tenant_id'', ''parent_account_id'', ''student_id'']', 'ARRAY[''tenant_id'', ''parent_account_id'', ''student_id'']') INTO v_found_con_name;
 
     IF v_found_con_name IS NULL THEN
-        IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relname = 'uq_parent_student_links_composite')
-        OR EXISTS (
-            SELECT 1 FROM pg_constraint con 
-            JOIN pg_class c ON c.oid = con.conrelid
-            JOIN pg_namespace n ON n.oid = con.connamespace 
-            WHERE n.nspname = 'public' AND c.relname = 'parent_student_links' AND con.conname = 'uq_parent_student_links_composite'
-        ) THEN
-            RAISE EXCEPTION 'MIGRASI DIBATALKAN: Nama uq_parent_student_links_composite sudah digunakan tetapi definisinya tidak sesuai.';
-        END IF;
-
         EXECUTE format(v_idx_query_base, 'parent_student_links', 3, 'ARRAY[''tenant_id'', ''parent_account_id'', ''student_id'']') INTO v_found_idx_name;
 
         IF v_found_idx_name IS NOT NULL THEN
+            IF v_found_idx_name <> 'uq_parent_student_links_composite' AND (
+                EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relname = 'uq_parent_student_links_composite')
+                OR EXISTS (
+                    SELECT 1 FROM pg_constraint con 
+                    JOIN pg_class c ON c.oid = con.conrelid
+                    JOIN pg_namespace n ON n.oid = con.connamespace 
+                    WHERE n.nspname = 'public' AND c.relname = 'parent_student_links' AND con.conname = 'uq_parent_student_links_composite'
+                )
+            ) THEN
+                RAISE EXCEPTION 'MIGRASI DIBATALKAN: Nama uq_parent_student_links_composite sudah digunakan tetapi definisinya tidak sesuai.';
+            END IF;
+
             EXECUTE format('ALTER TABLE public.parent_student_links ADD CONSTRAINT uq_parent_student_links_composite UNIQUE USING INDEX %I', v_found_idx_name);
         ELSE
+            IF EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relname = 'uq_parent_student_links_composite')
+            OR EXISTS (
+                SELECT 1 FROM pg_constraint con 
+                JOIN pg_class c ON c.oid = con.conrelid
+                JOIN pg_namespace n ON n.oid = con.connamespace 
+                WHERE n.nspname = 'public' AND c.relname = 'parent_student_links' AND con.conname = 'uq_parent_student_links_composite'
+            ) THEN
+                RAISE EXCEPTION 'MIGRASI DIBATALKAN: Nama uq_parent_student_links_composite sudah digunakan tetapi definisinya tidak sesuai.';
+            END IF;
+
             ALTER TABLE public.parent_student_links ADD CONSTRAINT uq_parent_student_links_composite UNIQUE (tenant_id, parent_account_id, student_id);
         END IF;
     END IF;

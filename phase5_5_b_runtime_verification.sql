@@ -107,31 +107,48 @@ audit_results AS (
                 FROM actual_indexes WHERE table_name = e.tbl AND index_name = e.name
             )
             WHEN e.type = 'CONSTRAINT' THEN (
-                SELECT CASE
-                    WHEN COUNT(*) = 0 THEN 'FAIL (Missing)'
-                    WHEN COUNT(*) > 1 THEN 'FAIL (Duplicate constraints with same name in public)'
+                CASE 
+                    WHEN e.name = 'uq_parent_accounts_tenant_email' AND NOT EXISTS (
+                        SELECT 1 FROM actual_constraints WHERE table_name = e.tbl AND conname = e.name
+                    ) AND EXISTS (
+                        SELECT 1 FROM actual_indexes 
+                        WHERE table_name = 'parent_accounts' AND index_name = 'uq_parent_accounts_tenant_email'
+                          AND indisunique = true AND indisvalid = true AND indisready = true AND indislive = true
+                          AND amname = 'btree' AND indnkeyatts = 2 AND indnatts = 2
+                          AND (
+                              SELECT a.attname::text FROM pg_attribute a WHERE a.attrelid = indrelid AND a.attnum = indkey[0]
+                          ) = 'tenant_id'
+                          AND indkey[1] = 0
+                          AND replace(replace(replace(replace(lower(pg_get_expr(indexprs, indrelid)), ' ', ''), '(', ''), ')', ''), '::text', '') = 'loweremail'
+                    ) THEN 'PASS'
                     ELSE (
                         SELECT CASE
-                            WHEN table_name != e.tbl THEN 'FAIL (Attached to wrong table)'
-                            WHEN contype != 'u' THEN 'FAIL (Not a UNIQUE constraint)'
-                            WHEN convalidated = false THEN 'FAIL (Constraint not validated)'
-                            WHEN condeferrable = true OR condeferred = true THEN 'FAIL (Deferrable/Deferred not allowed)'
-                            WHEN idx_am IS DISTINCT FROM 'btree' THEN 'FAIL (Backing index missing or not btree)'
-                            WHEN idx_unique = false THEN 'FAIL (Backing index not unique)'
-                            WHEN idx_valid = false OR idx_ready = false OR idx_live = false OR idx_immediate = false THEN 'FAIL (Backing index operational state invalid)'
-                            WHEN idx_natts != idx_nkeyatts THEN 'FAIL (Backing index has INCLUDE columns)'
-                            WHEN (idx_key::int2[])[1:idx_nkeyatts] IS DISTINCT FROM conkey THEN 'FAIL (Backing index key alignment mismatch)'
-                            WHEN (
-                                SELECT array_agg(a.attname::text ORDER BY x.pos)
-                                FROM unnest(conkey) WITH ORDINALITY AS x(colnum, pos)
-                                JOIN pg_attribute a ON a.attrelid = conrelid AND a.attnum = x.colnum
-                            ) IS DISTINCT FROM e.cols THEN 'FAIL (Column sequence mismatch)'
-                            ELSE 'PASS'
+                            WHEN COUNT(*) = 0 THEN 'FAIL (Missing)'
+                            WHEN COUNT(*) > 1 THEN 'FAIL (Duplicate constraints with same name in public)'
+                            ELSE (
+                                SELECT CASE
+                                    WHEN table_name != e.tbl THEN 'FAIL (Attached to wrong table)'
+                                    WHEN contype != 'u' THEN 'FAIL (Not a UNIQUE constraint)'
+                                    WHEN convalidated = false THEN 'FAIL (Constraint not validated)'
+                                    WHEN condeferrable = true OR condeferred = true THEN 'FAIL (Deferrable/Deferred not allowed)'
+                                    WHEN idx_am IS DISTINCT FROM 'btree' THEN 'FAIL (Backing index missing or not btree)'
+                                    WHEN idx_unique = false THEN 'FAIL (Backing index not unique)'
+                                    WHEN idx_valid = false OR idx_ready = false OR idx_live = false OR idx_immediate = false THEN 'FAIL (Backing index operational state invalid)'
+                                    WHEN idx_natts != idx_nkeyatts THEN 'FAIL (Backing index has INCLUDE columns)'
+                                    WHEN (idx_key::int2[])[1:idx_nkeyatts] IS DISTINCT FROM conkey THEN 'FAIL (Backing index key alignment mismatch)'
+                                    WHEN (
+                                        SELECT array_agg(a.attname::text ORDER BY x.pos)
+                                        FROM unnest(conkey) WITH ORDINALITY AS x(colnum, pos)
+                                        JOIN pg_attribute a ON a.attrelid = conrelid AND a.attnum = x.colnum
+                                    ) IS DISTINCT FROM e.cols THEN 'FAIL (Column sequence mismatch)'
+                                    ELSE 'PASS'
+                                END
+                                FROM actual_constraints WHERE table_name = e.tbl AND conname = e.name
+                            )
                         END
                         FROM actual_constraints WHERE table_name = e.tbl AND conname = e.name
                     )
                 END
-                FROM actual_constraints WHERE table_name = e.tbl AND conname = e.name
             )
         END AS status
     FROM expected e
