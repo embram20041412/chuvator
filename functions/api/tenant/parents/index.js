@@ -56,7 +56,13 @@ export async function onRequestPost(context) {
     }
 
     // 4. Security: Compute HMAC
-    const hmacSecret = env.KK_HMAC_SECRET || 'chua-sport-core-kk-hmac-default-secret-key-2026';
+    const hmacSecret = env.KK_HMAC_SECRET;
+    if (!hmacSecret) {
+      return new Response(
+        JSON.stringify({ success: false, message: 'Konfigurasi keamanan (KK_HMAC_SECRET) belum tersedia.' }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
     const kkHmac = await computeHMAC(normalizedKK, hmacSecret);
 
     // 5. Initialize Supabase Admin

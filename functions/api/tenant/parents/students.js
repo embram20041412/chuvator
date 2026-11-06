@@ -48,7 +48,13 @@ export async function onRequestGet(context) {
     }
 
     // 4. Compute HMAC
-    const secret = env.KK_HMAC_SECRET || 'chua-sport-core-kk-hmac-default-secret-key-2026';
+    const secret = env.KK_HMAC_SECRET;
+    if (!secret) {
+      return new Response(
+        JSON.stringify({ success: false, message: 'Konfigurasi keamanan (KK_HMAC_SECRET) belum tersedia.' }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
     const kkHmac = await computeHMAC(normalizedKK, secret);
     const kkLast4 = normalizedKK.slice(-4);
 
