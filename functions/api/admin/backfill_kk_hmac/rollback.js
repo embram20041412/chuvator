@@ -45,8 +45,8 @@ export async function onRequestPost(context) {
       );
     }
 
-    // 2. Ambil catatan audit sukses untuk run_id yang belum di-rollback
-    const auditQueryUrl = `${supabaseUrl}/rest/v1/backfill_kk_audit?run_id=eq.${encodeURIComponent(runId)}&operation_status=eq.SUCCESS&select=id,tenant_id,student_id,old_kk_hmac,old_kk_last4,new_kk_hmac,new_kk_last4`;
+    // 2. Ambil catatan audit BACKFILL_APPLIED untuk run_id yang bersangkutan
+    const auditQueryUrl = `${supabaseUrl}/rest/v1/backfill_kk_audit?run_id=eq.${encodeURIComponent(runId)}&event_type=eq.BACKFILL_APPLIED&select=id,batch_id,tenant_id,student_id,old_kk_hmac,old_kk_last4,new_kk_hmac,new_kk_last4`;
     const auditResp = await fetch(auditQueryUrl, {
       method: 'GET',
       headers: {
@@ -72,7 +72,7 @@ export async function onRequestPost(context) {
       return new Response(
         JSON.stringify({
           success: true,
-          message: 'Tidak ditemukan catatan perubahan yang perlu di-rollback untuk runId ini.',
+          message: 'Tidak ditemukan catatan perubahan (BACKFILL_APPLIED) yang perlu di-rollback untuk runId ini.',
           data: { runId, totalAudited: 0, restoredCount: 0, conflictCount: 0 }
         }),
         { status: 200, headers: corsHeaders }
@@ -81,6 +81,7 @@ export async function onRequestPost(context) {
 
     let restoredCount = 0;
     let conflictCount = 0;
+    let alreadyRestoredCount = 0;
     let failedCount = 0;
 
     for (const row of auditRows) {
@@ -102,7 +103,11 @@ export async function onRequestPost(context) {
       if (rpcResp && rpcResp.ok) {
         const result = await rpcResp.json().catch(() => ({}));
         if (result.success) {
-          restoredCount++;
+          if (result.code === 'ALREADY_ROLLED_BACK') {
+            alreadyRestoredCount++;
+          } else {
+            restoredCount++;
+          }
         } else if (result.code === 'ROLLBACK_CONFLICT_DATA_CHANGED') {
           conflictCount++;
         } else {
@@ -110,6 +115,22 @@ export async function onRequestPost(context) {
         }
       } else {
         // Fallback: Optimistic rollback manual melalui REST jika RPC belum ter-deploy
+        // 1. Periksa apakah sudah pernah di-restore (idempotensi)
+        const checkRestoredUrl = `${supabaseUrl}/rest/v1/backfill_kk_audit?run_id=eq.${encodeURIComponent(runId)}&student_id=eq.${encodeURIComponent(row.student_id)}&event_type=eq.ROLLBACK_RESTORED&original_audit_id=eq.${encodeURIComponent(row.id)}`;
+        const checkRestoredResp = await fetch(checkRestoredUrl, {
+          method: 'GET',
+          headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}`, 'Accept': 'application/json' }
+        }).catch(() => null);
+
+        if (checkRestoredResp && checkRestoredResp.ok) {
+          const restoredRows = await checkRestoredResp.json().catch(() => []);
+          if (restoredRows.length > 0) {
+            alreadyRestoredCount++;
+            continue;
+          }
+        }
+
+        // 2. Baca kondisi aktual siswa saat ini
         const checkStudentUrl = `${supabaseUrl}/rest/v1/students?id=eq.${encodeURIComponent(row.student_id)}&tenant_id=eq.${encodeURIComponent(row.tenant_id)}&select=id,kk_hmac,kk_last4`;
         const studentResp = await fetch(checkStudentUrl, {
           method: 'GET',
@@ -120,8 +141,11 @@ export async function onRequestPost(context) {
           const studentData = await studentResp.json().catch(() => []);
           if (studentData.length > 0) {
             const currentStudent = studentData[0];
-            // Validasi data belum berubah oleh proses lain
-            if (currentStudent.kk_hmac === row.new_kk_hmac && currentStudent.kk_last4 === row.new_kk_last4) {
+            // STRICT COMPARISON: Baik kk_hmac maupun kk_last4 harus cocok persis dengan new_kk_*
+            const hmacMatches = (currentStudent.kk_hmac ?? null) === (row.new_kk_hmac ?? null);
+            const last4Matches = (currentStudent.kk_last4 ?? null) === (row.new_kk_last4 ?? null);
+
+            if (hmacMatches && last4Matches) {
               const updateUrl = `${supabaseUrl}/rest/v1/students?id=eq.${encodeURIComponent(row.student_id)}&tenant_id=eq.${encodeURIComponent(row.tenant_id)}`;
               const updateResp = await fetch(updateUrl, {
                 method: 'PATCH',
@@ -134,18 +158,51 @@ export async function onRequestPost(context) {
               }).catch(() => null);
 
               if (updateResp && updateResp.ok) {
-                // Tandai audit ter-rollback
-                const markAuditUrl = `${supabaseUrl}/rest/v1/backfill_kk_audit?id=eq.${encodeURIComponent(row.id)}`;
-                await fetch(markAuditUrl, {
-                  method: 'PATCH',
+                // Catat event ROLLBACK_RESTORED sebagai baris baru (TRUE APPEND-ONLY, BUKAN UPDATE)
+                const appendAuditUrl = `${supabaseUrl}/rest/v1/backfill_kk_audit`;
+                await fetch(appendAuditUrl, {
+                  method: 'POST',
                   headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ operation_status: 'ROLLED_BACK', rolled_back_at: new Date().toISOString() })
+                  body: JSON.stringify({
+                    run_id: runId,
+                    event_type: 'ROLLBACK_RESTORED',
+                    batch_id: row.batch_id || 1,
+                    tenant_id: row.tenant_id,
+                    student_id: row.student_id,
+                    original_audit_id: row.id,
+                    old_kk_hmac: row.old_kk_hmac,
+                    old_kk_last4: row.old_kk_last4,
+                    new_kk_hmac: row.new_kk_hmac,
+                    new_kk_last4: row.new_kk_last4,
+                    reason: 'RESTORED: Nilai kk_hmac dan kk_last4 dikembalikan ke nilai sebelum backfill.'
+                  })
                 }).catch(() => null);
                 restoredCount++;
               } else {
                 failedCount++;
               }
             } else {
+              // Terjadi konflik perubahan data pasca-backfill
+              const appendConflictUrl = `${supabaseUrl}/rest/v1/backfill_kk_audit`;
+              await fetch(appendConflictUrl, {
+                method: 'POST',
+                headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  run_id: runId,
+                  event_type: 'ROLLBACK_CONFLICT',
+                  batch_id: row.batch_id || 1,
+                  tenant_id: row.tenant_id,
+                  student_id: row.student_id,
+                  original_audit_id: row.id,
+                  old_kk_hmac: row.old_kk_hmac,
+                  old_kk_last4: row.old_kk_last4,
+                  new_kk_hmac: row.new_kk_hmac,
+                  new_kk_last4: row.new_kk_last4,
+                  current_db_hmac: currentStudent.kk_hmac,
+                  current_db_last4: currentStudent.kk_last4,
+                  reason: 'CONFLICT: Nilai aktual di database telah berubah pasca-backfill. Pemulihan otomatis dibatalkan.'
+                })
+              }).catch(() => null);
               conflictCount++;
             }
           } else {
@@ -157,7 +214,7 @@ export async function onRequestPost(context) {
       }
     }
 
-    // Update status run menjadi ROLLED_BACK jika semua atau sebagian telah di-rollback
+    // Update status run menjadi ROLLED_BACK jika ada baris yang dipulihkan
     const updateRunUrl = `${supabaseUrl}/rest/v1/backfill_kk_runs?run_id=eq.${encodeURIComponent(runId)}`;
     await fetch(updateRunUrl, {
       method: 'PATCH',
@@ -178,6 +235,7 @@ export async function onRequestPost(context) {
           totalAudited: auditRows.length,
           restoredCount,
           conflictCount,
+          alreadyRestoredCount,
           failedCount,
           timestamp: new Date().toISOString()
         }

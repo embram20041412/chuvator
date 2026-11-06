@@ -1,16 +1,20 @@
 -- =============================================================================
--- CHUVATOR — FASE 5.5-B
+-- CHUVATOR — FASE 5.5-B (HARDENING V2)
 -- RUNTIME VERIFICATION SCRIPT: BACKFILL AUDIT INFRASTRUCTURE (READ-ONLY)
 -- File: phase5_5_b_backfill_verification.sql
--- Purpose: Read-only verification of backfill audit tables, indexes, and RPC routines.
+-- Purpose: Read-only verification of backfill audit tables, indexes, triggers, and RPC routines.
 -- =============================================================================
 
 WITH expected_objects AS (
     SELECT 'TABLE'::text AS obj_type, 'backfill_kk_runs'::text AS obj_name
     UNION ALL SELECT 'TABLE', 'backfill_kk_audit'
     UNION ALL SELECT 'INDEX', 'idx_backfill_runs_status_lease'
+    UNION ALL SELECT 'INDEX', 'idx_backfill_runs_tenant_status'
     UNION ALL SELECT 'INDEX', 'idx_backfill_audit_run_student'
     UNION ALL SELECT 'INDEX', 'idx_backfill_audit_tenant_student'
+    UNION ALL SELECT 'TRIGGER', 'trg_prevent_backfill_audit_update'
+    UNION ALL SELECT 'TRIGGER', 'trg_prevent_backfill_audit_truncate'
+    UNION ALL SELECT 'ROUTINE', 'fn_prevent_backfill_audit_mutation'
     UNION ALL SELECT 'ROUTINE', 'acquire_backfill_kk_lease'
     UNION ALL SELECT 'ROUTINE', 'heartbeat_backfill_kk_lease'
     UNION ALL SELECT 'ROUTINE', 'apply_backfill_kk_atomic_record'
@@ -29,6 +33,11 @@ actual_indexes AS (
     JOIN pg_namespace n ON n.oid = c.relnamespace
     WHERE n.nspname = 'public' AND c.relkind = 'i'
 ),
+actual_triggers AS (
+    SELECT trigger_name
+    FROM information_schema.triggers
+    WHERE trigger_schema = 'public'
+),
 actual_routines AS (
     SELECT routine_name
     FROM information_schema.routines
@@ -40,6 +49,7 @@ SELECT
     CASE 
         WHEN e.obj_type = 'TABLE' AND EXISTS (SELECT 1 FROM actual_tables WHERE table_name = e.obj_name) THEN 'READY'
         WHEN e.obj_type = 'INDEX' AND EXISTS (SELECT 1 FROM actual_indexes WHERE index_name = e.obj_name) THEN 'READY'
+        WHEN e.obj_type = 'TRIGGER' AND EXISTS (SELECT 1 FROM actual_triggers WHERE trigger_name = e.obj_name) THEN 'READY'
         WHEN e.obj_type = 'ROUTINE' AND EXISTS (SELECT 1 FROM actual_routines WHERE routine_name = e.obj_name) THEN 'READY'
         ELSE 'PENDING_DEPLOYMENT'
     END AS status

@@ -1,7 +1,8 @@
 /**
  * Cloudflare Pages Function: POST /api/admin/backfill_kk_hmac
- * Execution & Dry-Run Endpoint for Student KK_HMAC Backfill.
+ * Execution & Dry-Run Endpoint for Student KK_HMAC Backfill (V2 Hardened).
  * Protected: Superadmin Only, Fail-Closed on missing KK_HMAC_SECRET.
+ * Enforces Distributed Fencing Lease Tokens, Persistent Database Cursors, and Tenant Binding.
  */
 
 import { getCorsHeaders } from '../../portal/_auth_v2.js';
@@ -53,13 +54,13 @@ export async function onRequestPost(context) {
     const url = new URL(request.url);
     const body = await request.json().catch(() => ({}));
     const isDryRun = url.searchParams.get('dryRun') === 'true' || body.dryRun === true;
-    const tenantFilter = body.tenantId || url.searchParams.get('tenantId') || null;
+    const requestedTenantId = body.tenantId || url.searchParams.get('tenantId') || 'global';
 
     // -------------------------------------------------------------------------
     // 3. MODE DRY-RUN: 100% Read-Only, Zero INSERT, Zero UPDATE, Zero Locks
     // -------------------------------------------------------------------------
     if (isDryRun) {
-      const analysis = await performDryRunAnalysis(supabaseUrl, serviceRoleKey, secret, tenantFilter);
+      const analysis = await performDryRunAnalysis(supabaseUrl, serviceRoleKey, secret, requestedTenantId);
 
       return new Response(
         JSON.stringify({
@@ -76,14 +77,126 @@ export async function onRequestPost(context) {
     }
 
     // -------------------------------------------------------------------------
-    // 4. MODE ACTIVE EXECUTION (ATOMIC BATCHING WITH CONCURRENCY LEASE LOCK)
+    // 4. ACTIVE EXECUTION (FENCING LEASE TOKEN + DATABASE-AUTHORITATIVE CURSOR)
     // -------------------------------------------------------------------------
     const batchSize = Math.min(Number(body.batchSize) || 50, 50);
-    const resumeCursor = body.cursor || null;
-    let runId = body.runId || null;
+    const requestRunId = body.runId || null;
+    let runId = requestRunId;
+    let leaseToken = body.leaseToken || null;
+    let runTenantId = requestedTenantId;
+    let dbCursor = null;
 
-    // 4.1. Ambil atau verifikasi lease lock
-    if (!runId) {
+    if (requestRunId) {
+      // -----------------------------------------------------------------------
+      // RESUME PRE-EXISTING RUN:
+      // Baca langsung state resmi dari database: cursor dan tenant terikat permanen!
+      // DILARANG menerima kursor arbitrer dari client.
+      // -----------------------------------------------------------------------
+      if (body.cursor !== undefined) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            code: 'CLIENT_CURSOR_REJECTED',
+            message: 'Kursor klien ditolak. Siklus resume harus membaca kursor secara eksklusif dari database (last_cursor).'
+          }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      const getRunUrl = `${supabaseUrl}/rest/v1/backfill_kk_runs?run_id=eq.${encodeURIComponent(requestRunId)}&select=run_id,tenant_id,status,lease_token,lease_expires_at,last_cursor`;
+      const runResp = await fetch(getRunUrl, {
+        method: 'GET',
+        headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}`, 'Accept': 'application/json' }
+      }).catch(() => null);
+
+      if (!runResp || !runResp.ok) {
+        return new Response(
+          JSON.stringify({ success: false, code: 'RUN_NOT_FOUND', message: 'Siklus run tidak ditemukan di database.' }),
+          { status: 404, headers: corsHeaders }
+        );
+      }
+
+      const runs = await runResp.json().catch(() => []);
+      if (!Array.isArray(runs) || runs.length === 0) {
+        return new Response(
+          JSON.stringify({ success: false, code: 'RUN_NOT_FOUND', message: 'Siklus run tidak ditemukan di database.' }),
+          { status: 404, headers: corsHeaders }
+        );
+      }
+
+      const existingRun = runs[0];
+      if (existingRun.status !== 'RUNNING' && existingRun.status !== 'ACQUIRED') {
+        return new Response(
+          JSON.stringify({ success: false, code: 'RUN_NOT_ACTIVE', message: `Siklus run tidak dapat dilanjutkan karena berstatus: ${existingRun.status}.` }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      // Validasi Tenant Immutability: Tenant tidak boleh diganti saat resume!
+      if (requestedTenantId && requestedTenantId !== 'global' && requestedTenantId !== existingRun.tenant_id) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            code: 'TENANT_MISMATCH_ON_RESUME',
+            message: `Siklus run ini terikat secara permanen pada tenant '${existingRun.tenant_id}'. Penggantian tenant saat resume dilarang.`
+          }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      runTenantId = existingRun.tenant_id;
+      dbCursor = existingRun.last_cursor; // Selalu baca kursor dari DB!
+
+      // Validasi atau Akuisisi Fencing Lease Token
+      if (body.leaseToken) {
+        if (body.leaseToken !== existingRun.lease_token) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              code: 'FENCING_TOKEN_STALE',
+              message: 'Lease token yang disertakan telah usang. Worker lain telah mengambil alih run ini.'
+            }),
+            { status: 409, headers: corsHeaders }
+          );
+        }
+        leaseToken = body.leaseToken;
+      } else {
+        // Jika resume tanpa token aktif, periksa apakah lease lama sudah kedaluwarsa
+        const leaseExpired = new Date(existingRun.lease_expires_at).getTime() <= Date.now();
+        if (!leaseExpired) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              code: 'RUN_CURRENTLY_LOCKED',
+              message: 'Run ini sedang dikunci oleh worker aktif. Sertakan leaseToken yang sah atau tunggu lease kedaluwarsa.'
+            }),
+            { status: 409, headers: corsHeaders }
+          );
+        }
+
+        // Perpanjang / terbitkan lease token baru untuk worker ini
+        const renewUrl = `${supabaseUrl}/rest/v1/rpc/acquire_backfill_kk_lease`;
+        const renewResp = await fetch(renewUrl, {
+          method: 'POST',
+          headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ p_tenant_id: runTenantId, p_created_by: auth.user.email, p_lease_seconds: 120 })
+        }).catch(() => null);
+
+        if (renewResp && renewResp.ok) {
+          const renewData = await renewResp.json().catch(() => ({}));
+          runId = renewData.run_id;
+          leaseToken = renewData.lease_token;
+        } else {
+          return new Response(
+            JSON.stringify({ success: false, code: 'LEASE_ACQUIRE_FAILED', message: 'Gagal memperbarui lease lock.' }),
+            { status: 500, headers: corsHeaders }
+          );
+        }
+      }
+    } else {
+      // -----------------------------------------------------------------------
+      // INISIASI RUN BARU DENGAN LEASE FENCING TOKEN & TENANT TERIKAT
+      // -----------------------------------------------------------------------
       const leaseRpcUrl = `${supabaseUrl}/rest/v1/rpc/acquire_backfill_kk_lease`;
       const leaseResp = await fetch(leaseRpcUrl, {
         method: 'POST',
@@ -93,26 +206,13 @@ export async function onRequestPost(context) {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
+          p_tenant_id: runTenantId,
           p_created_by: auth.user.email,
           p_lease_seconds: 120
         })
       }).catch(() => null);
 
-      if (leaseResp && leaseResp.ok) {
-        const leaseData = await leaseResp.json().catch(() => ({}));
-        if (!leaseData.success) {
-          return new Response(
-            JSON.stringify({
-              success: false,
-              code: leaseData.code || 'CONCURRENCY_LOCKED',
-              message: leaseData.message || 'Terdapat proses backfill lain yang sedang aktif.'
-            }),
-            { status: 409, headers: corsHeaders }
-          );
-        }
-        runId = leaseData.run_id;
-      } else {
-        // Fallback jika tabel audit belum di-deploy: Tolak mutasi dengan pesan jelas
+      if (!leaseResp || !leaseResp.ok) {
         return new Response(
           JSON.stringify({
             success: false,
@@ -122,15 +222,30 @@ export async function onRequestPost(context) {
           { status: 503, headers: corsHeaders }
         );
       }
+
+      const leaseData = await leaseResp.json().catch(() => ({}));
+      if (!leaseData.success) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            code: leaseData.code || 'CONCURRENCY_LOCKED',
+            message: leaseData.message || 'Terdapat proses backfill yang sedang berjalan pada tenant ini.'
+          }),
+          { status: 409, headers: corsHeaders }
+        );
+      }
+
+      runId = leaseData.run_id;
+      leaseToken = leaseData.lease_token;
     }
 
-    // 4.2. Baca batch siswa menggunakan Keyset Pagination (UUID deterministik)
+    // 4.2. Baca batch siswa menggunakan Keyset Pagination dengan kursor resmi DB
     let fetchUrl = `${supabaseUrl}/rest/v1/students?select=id,tenant_id,nik_kk,kk_hmac,kk_last4&order=id.asc&limit=${batchSize}`;
-    if (resumeCursor) {
-      fetchUrl += `&id=gt.${encodeURIComponent(resumeCursor)}`;
+    if (dbCursor) {
+      fetchUrl += `&id=gt.${encodeURIComponent(dbCursor)}`;
     }
-    if (tenantFilter && tenantFilter !== 'global') {
-      fetchUrl += `&tenant_id=eq.${encodeURIComponent(tenantFilter)}`;
+    if (runTenantId && runTenantId !== 'global') {
+      fetchUrl += `&tenant_id=eq.${encodeURIComponent(runTenantId)}`;
     }
 
     const studentsResp = await fetch(fetchUrl, {
@@ -153,9 +268,9 @@ export async function onRequestPost(context) {
     let processed = 0;
     let skipped = 0;
     let failed = 0;
-    let lastProcessedId = resumeCursor;
+    let lastProcessedId = dbCursor;
 
-    // 4.3. Proses setiap siswa dalam batch secara terkontrol
+    // 4.3. Proses setiap siswa dalam batch menggunakan RPC atomik ber-fencing token
     for (const student of studentsBatch) {
       const studentId = student.id;
       const tenantId = student.tenant_id;
@@ -173,6 +288,7 @@ export async function onRequestPost(context) {
           headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             p_run_id: runId,
+            p_lease_token: leaseToken,
             p_batch_id: 1,
             p_student_id: studentId,
             p_tenant_id: tenantId,
@@ -185,13 +301,14 @@ export async function onRequestPost(context) {
         continue;
       }
 
-      // Kasus B: HMAC sudah ada tetapi formatnya rusak (bukan 64 hex)
+      // Kasus B: Format hash rusak (bukan 64 hex)
       if (currHmac && !/^[0-9a-f]{64}$/.test(currHmac)) {
         await fetch(`${supabaseUrl}/rest/v1/rpc/record_backfill_kk_skip`, {
           method: 'POST',
           headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             p_run_id: runId,
+            p_lease_token: leaseToken,
             p_batch_id: 1,
             p_student_id: studentId,
             p_tenant_id: tenantId,
@@ -208,15 +325,16 @@ export async function onRequestPost(context) {
       const computedHmac = await computeHMAC(cleanKK, secret);
       const computedLast4 = cleanKK.slice(-4);
 
-      // Kasus C: HMAC sudah ada dan valid
+      // Kasus C: Hash sudah ada di database
       if (currHmac) {
         if (currHmac !== computedHmac) {
-          // Mismatch antara KK sumber dan HMAC yang tersimpan
+          // Mismatch antara KK sumber dan hash tersimpan
           await fetch(`${supabaseUrl}/rest/v1/rpc/record_backfill_kk_skip`, {
             method: 'POST',
             headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({
               p_run_id: runId,
+              p_lease_token: leaseToken,
               p_batch_id: 1,
               p_student_id: studentId,
               p_tenant_id: tenantId,
@@ -229,13 +347,14 @@ export async function onRequestPost(context) {
           continue;
         }
 
-        // Jika HMAC cocok dan last4 sudah terisi valid
+        // Jika hash cocok dan last4 sudah valid: Idempoten skip
         if (currLast4 === computedLast4) {
           await fetch(`${supabaseUrl}/rest/v1/rpc/record_backfill_kk_skip`, {
             method: 'POST',
             headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
             body: JSON.stringify({
               p_run_id: runId,
+              p_lease_token: leaseToken,
               p_batch_id: 1,
               p_student_id: studentId,
               p_tenant_id: tenantId,
@@ -248,12 +367,13 @@ export async function onRequestPost(context) {
           continue;
         }
 
-        // Jika HMAC cocok tetapi last4 kosong, update last4 saja via RPC atomik
+        // Jika hash cocok tetapi last4 kosong: Mutasi hanya last4 via RPC atomik
         const applyResp = await fetch(`${supabaseUrl}/rest/v1/rpc/apply_backfill_kk_atomic_record`, {
           method: 'POST',
           headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             p_run_id: runId,
+            p_lease_token: leaseToken,
             p_batch_id: 1,
             p_student_id: studentId,
             p_tenant_id: tenantId,
@@ -265,19 +385,21 @@ export async function onRequestPost(context) {
         }).catch(() => null);
 
         if (applyResp && applyResp.ok) {
-          processed++;
+          const resJson = await applyResp.json().catch(() => ({}));
+          if (resJson.success) processed++; else failed++;
         } else {
           failed++;
         }
         continue;
       }
 
-      // Kasus D: Kandidat Murni (KK valid, HMAC kosong) -> Terapkan secara atomik
+      // Kasus D: Kandidat Murni (KK valid, HMAC null/kosong) -> Terapkan secara atomik
       const applyResp = await fetch(`${supabaseUrl}/rest/v1/rpc/apply_backfill_kk_atomic_record`, {
         method: 'POST',
         headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           p_run_id: runId,
+          p_lease_token: leaseToken,
           p_batch_id: 1,
           p_student_id: studentId,
           p_tenant_id: tenantId,
@@ -289,17 +411,18 @@ export async function onRequestPost(context) {
       }).catch(() => null);
 
       if (applyResp && applyResp.ok) {
-        processed++;
+        const resJson = await applyResp.json().catch(() => ({}));
+        if (resJson.success) processed++; else failed++;
       } else {
         failed++;
       }
     }
 
-    // 4.4. Perpanjang heartbeat lease
+    // 4.4. Perpanjang heartbeat lease dengan fencing token
     await fetch(`${supabaseUrl}/rest/v1/rpc/heartbeat_backfill_kk_lease`, {
       method: 'POST',
       headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ p_run_id: runId, p_lease_seconds: 120 })
+      body: JSON.stringify({ p_run_id: runId, p_lease_token: leaseToken, p_lease_seconds: 120 })
     }).catch(() => null);
 
     // 4.5. Jika seluruh batch selesai atau tidak ada baris tersisa, selesaikan run
@@ -308,7 +431,7 @@ export async function onRequestPost(context) {
       await fetch(`${supabaseUrl}/rest/v1/rpc/complete_backfill_kk_run`, {
         method: 'POST',
         headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ p_run_id: runId, p_status: 'COMPLETED' })
+        body: JSON.stringify({ p_run_id: runId, p_lease_token: leaseToken, p_status: 'COMPLETED' })
       }).catch(() => null);
     }
 
@@ -317,6 +440,8 @@ export async function onRequestPost(context) {
         success: true,
         data: {
           runId,
+          leaseToken,
+          tenantId: runTenantId,
           batchCount: studentsBatch.length,
           processed,
           skipped,
