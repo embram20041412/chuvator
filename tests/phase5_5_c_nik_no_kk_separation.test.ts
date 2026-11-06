@@ -373,16 +373,17 @@ test('CHUVATOR — FASE 5.5-B: Pemisahan Identitas NIK dan Nomor KK', async (t) 
     assert.match(migrationSql, /NEW\.kk_last4\s*:=\s*NULL;/);
   });
 
-  await t.test('13. Kegagalan Komputasi HMAC: Mencegah hash lama tertinggal untuk Nomor KK baru', () => {
-    // Simulasi trigger DB: Jika KK berubah dan tidak ada hash baru yang berbeda disertakan,
-    // hash lama wajib di-NULL-kan
-    const simulateTrigger = (oldRow: any, newRow: any) => {
+  await t.test('13. Pengujian Negatif Trigger Invalidasi: 7 Skenario Keamanan HMAC', () => {
+    // Simulasi fungsi trigger PL/pgSQL public.fn_invalidate_student_kk_hmac():
+    // IF (OLD.no_kk IS DISTINCT FROM NEW.no_kk) THEN
+    //     NEW.kk_hmac := NULL;
+    //     NEW.kk_last4 := NULL;
+    // END IF;
+    const simulateDatabaseTrigger = (oldRow: any, newRow: any) => {
       const row = { ...newRow };
       if (oldRow.no_kk !== row.no_kk) {
-        if (row.kk_hmac === oldRow.kk_hmac) {
-          row.kk_hmac = null;
-          row.kk_last4 = null;
-        }
+        row.kk_hmac = null;
+        row.kk_last4 = null;
       }
       return row;
     };
@@ -391,25 +392,78 @@ test('CHUVATOR — FASE 5.5-B: Pemisahan Identitas NIK dan Nomor KK', async (t) 
       id: 'student-1',
       nik: '3201010000000001',
       no_kk: '3201010000000002',
-      kk_hmac: 'old_hmac_hash_64_characters_long_abcdef1234567890abcdef1234567890ab',
+      kk_hmac: 'a'.repeat(64),
       kk_last4: '0002'
     };
 
-    // Kasus 1: no_kk diubah tanpa menyediakan hash baru -> hash lama gugur
-    const updatedStudent1 = simulateTrigger(initialStudent, {
+    // Skenario 1: no_kk berubah tanpa mengirim HMAC baru -> HMAC dan last4 menjadi NULL
+    const res1 = simulateDatabaseTrigger(initialStudent, {
       ...initialStudent,
-      no_kk: '3201019999999999' // KK baru
+      no_kk: '3201019999999999'
     });
-    assert.strictEqual(updatedStudent1.kk_hmac, null, 'Hash lama wajib di-NULL-kan');
-    assert.strictEqual(updatedStudent1.kk_last4, null, 'Last4 lama wajib di-NULL-kan');
+    assert.strictEqual(res1.kk_hmac, null, '1. HMAC wajib menjadi NULL saat no_kk berubah');
+    assert.strictEqual(res1.kk_last4, null, '1. Last4 wajib menjadi NULL saat no_kk berubah');
 
-    // Kasus 2: nik saja yang diubah -> hash KK tetap utuh
-    const updatedStudent2 = simulateTrigger(initialStudent, {
+    // Skenario 2: no_kk berubah sambil mengirim HMAC lama -> TETAP menjadi NULL
+    const res2 = simulateDatabaseTrigger(initialStudent, {
       ...initialStudent,
-      nik: '3201018888888888' // NIK baru
+      no_kk: '3201019999999999',
+      kk_hmac: initialStudent.kk_hmac,
+      kk_last4: initialStudent.kk_last4
     });
-    assert.strictEqual(updatedStudent2.kk_hmac, initialStudent.kk_hmac, 'Hash KK tidak boleh berubah saat NIK berubah');
-    assert.strictEqual(updatedStudent2.kk_last4, '0002', 'Last4 KK tidak boleh berubah saat NIK berubah');
+    assert.strictEqual(res2.kk_hmac, null, '2. HMAC lama wajib digugurkan menjadi NULL');
+    assert.strictEqual(res2.kk_last4, null, '2. Last4 lama wajib digugurkan menjadi NULL');
+
+    // Skenario 3: no_kk berubah sambil mengirim HMAC palsu -> TETAP menjadi NULL
+    const res3 = simulateDatabaseTrigger(initialStudent, {
+      ...initialStudent,
+      no_kk: '3201019999999999',
+      kk_hmac: 'f'.repeat(64),
+      kk_last4: '9999'
+    });
+    assert.strictEqual(res3.kk_hmac, null, '3. HMAC palsu wajib ditolak dan di-NULL-kan oleh trigger');
+    assert.strictEqual(res3.kk_last4, null, '3. Last4 palsu wajib ditolak dan di-NULL-kan oleh trigger');
+
+    // Skenario 4: no_kk tidak berubah -> HMAC tidak terhapus
+    const res4 = simulateDatabaseTrigger(initialStudent, {
+      ...initialStudent,
+      student_name: 'Budi Santoso Edit Nama'
+    });
+    assert.strictEqual(res4.kk_hmac, initialStudent.kk_hmac, '4. HMAC tidak boleh terhapus jika no_kk tidak berubah');
+    assert.strictEqual(res4.kk_last4, initialStudent.kk_last4, '4. Last4 tidak boleh terhapus jika no_kk tidak berubah');
+
+    // Skenario 5: Hanya NIK berubah (no_kk tetap) -> HMAC tidak terhapus
+    const res5 = simulateDatabaseTrigger(initialStudent, {
+      ...initialStudent,
+      nik: '3201018888888888'
+    });
+    assert.strictEqual(res5.kk_hmac, initialStudent.kk_hmac, '5. Perubahan NIK tidak boleh menginvalidasi HMAC KK');
+    assert.strictEqual(res5.kk_last4, initialStudent.kk_last4, '5. Perubahan NIK tidak boleh menginvalidasi Last4 KK');
+
+    // Skenario 6: Backfill mengisi HMAC tanpa mengubah no_kk -> HMAC dan last4 tersimpan
+    const unbackfilledStudent = {
+      id: 'student-2',
+      nik: '3201010000000001',
+      no_kk: '3201010000000002',
+      kk_hmac: null,
+      kk_last4: null
+    };
+    const backfilledHmac = 'b'.repeat(64);
+    const res6 = simulateDatabaseTrigger(unbackfilledStudent, {
+      ...unbackfilledStudent,
+      kk_hmac: backfilledHmac,
+      kk_last4: '0002'
+    });
+    assert.strictEqual(res6.kk_hmac, backfilledHmac, '6. Backfill berhasil menyimpan HMAC karena no_kk tidak berubah');
+    assert.strictEqual(res6.kk_last4, '0002', '6. Backfill berhasil menyimpan Last4 karena no_kk tidak berubah');
+
+    // Skenario 7: Perubahan KK setelah backfill -> HMAC dan last4 kembali NULL
+    const res7 = simulateDatabaseTrigger(res6, {
+      ...res6,
+      no_kk: '3201017777777777'
+    });
+    assert.strictEqual(res7.kk_hmac, null, '7. Edit KK pasca-backfill wajib menginvalidasi HMAC kembali ke NULL');
+    assert.strictEqual(res7.kk_last4, null, '7. Edit KK pasca-backfill wajib menginvalidasi Last4 kembali ke NULL');
   });
 
   await t.test('14. Portal Wali: Menolak HMAC kosong atau kedaluwarsa secara konsisten', async () => {

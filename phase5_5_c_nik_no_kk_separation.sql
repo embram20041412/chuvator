@@ -80,14 +80,12 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 BEGIN
-    -- Hanya invalidasi jika no_kk mengalami perubahan nilai
+    -- Setiap kali no_kk mengalami perubahan nilai (OLD.no_kk IS DISTINCT FROM NEW.no_kk),
+    -- WAJIB menginvalidasi kk_hmac dan kk_last4 menjadi NULL secara tanpa syarat.
+    -- Trigger database tidak boleh mempercayai nilai HMAC arbitrer yang dikirim bersamaan dengan perubahan no_kk.
     IF (OLD.no_kk IS DISTINCT FROM NEW.no_kk) THEN
-        -- Jika update tidak secara bersamaan menyertakan HMAC baru yang berbeda,
-        -- reset kk_hmac dan kk_last4 agar hash KK lama tidak tertinggal aktif
-        IF (NEW.kk_hmac IS NOT DISTINCT FROM OLD.kk_hmac) THEN
-            NEW.kk_hmac := NULL;
-            NEW.kk_last4 := NULL;
-        END IF;
+        NEW.kk_hmac := NULL;
+        NEW.kk_last4 := NULL;
     END IF;
     RETURN NEW;
 END;

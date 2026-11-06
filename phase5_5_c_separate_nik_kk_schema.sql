@@ -1,17 +1,12 @@
 -- =============================================================================
--- CHUVATOR — FASE 5.5-C (ADDITIVE IDENTITY SEPARATION SCHEMA)
+-- CHUVATOR — FASE 5.5-C (DEPRECATED LEGACY ALIAS SCHEMA FILE)
 -- PEMISAHAN IDENTITAS SISWA: NIK (16 DIGIT) DAN NO_KK (16 DIGIT)
 -- File: phase5_5_c_separate_nik_kk_schema.sql
--- Status: PREPARED SPECIFICATION (NOT EXECUTED - ZERO PRODUCTION MUTATION)
+-- Status: DEPRECATED / ALIAS SPECIFICATION (MIGRATION KANONIS REGULAR: phase5_5_c_nik_no_kk_separation.sql)
 -- 
--- PRINSIP KEAMANAN & ARSITEKTUR:
--- 1. ADDITIVE ONLY: Menambahkan kolom baru tanpa menghapus kolom lama nik_kk.
--- 2. NULL-SAFE: Kolom nik dan no_kk bersifat NULLABLE sehingga tidak merusak
---    data historis 6 siswa yang ada saat ini di Supabase wqnhlmvvyhpctmaukwyj.
--- 3. NO AUTO-MIGRATION: Dilarang melakukan migrasi otomatis dari nik_kk ke no_kk
---    atau nik sebelum verifikasi dokumen fisik dilakukan oleh pihak sekolah.
--- 4. FORMAT VALIDATION: Format constraint NULL-safe memastikan jika diisi,
---    wajib tepat 16 digit angka murni (^[0-9]{16}$).
+-- PERINGATAN KANONIKALITAS:
+-- File ini dipertahankan murni untuk referensi kompatibilitas histori repository.
+-- DDL KANONIS RESMI UNTUK EKSEKUSI ADALAH: phase5_5_c_nik_no_kk_separation.sql
 -- =============================================================================
 
 BEGIN;
@@ -79,14 +74,12 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 BEGIN
-    -- Hanya invalidasi jika no_kk mengalami perubahan nilai
+    -- Setiap kali no_kk mengalami perubahan nilai (OLD.no_kk IS DISTINCT FROM NEW.no_kk),
+    -- WAJIB menginvalidasi kk_hmac dan kk_last4 menjadi NULL secara tanpa syarat.
+    -- Trigger database tidak boleh mempercayai nilai HMAC arbitrer yang dikirim bersamaan dengan perubahan no_kk.
     IF (OLD.no_kk IS DISTINCT FROM NEW.no_kk) THEN
-        -- Jika update tidak secara bersamaan menyertakan HMAC baru yang berbeda,
-        -- reset kk_hmac dan kk_last4 agar hash KK lama tidak tertinggal aktif
-        IF (NEW.kk_hmac IS NOT DISTINCT FROM OLD.kk_hmac) THEN
-            NEW.kk_hmac := NULL;
-            NEW.kk_last4 := NULL;
-        END IF;
+        NEW.kk_hmac := NULL;
+        NEW.kk_last4 := NULL;
     END IF;
     RETURN NEW;
 END;
