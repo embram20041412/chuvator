@@ -1,12 +1,13 @@
 /**
  * Cloudflare Pages Function: /api/portal/evaluations
- * Edge-safe athlete evaluations and achievements endpoint for Parent Portal V2 (V2.6.9 Security Hotfix).
+ * Edge-safe athlete evaluations and achievements endpoint for Parent Portal V2 (V2.6.10 Security Hardening).
  * Strict Session V2, Anti-IDOR, Tenant Boundary Enforcement, CSRF verification, and Supabase RLS Bearer token integration.
  * 
  * ZERO DUMMY DATA:
  * - If no evaluations in database, returns evaluations: [] and latestEvaluation: null.
  * - If no achievements in database, returns achievements: [].
  * - Never uses anonKey as Bearer token.
+ * - Fail-closed CSRF, Tenant Isolation, Student UUID validation, and Supabase Response Error Handling.
  */
 
 import {
@@ -56,22 +57,46 @@ export async function onRequest(context) {
     const childrenSummary = Array.isArray(session.childrenSummary) ? session.childrenSummary : [];
     const accessibleTenants = Array.isArray(session.accessibleTenants) ? session.accessibleTenants : [];
 
-    // 3. Strict CSRF Verification for POST
+    // 3. Strict CSRF Verification for POST (Fail-Closed)
     if (request.method === 'POST') {
-      const csrfHeader = request.headers.get('X-Portal-CSRF');
-      if (!verifyCsrf(request, env, session.csrfToken || csrfHeader)) {
+      const sessionCsrf = typeof session.csrfToken === 'string' ? session.csrfToken.trim() : '';
+      if (!sessionCsrf) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: 'CSRF token sesi tidak tersedia.',
+            message: 'Akses ditolak. CSRF token sesi tidak tersedia.'
+          }),
+          { status: 403, headers: corsHeaders }
+        );
+      }
+
+      const reqCsrf = request.headers.get('X-Portal-CSRF');
+      if (!reqCsrf || reqCsrf !== sessionCsrf || !verifyCsrf(request, env, sessionCsrf)) {
         return new Response(
           JSON.stringify({
             success: false,
             error: 'CSRF token atau origin tidak valid.',
-            message: 'CSRF token atau origin tidak valid.'
+            message: 'Akses ditolak. CSRF token atau origin tidak valid.'
           }),
           { status: 403, headers: corsHeaders }
         );
       }
     }
 
-    // 4. Parse Body / SearchParams for requested student & tenant
+    // 4. Validasi accessibleTenants (Wajib array valid dan tidak kosong)
+    if (!Array.isArray(session.accessibleTenants) || session.accessibleTenants.length === 0) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Akses lintas tenant tidak diizinkan.',
+          message: 'Akses ditolak. Sesi Anda tidak memiliki daftar tenant yang terotorisasi.'
+        }),
+        { status: 403, headers: corsHeaders }
+      );
+    }
+
+    // 5. Parse Body / SearchParams for requested student & tenant
     let rawStudentId = '';
     let rawTenantId = '';
 
@@ -89,6 +114,7 @@ export async function onRequest(context) {
     const firstChild = childrenSummary[0] || {};
     const studentId = String(rawStudentId || firstChild.studentId || firstChild.id || '').trim().toLowerCase();
 
+    // 6. Validasi studentId & format UUID
     if (!studentId) {
       return new Response(
         JSON.stringify({
@@ -100,7 +126,18 @@ export async function onRequest(context) {
       );
     }
 
-    // 5. Anti-IDOR: Validasi Kepemilikan Siswa terhadap childrenSummary pada sesi
+    if (!UUID_REGEX.test(studentId)) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Format studentId tidak valid.',
+          message: 'Format studentId tidak valid. Wajib berupa UUID.'
+        }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    // 7. Anti-IDOR: Validasi Kepemilikan Siswa terhadap childrenSummary pada sesi
     const matchingChildren = childrenSummary.filter(
       c => String(c.studentId || c.id || '').trim().toLowerCase() === studentId
     );
@@ -128,9 +165,36 @@ export async function onRequest(context) {
     }
 
     const matchedChild = matchingChildren[0];
-    const childTenantId = String(matchedChild.tenantId || matchedChild.tenant_id || rawTenantId || firstChild.tenantId || '').trim();
 
-    // 6. Validasi Isolasi Tenant
+    // 8. Isolasi Batas Tenant (Tenant wajib berasal dari data anak yang terverifikasi)
+    const childTenantId = String(matchedChild.tenantId || matchedChild.tenant_id || '').trim();
+
+    if (!childTenantId) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Akses lintas tenant tidak diizinkan.',
+          message: 'Akses ditolak. Tenant siswa tidak valid atau kosong.'
+        }),
+        { status: 403, headers: corsHeaders }
+      );
+    }
+
+    const isTenantAccessible = accessibleTenants.some(
+      t => String(t).trim().toLowerCase() === childTenantId.toLowerCase()
+    );
+
+    if (!isTenantAccessible) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Akses lintas tenant tidak diizinkan.',
+          message: 'Akses ditolak. Tenant siswa tidak terdaftar dalam tenant yang terotorisasi.'
+        }),
+        { status: 403, headers: corsHeaders }
+      );
+    }
+
     if (rawTenantId && String(rawTenantId).trim().toLowerCase() !== childTenantId.toLowerCase()) {
       return new Response(
         JSON.stringify({
@@ -142,18 +206,7 @@ export async function onRequest(context) {
       );
     }
 
-    if (accessibleTenants.length > 0 && childTenantId && !accessibleTenants.some(t => String(t).toLowerCase() === childTenantId.toLowerCase())) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: 'Akses lintas tenant tidak diizinkan.',
-          message: 'Akses ditolak. Sesi Anda tidak memiliki otorisasi untuk tenant ini.'
-        }),
-        { status: 403, headers: corsHeaders }
-      );
-    }
-
-    // 7. Pengambilan Data Evaluasi & Prestasi via Supabase REST dengan Bearer Token Sesi Parent
+    // 9. Pengambilan Data Evaluasi via Supabase REST dengan Bearer Token Sesi Parent
     const supabaseUrl = getCleanSupabaseUrl(env) || (env.SUPABASE_URL || env.VITE_SUPABASE_URL || '').replace(/\/+$/, '');
     const anonKey = getSupabaseAnonKey(env) || env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY;
 
@@ -169,10 +222,7 @@ export async function onRequest(context) {
     }
 
     let evaluationsList = [];
-    let evalQuery = `${supabaseUrl}/rest/v1/academy_evaluations?student_id=eq.${encodeURIComponent(studentId)}&order=created_at.desc`;
-    if (childTenantId) {
-      evalQuery += `&tenant_id=eq.${encodeURIComponent(childTenantId)}`;
-    }
+    const evalQuery = `${supabaseUrl}/rest/v1/academy_evaluations?student_id=eq.${encodeURIComponent(studentId)}&tenant_id=eq.${encodeURIComponent(childTenantId)}&order=created_at.desc`;
 
     const evalResp = await fetch(evalQuery, {
       method: 'GET',
@@ -194,8 +244,19 @@ export async function onRequest(context) {
       );
     }
 
-    const rawEvals = await evalResp.json().catch(() => []);
-    if (Array.isArray(rawEvals) && rawEvals.length > 0) {
+    const rawEvals = await evalResp.json().catch(() => null);
+    if (!Array.isArray(rawEvals)) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Terjadi gangguan pada layanan evaluasi.',
+          message: 'Terjadi gangguan pada layanan evaluasi. Silakan coba beberapa saat lagi.'
+        }),
+        { status: 502, headers: corsHeaders }
+      );
+    }
+
+    if (rawEvals.length > 0) {
       evaluationsList = rawEvals
         .filter(ev => {
           const rawStatus = ev.status || ev.publication_status;
@@ -232,18 +293,15 @@ export async function onRequest(context) {
         });
     }
 
-    // 8. Ambil data prestasi atlet dari kolom tournaments di tabel students
+    // 10. Ambil data prestasi atlet dari kolom tournaments di tabel students (Fail-Closed)
     let achievementsList = [];
-    let studentInfo = {
+    const studentInfo = {
       id: studentId,
-      studentName: '',
-      className: ''
+      studentName: matchedChild.studentName || matchedChild.name || '',
+      className: matchedChild.className || ''
     };
 
-    let studentQuery = `${supabaseUrl}/rest/v1/students?id=eq.${encodeURIComponent(studentId)}&select=tournaments,student_name,name,class_name`;
-    if (childTenantId) {
-      studentQuery += `&tenant_id=eq.${encodeURIComponent(childTenantId)}`;
-    }
+    const studentQuery = `${supabaseUrl}/rest/v1/students?id=eq.${encodeURIComponent(studentId)}&tenant_id=eq.${encodeURIComponent(childTenantId)}&select=tournaments,student_name,name,class_name`;
 
     const studentResp = await fetch(studentQuery, {
       method: 'GET',
@@ -254,37 +312,57 @@ export async function onRequest(context) {
       }
     });
 
-    if (studentResp.ok) {
-      const studentData = await studentResp.json().catch(() => []);
-      const st = studentData[0];
-      if (st) {
-        studentInfo.studentName = st.student_name || st.name || '';
-        studentInfo.className = st.class_name || '';
+    if (!studentResp.ok) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Terjadi gangguan pada layanan data siswa.',
+          message: 'Terjadi gangguan pada layanan data siswa. Silakan coba beberapa saat lagi.'
+        }),
+        { status: 502, headers: corsHeaders }
+      );
+    }
 
-        const rawTournaments = Array.isArray(st.tournaments) ? st.tournaments : [];
-        rawTournaments.forEach(t => {
-          const achName = t.name || t.title || t.tournamentName;
-          const achResult = t.result || t.rank || t.achievement;
-          const achStatus = t.status || t.publication_status;
-          if (achStatus) {
-            const s = String(achStatus).toLowerCase().trim();
-            if (!['published', 'approved'].includes(s)) return;
-          }
+    const studentData = await studentResp.json().catch(() => null);
+    if (!Array.isArray(studentData)) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Terjadi gangguan pada layanan data siswa.',
+          message: 'Terjadi gangguan pada layanan data siswa. Silakan coba beberapa saat lagi.'
+        }),
+        { status: 502, headers: corsHeaders }
+      );
+    }
 
-          if (achName && achResult) {
-            achievementsList.push({
-              id: t.id || null,
-              name: achName,
-              date: t.date || t.year || null,
-              result: achResult,
-              category: t.category || t.sport || null,
-              notes: t.notes || t.description || null
-            });
-          }
-        });
+    const st = studentData[0];
+    if (st) {
+      studentInfo.studentName = st.student_name || st.name || studentInfo.studentName;
+      studentInfo.className = st.class_name || studentInfo.className;
 
-        achievementsList.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
-      }
+      const rawTournaments = Array.isArray(st.tournaments) ? st.tournaments : [];
+      rawTournaments.forEach(t => {
+        const achName = t.name || t.title || t.tournamentName;
+        const achResult = t.result || t.rank || t.achievement;
+        const achStatus = t.status || t.publication_status;
+        if (achStatus) {
+          const s = String(achStatus).toLowerCase().trim();
+          if (!['published', 'approved'].includes(s)) return;
+        }
+
+        if (achName && achResult) {
+          achievementsList.push({
+            id: t.id || null,
+            name: achName,
+            date: t.date || t.year || null,
+            result: achResult,
+            category: t.category || t.sport || null,
+            notes: t.notes || t.description || null
+          });
+        }
+      });
+
+      achievementsList.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
     }
 
     return new Response(

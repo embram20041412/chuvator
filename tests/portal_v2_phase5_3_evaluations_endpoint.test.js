@@ -5,7 +5,7 @@ import { onRequestPost } from '../functions/api/portal/evaluations.js';
 /**
  * CHUVATOR Parent Portal V2 — Phase 5.3-B.4
  * REAL ENDPOINT TEST AUDIT
- * Reconciled for Supabase/PostgreSQL source.
+ * Reconciled for Supabase/PostgreSQL source and V2.6.10 Security Hardening.
  */
 
 describe('Evaluations API Endpoint — Real Logic Test Audit (Supabase)', () => {
@@ -22,6 +22,10 @@ describe('Evaluations API Endpoint — Real Logic Test Audit (Supabase)', () => 
     ENVIRONMENT: 'development',
     PORTAL_TOKEN_ENCRYPTION_SECRET: 'test-secret-long-enough-32-chars-!!!'
   };
+
+  const VALID_CHILD_1_UUID = '11111111-1111-1111-1111-111111111111';
+  const VALID_CHILD_2_UUID = '22222222-2222-2222-2222-222222222222';
+  const STRANGER_CHILD_UUID = '99999999-9999-9999-9999-999999999999';
 
   before(() => {
     originalFetch = globalThis.fetch;
@@ -94,7 +98,8 @@ describe('Evaluations API Endpoint — Real Logic Test Audit (Supabase)', () => 
       version: 'v2',
       csrfToken: 'mock-csrf',
       authUserId: 'user-123',
-      childrenSummary: [{ studentId: 'child-01', tenantId: 'tenant-01' }],
+      accessibleTenants: ['tenant-01'],
+      childrenSummary: [{ studentId: VALID_CHILD_1_UUID, tenantId: 'tenant-01' }],
       encryptedAccessToken: 'iv:cipher',
       encryptedRefreshToken: 'iv:cipher',
       expiresAt: new Date(Date.now() + 3600000).toISOString(),
@@ -102,18 +107,18 @@ describe('Evaluations API Endpoint — Real Logic Test Audit (Supabase)', () => 
     };
 
     const supabaseEvaluations = [
-      { id: 'eval-01', student_id: 'child-01', tenant_id: 'tenant-01', status: 'published', overall_score: 85 },
-      { id: 'eval-02', student_id: 'child-01', tenant_id: 'tenant-01', status: 'approved', overall_score: 80 },
-      { id: 'eval-03', student_id: 'child-01', tenant_id: 'tenant-01', status: 'draft', overall_score: 90 }, // Filtered
-      { id: 'eval-04', student_id: 'child-01', tenant_id: 'tenant-01', overall_score: 75 } // No status -> Allowed for now
+      { id: 'eval-01', student_id: VALID_CHILD_1_UUID, tenant_id: 'tenant-01', status: 'published', overall_score: 85 },
+      { id: 'eval-02', student_id: VALID_CHILD_1_UUID, tenant_id: 'tenant-01', status: 'approved', overall_score: 80 },
+      { id: 'eval-03', student_id: VALID_CHILD_1_UUID, tenant_id: 'tenant-01', status: 'draft', overall_score: 90 }, // Filtered
+      { id: 'eval-04', student_id: VALID_CHILD_1_UUID, tenant_id: 'tenant-01', overall_score: 75 } // No status -> Allowed for now
     ];
 
     setupEnvironment(mockSessionRecord, [
       { status: 200, body: supabaseEvaluations },
-      { status: 200, body: [{ id: 'child-01', tournaments: [] }] } // Student achievements query
+      { status: 200, body: [{ id: VALID_CHILD_1_UUID, tournaments: [] }] } // Student achievements query
     ]);
 
-    const response = await onRequestPost(createMockContext('child-01'));
+    const response = await onRequestPost(createMockContext(VALID_CHILD_1_UUID));
     const result = await response.json();
 
     assert.strictEqual(response.status, 200);
@@ -127,7 +132,8 @@ describe('Evaluations API Endpoint — Real Logic Test Audit (Supabase)', () => 
       version: 'v2',
       csrfToken: 'mock-csrf',
       authUserId: 'user-123',
-      childrenSummary: [{ studentId: 'child-01', tenantId: 'tenant-01' }],
+      accessibleTenants: ['tenant-01'],
+      childrenSummary: [{ studentId: VALID_CHILD_1_UUID, tenantId: 'tenant-01' }],
       encryptedAccessToken: 'iv:cipher',
       encryptedRefreshToken: 'iv:cipher',
       expiresAt: new Date(Date.now() + 3600000).toISOString(),
@@ -137,7 +143,7 @@ describe('Evaluations API Endpoint — Real Logic Test Audit (Supabase)', () => 
     const supabaseEvaluations = [
       { 
         id: 'eval-01', 
-        student_id: 'child-01', 
+        student_id: VALID_CHILD_1_UUID, 
         tenant_id: 'tenant-01', 
         status: 'published',
         pillar_scores: { teknik: 90 } // other pillars missing
@@ -149,7 +155,7 @@ describe('Evaluations API Endpoint — Real Logic Test Audit (Supabase)', () => 
       { status: 200, body: [] }
     ]);
 
-    const response = await onRequestPost(createMockContext('child-01'));
+    const response = await onRequestPost(createMockContext(VALID_CHILD_1_UUID));
     const result = await response.json();
 
     const ev = result.evaluations[0];
@@ -163,9 +169,10 @@ describe('Evaluations API Endpoint — Real Logic Test Audit (Supabase)', () => 
       version: 'v2',
       csrfToken: 'mock-csrf',
       authUserId: 'user-123',
+      accessibleTenants: ['tenant-01', 'tenant-02'],
       childrenSummary: [
-        { studentId: 'child-01', tenantId: 'tenant-01' },
-        { studentId: 'child-02', tenantId: 'tenant-02' }
+        { studentId: VALID_CHILD_1_UUID, tenantId: 'tenant-01' },
+        { studentId: VALID_CHILD_2_UUID, tenantId: 'tenant-02' }
       ],
       encryptedAccessToken: 'iv:cipher',
       encryptedRefreshToken: 'iv:cipher',
@@ -176,7 +183,7 @@ describe('Evaluations API Endpoint — Real Logic Test Audit (Supabase)', () => 
     // Scenario: Trying to access data for an unauthorized student
     setupEnvironment(mockSessionRecord, []);
 
-    const response = await onRequestPost(createMockContext('child-stranger'));
+    const response = await onRequestPost(createMockContext(STRANGER_CHILD_UUID));
     const result = await response.json();
 
     assert.strictEqual(response.status, 403);
@@ -188,7 +195,8 @@ describe('Evaluations API Endpoint — Real Logic Test Audit (Supabase)', () => 
       version: 'v2',
       csrfToken: 'mock-csrf',
       authUserId: 'user-123',
-      childrenSummary: [{ studentId: 'child-01', tenantId: 'tenant-01' }],
+      accessibleTenants: ['tenant-01'],
+      childrenSummary: [{ studentId: VALID_CHILD_1_UUID, tenantId: 'tenant-01' }],
       encryptedAccessToken: 'iv:cipher',
       encryptedRefreshToken: 'iv:cipher',
       expiresAt: new Date(Date.now() + 3600000).toISOString(),
@@ -197,7 +205,7 @@ describe('Evaluations API Endpoint — Real Logic Test Audit (Supabase)', () => 
 
     const studentData = [
       { 
-        id: 'child-01',
+        id: VALID_CHILD_1_UUID,
         tournaments: [
           { name: 'Juara 1', result: 'Emas', status: 'published' },
           { name: 'Latihan', result: 'Peserta', status: 'draft' } // Should be filtered
@@ -210,7 +218,7 @@ describe('Evaluations API Endpoint — Real Logic Test Audit (Supabase)', () => 
       { status: 200, body: studentData }
     ]);
 
-    const response = await onRequestPost(createMockContext('child-01'));
+    const response = await onRequestPost(createMockContext(VALID_CHILD_1_UUID));
     const result = await response.json();
 
     assert.strictEqual(result.achievements.length, 1);
@@ -222,7 +230,8 @@ describe('Evaluations API Endpoint — Real Logic Test Audit (Supabase)', () => 
       version: 'v2',
       csrfToken: 'mock-csrf',
       authUserId: 'user-123',
-      childrenSummary: [{ studentId: 'child-01', tenantId: 'tenant-01' }],
+      accessibleTenants: ['tenant-01'],
+      childrenSummary: [{ studentId: VALID_CHILD_1_UUID, tenantId: 'tenant-01' }],
       encryptedAccessToken: 'iv:cipher',
       encryptedRefreshToken: 'iv:cipher',
       expiresAt: new Date(Date.now() + 3600000).toISOString(),
@@ -233,7 +242,7 @@ describe('Evaluations API Endpoint — Real Logic Test Audit (Supabase)', () => 
       { status: 500, body: { message: 'Database Error' } }
     ]);
 
-    const response = await onRequestPost(createMockContext('child-01'));
+    const response = await onRequestPost(createMockContext(VALID_CHILD_1_UUID));
     const result = await response.json();
 
     assert.strictEqual(response.status, 502);
