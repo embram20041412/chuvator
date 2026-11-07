@@ -1,6 +1,7 @@
 /**
  * Cloudflare Pages Function: POST /api/tenant/parents/resend
- * Email Action Link Delivery via Resend with strict validation and HTML escaping.
+ * Email Action Link Delivery via Resend with strict URL validation, error sanitization,
+ * and fail-closed Auth user verification.
  */
 
 import { getCorsHeaders } from '../../portal/_auth_v2.js';
@@ -19,6 +20,20 @@ function escapeHtml(str) {
 function isValidEmailFormat(email) {
   if (!email || typeof email !== 'string') return false;
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
+
+function isValidSupabaseActionLink(link, supabaseUrl) {
+  if (!link || typeof link !== 'string') return false;
+  try {
+    const url = new URL(link);
+    if (url.protocol !== 'https:') return false;
+    const baseClean = supabaseUrl.replace(/\/$/, '');
+    const urlOrigin = url.origin;
+    const baseOrigin = new URL(baseClean).origin;
+    return urlOrigin === baseOrigin;
+  } catch {
+    return false;
+  }
 }
 
 export async function onRequestOptions(context) {
@@ -162,9 +177,17 @@ export async function onRequestPost(context) {
         );
       }
       const authUser = await authUserResp.json().catch(() => null);
-      if (authUser) {
-        isConfirmed = !!(authUser.email_confirmed_at || authUser.confirmed_at);
+      if (!authUser || typeof authUser !== 'object' || authUser.id !== authUid) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            code: 'AUTH_VERIFICATION_FAILED', 
+            message: 'Respons Auth tidak valid atau ID user tidak cocok (Fail-closed).' 
+          }),
+          { status: 500, headers: corsHeaders }
+        );
       }
+      isConfirmed = !!(authUser.email_confirmed_at || authUser.confirmed_at);
     } else {
       return new Response(
         JSON.stringify({ 
@@ -198,12 +221,11 @@ export async function onRequestPost(context) {
     });
 
     if (!linkResp.ok) {
-      const errData = await linkResp.json().catch(() => ({}));
       return new Response(
         JSON.stringify({ 
           success: false, 
           code: 'GENERATE_LINK_FAILED', 
-          message: `Gagal menghasilkan tautan dari Supabase Auth: ${errData.msg || errData.message || 'Error unknown'}` 
+          message: 'Gagal menghasilkan tautan dari Supabase Auth.' 
         }),
         { status: 500, headers: corsHeaders }
       );
@@ -212,12 +234,12 @@ export async function onRequestPost(context) {
     const linkData = await linkResp.json().catch(() => ({}));
     const actionLink = linkData.properties?.action_link || linkData.action_link;
 
-    if (!actionLink) {
+    if (!isValidSupabaseActionLink(actionLink, supabaseUrl)) {
       return new Response(
         JSON.stringify({ 
           success: false, 
           code: 'GENERATE_LINK_FAILED', 
-          message: 'Tautan aksi tidak ditemukan dalam respons Supabase.' 
+          message: 'Tautan aksi tidak valid atau tidak berasal dari project Supabase yang dikonfigurasi.' 
         }),
         { status: 500, headers: corsHeaders }
       );
@@ -228,7 +250,6 @@ export async function onRequestPost(context) {
     const emailHtml = `<p>Halo,</p><p>Silakan klik tautan berikut untuk ${linkType === 'invite' ? 'mengaktivasi akun Portal Wali Murid Anda' : 'memulihkan kata sandi akun Anda'}:</p><p><a href="${escapedActionLink}">Aktivasi / Pemulihan Akun</a></p>`;
 
     let emailSent = false;
-    let providerErrorMsg = '';
 
     try {
       const resendSendResp = await fetch('https://api.resend.com/emails', {
@@ -247,12 +268,9 @@ export async function onRequestPost(context) {
 
       if (resendSendResp.ok) {
         emailSent = true;
-      } else {
-        const resendErr = await resendSendResp.json().catch(() => ({}));
-        providerErrorMsg = resendErr.message || 'Resend API error';
       }
     } catch (sendErr) {
-      providerErrorMsg = sendErr.message;
+      // Sanitized: no raw exception message leaked
     }
 
     if (!emailSent) {
@@ -260,7 +278,7 @@ export async function onRequestPost(context) {
         JSON.stringify({ 
           success: false, 
           code: 'EMAIL_SEND_FAILED', 
-          message: `Gagal mengirim email melalui Resend: ${providerErrorMsg}` 
+          message: 'Gagal mengirim email melalui Resend.' 
         }),
         { status: 500, headers: corsHeaders }
       );
