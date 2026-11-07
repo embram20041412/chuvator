@@ -36,6 +36,11 @@ test('CHUVATOR — Parent Portal V2.6.5 Final Type Alignment, Error Sanitization
       APP_URL: appUrl,
       ENVIRONMENT: 'test',
       ALLOWED_ORIGINS: 'https://myapp.local',
+      PORTAL_SESSIONS_KV: {
+        get: async () => null,
+        put: async () => {},
+        delete: async () => {}
+      },
       ...envOverrides
     }
   });

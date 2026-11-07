@@ -14,7 +14,9 @@ import {
   buildWhatsAppUrl,
   isValidSupabaseActionLink,
   validateSupabaseActionLink,
-  getVerifiedTenantName
+  getVerifiedTenantName,
+  generateClaimToken,
+  buildIntermediaryClaimUrl
 } from './_invitation_helper.js';
 
 export async function onRequestOptions(context) {
@@ -334,18 +336,61 @@ export async function onRequestPost(context) {
       );
     }
 
-    // Build dynamic message and safe wa.me URL
+    // 7.5 Secure Intermediary Claim: Generate 256-bit entropy token & store mapping in KV (Fail-Closed)
+    if (!kvBinding) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          code: 'KV_BINDING_MISSING',
+          message: 'Penyimpanan server tidak tersedia untuk tautan undangan.'
+        }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
+    const claimToken = generateClaimToken();
+    const claimKey = `v2_invitation_claim:${claimToken}`;
+    const claimTtlSeconds = 3600; // 1 jam (tidak melebihi masa berlaku OTP Supabase)
+    const nowIso = new Date().toISOString();
+    const claimExpiresAt = new Date(Date.now() + claimTtlSeconds * 1000).toISOString();
+
+    try {
+      await kvBinding.put(
+        claimKey,
+        JSON.stringify({
+          actionLink,
+          parentId: parent.id,
+          tenantId: targetTenantId,
+          type: linkType,
+          createdAt: nowIso,
+          expiresAt: claimExpiresAt
+        }),
+        { expirationTtl: claimTtlSeconds }
+      );
+    } catch (_) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          code: 'CLAIM_STORAGE_FAILED',
+          message: 'Gagal menyiapkan tautan aktivasi yang aman di server.'
+        }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
+    const intermediaryUrl = buildIntermediaryClaimUrl(appUrl, claimToken);
+
+    // Build dynamic message and safe wa.me URL using INTERMEDIARY URL (NO raw Supabase link)
     const parentName = parent.full_name || 'Bapak/Ibu';
     const message = generateWhatsAppMessage({
       parentName,
       tenantName,
-      actionLink
+      actionLink: intermediaryUrl
     });
 
     const whatsappUrl = buildWhatsAppUrl(phoneCheck.normalized, message);
 
     // Update generatedAt and RESET SENT_MANUALLY status in Supabase user_metadata & KV
-    const nowIso = new Date().toISOString();
     let metaUpdated = false;
     let kvUpdated = false;
 
@@ -414,6 +459,7 @@ export async function onRequestPost(context) {
         status: responseStatus,
         message: successMsg,
         actionLink,
+        claimUrl: intermediaryUrl,
         whatsappUrl,
         phone: phoneCheck.normalized,
         data: {
@@ -424,6 +470,7 @@ export async function onRequestPost(context) {
           rawPhone: parent.phone || '',
           tenantName,
           actionLink,
+          claimUrl: intermediaryUrl,
           message,
           whatsappUrl,
           isConfirmed,

@@ -14,7 +14,9 @@ import {
   isValidSupabaseActionLink,
   validateSupabaseActionLink,
   getVerifiedTenantName,
-  determineInvitationStatus
+  determineInvitationStatus,
+  generateClaimToken,
+  buildIntermediaryClaimUrl
 } from './_invitation_helper.js';
 
 export async function onRequestOptions(context) {
@@ -620,39 +622,106 @@ export async function onRequestPost(context) {
       );
     }
 
-    // 10. Generate WhatsApp Invitation message and wa.me URL
+    // 10. Secure Intermediary Claim: Generate 256-bit entropy token & store mapping in KV (Fail-Closed)
+    const kvBinding = env.PORTAL_RATELIMIT_KV || env.PORTAL_SESSIONS_KV;
+    if (!kvBinding) {
+      // Clean up newly created student links, parent, and auth user
+      await fetch(`${supabaseUrl}/rest/v1/parent_student_links?parent_account_id=eq.${parentId}`, {
+        method: 'DELETE',
+        headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
+      }).catch(() => null);
+      await fetch(`${supabaseUrl}/rest/v1/parent_accounts?id=eq.${parentId}`, {
+        method: 'DELETE',
+        headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
+      }).catch(() => null);
+      await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUid}`, {
+        method: 'DELETE',
+        headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
+      }).catch(() => null);
+
+      return new Response(
+        JSON.stringify({
+          success: false,
+          code: 'KV_BINDING_MISSING',
+          message: 'Penyimpanan server tidak tersedia untuk tautan undangan.'
+        }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
+    const claimToken = generateClaimToken();
+    const claimKey = `v2_invitation_claim:${claimToken}`;
+    const claimTtlSeconds = 3600; // 1 jam (tidak melebihi masa berlaku OTP Supabase)
+    const claimExpiresAt = new Date(Date.now() + claimTtlSeconds * 1000).toISOString();
+
+    try {
+      await kvBinding.put(
+        claimKey,
+        JSON.stringify({
+          actionLink,
+          parentId,
+          tenantId: targetTenantId,
+          type: 'invite',
+          createdAt: nowIso,
+          expiresAt: claimExpiresAt
+        }),
+        { expirationTtl: claimTtlSeconds }
+      );
+    } catch (_) {
+      // Clean up newly created student links, parent, and auth user on storage failure
+      await fetch(`${supabaseUrl}/rest/v1/parent_student_links?parent_account_id=eq.${parentId}`, {
+        method: 'DELETE',
+        headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
+      }).catch(() => null);
+      await fetch(`${supabaseUrl}/rest/v1/parent_accounts?id=eq.${parentId}`, {
+        method: 'DELETE',
+        headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
+      }).catch(() => null);
+      await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUid}`, {
+        method: 'DELETE',
+        headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
+      }).catch(() => null);
+
+      return new Response(
+        JSON.stringify({
+          success: false,
+          code: 'CLAIM_STORAGE_FAILED',
+          message: 'Gagal menyiapkan tautan aktivasi yang aman di server.'
+        }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
+    const intermediaryUrl = buildIntermediaryClaimUrl(appUrl, claimToken);
+
+    // Generate WhatsApp Invitation message and wa.me URL with INTERMEDIARY URL
     const message = generateWhatsAppMessage({
       parentName: name,
       tenantName,
-      actionLink
+      actionLink: intermediaryUrl
     });
 
     const whatsappUrl = buildWhatsAppUrl(phoneCheck.normalized, message);
 
     // Record initial READY_TO_SEND status in KV cache (non-blocking fallback)
-    const kvBinding = env.PORTAL_RATELIMIT_KV || env.PORTAL_SESSIONS_KV;
-    if (kvBinding) {
-      try {
-        await kvBinding.put(
-          `v2_invitation_status:${parentId}`,
-          JSON.stringify({
-            status: 'READY_TO_SEND',
-            generatedAt: nowIso,
-            generatedBy: staffUid
-          }),
-          { expirationTtl: 86400 * 7 }
-        );
-      } catch (_) {
-        // KV is only a cache/fallback. Failure to write to KV cache must not fail account creation
-        // or trigger cleanup of the newly created account.
-      }
-    }
+    try {
+      await kvBinding.put(
+        `v2_invitation_status:${parentId}`,
+        JSON.stringify({
+          status: 'READY_TO_SEND',
+          generatedAt: nowIso,
+          generatedBy: staffUid
+        }),
+        { expirationTtl: 86400 * 7 }
+      );
+    } catch (_) {}
 
     return new Response(
       JSON.stringify({
         success: true,
         message: 'Akun wali murid berhasil dibuat. Silakan kirim undangan melalui WhatsApp.',
         actionLink,
+        claimUrl: intermediaryUrl,
         whatsappUrl,
         phone: phoneCheck.normalized,
         data: {
@@ -663,6 +732,7 @@ export async function onRequestPost(context) {
           rawPhone: phone,
           tenantName,
           actionLink,
+          claimUrl: intermediaryUrl,
           message,
           whatsappUrl,
           status: 'READY_TO_SEND',

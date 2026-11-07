@@ -28,6 +28,7 @@ const ParentManagementPage = lazy(() => import('./pages/ParentManagementPage'));
 const AcceptInvitationPage = lazy(() => import('./pages/AcceptInvitationPage'));
 const PortalDashboard = lazy(() => import('./pages/Portal/PortalDashboard'));
 const PortalAcceptInvitation = lazy(() => import('./pages/Portal/PortalAcceptInvitation'));
+const PortalClaimInvitation = lazy(() => import('./pages/Portal/PortalClaimInvitation'));
 
 function PageLoadingSkeleton() {
   return (
@@ -169,6 +170,7 @@ export default function App() {
             <Route element={<PortalLayout />}>
               {/* Primary Entry Point: Portal V2 Login */}
               <Route path="/portal" element={<PortalLoginV2 />} />
+              <Route path="/portal/claim" element={<PortalClaimInvitation />} />
               <Route path="/portal/accept-invitation" element={<PortalAcceptInvitation />} />
               <Route path="/portal/dashboard" element={<PortalDashboard />} />
               {/* V2 Canonical Route Redirect */}

@@ -293,7 +293,12 @@ test('CHUVATOR PARENT PORTAL V2.6.14 — REST PAYLOAD & REDIRECT_TO VERIFICATION
           SUPABASE_URL: supabaseUrl,
           SUPABASE_SERVICE_ROLE_KEY: 'test-service-key',
           KK_HMAC_SECRET: hmacSecret,
-          APP_URL: appUrl
+          APP_URL: appUrl,
+          PORTAL_SESSIONS_KV: {
+            get: async () => null,
+            put: async () => {},
+            delete: async () => {}
+          }
         }
       };
     };

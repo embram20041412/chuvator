@@ -124,6 +124,36 @@ export function buildWhatsAppUrl(phone, message) {
 }
 
 /**
+ * Generate cryptographically secure claim token with minimum 256 bits of entropy.
+ * Returns 64-character lowercase hex string.
+ * 
+ * @returns {string}
+ */
+export function generateClaimToken() {
+  const bytes = new Uint8Array(32); // 32 bytes = 256 bits of entropy
+  if (typeof globalThis.crypto !== 'undefined' && globalThis.crypto.getRandomValues) {
+    globalThis.crypto.getRandomValues(bytes);
+  } else if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+    crypto.getRandomValues(bytes);
+  } else {
+    throw new Error('Crypto getRandomValues is not available in this environment.');
+  }
+  return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * Construct intermediary invitation claim URL (CHUVATOR owned, non-Supabase).
+ * 
+ * @param {string} appUrl
+ * @param {string} claimToken
+ * @returns {string}
+ */
+export function buildIntermediaryClaimUrl(appUrl, claimToken) {
+  const cleanApp = (appUrl || 'https://chuvator.pages.dev').replace(/\/$/, '');
+  return `${cleanApp}/portal/claim?token=${encodeURIComponent(claimToken)}`;
+}
+
+/**
  * Validate action link and return detailed diagnostic reason.
  * 
  * Reason codes:
