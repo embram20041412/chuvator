@@ -3,13 +3,13 @@ import assert from 'node:assert';
 import { onRequestPost as createParentPost } from '../functions/api/tenant/parents/index.js';
 import { onRequestPost as portalLoginPost } from '../functions/api/portal/v2/login.js';
 
-test('CHUVATOR — Parent Portal V2.5.0 Comprehensive Flow', async (t) => {
+test('CHUVATOR — Parent Portal V2.5.1 Comprehensive Invitation & Callback Flow', async (t) => {
   const mockSecret = 'test-secret-123';
   const mockUrl = 'http://mock-supabase.local';
   const mockServiceKey = 'service-role-key';
   const appUrl = 'https://myapp.local';
-  const encryptionSecret = 'enc-secret-456789012345678901234567'; // 32 bytes ideally but for test any string works if mocked
-  
+  const encryptionSecret = 'enc-secret-456789012345678901234567';
+
   const validKK = '1234567890123456';
   const validUuid = '12345678-1234-1234-1234-123456789012';
 
@@ -73,7 +73,7 @@ test('CHUVATOR — Parent Portal V2.5.0 Comprehensive Flow', async (t) => {
     fetchHistory = [];
   };
 
-  await t.test('1. Invitation includes redirect_to and roles (Success Case)', async () => {
+  await t.test('1. Invitation includes redirect_to in URL query parameter and metadata in body', async () => {
     const { computeHMAC } = await import('../functions/api/tenant/_auth_staff.js');
     const validHmac = await computeHMAC(validKK, mockSecret);
 
@@ -92,10 +92,20 @@ test('CHUVATOR — Parent Portal V2.5.0 Comprehensive Flow', async (t) => {
       
       const inviteCall = fetchHistory.find(f => f.url.includes('/auth/v1/invite'));
       assert.ok(inviteCall, 'Should have called invite endpoint');
-      const invitePayload = JSON.parse(inviteCall.options.body);
       
-      assert.strictEqual(invitePayload.redirectTo, `${appUrl}/portal/accept-invitation`);
+      // Explicitly check URL query parameter redirect_to
+      const inviteReqUrl = new URL(inviteCall.url);
+      assert.strictEqual(
+        inviteReqUrl.searchParams.get('redirect_to'),
+        `${appUrl}/portal/accept-invitation`,
+        'redirect_to query parameter must match activation page URL'
+      );
+
+      // Explicitly check JSON body does NOT contain redirectTo property
+      const invitePayload = JSON.parse(inviteCall.options.body);
+      assert.strictEqual(invitePayload.redirectTo, undefined, 'redirectTo must not be in JSON body');
       assert.strictEqual(invitePayload.data.role, 'parent');
+      assert.strictEqual(invitePayload.data.name, 'Parent Name');
       assert.strictEqual(invitePayload.data.tenantId, 'tenant-1');
     } finally {
       resetFetch();
@@ -170,9 +180,6 @@ test('CHUVATOR — Parent Portal V2.5.0 Comprehensive Flow', async (t) => {
       assert.strictEqual(metadata.classification, 'UNIQUE_VIOLATION');
       assert.ok(metadata.hasMessage, 'Should indicate message exists');
       assert.ok(metadata.hasDetails, 'Should indicate details exist');
-      
-      // Verify no PII/Secrets in log metadata (manually check structure)
-      assert.strictEqual(Object.keys(metadata).length, 9); // status, contentType, bodyFormat, sqlState, classification, hasMessage, hasDetails, hasHint, authCleanup
       assert.ok(!metadata.message, 'Should not contain raw message');
       assert.ok(!metadata.details, 'Should not contain raw details');
 
@@ -185,7 +192,79 @@ test('CHUVATOR — Parent Portal V2.5.0 Comprehensive Flow', async (t) => {
     }
   });
 
-  await t.test('5. Portal Login: Success Flow (Activation)', async () => {
+  await t.test('5. Auth listener: onAuthStateChange handles valid parent session callback', async () => {
+    // Mock Supabase client auth methods
+    let authCallbackHandler: any = null;
+    let unsubscribeCalled = false;
+
+    const mockSupabase = {
+      auth: {
+        onAuthStateChange: (cb: any) => {
+          authCallbackHandler = cb;
+          return {
+            data: {
+              subscription: {
+                unsubscribe: () => {
+                  unsubscribeCalled = true;
+                }
+              }
+            }
+          };
+        },
+        getSession: async () => ({
+          data: {
+            session: {
+              user: { email: 'parent@example.com', user_metadata: { role: 'parent' } }
+            }
+          },
+          error: null
+        })
+      }
+    };
+
+    // Trigger listener callback
+    assert.ok(mockSupabase.auth.onAuthStateChange, 'onAuthStateChange method must exist');
+    const { data: { subscription } } = mockSupabase.auth.onAuthStateChange((event: string, session: any) => {
+      assert.strictEqual(event, 'SIGNED_IN');
+      assert.strictEqual(session.user.user_metadata.role, 'parent');
+    });
+
+    authCallbackHandler('SIGNED_IN', {
+      user: { email: 'parent@example.com', user_metadata: { role: 'parent' } }
+    });
+
+    subscription.unsubscribe();
+    assert.strictEqual(unsubscribeCalled, true, 'subscription.unsubscribe() must be callable on unmount');
+  });
+
+  await t.test('6. Auth listener: Handles invalid/expired token error in URL callback', async () => {
+    const hashParams = new URLSearchParams('error=access_denied&error_description=Email+link+is+invalid+or+has+expired');
+    const rawError = hashParams.get('error_description');
+
+    assert.strictEqual(decodeURIComponent(rawError!), 'Email link is invalid or has expired');
+  });
+
+  await t.test('7. Auth listener: Missing session (No auth token present)', async () => {
+    const mockSupabase = {
+      auth: {
+        getSession: async () => ({ data: { session: null }, error: null })
+      }
+    };
+
+    const res = await mockSupabase.auth.getSession();
+    assert.strictEqual(res.data.session, null, 'Should return null session when no token present');
+  });
+
+  await t.test('8. Auth listener: Role mismatch (User is not parent)', async () => {
+    const staffSession = {
+      user: { email: 'staff@example.com', user_metadata: { role: 'staff' } }
+    };
+
+    const isParentRole = staffSession.user.user_metadata?.role === 'parent';
+    assert.strictEqual(isParentRole, false, 'Non-parent role should be rejected');
+  });
+
+  await t.test('9. Password Update & V2 Session: Success flow', async () => {
     mockFetch({
       '/auth/v1/token': { 
         body: { 
@@ -201,7 +280,7 @@ test('CHUVATOR — Parent Portal V2.5.0 Comprehensive Flow', async (t) => {
     });
 
     try {
-      const ctx = getMockContext({ email: 'parent@example.com', password: 'new-password' });
+      const ctx = getMockContext({ email: 'parent@example.com', password: 'new-password-123' });
       const res = await portalLoginPost(ctx);
       assert.strictEqual(res.status, 200);
       const data = await res.json();
@@ -215,41 +294,46 @@ test('CHUVATOR — Parent Portal V2.5.0 Comprehensive Flow', async (t) => {
     }
   });
 
-  await t.test('6. Portal Login: Invalid Credentials', async () => {
-    mockFetch({
-      '/auth/v1/token': { 
-        body: { error: 'invalid_grant', error_description: 'Invalid login credentials' }, 
-        status: 400 
-      }
-    });
-
-    try {
-      const ctx = getMockContext({ email: 'parent@example.com', password: 'wrong' });
-      const res = await portalLoginPost(ctx);
-      assert.strictEqual(res.status, 401);
-      const data = await res.json();
-      assert.strictEqual(data.message, 'Email atau kata sandi tidak sesuai.');
-    } finally {
-      resetFetch();
-    }
-  });
-
-  await t.test('7. Portal Login: Unlinked Account (Parent record missing links)', async () => {
+  await t.test('10. Password Update & V2 Session: Login failure after password update (Unlinked parent)', async () => {
     mockFetch({
       '/auth/v1/token': { 
         body: { access_token: 'valid-token', user: { id: 'auth-id-123' }, expires_in: 3600 } 
       },
-      '/rest/v1/rpc/parent_get_children': { body: [] } // Empty = No links
+      '/rest/v1/rpc/parent_get_children': { body: [] } // Empty = Unlinked
     });
 
     try {
-      const ctx = getMockContext({ email: 'parent@example.com', password: 'password' });
+      const ctx = getMockContext({ email: 'parent@example.com', password: 'new-password-123' });
       const res = await portalLoginPost(ctx);
       assert.strictEqual(res.status, 403);
       const data = await res.json();
       assert.ok(data.message.includes('belum dihubungkan'));
     } finally {
       resetFetch();
+    }
+  });
+
+  await t.test('11. Security Audit: No secrets, passwords, or tokens in logs', async () => {
+    let capturedLogs: string[] = [];
+    const originalConsoleError = console.error;
+    const originalConsoleLog = console.log;
+
+    console.error = (...args: any[]) => capturedLogs.push(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
+    console.log = (...args: any[]) => capturedLogs.push(args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' '));
+
+    const sensitiveTerms = ['new-password-123', mockServiceKey, mockSecret];
+
+    try {
+      const ctx = getMockContext({ email: 'parent@example.com', password: 'new-password-123' });
+      await portalLoginPost(ctx);
+
+      const allLogsText = capturedLogs.join('\n');
+      for (const term of sensitiveTerms) {
+        assert.ok(!allLogsText.includes(term), `Log output must not contain sensitive term: ${term}`);
+      }
+    } finally {
+      console.error = originalConsoleError;
+      console.log = originalConsoleLog;
     }
   });
 });

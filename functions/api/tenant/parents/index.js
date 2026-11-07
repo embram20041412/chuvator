@@ -261,8 +261,10 @@ export async function onRequestPost(context) {
     const appUrl = env.APP_URL || 'https://chuvator.pages.dev';
     const redirectUrl = `${appUrl.replace(/\/$/, '')}/portal/accept-invitation`;
 
-    const inviteUrl = `${supabaseUrl}/auth/v1/invite`;
-    const inviteResp = await fetch(inviteUrl, {
+    const inviteUrlObj = new URL(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/invite`);
+    inviteUrlObj.searchParams.set('redirect_to', redirectUrl);
+
+    const inviteResp = await fetch(inviteUrlObj.toString(), {
       method: 'POST',
       headers: {
         'apikey': serviceRoleKey,
@@ -275,8 +277,7 @@ export async function onRequestPost(context) {
           name: name,
           role: 'parent',
           tenantId: targetTenantId
-        },
-        redirectTo: redirectUrl
+        }
       })
     });
 
