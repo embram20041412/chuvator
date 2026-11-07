@@ -299,7 +299,7 @@ export default function SaasAdminPage({ userProfile }) {
                 <div className="flex items-center space-x-2">
                   <Database className="w-4 h-4 text-indigo-600" />
                   <span className="font-semibold text-gray-700">Waktu Analisis Terakhir:</span>
-                  <span>{dryRunResult.timestamp ? new Date(dryRunResult.timestamp).toLocaleString('id-ID') : new Date().toLocaleString('id-ID')}</span>
+                  <span>{dryRunResult.completedAt ? new Date(dryRunResult.completedAt).toLocaleString('id-ID') : new Date().toLocaleString('id-ID')}</span>
                 </div>
                 <span className="font-mono text-[11px] bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded font-bold">
                   MODE: DRY_RUN
@@ -313,22 +313,22 @@ export default function SaasAdminPage({ userProfile }) {
                   <p className="text-xl font-black text-slate-800 mt-1">{dryRunResult.totalStudents ?? 0}</p>
                 </div>
                 <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl">
-                  <p className="text-[11px] font-bold text-emerald-700 uppercase">KK Sumber Valid</p>
-                  <p className="text-xl font-black text-emerald-900 mt-1">{dryRunResult.validSourceKK ?? 0}</p>
-                </div>
-                <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl">
-                  <p className="text-[11px] font-bold text-amber-700 uppercase">KK Tidak Valid</p>
-                  <p className="text-xl font-black text-amber-900 mt-1">{dryRunResult.invalidSourceKK ?? 0}</p>
+                  <p className="text-[11px] font-bold text-emerald-700 uppercase">ALREADY_VALID</p>
+                  <p className="text-xl font-black text-emerald-900 mt-1">{dryRunResult.categories?.ALREADY_VALID ?? 0}</p>
                 </div>
                 <div className="p-3.5 bg-indigo-50 border border-indigo-200 rounded-xl">
-                  <p className="text-[11px] font-bold text-indigo-700 uppercase">Kandidat Backfill</p>
-                  <p className="text-xl font-black text-indigo-900 mt-1">{dryRunResult.backfillCandidates ?? 0}</p>
+                  <p className="text-[11px] font-bold text-indigo-700 uppercase">Kandidat ELIGIBLE</p>
+                  <p className="text-xl font-black text-indigo-900 mt-1">{dryRunResult.eligibleCandidates ?? 0}</p>
+                </div>
+                <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-xl">
+                  <p className="text-[11px] font-bold text-rose-700 uppercase">Perlu Tinjauan</p>
+                  <p className="text-xl font-black text-rose-900 mt-1">{dryRunResult.reviewRequired ?? 0}</p>
                 </div>
               </div>
 
-              {/* Rincian Kategori Kualifikasi (6 Kategori Kunci) */}
+              {/* Rincian Kategori Kualifikasi (9 Kategori) */}
               <div className="space-y-2">
-                <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Rincian Kualifikasi Kategori (6 Kategori)</h3>
+                <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Rincian Kualifikasi Kategori (9 Kategori)</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
 
                   {/* 1. ELIGIBLE */}
@@ -339,7 +339,7 @@ export default function SaasAdminPage({ userProfile }) {
                         {dryRunResult.categories?.ELIGIBLE ?? 0}
                       </span>
                     </div>
-                    <p className="text-[11px] text-blue-700">Siap Backfill (No. KK 16 digit valid, HMAC masih kosong)</p>
+                    <p className="text-[11px] text-blue-700">Siap Backfill (No. KK valid, HMAC & Last4 kosong)</p>
                   </div>
 
                   {/* 2. ALREADY_VALID */}
@@ -350,51 +350,84 @@ export default function SaasAdminPage({ userProfile }) {
                         {dryRunResult.categories?.ALREADY_VALID ?? 0}
                       </span>
                     </div>
-                    <p className="text-[11px] text-emerald-700">Sudah Valid (HMAC & Last4 cocok sempurna dengan secret server)</p>
+                    <p className="text-[11px] text-emerald-700">Sudah Valid (HMAC & Last4 cocok sempurna dengan secret)</p>
                   </div>
 
-                  {/* 3. INVALID_SOURCE */}
-                  <div data-testid="dryrun-category-INVALID_SOURCE" className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-xl space-y-1">
+                  {/* 3. MISSING_NO_KK */}
+                  <div data-testid="dryrun-category-MISSING_NO_KK" className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-amber-900">3. INVALID_SOURCE</span>
-                      <span className="px-2 py-0.5 bg-amber-600 text-white font-bold text-xs rounded-full">
-                        {dryRunResult.categories?.INVALID_SOURCE ?? 0}
+                      <span className="text-xs font-bold text-slate-900">3. MISSING_NO_KK</span>
+                      <span className="px-2 py-0.5 bg-slate-600 text-white font-bold text-xs rounded-full">
+                        {dryRunResult.categories?.MISSING_NO_KK ?? 0}
                       </span>
                     </div>
-                    <p className="text-[11px] text-amber-700">Sumber KK Tidak Valid (no_kk kosong / kurang dari 16 digit)</p>
+                    <p className="text-[11px] text-slate-700">Nomor KK kosong (Belum diisi di profil siswa)</p>
                   </div>
 
-                  {/* 4. MISSING_LAST4 */}
+                  {/* 4. INVALID_NO_KK */}
+                  <div data-testid="dryrun-category-INVALID_NO_KK" className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-900">4. INVALID_NO_KK</span>
+                      <span className="px-2 py-0.5 bg-slate-600 text-white font-bold text-xs rounded-full">
+                        {dryRunResult.categories?.INVALID_NO_KK ?? 0}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-700">Nomor KK tidak valid (Bukan 16 digit angka murni)</p>
+                  </div>
+
+                  {/* 5. MISSING_LAST4 */}
                   <div data-testid="dryrun-category-MISSING_LAST4" className="p-3.5 bg-purple-50/70 border border-purple-200 rounded-xl space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-purple-900">4. MISSING_LAST4</span>
+                      <span className="text-xs font-bold text-purple-900">5. MISSING_LAST4</span>
                       <span className="px-2 py-0.5 bg-purple-600 text-white font-bold text-xs rounded-full">
                         {dryRunResult.categories?.MISSING_LAST4 ?? 0}
                       </span>
                     </div>
-                    <p className="text-[11px] text-purple-700">Format HMAC Valid (64 hex) tapi kk_last4 masih kosong</p>
+                    <p className="text-[11px] text-purple-700">HMAC Cocok, tetapi kk_last4 masih kosong</p>
                   </div>
 
-                  {/* 5. CORRUPT_HMAC */}
+                  {/* 6. LAST4_MISMATCH */}
+                  <div data-testid="dryrun-category-LAST4_MISMATCH" className="p-3.5 bg-purple-50/70 border border-purple-200 rounded-xl space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-purple-900">6. LAST4_MISMATCH</span>
+                      <span className="px-2 py-0.5 bg-purple-600 text-white font-bold text-xs rounded-full">
+                        {dryRunResult.categories?.LAST4_MISMATCH ?? 0}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-purple-700">HMAC Cocok, tetapi kk_last4 berbeda dari sumber</p>
+                  </div>
+
+                  {/* 7. CORRUPT_HMAC */}
                   <div data-testid="dryrun-category-CORRUPT_HMAC" className="p-3.5 bg-rose-50/70 border border-rose-200 rounded-xl space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-rose-900">5. CORRUPT_HMAC</span>
+                      <span className="text-xs font-bold text-rose-900">7. CORRUPT_HMAC</span>
                       <span className="px-2 py-0.5 bg-rose-600 text-white font-bold text-xs rounded-full">
                         {dryRunResult.categories?.CORRUPT_HMAC ?? 0}
                       </span>
                     </div>
-                    <p className="text-[11px] text-rose-700">Format HMAC Rusak (Bukan karakter hex 64 digit yang sah)</p>
+                    <p className="text-[11px] text-rose-700">Format HMAC Rusak (Bukan 64 hex hexadecimal yang sah)</p>
                   </div>
 
-                  {/* 6. HMAC_MISMATCH */}
+                  {/* 8. HMAC_MISMATCH */}
                   <div data-testid="dryrun-category-HMAC_MISMATCH" className="p-3.5 bg-red-50/70 border border-red-200 rounded-xl space-y-1">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-red-900">6. HMAC_MISMATCH</span>
+                      <span className="text-xs font-bold text-red-900">8. HMAC_MISMATCH</span>
                       <span className="px-2 py-0.5 bg-red-600 text-white font-bold text-xs rounded-full">
                         {dryRunResult.categories?.HMAC_MISMATCH ?? 0}
                       </span>
                     </div>
-                    <p className="text-[11px] text-red-700">HMAC Tidak Cocok (Beda dengan hasil perhitungan secret server)</p>
+                    <p className="text-[11px] text-red-700">HMAC Tersimpan tidak cocok dengan hasil perhitungan secret</p>
+                  </div>
+
+                  {/* 9. LAST4_WITHOUT_HMAC */}
+                  <div data-testid="dryrun-category-LAST4_WITHOUT_HMAC" className="p-3.5 bg-orange-50 border border-orange-200 rounded-xl space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-orange-900">9. LAST4_NO_HMAC</span>
+                      <span className="px-2 py-0.5 bg-orange-600 text-white font-bold text-xs rounded-full">
+                        {dryRunResult.categories?.LAST4_WITHOUT_HMAC ?? 0}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-orange-700">HMAC Kosong tetapi kk_last4 terisi secara manual</p>
                   </div>
 
                 </div>
@@ -404,7 +437,7 @@ export default function SaasAdminPage({ userProfile }) {
               <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center space-x-2 text-xs text-gray-600">
                 <Lock className="w-4 h-4 text-gray-400 shrink-0" />
                 <span>
-                  <strong>Jaminan Privasi & Keamanan PII:</strong> Hasil analisis ini murni statistik agregat. NIK, Nomor KK lengkap, nilai HMAC, dan secret server tidak pernah ditampilkan atau dikirimkan ke client.
+                  <strong>Jaminan Privasi & Keamanan PII:</strong> Hasil analisis simulasi tidak melakukan mutasi database. NIK, No. KK lengkap, HMAC, dan secret tidak pernah diekspos di browser.
                 </span>
               </div>
             </div>

@@ -284,4 +284,113 @@ test('CHUVATOR — FASE 5.5-B: Hardened Backfill Infrastructure V2.2.4 (Security
       global.fetch = originalFetch;
     }
   });
+
+  await t.test('19. Dry-Run: Keyset Pagination for > 50 students', async () => {
+    const originalFetch = global.fetch;
+    let fetchCount = 0;
+
+    (global as any).fetch = async (url: any) => {
+      fetchCount++;
+      const limit = new URL(url).searchParams.get('limit');
+      assert.strictEqual(limit, '50', 'Must use limit=50 for pagination');
+
+      if (fetchCount === 1) {
+        // Return 50 students
+        const students = Array.from({ length: 50 }, (_, i) => ({ id: `id-${i}`, tenant_id: 'global', no_kk: '1234567890123456' }));
+        return new Response(JSON.stringify(students), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      } else if (fetchCount === 2) {
+        // Return 10 more
+        const students = Array.from({ length: 10 }, (_, i) => ({ id: `id-${50+i}`, tenant_id: 'global', no_kk: '1234567890123456' }));
+        return new Response(JSON.stringify(students), { status: 200, headers: { 'Content-Type': 'application/json' } });
+      }
+      return new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    };
+
+    try {
+      const res = await performDryRunAnalysis('http://mock', 'key', 'secret', 'global');
+      assert.strictEqual(res.totalStudents, 60);
+      assert.ok(fetchCount >= 2, 'Should have made at least 2 fetch calls');
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  await t.test('20. Dry-Run: Classification Accuracy (9 Categories)', async () => {
+    const secret = 'test-secret';
+    const validKK = '1234567890123456';
+    const validHmac = await computeHMAC(validKK, secret);
+    const validLast4 = validKK.slice(-4);
+
+    const mockStudents = [
+      { id: '1', no_kk: validKK, kk_hmac: null, kk_last4: null }, // ELIGIBLE
+      { id: '2', no_kk: validKK, kk_hmac: validHmac, kk_last4: validLast4 }, // ALREADY_VALID
+      { id: '3', no_kk: null, kk_hmac: null, kk_last4: null }, // MISSING_NO_KK
+      { id: '4', no_kk: '123', kk_hmac: null, kk_last4: null }, // INVALID_NO_KK
+      { id: '5', no_kk: validKK, kk_hmac: validHmac, kk_last4: null }, // MISSING_LAST4
+      { id: '6', no_kk: validKK, kk_hmac: validHmac, kk_last4: '9999' }, // LAST4_MISMATCH
+      { id: '7', no_kk: validKK, kk_hmac: 'not-hex', kk_last4: null }, // CORRUPT_HMAC
+      { id: '8', no_kk: validKK, kk_hmac: 'a'.repeat(64), kk_last4: null }, // HMAC_MISMATCH
+      { id: '9', no_kk: validKK, kk_hmac: null, kk_last4: '1234' } // LAST4_WITHOUT_HMAC
+    ];
+
+    const originalFetch = global.fetch;
+    (global as any).fetch = async () => new Response(JSON.stringify(mockStudents), { status: 200, headers: { 'Content-Type': 'application/json' } });
+
+    try {
+      const res = await performDryRunAnalysis('http://mock', 'key', secret, 'global');
+      
+      assert.strictEqual(res.totalStudents, 9);
+      assert.strictEqual(res.categories.ELIGIBLE, 1);
+      assert.strictEqual(res.categories.ALREADY_VALID, 1);
+      assert.strictEqual(res.categories.MISSING_NO_KK, 1);
+      assert.strictEqual(res.categories.INVALID_NO_KK, 1);
+      assert.strictEqual(res.categories.MISSING_LAST4, 1);
+      assert.strictEqual(res.categories.LAST4_MISMATCH, 1);
+      assert.strictEqual(res.categories.CORRUPT_HMAC, 1);
+      assert.strictEqual(res.categories.HMAC_MISMATCH, 1);
+      assert.strictEqual(res.categories.LAST4_WITHOUT_HMAC, 1);
+      
+      const totalFromCats = Object.values(res.categories).reduce((a: any, b: any) => a + b, 0);
+      assert.strictEqual(totalFromCats, 9, 'Total categories must equal total students');
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  await t.test('21. Dry-Run: Privacy Hardening (No PII or Identifiers)', async () => {
+    const originalFetch = global.fetch;
+    (global as any).fetch = async () => new Response(JSON.stringify([{ id: 'uuid-1', no_kk: '1234567890123456', kk_hmac: null, kk_last4: null }]), { status: 200, headers: { 'Content-Type': 'application/json' } });
+
+    try {
+      const res: any = await performDryRunAnalysis('http://mock', 'key', 'secret', 'global');
+      
+      // Check that sensitive fields are NOT in the response
+      assert.strictEqual(res.items, undefined, 'Response must not contain individual items list');
+      const resString = JSON.stringify(res);
+      assert.doesNotMatch(resString, /uuid-1/, 'Response must not contain student UUIDs');
+      assert.doesNotMatch(resString, /1234567890123456/, 'Response must not contain full No. KK');
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  await t.test('22. Endpoint: Fail-Closed on Missing Secret or Service Role Key', async () => {
+    const mockContextBase = {
+      request: new Request('http://localhost/api/admin/backfill_kk_hmac?dryRun=true', {
+        method: 'POST',
+        headers: { 'x-test-staff-role': 'superadmin', 'x-test-staff-uid': '1', 'x-test-tenant-id': 'global' }
+      }),
+      env: { KK_HMAC_SECRET: 'secret', SUPABASE_SERVICE_ROLE_KEY: 'key', SUPABASE_URL: 'http://mock' }
+    };
+
+    // 1. Missing Secret
+    const res1 = await backfillIndexPost({ ...mockContextBase, env: { ...mockContextBase.env, KK_HMAC_SECRET: '' } });
+    const body1: any = await res1.json();
+    assert.strictEqual(body1.code, 'SECRET_NOT_CONFIGURED');
+
+    // 2. Missing Service Role Key
+    const res2 = await backfillIndexPost({ ...mockContextBase, env: { ...mockContextBase.env, SUPABASE_SERVICE_ROLE_KEY: '' } });
+    const body2: any = await res2.json();
+    assert.strictEqual(body2.code, 'SERVICE_ROLE_NOT_CONFIGURED');
+  });
 });

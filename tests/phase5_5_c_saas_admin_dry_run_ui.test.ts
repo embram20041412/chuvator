@@ -50,18 +50,20 @@ test('CHUVATOR — FASE 5.5-C: SaaS Admin & Tenant Controlled Backfill Integrati
           message: 'Analisis simulasi selesai (100% read-only).',
           data: {
             totalStudents: 150,
-            validSourceKK: 120,
-            invalidSourceKK: 30,
-            backfillCandidates: 50,
+            eligibleCandidates: 50,
+            reviewRequired: 10,
             categories: {
               ELIGIBLE: 50,
               ALREADY_VALID: 60,
-              INVALID_SOURCE: 30,
-              MISSING_LAST4: 0,
-              CORRUPT_HMAC: 5,
-              HMAC_MISMATCH: 5
+              MISSING_NO_KK: 20,
+              INVALID_NO_KK: 10,
+              MISSING_LAST4: 2,
+              LAST4_MISMATCH: 2,
+              CORRUPT_HMAC: 2,
+              HMAC_MISMATCH: 2,
+              LAST4_WITHOUT_HMAC: 2
             },
-            timestamp: '2026-11-06T12:00:00.000Z'
+            completedAt: '2026-11-06T12:00:00.000Z'
           }
         })
       } as any;
@@ -147,7 +149,7 @@ test('CHUVATOR — FASE 5.5-C: SaaS Admin & Tenant Controlled Backfill Integrati
   // 2. AUTHORIZATION & TENANT ISOLATION TESTS
   // =========================================================================
 
-  await t.test('4. Authorization: validateBackfillAdmin allows owner/admin/superadmin and rejects manager/kasir/coach/staff', async () => {
+  await t.test('4. Authorization: validateBackfillAdmin allows owner/admin/superadmin and rejects kasir/coach/staff', async () => {
     // 1. Test allowed roles
     for (const role of ['superadmin', 'owner', 'admin']) {
       const mockContext = {
@@ -166,7 +168,7 @@ test('CHUVATOR — FASE 5.5-C: SaaS Admin & Tenant Controlled Backfill Integrati
     }
 
     // 2. Test forbidden roles
-    for (const role of ['manager', 'kasir', 'coach', 'pelatih', 'staff']) {
+    for (const role of ['kasir', 'coach', 'pelatih', 'staff']) {
       const mockContext = {
         request: new Request('http://localhost/api/admin/backfill_kk_hmac', {
           headers: {
@@ -216,18 +218,19 @@ test('CHUVATOR — FASE 5.5-C: SaaS Admin & Tenant Controlled Backfill Integrati
   // 3. UI COMPONENT & CODE AUDIT TESTS
   // =========================================================================
 
-  await t.test('6. UI Contract: SaasAdminPage.jsx & TenantBackfillControlCard.jsx enforce confirmation & zero PII', () => {
+  await t.test('6. UI Contract: SaasAdminPage.jsx & TenantBackfillControlCard.jsx enforce READ-ONLY phase', () => {
     const saasPageJsx = fs.readFileSync(path.join(process.cwd(), 'src/pages/SaasAdminPage.jsx'), 'utf8');
     const tenantCardJsx = fs.readFileSync(path.join(process.cwd(), 'src/components/TenantBackfillControlCard.jsx'), 'utf8');
     const pengaturanJsx = fs.readFileSync(path.join(process.cwd(), 'src/pages/PengaturanPage.jsx'), 'utf8');
 
-    // 1. SaasAdminPage contains dry-run button & read-only modal
+    // 1. SaasAdminPage contains dry-run button & categories
     assert.match(saasPageJsx, /Jalankan Dry-Run KK HMAC/);
     assert.match(saasPageJsx, /100% AMAN & READ-ONLY/i);
+    assert.match(saasPageJsx, /LAST4_WITHOUT_HMAC/);
 
-    // 2. TenantBackfillControlCard requires explicit confirmation modal before execution
-    assert.match(tenantCardJsx, /Konfirmasi Eksekusi Controlled Backfill/);
-    assert.match(tenantCardJsx, /executeKkHmacBackfill/);
+    // 2. TenantBackfillControlCard disables execution button for this phase
+    assert.match(tenantCardJsx, /Eksekusi Terkunci/);
+    assert.match(tenantCardJsx, /disabled=\{true\}/);
 
     // 3. PengaturanPage imports & renders TenantBackfillControlCard
     assert.match(pengaturanJsx, /TenantBackfillControlCard/);

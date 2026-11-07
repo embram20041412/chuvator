@@ -355,13 +355,11 @@ test('CHUVATOR — FASE 5.5-C: Pemisahan Identitas NIK dan Nomor KK', async (t) 
     try {
       const summary = await performDryRunAnalysis('http://mock-supabase.local', 'test-key', 'test-secret', 'global');
       assert.strictEqual(summary.totalStudents, 3);
-      // Hanya Siswa 1 yang valid source KK dari no_kk
-      assert.strictEqual(summary.validSourceKK, 1);
       // Siswa 2 dan 3 invalid/unverified source KK
-      assert.strictEqual(summary.invalidSourceKK, 2);
-      assert.strictEqual(summary.categories.INVALID_SOURCE, 2);
+      assert.strictEqual(summary.categories.MISSING_NO_KK, 1);
+      assert.strictEqual(summary.categories.INVALID_NO_KK, 1);
       // Kandidat backfill hanya 1 (Siswa 1)
-      assert.strictEqual(summary.backfillCandidates, 1);
+      assert.strictEqual(summary.eligibleCandidates, 1);
     } finally {
       global.fetch = originalFetch;
     }

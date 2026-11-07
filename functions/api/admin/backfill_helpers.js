@@ -97,39 +97,33 @@ export async function checkCryptoEngineStatus(secret) {
  * Perform 100% Read-Only Dry-Run Analysis
  * Zero INSERT, Zero UPDATE, Zero Run record, Zero Audit record, Zero RPC calls.
  * Uses Keyset Pagination (order=id.asc, limit=50) and strict no_kk source validation.
- * Categorizes each student record into: ELIGIBLE, ALREADY_VALID, INVALID_SOURCE, MISSING_LAST4, CORRUPT_HMAC, HMAC_MISMATCH.
- * Output contains ONLY non-sensitive fields (id, tenant_id, category). NO NIK, NO full KK, NO full HMAC, NO secret.
+ * Output contains ONLY non-sensitive aggregate fields. NO PII, NO identifiers.
  * @param {string} supabaseUrl
  * @param {string} serviceRoleKey
  * @param {string} secret
  * @param {string|null} [tenantFilter=null]
  */
 export async function performDryRunAnalysis(supabaseUrl, serviceRoleKey, secret, tenantFilter = null) {
+  const startedAt = new Date().toISOString();
   let summary = {
     totalStudents: 0,
-    validSourceKK: 0,
-    invalidSourceKK: 0,
-    nullOrEmptyHmac: 0,
-    validFormatHmac: 0,
-    corruptHmac: 0,
-    hmacMismatch: 0,
-    missingLast4: 0,
-    backfillCandidates: 0,
-    estimatedProcessable: 0
+    eligibleCandidates: 0,
+    reviewRequired: 0
   };
 
   let categories = {
     ELIGIBLE: 0,
     ALREADY_VALID: 0,
-    INVALID_SOURCE: 0,
+    MISSING_NO_KK: 0,
+    INVALID_NO_KK: 0,
     MISSING_LAST4: 0,
+    LAST4_MISMATCH: 0,
     CORRUPT_HMAC: 0,
-    HMAC_MISMATCH: 0
+    HMAC_MISMATCH: 0,
+    LAST4_WITHOUT_HMAC: 0
   };
 
-  let items = [];
-
-  const batchSize = 50; // Keyset pagination batch limit (max 50)
+  const batchSize = 50; 
   let lastId = null;
   let hasMore = true;
 
@@ -165,47 +159,50 @@ export async function performDryRunAnalysis(supabaseUrl, serviceRoleKey, secret,
       lastId = s.id;
       summary.totalStudents++;
 
-      let category = 'INVALID_SOURCE';
-
-      // Membaca HANYA no_kk (Nomor KK terverifikasi) sebagai sumber resmi
-      const rawKK = s.no_kk;
+      const rawKK = s.no_kk ? String(s.no_kk).trim() : '';
       const cleanKK = normalizeKK(rawKK);
-      const hasValidSourceKK = Boolean(cleanKK);
-
       const currHmac = s.kk_hmac ? String(s.kk_hmac).trim().toLowerCase() : null;
       const currLast4 = s.kk_last4 ? String(s.kk_last4).trim() : null;
-      const hasValidLast4 = Boolean(currLast4 && /^[0-9]{4}$/.test(currLast4));
+      
+      let category = 'INVALID_NO_KK';
 
-      if (!hasValidSourceKK) {
-        category = 'INVALID_SOURCE';
-        summary.invalidSourceKK++;
+      // 1. Validasi No. KK
+      if (!rawKK) {
+        category = 'MISSING_NO_KK';
+      } else if (!cleanKK) {
+        category = 'INVALID_NO_KK';
       } else {
-        summary.validSourceKK++;
+        // No. KK Valid (16 digits)
         const expectedHmac = secret ? await computeHMAC(cleanKK, secret) : null;
+        const expectedLast4 = cleanKK.slice(-4);
 
         if (!currHmac) {
-          category = 'ELIGIBLE';
-          summary.nullOrEmptyHmac++;
-          summary.backfillCandidates++;
-          summary.estimatedProcessable++;
-        } else if (!/^[0-9a-f]{64}$/.test(currHmac)) {
-          category = 'CORRUPT_HMAC';
-          summary.corruptHmac++;
-        } else {
-          // Format HMAC valid 64 hex
-          summary.validFormatHmac++;
-
-          if (expectedHmac && currHmac !== expectedHmac) {
-            category = 'HMAC_MISMATCH';
-            summary.hmacMismatch++;
+          // HMAC Kosong
+          if (!currLast4) {
+            category = 'ELIGIBLE';
+            summary.eligibleCandidates++;
           } else {
-            // HMAC cocok dengan hasil perhitungan sumber KK
-            if (hasValidLast4) {
-              category = 'ALREADY_VALID';
-            } else {
-              category = 'MISSING_LAST4';
-              summary.missingLast4++;
-            }
+            category = 'LAST4_WITHOUT_HMAC';
+            summary.reviewRequired++;
+          }
+        } else if (!/^[0-9a-f]{64}$/.test(currHmac)) {
+          // HMAC Ada tapi corrupt (bukan 64 hex)
+          category = 'CORRUPT_HMAC';
+          summary.reviewRequired++;
+        } else if (expectedHmac && currHmac !== expectedHmac) {
+          // HMAC Ada tapi mismatch
+          category = 'HMAC_MISMATCH';
+          summary.reviewRequired++;
+        } else {
+          // HMAC Cocok
+          if (!currLast4) {
+            category = 'MISSING_LAST4';
+            summary.reviewRequired++;
+          } else if (currLast4 !== expectedLast4) {
+            category = 'LAST4_MISMATCH';
+            summary.reviewRequired++;
+          } else {
+            category = 'ALREADY_VALID';
           }
         }
       }
@@ -213,13 +210,6 @@ export async function performDryRunAnalysis(supabaseUrl, serviceRoleKey, secret,
       if (categories[category] !== undefined) {
         categories[category]++;
       }
-
-      // HANYA data non-sensitif (tanpa NIK, tanpa KK lengkap, tanpa HMAC lengkap, tanpa secret)
-      items.push({
-        id: s.id,
-        tenant_id: s.tenant_id,
-        category
-      });
     }
 
     if (students.length < batchSize) {
@@ -228,8 +218,9 @@ export async function performDryRunAnalysis(supabaseUrl, serviceRoleKey, secret,
   }
 
   return {
+    startedAt,
+    completedAt: new Date().toISOString(),
     ...summary,
-    categories,
-    items
+    categories
   };
 }

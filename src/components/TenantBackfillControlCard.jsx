@@ -60,7 +60,8 @@ export default function TenantBackfillControlCard({ tenantId = 'global', tenantN
     }
   };
 
-  const eligibleCount = dryRunResult?.categories?.ELIGIBLE ?? dryRunResult?.backfillCandidates ?? 0;
+  const eligibleCount = dryRunResult?.categories?.ELIGIBLE ?? 0;
+  const reviewRequired = dryRunResult?.reviewRequired ?? 0;
 
   return (
     <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 space-y-5">
@@ -73,13 +74,13 @@ export default function TenantBackfillControlCard({ tenantId = 'global', tenantN
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <h3 className="font-bold text-base text-[#333333]">Audit & Controlled Backfill KK HMAC</h3>
+              <h3 className="font-bold text-base text-[#333333]">Audit & Dry-Run Analisis KK HMAC</h3>
               <span className="px-2.5 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-bold rounded-full uppercase">
                 {tenantName || 'Tenant Admin'}
               </span>
             </div>
             <p className="text-xs text-gray-500 mt-0.5">
-              Analisis terisolasi & eksekusi bertahap pembuatan hash HMAC dari Nomor KK siswa.
+              Analisis terisolasi & simulasi pembuatan hash HMAC dari Nomor KK siswa (100% Read-Only).
             </p>
           </div>
         </div>
@@ -107,21 +108,12 @@ export default function TenantBackfillControlCard({ tenantId = 'global', tenantN
           <button
             data-testid="tenant-btn-execute"
             onClick={() => setShowExecuteConfirm(true)}
-            disabled={loadingExecute || loadingDryRun || eligibleCount === 0}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-sm transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1.5"
-            title={eligibleCount === 0 ? 'Jalankan analisis dry-run terlebih dahulu atau tidak ada kandidat ELIGIBLE' : 'Eksekusi Backfill'}
+            disabled={true}
+            className="px-4 py-2 bg-gray-200 text-gray-500 font-semibold text-xs rounded-xl shadow-sm transition-colors cursor-not-allowed flex items-center space-x-1.5 opacity-50"
+            title="Eksekusi Backfill dinonaktifkan selama fase validasi Dry-Run."
           >
-            {loadingExecute ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Mengeksekusi...</span>
-              </>
-            ) : (
-              <>
-                <Play className="w-4 h-4" />
-                <span>Eksekusi Backfill ({eligibleCount})</span>
-              </>
-            )}
+            <Play className="w-4 h-4" />
+            <span>Eksekusi Terkunci</span>
           </button>
         </div>
       </div>
@@ -150,36 +142,6 @@ export default function TenantBackfillControlCard({ tenantId = 'global', tenantN
         </div>
       )}
 
-      {/* Hasil Eksekusi Terbaru */}
-      {executeResult && (
-        <div data-testid="tenant-execute-summary" className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2 text-emerald-900 font-bold text-sm">
-              <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-              <span>Eksekusi Backfill Selesai!</span>
-            </div>
-            <span className="text-xs font-mono bg-emerald-200 text-emerald-900 px-2.5 py-0.5 rounded-full font-bold">
-              Status: {executeResult.completed ? 'COMPLETED' : 'PARTIAL'}
-            </span>
-          </div>
-
-          <div className="grid grid-cols-3 gap-3 text-center">
-            <div className="p-2.5 bg-white border border-emerald-200 rounded-lg">
-              <p className="text-[10px] font-bold text-gray-500 uppercase">Berhasil Diproses</p>
-              <p className="text-lg font-black text-emerald-700">{executeResult.processed ?? 0}</p>
-            </div>
-            <div className="p-2.5 bg-white border border-emerald-200 rounded-lg">
-              <p className="text-[10px] font-bold text-gray-500 uppercase">Dilewati (Skipped)</p>
-              <p className="text-lg font-black text-amber-700">{executeResult.skipped ?? 0}</p>
-            </div>
-            <div className="p-2.5 bg-white border border-emerald-200 rounded-lg">
-              <p className="text-[10px] font-bold text-gray-500 uppercase">Gagal (Failed)</p>
-              <p className="text-lg font-black text-rose-700">{executeResult.failed ?? 0}</p>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Display Hasil Dry-Run */}
       {dryRunResult ? (
         <div data-testid="tenant-dryrun-results" className="space-y-4">
@@ -187,7 +149,7 @@ export default function TenantBackfillControlCard({ tenantId = 'global', tenantN
             <div className="flex items-center space-x-2">
               <Database className="w-4 h-4 text-indigo-600" />
               <span className="font-semibold text-gray-700">Hasil Analisis Read-Only Tenant:</span>
-              <span>{dryRunResult.timestamp ? new Date(dryRunResult.timestamp).toLocaleString('id-ID') : new Date().toLocaleString('id-ID')}</span>
+              <span>{dryRunResult.completedAt ? new Date(dryRunResult.completedAt).toLocaleString('id-ID') : new Date().toLocaleString('id-ID')}</span>
             </div>
             <span className="font-mono text-[11px] bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded font-bold">
               TENANT: {tenantId}
@@ -201,36 +163,44 @@ export default function TenantBackfillControlCard({ tenantId = 'global', tenantN
               <p className="text-lg font-black text-slate-800 mt-0.5">{dryRunResult.totalStudents ?? 0}</p>
             </div>
             <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
-              <p className="text-[10px] font-bold text-emerald-700 uppercase">No. KK Valid</p>
-              <p className="text-lg font-black text-emerald-900 mt-0.5">{dryRunResult.validSourceKK ?? 0}</p>
-            </div>
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
-              <p className="text-[10px] font-bold text-amber-700 uppercase">No. KK Kosong/Invalid</p>
-              <p className="text-lg font-black text-amber-900 mt-0.5">{dryRunResult.invalidSourceKK ?? 0}</p>
+              <p className="text-[10px] font-bold text-emerald-700 uppercase">ALREADY_VALID</p>
+              <p className="text-lg font-black text-emerald-900 mt-0.5">{dryRunResult.categories?.ALREADY_VALID ?? 0}</p>
             </div>
             <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl">
               <p className="text-[10px] font-bold text-indigo-700 uppercase">Kandidat ELIGIBLE</p>
               <p className="text-lg font-black text-indigo-900 mt-0.5">{eligibleCount}</p>
             </div>
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl">
+              <p className="text-[10px] font-bold text-rose-700 uppercase">Perlu Tinjauan</p>
+              <p className="text-lg font-black text-rose-900 mt-0.5">{reviewRequired}</p>
+            </div>
           </div>
 
           {/* Rincian Kategori Kualifikasi */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-[11px]">
             <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-lg flex justify-between items-center">
-              <span className="font-semibold text-blue-900">ELIGIBLE (Siap)</span>
+              <span className="font-semibold text-blue-900">ELIGIBLE</span>
               <span className="font-bold bg-blue-600 text-white px-2 py-0.5 rounded-full">{dryRunResult.categories?.ELIGIBLE ?? 0}</span>
             </div>
             <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg flex justify-between items-center">
               <span className="font-semibold text-emerald-900">ALREADY_VALID</span>
               <span className="font-bold bg-emerald-600 text-white px-2 py-0.5 rounded-full">{dryRunResult.categories?.ALREADY_VALID ?? 0}</span>
             </div>
-            <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg flex justify-between items-center">
-              <span className="font-semibold text-amber-900">INVALID_SOURCE</span>
-              <span className="font-bold bg-amber-600 text-white px-2 py-0.5 rounded-full">{dryRunResult.categories?.INVALID_SOURCE ?? 0}</span>
+            <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex justify-between items-center">
+              <span className="font-semibold text-slate-900">MISSING_NO_KK</span>
+              <span className="font-bold bg-slate-600 text-white px-2 py-0.5 rounded-full">{dryRunResult.categories?.MISSING_NO_KK ?? 0}</span>
+            </div>
+            <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg flex justify-between items-center">
+              <span className="font-semibold text-slate-900">INVALID_NO_KK</span>
+              <span className="font-bold bg-slate-600 text-white px-2 py-0.5 rounded-full">{dryRunResult.categories?.INVALID_NO_KK ?? 0}</span>
             </div>
             <div className="p-2.5 bg-purple-50 border border-purple-200 rounded-lg flex justify-between items-center">
               <span className="font-semibold text-purple-900">MISSING_LAST4</span>
               <span className="font-bold bg-purple-600 text-white px-2 py-0.5 rounded-full">{dryRunResult.categories?.MISSING_LAST4 ?? 0}</span>
+            </div>
+            <div className="p-2.5 bg-purple-50 border border-purple-200 rounded-lg flex justify-between items-center">
+              <span className="font-semibold text-purple-900">LAST4_MISMATCH</span>
+              <span className="font-bold bg-purple-600 text-white px-2 py-0.5 rounded-full">{dryRunResult.categories?.LAST4_MISMATCH ?? 0}</span>
             </div>
             <div className="p-2.5 bg-rose-50 border border-rose-200 rounded-lg flex justify-between items-center">
               <span className="font-semibold text-rose-900">CORRUPT_HMAC</span>
@@ -240,12 +210,16 @@ export default function TenantBackfillControlCard({ tenantId = 'global', tenantN
               <span className="font-semibold text-red-900">HMAC_MISMATCH</span>
               <span className="font-bold bg-red-600 text-white px-2 py-0.5 rounded-full">{dryRunResult.categories?.HMAC_MISMATCH ?? 0}</span>
             </div>
+            <div className="p-2.5 bg-orange-50 border border-orange-200 rounded-lg flex justify-between items-center">
+              <span className="font-semibold text-orange-900">LAST4_NO_HMAC</span>
+              <span className="font-bold bg-orange-600 text-white px-2 py-0.5 rounded-full">{dryRunResult.categories?.LAST4_WITHOUT_HMAC ?? 0}</span>
+            </div>
           </div>
 
           <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center space-x-2 text-[11px] text-gray-500">
             <Lock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
             <span>
-              Privasi terjamin: NIK, No. KK lengkap, HMAC secret, dan identitas individu siswa tidak pernah diekspos di browser.
+              Analisis simulasi tidak melakukan mutasi database. Tombol eksekusi dinonaktifkan selama fase audit.
             </span>
           </div>
         </div>
@@ -255,60 +229,6 @@ export default function TenantBackfillControlCard({ tenantId = 'global', tenantN
           <p className="text-xs font-semibold text-gray-600">
             Tekan "Analisis Dry-Run (Read-Only)" untuk memeriksa kesiapan data siswa tenant ini.
           </p>
-        </div>
-      )}
-
-      {/* Modal Konfirmasi Eksekusi Controlled Backfill */}
-      {showExecuteConfirm && (
-        <div data-testid="execute-confirm-modal" className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl border border-gray-100 space-y-5 animate-in fade-in zoom-in-95">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <div className="flex items-center space-x-2 text-emerald-600">
-                <Play className="w-5 h-5" />
-                <h3 className="font-bold text-base text-gray-900">Konfirmasi Eksekusi Controlled Backfill</h3>
-              </div>
-              <button
-                data-testid="execute-confirm-cancel-x"
-                onClick={() => setShowExecuteConfirm(false)}
-                className="text-gray-400 hover:text-gray-600 p-1 rounded-lg cursor-pointer"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="space-y-3 text-sm text-gray-600">
-              <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl flex items-center space-x-2.5 text-indigo-900 text-xs font-semibold">
-                <ShieldCheck className="w-4 h-4 text-indigo-600 shrink-0" />
-                <span>Terdapat {eligibleCount} kandidat ELIGIBLE siap di-backfill.</span>
-              </div>
-              <p className="leading-relaxed text-xs">
-                Sistem akan memproses pembuatan hash `kk_hmac` dan `kk_last4` menggunakan transaksi atomik database (`apply_backfill_kk_atomic_record`).
-              </p>
-              <ul className="text-xs space-y-1 text-gray-500 list-disc pl-4">
-                <li>Siswa tanpa No. KK (INVALID_SOURCE) akan dilewati secara aman.</li>
-                <li>Perubahan No. KK saat proses berlangsung akan dideteksi dan dibatalkan via `p_expected_no_kk`.</li>
-                <li>Audit trail append-only dicatat secara permanen di database.</li>
-              </ul>
-            </div>
-
-            <div className="flex items-center justify-end space-x-3 pt-2">
-              <button
-                data-testid="execute-confirm-cancel"
-                onClick={() => setShowExecuteConfirm(false)}
-                className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-xs rounded-xl transition-colors cursor-pointer"
-              >
-                Batal
-              </button>
-              <button
-                data-testid="execute-confirm-yes"
-                onClick={handleConfirmExecute}
-                className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs rounded-xl shadow-sm transition-colors cursor-pointer flex items-center space-x-2"
-              >
-                <Play className="w-4 h-4" />
-                <span>Konfirmasi Eksekusi Backfill</span>
-              </button>
-            </div>
-          </div>
         </div>
       )}
 

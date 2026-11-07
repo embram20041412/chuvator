@@ -51,11 +51,15 @@ export async function onRequestPost(context) {
     }
 
     const supabaseUrl = env.SUPABASE_URL || env.VITE_SUPABASE_URL;
-    const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY || env.VITE_SUPABASE_ANON_KEY;
+    const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
 
     if (!supabaseUrl || !serviceRoleKey) {
       return new Response(
-        JSON.stringify({ success: false, message: 'Konfigurasi server database tidak lengkap.' }),
+        JSON.stringify({ 
+          success: false, 
+          code: 'SERVICE_ROLE_NOT_CONFIGURED',
+          message: 'Konfigurasi server database (SERVICE_ROLE_KEY) tidak lengkap.' 
+        }),
         { status: 500, headers: corsHeaders }
       );
     }
@@ -106,10 +110,7 @@ export async function onRequestPost(context) {
           success: true,
           mode: 'DRY_RUN',
           message: 'Analisis simulasi selesai (100% read-only, tanpa perubahan database).',
-          data: {
-            ...analysis,
-            timestamp: new Date().toISOString()
-          }
+          data: analysis
         }),
         { status: 200, headers: corsHeaders }
       );
