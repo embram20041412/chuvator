@@ -1,0 +1,118 @@
+/**
+ * Cloudflare Pages Function: DELETE /api/tenant/parents?id=...
+ * Cancels registration / deletes parent account and associated links.
+ */
+
+import { getCorsHeaders } from '../../portal/_auth_v2.js';
+import { validateStaffSession } from '../_auth_staff.js';
+
+export async function onRequestOptions(context) {
+  const corsHeaders = getCorsHeaders(context.request, context.env);
+  return new Response(null, { status: 204, headers: corsHeaders });
+}
+
+export async function onRequestDelete(context) {
+  const { request, env = {} } = context;
+  const corsHeaders = getCorsHeaders(request, env);
+
+  try {
+    const authResult = await validateStaffSession(context);
+    if (!authResult.valid) {
+      return new Response(JSON.stringify({ success: false, message: authResult.message }), { status: 401, headers: corsHeaders });
+    }
+
+    const { role, tenantId: staffTenantId } = authResult.user;
+    if (!['superadmin', 'owner', 'admin'].includes(role)) {
+      return new Response(JSON.stringify({ success: false, message: 'Akses ditolak. Hanya Owner/Admin yang dapat menghapus akun wali murid.' }), { status: 403, headers: corsHeaders });
+    }
+
+    const url = new URL(request.url);
+    const parentId = url.searchParams.get('id');
+
+    if (!parentId) {
+      return new Response(JSON.stringify({ success: false, message: 'Parent ID wajib disertakan.' }), { status: 400, headers: corsHeaders });
+    }
+
+    const supabaseUrl = env.SUPABASE_URL;
+    const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return new Response(JSON.stringify({ success: false, code: 'SUPABASE_CONFIG_MISSING', message: 'Konfigurasi server tidak lengkap.' }), { status: 500, headers: corsHeaders });
+    }
+
+    let parentQuery = `${supabaseUrl}/rest/v1/parent_accounts?id=eq.${encodeURIComponent(parentId)}&select=id,tenant_id,auth_uid`;
+    if (role !== 'superadmin') {
+      parentQuery += `&tenant_id=eq.${encodeURIComponent(staffTenantId)}`;
+    }
+
+    const parentResp = await fetch(parentQuery, {
+      method: 'GET',
+      headers: {
+        'apikey': serviceRoleKey,
+        'Authorization': `Bearer ${serviceRoleKey}`,
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!parentResp.ok) {
+      return new Response(JSON.stringify({ success: false, message: 'Gagal mengambil data akun wali murid.' }), { status: 500, headers: corsHeaders });
+    }
+
+    const parents = await parentResp.json().catch(() => []);
+    if (!Array.isArray(parents) || parents.length === 0) {
+      return new Response(JSON.stringify({ success: false, message: 'Akun wali murid tidak ditemukan atau di luar tenant Anda.' }), { status: 404, headers: corsHeaders });
+    }
+
+    const parent = parents[0];
+    const authUid = parent.auth_uid;
+
+    // Delete parent_student_links first
+    const linkDelResp = await fetch(`${supabaseUrl}/rest/v1/parent_student_links?parent_account_id=eq.${encodeURIComponent(parentId)}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': serviceRoleKey,
+        'Authorization': `Bearer ${serviceRoleKey}`
+      }
+    });
+
+    if (!linkDelResp.ok && linkDelResp.status !== 404) {
+      return new Response(JSON.stringify({ success: false, message: 'Gagal menghapus relasi siswa wali murid.' }), { status: 500, headers: corsHeaders });
+    }
+
+    // Delete parent_accounts record
+    const parentDelResp = await fetch(`${supabaseUrl}/rest/v1/parent_accounts?id=eq.${encodeURIComponent(parentId)}`, {
+      method: 'DELETE',
+      headers: {
+        'apikey': serviceRoleKey,
+        'Authorization': `Bearer ${serviceRoleKey}`
+      }
+    });
+
+    if (!parentDelResp.ok) {
+      return new Response(JSON.stringify({ success: false, message: 'Gagal menghapus profil wali murid.' }), { status: 500, headers: corsHeaders });
+    }
+
+    // Delete Supabase Auth user
+    if (authUid) {
+      await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUid}`, {
+        method: 'DELETE',
+        headers: {
+          'apikey': serviceRoleKey,
+          'Authorization': `Bearer ${serviceRoleKey}`
+        }
+      }).catch(() => {});
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: 'Akun wali murid berhasil dibatalkan dan dihapus.'
+      }),
+      { status: 200, headers: corsHeaders }
+    );
+
+  } catch (err) {
+    console.error('Delete parent account error:', err.message);
+    return new Response(JSON.stringify({ success: false, message: 'Terjadi kesalahan internal pada server.' }), { status: 500, headers: corsHeaders });
+  }
+}

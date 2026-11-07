@@ -12,7 +12,9 @@ import {
   CreditCard,
   X,
   ChevronRight,
-  Info
+  Info,
+  Send,
+  Trash2
 } from 'lucide-react';
 import { supabase } from '../config/supabase';
 import { parentService } from '../services/parentService';
@@ -40,6 +42,10 @@ export default function ParentManagementPage({ userProfile }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState(null);
   const [successResult, setSuccessResult] = useState(null);
+
+  // Action feedback states
+  const [actionLoadingId, setActionLoadingId] = useState(null);
+  const [actionMessage, setActionMessage] = useState(null);
 
   const fetchParents = useCallback(async () => {
     if (!tenantId) return;
@@ -104,11 +110,42 @@ export default function ParentManagementPage({ userProfile }) {
       const result = await parentService.createParentAccount(payload);
       setSuccessResult(result);
       fetchParents();
-      // Reset form but keep modal open to show success
     } catch (err) {
       setFormError(err.message);
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleResend = async (parentId) => {
+    setActionLoadingId(parentId);
+    setActionMessage(null);
+    try {
+      const res = await parentService.resendInvitation(parentId);
+      setActionMessage({ type: 'success', text: res.message || 'Undangan berhasil dikirim ulang.' });
+    } catch (err) {
+      setActionMessage({ type: 'error', text: err.message || 'Gagal mengirim ulang undangan.' });
+    } finally {
+      setActionLoadingId(null);
+      setTimeout(() => setActionMessage(null), 4000);
+    }
+  };
+
+  const handleDelete = async (parentId, parentName) => {
+    if (!window.confirm(`Apakah Anda yakin ingin membatalkan pendaftaran dan menghapus akun wali '${parentName}'?`)) {
+      return;
+    }
+    setActionLoadingId(parentId);
+    setActionMessage(null);
+    try {
+      await parentService.deleteParentAccount(parentId);
+      setActionMessage({ type: 'success', text: 'Akun wali murid berhasil dihapus.' });
+      fetchParents();
+    } catch (err) {
+      setActionMessage({ type: 'error', text: err.message || 'Gagal menghapus akun.' });
+    } finally {
+      setActionLoadingId(null);
+      setTimeout(() => setActionMessage(null), 4000);
     }
   };
 
@@ -136,9 +173,9 @@ export default function ParentManagementPage({ userProfile }) {
               <Users className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Manajemen Wali Murid</h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Manajemen Wali Murid V2.6.0</h1>
               <p className="text-xs text-gray-500 mt-0.5">
-                Kelola akun portal wali murid dan hubungkan dengan data siswa akademi.
+                Kelola siklus hidup akun portal wali murid, pengiriman ulang undangan, dan hubungan siswa.
               </p>
             </div>
           </div>
@@ -152,6 +189,15 @@ export default function ParentManagementPage({ userProfile }) {
           <span>Tambah Akun Wali</span>
         </button>
       </div>
+
+      {actionMessage && (
+        <div className={`p-4 rounded-2xl text-xs flex items-center space-x-2 ${
+          actionMessage.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-red-50 text-red-700 border border-red-200'
+        }`}>
+          {actionMessage.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+          <span>{actionMessage.text}</span>
+        </div>
+      )}
 
       {/* Main List */}
       <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
@@ -190,56 +236,74 @@ export default function ParentManagementPage({ userProfile }) {
                 <tr>
                   <th className="px-6 py-3">Nama Wali Murid</th>
                   <th className="px-6 py-3">Email & Telepon</th>
+                  <th className="px-6 py-3">Status Aktivasi</th>
                   <th className="px-6 py-3">Siswa Terhubung</th>
-                  <th className="px-6 py-3">Tanggal Dibuat</th>
-                  <th className="px-6 py-3 text-right">Aksi</th>
+                  <th className="px-6 py-3 text-right">Aksi & Pemulihan</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredParents.map((parent) => (
-                  <tr key={parent.id} className="hover:bg-gray-50/50 transition">
-                    <td className="px-6 py-4">
-                      <div className="font-bold text-gray-900">{parent.name}</div>
-                      <div className="text-[10px] text-gray-400 font-mono mt-0.5 uppercase">ID: {parent.id.slice(0,8)}...</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center space-x-1.5">
-                        <Mail className="w-3 h-3 text-gray-400" />
-                        <span>{parent.email}</span>
-                      </div>
-                      {parent.phone && (
-                        <div className="flex items-center space-x-1.5 mt-1 text-gray-500">
-                          <Phone className="w-3 h-3 text-gray-400" />
-                          <span>{parent.phone}</span>
+                {filteredParents.map((parent) => {
+                  const isPending = !parent.activated_at && !parent.updated_at;
+                  return (
+                    <tr key={parent.id} className="hover:bg-gray-50/50 transition">
+                      <td className="px-6 py-4">
+                        <div className="font-bold text-gray-900">{parent.name || parent.full_name}</div>
+                        <div className="text-[10px] text-gray-400 font-mono mt-0.5 uppercase">ID: {parent.id.slice(0,8)}...</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center space-x-1.5">
+                          <Mail className="w-3 h-3 text-gray-400" />
+                          <span>{parent.email}</span>
                         </div>
-                      )}
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-wrap gap-1">
-                        {parent.links?.map((link, idx) => (
-                          <span key={idx} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full font-semibold border border-indigo-100">
-                            {link.student?.name}
-                          </span>
-                        ))}
-                        {(!parent.links || parent.links.length === 0) && (
-                          <span className="text-gray-400 italic text-[11px]">Belum terhubung</span>
+                        {parent.phone && (
+                          <div className="flex items-center space-x-1.5 mt-1 text-gray-500">
+                            <Phone className="w-3 h-3 text-gray-400" />
+                            <span>{parent.phone}</span>
+                          </div>
                         )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 text-gray-500">
-                      {new Date(parent.created_at).toLocaleDateString('id-ID', { 
-                        day: 'numeric', 
-                        month: 'short', 
-                        year: 'numeric' 
-                      })}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <button className="p-1.5 text-gray-400 hover:text-indigo-600 transition">
-                        <Info className="w-4 h-4" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                          isPending ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        }`}>
+                          {isPending ? 'Menunggu Aktivasi' : 'Aktif'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-wrap gap-1">
+                          {parent.links?.map((link, idx) => (
+                            <span key={idx} className="px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full font-semibold border border-indigo-100">
+                              {link.student?.name}
+                            </span>
+                          ))}
+                          {(!parent.links || parent.links.length === 0) && (
+                            <span className="text-gray-400 italic text-[11px]">Belum terhubung</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-right space-x-2">
+                        <button 
+                          onClick={() => handleResend(parent.id)}
+                          disabled={actionLoadingId === parent.id}
+                          title="Kirim ulang undangan aktivasi"
+                          className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl font-bold transition inline-flex items-space space-x-1 disabled:opacity-50"
+                        >
+                          {actionLoadingId === parent.id ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
+                          <span>Kirim Ulang</span>
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(parent.id, parent.name || parent.full_name)}
+                          disabled={actionLoadingId === parent.id}
+                          title="Batalkan pendaftaran & hapus akun"
+                          className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl font-bold transition inline-flex items-space space-x-1 disabled:opacity-50"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Hapus</span>
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -250,7 +314,6 @@ export default function ParentManagementPage({ userProfile }) {
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl relative my-8">
-            {/* Modal Header */}
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
               <div className="flex items-center space-x-2.5">
                 <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
@@ -272,7 +335,7 @@ export default function ParentManagementPage({ userProfile }) {
                   <h4 className="text-xl font-bold text-gray-900">Akun Berhasil Dibuat!</h4>
                   <p className="text-sm text-gray-500 mt-2 leading-relaxed">
                     Undangan akses telah dikirimkan ke email <strong className="text-gray-800">{successResult.data?.email}</strong>.<br />
-                    Wali murid dapat login ke portal menggunakan email tersebut.
+                    Wali murid dapat mengaktifkan akun melalui tautan email.
                   </p>
                 </div>
                 <button 
@@ -285,7 +348,6 @@ export default function ParentManagementPage({ userProfile }) {
             ) : (
               <div className="p-6">
                 <form onSubmit={handleSubmit} className="space-y-6">
-                  {/* Form Grid */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5 text-left">
                       <label className="block text-[11px] font-bold text-gray-700 uppercase px-1">Nama Wali Murid <span className="text-red-500">*</span></label>
@@ -377,7 +439,6 @@ export default function ParentManagementPage({ userProfile }) {
                     </div>
                   )}
 
-                  {/* Search Results */}
                   <div className="space-y-3">
                     <h4 className="text-xs font-bold text-gray-700 uppercase flex items-center justify-between">
                       <span>Daftar Siswa Ditemukan ({searchResults.length})</span>
@@ -420,7 +481,6 @@ export default function ParentManagementPage({ userProfile }) {
                     )}
                   </div>
 
-                  {/* Modal Footer */}
                   <div className="pt-2 flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-gray-100">
                     <div className="text-[11px] text-gray-400 flex items-start space-x-1.5 text-left max-w-xs leading-normal italic">
                       <div className="p-0.5 bg-gray-100 rounded text-gray-500 shrink-0 mt-0.5">

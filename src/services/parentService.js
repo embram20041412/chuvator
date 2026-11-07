@@ -1,6 +1,6 @@
 /**
  * Parent Management Service
- * Integrates with Cloudflare Pages Functions for FASE 5.5-B
+ * Integrates with Cloudflare Pages Functions for FASE 5.5-B & V2.6.0
  */
 
 import { supabase } from '../config/supabase';
@@ -36,7 +36,6 @@ const getAuthHeaders = async () => {
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   } else {
-    // Demo/test environment headers fallback for local development
     headers['Authorization'] = 'Bearer demo-test-token';
     headers['x-test-staff-role'] = 'owner';
     headers['x-test-staff-uid'] = 'demo-tenant-admin';
@@ -83,6 +82,41 @@ export const parentService = {
   },
 
   /**
+   * Resend activation invitation to existing parent account
+   */
+  resendInvitation: async (parentId) => {
+    const headers = await getAuthHeaders();
+    const response = await fetch('/api/tenant/parents/resend', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ parentId })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || 'Gagal mengirim ulang undangan.');
+    }
+    return data;
+  },
+
+  /**
+   * Cancel / delete parent account registration and links
+   */
+  deleteParentAccount: async (parentId) => {
+    const headers = await getAuthHeaders();
+    const response = await fetch(`/api/tenant/parents/delete?id=${encodeURIComponent(parentId)}`, {
+      method: 'DELETE',
+      headers
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || 'Gagal menghapus akun wali murid.');
+    }
+    return data;
+  },
+
+  /**
    * Fetch all parent accounts for the tenant
    */
   getParentAccounts: async (supabaseClient, tenantId) => {
@@ -101,7 +135,6 @@ export const parentService = {
       if (!error && Array.isArray(data)) return data;
     } catch (_) {}
 
-    // Fallback if kk_last4 column does not exist on database schema yet
     try {
       const { data, error } = await supabaseClient
         .from('parent_accounts')
