@@ -279,7 +279,7 @@ export async function onRequestPost(context) {
       tenant_id: targetTenantId,
       auth_uid: authUid,
       email: normalizedEmail,
-      name: name,
+      full_name: name,
       phone: phone || null,
       created_at: new Date().toISOString()
     };

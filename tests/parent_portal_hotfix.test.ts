@@ -4,7 +4,7 @@ import { onRequestPost as createParentPost } from '../functions/api/tenant/paren
 import { onRequestGet as searchStudentsGet } from '../functions/api/tenant/parents/students.js';
 import { computeHMAC } from '../functions/api/tenant/_auth_staff.js';
 
-test('CHUVATOR — Parent Portal Hotfix V2.3.8 Verification Suite', async (t) => {
+test('CHUVATOR — Parent Portal Hotfix V2.3.9 Verification Suite', async (t) => {
   const mockSecret = 'test-secret-123';
   const mockUrl = 'http://mock-supabase.local';
   const mockServiceKey = 'service-role-key';
@@ -385,6 +385,36 @@ test('CHUVATOR — Parent Portal Hotfix V2.3.8 Verification Suite', async (t) =>
     } finally {
       global.fetch = originalFetch;
       console.error = originalConsoleError;
+    }
+  });
+
+  await t.test('14. Database insert uses full_name and does not contain name (V2.3.9)', async () => {
+    const originalFetch = global.fetch;
+    let capturedPayload: any = null;
+
+    global.fetch = async (url: any, options: any) => {
+      const urlStr = String(url);
+      const method = (options?.method || 'GET').toUpperCase();
+      if (urlStr.includes('/rest/v1/students')) return new Response(JSON.stringify([{ id: validUuid, tenant_id: 'tenant-1', kk_hmac: validHmac }]), { status: 200 });
+      if (urlStr.includes('/auth/v1/invite')) return new Response(JSON.stringify({ id: 'auth-ok' }), { status: 200 });
+      if (urlStr.includes('/rest/v1/parent_accounts') && method === 'POST') {
+        capturedPayload = JSON.parse(options.body);
+        return new Response(JSON.stringify([{ id: 'p-ok' }]), { status: 201 });
+      }
+      if (urlStr.includes('/rest/v1/parent_student_links')) return new Response(JSON.stringify({}), { status: 201 });
+      return new Response(JSON.stringify([]), { status: 200 });
+    };
+
+    try {
+      const ctx = getMockContext();
+      await createParentPost(ctx);
+      
+      assert.ok(capturedPayload, 'Payload should be captured');
+      assert.strictEqual(capturedPayload.full_name, 'Parent Name', 'Should use full_name');
+      assert.strictEqual(capturedPayload.name, undefined, 'Should not contain name property');
+      assert.strictEqual(capturedPayload.email, 'parent@example.com');
+    } finally {
+      global.fetch = originalFetch;
     }
   });
 });
