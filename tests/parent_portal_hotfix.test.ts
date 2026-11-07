@@ -4,7 +4,7 @@ import { onRequestPost as createParentPost } from '../functions/api/tenant/paren
 import { onRequestGet as searchStudentsGet } from '../functions/api/tenant/parents/students.js';
 import { computeHMAC } from '../functions/api/tenant/_auth_staff.js';
 
-test('CHUVATOR — Parent Portal Hotfix V2.4.0 Verification Suite', async (t) => {
+test('CHUVATOR — Parent Portal Hotfix V2.4.1 Verification Suite', async (t) => {
   const mockSecret = 'test-secret-123';
   const mockUrl = 'http://mock-supabase.local';
   const mockServiceKey = 'service-role-key';
@@ -128,7 +128,7 @@ test('CHUVATOR — Parent Portal Hotfix V2.4.0 Verification Suite', async (t) =>
     }
   });
 
-  await t.test('5. Student link failure triggers diagnostics and cleanup (V2.4.0)', async () => {
+  await t.test('5. Student link failure triggers sanitized diagnostics and cleanup (V2.4.1)', async () => {
     const originalFetch = global.fetch;
     const originalConsoleError = console.error;
     let loggedErrors: any[] = [];
@@ -143,13 +143,18 @@ test('CHUVATOR — Parent Portal Hotfix V2.4.0 Verification Suite', async (t) =>
       const urlStr = String(url);
       const method = (options?.method || 'GET').toUpperCase();
       if (urlStr.includes('/rest/v1/students')) return new Response(JSON.stringify([{ id: validUuid, tenant_id: 'tenant-1', kk_hmac: validHmac }]), { status: 200 });
-      if (urlStr.includes('/auth/v1/invite')) return new Response(JSON.stringify({ id: 'auth-id' }), { status: 200 });
-      if (urlStr.includes('/rest/v1/parent_accounts') && method === 'POST') return new Response(JSON.stringify([{ id: 'p-id' }]), { status: 201 });
+      if (urlStr.includes('/auth/v1/invite')) return new Response(JSON.stringify({ id: 'auth-id-leak-123' }), { status: 200 });
+      if (urlStr.includes('/rest/v1/parent_accounts') && method === 'POST') return new Response(JSON.stringify([{ id: 'p-id-leak-456' }]), { status: 201 });
       if (urlStr.includes('/rest/v1/parent_student_links')) {
-        return new Response(JSON.stringify({ code: '23502', message: 'Not null violation' }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+        return new Response(JSON.stringify({ 
+          code: '23502', 
+          message: 'PII Leak: parent@example.com',
+          details: 'Leak UUID: auth-id-leak-123',
+          hint: 'KK Leak: 1234567890123456'
+        }), { status: 400, headers: { 'Content-Type': 'application/json' } });
       }
-      if (urlStr.includes('/auth/v1/admin/users/auth-id') && method === 'DELETE') { authCleaned = true; return new Response(JSON.stringify({}), { status: 200 }); }
-      if (urlStr.includes('/parent_accounts?id=eq.p-id') && method === 'DELETE') { parentCleaned = true; return new Response(JSON.stringify({}), { status: 200 }); }
+      if (urlStr.includes('/auth/v1/admin/users/auth-id-leak-123') && method === 'DELETE') { authCleaned = true; return new Response(JSON.stringify({}), { status: 200 }); }
+      if (urlStr.includes('/parent_accounts?id=eq.p-id-leak-456') && method === 'DELETE') { parentCleaned = true; return new Response(JSON.stringify({}), { status: 200 }); }
       return new Response(JSON.stringify([]), { status: 200 });
     };
 
@@ -163,6 +168,17 @@ test('CHUVATOR — Parent Portal Hotfix V2.4.0 Verification Suite', async (t) =>
       assert.strictEqual(logEntry.status, 400);
       assert.strictEqual(logEntry.sqlState, '23502');
       assert.strictEqual(logEntry.classification, 'NOT_NULL_VIOLATION');
+      assert.strictEqual(logEntry.parentCleanup, 'SUCCESS');
+      assert.strictEqual(logEntry.authCleanup, 'SUCCESS');
+      
+      // ABSOLUTE PII PROTECTION VERIFICATION
+      const logStr = JSON.stringify(loggedErrors);
+      assert.ok(!logStr.includes('parent@example.com'), 'Log must not contain email');
+      assert.ok(!logStr.includes(validKK), 'Log must not contain KK');
+      assert.ok(!logStr.includes('auth-id-leak-123'), 'Log must not contain Auth UID');
+      assert.ok(!logStr.includes('p-id-leak-456'), 'Log must not contain Parent ID');
+      assert.ok(!logStr.includes('PII Leak'), 'Log must not contain raw error message');
+      assert.ok(!('message' in logEntry), 'Log entry object should not have message key');
     } finally {
       global.fetch = originalFetch;
       console.error = originalConsoleError;

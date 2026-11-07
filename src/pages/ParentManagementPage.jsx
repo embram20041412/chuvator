@@ -32,7 +32,7 @@ export default function ParentManagementPage({ userProfile }) {
     email: '',
     phone: '',
     kk: '',
-    relationship: 'father'
+    relationship: 'guardian'
   });
   const [isSearchingStudents, setIsSearchingStudents] = useState(false);
   const [searchResults, setSearchStudents] = useState([]);
@@ -114,7 +114,7 @@ export default function ParentManagementPage({ userProfile }) {
 
   const closeAndReset = () => {
     setShowAddModal(false);
-    setFormData({ name: '', email: '', phone: '', kk: '', relationship: 'father' });
+    setFormData({ name: '', email: '', phone: '', kk: '', relationship: 'guardian' });
     setSearchStudents([]);
     setSelectedStudentIds([]);
     setFormError(null);
