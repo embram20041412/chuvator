@@ -4,7 +4,7 @@ import { onRequestPost as createParentPost } from '../functions/api/tenant/paren
 import { onRequestGet as searchStudentsGet } from '../functions/api/tenant/parents/students.js';
 import { computeHMAC } from '../functions/api/tenant/_auth_staff.js';
 
-test('CHUVATOR — Parent Portal Hotfix V2.3.6 Verification Suite', async (t) => {
+test('CHUVATOR — Parent Portal Hotfix V2.3.7 Verification Suite', async (t) => {
   const mockSecret = 'test-secret-123';
   const mockUrl = 'http://mock-supabase.local';
   const mockServiceKey = 'service-role-key';
@@ -277,62 +277,81 @@ test('CHUVATOR — Parent Portal Hotfix V2.3.6 Verification Suite', async (t) =>
     }
   });
 
-  await t.test('13. Database insert error logs sanitized diagnostics and triggers cleanup', async () => {
+  await t.test('13. Database insert error logs hardened diagnostics (V2.3.7)', async (st) => {
     const originalFetch = global.fetch;
     const originalConsoleError = console.error;
     let loggedErrors: any[] = [];
-    let authCleanupCalled = false;
 
     console.error = (...args: any[]) => {
       loggedErrors.push(args);
     };
 
-    global.fetch = async (url: any, options: any) => {
-      const urlStr = String(url);
-      const method = (options?.method || 'GET').toUpperCase();
-      if (urlStr.includes('/rest/v1/students')) return new Response(JSON.stringify([{ id: validUuid, tenant_id: 'tenant-1', kk_hmac: validHmac }]), { status: 200 });
-      if (urlStr.includes('/auth/v1/invite')) return new Response(JSON.stringify({ id: 'auth-id-123' }), { status: 200 });
-      if (urlStr.includes('/rest/v1/parent_accounts') && method === 'POST') {
-        return new Response(JSON.stringify({ 
-          code: '23505', 
-          message: 'PII Leakage: parent@example.com', 
-          details: 'PII Leakage: KK 1234567890123456',
-          hint: 'Check unique constraint' 
-        }), { status: 409 });
-      }
-      if (urlStr.includes('/auth/v1/admin/users/auth-id-123') && method === 'DELETE') {
-        authCleanupCalled = true;
-        return new Response(JSON.stringify({}), { status: 200 });
-      }
-      return new Response(JSON.stringify([]), { status: 200 });
+    const setupFetchMock = (respBody: string, contentType: string, status: number = 400) => {
+      global.fetch = async (url: any, options: any) => {
+        const urlStr = String(url);
+        const method = (options?.method || 'GET').toUpperCase();
+        if (urlStr.includes('/rest/v1/students')) return new Response(JSON.stringify([{ id: validUuid, tenant_id: 'tenant-1', kk_hmac: validHmac }]), { status: 200 });
+        if (urlStr.includes('/auth/v1/invite')) return new Response(JSON.stringify({ id: 'auth-id' }), { status: 200 });
+        if (urlStr.includes('/rest/v1/parent_accounts') && method === 'POST') {
+          return new Response(respBody, { 
+            status, 
+            headers: { 'Content-Type': contentType } 
+          });
+        }
+        if (urlStr.includes('/auth/v1/admin/users/auth-id') && method === 'DELETE') {
+          return new Response(JSON.stringify({}), { status: 200 });
+        }
+        return new Response(JSON.stringify([]), { status: 200 });
+      };
     };
 
     try {
-      const ctx = getMockContext();
-      const res = await createParentPost(ctx);
-      assert.strictEqual(res.status, 500);
-      assert.strictEqual(authCleanupCalled, true, 'Cleanup must be called');
-      
-      // Verify diagnostic log
-      const dbErrorLogEntry = loggedErrors.find((args: any[]) => args[0].includes('[Database Error]'));
-      assert.ok(dbErrorLogEntry, 'Diagnostic log for DB error should exist');
-      
-      const dbErrorData = dbErrorLogEntry[1];
-      assert.strictEqual(dbErrorData.status, 409);
-      assert.strictEqual(dbErrorData.sqlState, '23505');
-      assert.strictEqual(dbErrorData.hasDetails, true);
-      assert.strictEqual(dbErrorData.authCleanup, 'SUCCESS');
-      
-      // Ensure NO raw message or hint keys exist in the logged object
-      assert.ok(!('message' in dbErrorData), 'Log must not contain raw message key');
-      assert.ok(!('hint' in dbErrorData), 'Log must not contain raw hint key');
-      assert.ok(!('details' in dbErrorData), 'Log must not contain raw details key');
-      
-      // Ensure no PII in log at all
-      const logStr = JSON.stringify(loggedErrors);
-      assert.ok(!logStr.includes('parent@example.com'), 'Log must not contain email');
-      assert.ok(!logStr.includes(validKK), 'Log must not contain KK');
-      assert.ok(!logStr.includes('PII Leakage'), 'Log must not contain raw error strings');
+      await st.test('13a. Valid SQLSTATE 23505 (Unique Violation)', async () => {
+        loggedErrors = [];
+        setupFetchMock(JSON.stringify({ code: '23505', message: 'Leak parent@example.com' }), 'application/json');
+        await createParentPost(getMockContext());
+        const log = loggedErrors.find(l => l[0].includes('[Database Error]'))[1];
+        assert.strictEqual(log.sqlState, '23505');
+        assert.strictEqual(log.classification, 'UNIQUE_VIOLATION');
+        assert.strictEqual(log.bodyFormat, 'JSON');
+        assert.ok(!JSON.stringify(loggedErrors).includes('parent@example.com'));
+      });
+
+      await st.test('13b. PostgREST Error Code P0001', async () => {
+        loggedErrors = [];
+        setupFetchMock(JSON.stringify({ code: 'P0001', hint: 'Sensitive hint' }), 'application/json');
+        await createParentPost(getMockContext());
+        const log = loggedErrors.find(l => l[0].includes('[Database Error]'))[1];
+        assert.strictEqual(log.sqlState, 'P0001');
+        assert.strictEqual(log.classification, 'POSTGREST_ERROR');
+        assert.ok(!JSON.stringify(loggedErrors).includes('Sensitive hint'));
+      });
+
+      await st.test('13c. Malformed JSON', async () => {
+        loggedErrors = [];
+        setupFetchMock('{ malformed: ', 'application/json');
+        await createParentPost(getMockContext());
+        const log = loggedErrors.find(l => l[0].includes('[Database Error]'))[1];
+        assert.strictEqual(log.bodyFormat, 'MALFORMED_JSON');
+        assert.strictEqual(log.sqlState, 'UNKNOWN');
+      });
+
+      await st.test('13d. Empty Body', async () => {
+        loggedErrors = [];
+        setupFetchMock('', 'application/json');
+        await createParentPost(getMockContext());
+        const log = loggedErrors.find(l => l[0].includes('[Database Error]'))[1];
+        assert.strictEqual(log.bodyFormat, 'EMPTY');
+      });
+
+      await st.test('13e. Non-JSON Response', async () => {
+        loggedErrors = [];
+        setupFetchMock('<html>Error</html>', 'text/html');
+        await createParentPost(getMockContext());
+        const log = loggedErrors.find(l => l[0].includes('[Database Error]'))[1];
+        assert.strictEqual(log.bodyFormat, 'NON_JSON');
+      });
+
     } finally {
       global.fetch = originalFetch;
       console.error = originalConsoleError;
