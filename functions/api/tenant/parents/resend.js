@@ -1,6 +1,7 @@
 /**
  * Cloudflare Pages Function: POST /api/tenant/parents/resend
- * Invitation Recovery & Resend for existing parent accounts.
+ * Invitation Recovery & Resend for existing parent accounts with strict separation
+ * between unconfirmed (invite) and confirmed (recovery) users.
  */
 
 import { getCorsHeaders } from '../../portal/_auth_v2.js';
@@ -78,6 +79,7 @@ export async function onRequestPost(context) {
 
     const parent = parents[0];
     const targetEmail = parent.email;
+    const authUid = parent.auth_uid;
 
     if (kvBinding) {
       const rateKey = `v2_ratelimit:resend:${parent.id}`;
@@ -89,24 +91,75 @@ export async function onRequestPost(context) {
       await kvBinding.put(rateKey, String(count + 1), { expirationTtl: 300 });
     }
 
-    // Use Supabase Auth recover endpoint to securely trigger recovery email for existing user
-    const recoverResp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/recover`, {
-      method: 'POST',
-      headers: {
-        'apikey': serviceRoleKey,
-        'Authorization': `Bearer ${serviceRoleKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ email: targetEmail })
-    });
+    // 1. Fetch actual Supabase Auth user to check confirmation status
+    let isConfirmed = false;
+    if (authUid) {
+      const authUserResp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/users/${authUid}`, {
+        method: 'GET',
+        headers: {
+          'apikey': serviceRoleKey,
+          'Authorization': `Bearer ${serviceRoleKey}`
+        }
+      });
+      if (authUserResp.ok) {
+        const authUser = await authUserResp.json().catch(() => null);
+        if (authUser) {
+          isConfirmed = !!(authUser.email_confirmed_at || authUser.confirmed_at);
+        }
+      }
+    }
 
-    if (!recoverResp.ok) {
-      const errData = await recoverResp.json().catch(() => ({}));
+    const appUrl = env.APP_URL || 'https://chuvator.pages.dev';
+    const redirectUrl = `${appUrl.replace(/\/$/, '')}/portal/accept-invitation`;
+
+    let actionResp;
+    let successMessage;
+
+    if (!isConfirmed) {
+      // Unconfirmed user -> Generate invite link / resend invitation
+      actionResp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/generate_link`, {
+        method: 'POST',
+        headers: {
+          'apikey': serviceRoleKey,
+          'Authorization': `Bearer ${serviceRoleKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          type: 'invite',
+          email: targetEmail,
+          options: {
+            redirectTo: redirectUrl
+          }
+        })
+      });
+      successMessage = 'Undangan aktivasi berhasil dikirim ulang ke wali murid.';
+    } else {
+      // Confirmed user -> Password recovery
+      actionResp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/generate_link`, {
+        method: 'POST',
+        headers: {
+          'apikey': serviceRoleKey,
+          'Authorization': `Bearer ${serviceRoleKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          type: 'recovery',
+          email: targetEmail,
+          options: {
+            redirectTo: redirectUrl
+          }
+        })
+      });
+      successMessage = 'Email pemulihan password berhasil dikirim ke wali murid.';
+    }
+
+    if (!actionResp.ok) {
+      const errData = await actionResp.json().catch(() => ({}));
       return new Response(
         JSON.stringify({ 
           success: false, 
-          code: 'RECOVERY_EMAIL_FAILED', 
-          message: `Gagal mengirim email pemulihan: ${errData.msg || errData.message || 'Error unknown'}` 
+          code: 'RECOVERY_OR_INVITE_FAILED', 
+          message: `Gagal mengirim email: ${errData.msg || errData.message || 'Error unknown'}` 
         }),
         { status: 500, headers: corsHeaders }
       );
@@ -115,7 +168,7 @@ export async function onRequestPost(context) {
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Email pemulihan dan aktivasi berhasil dikirim ke wali murid.'
+        message: successMessage
       }),
       { status: 200, headers: corsHeaders }
     );

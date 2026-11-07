@@ -88,7 +88,7 @@ export async function onRequestGet(context) {
           if (authUserResp.ok) {
             const authUser = await authUserResp.json();
             if (authUser && authUser.id) {
-              if (authUser.last_sign_in_at) {
+              if (authUser.email_confirmed_at || authUser.confirmed_at) {
                 verificationStatus = 'active';
               } else {
                 verificationStatus = 'pending';

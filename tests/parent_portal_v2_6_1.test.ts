@@ -166,8 +166,8 @@ test('CHUVATOR — Parent Portal V2.6.1 Invitation Recovery & Lifecycle Safety H
         ] 
       },
       { pattern: '/rest/v1/parent_student_links', method: 'GET', body: [] },
-      { pattern: '/auth/v1/admin/users/auth-active', method: 'GET', body: { id: 'auth-active', last_sign_in_at: '2026-01-01T00:00:00Z' }, status: 200 },
-      { pattern: '/auth/v1/admin/users/auth-pending', method: 'GET', body: { id: 'auth-pending', last_sign_in_at: null }, status: 200 },
+      { pattern: '/auth/v1/admin/users/auth-active', method: 'GET', body: { id: 'auth-active', email_confirmed_at: '2026-01-01T00:00:00Z' }, status: 200 },
+      { pattern: '/auth/v1/admin/users/auth-pending', method: 'GET', body: { id: 'auth-pending', email_confirmed_at: null }, status: 200 },
       { pattern: '/auth/v1/admin/users/auth-missing', method: 'GET', body: { error: 'Not found' }, status: 404 }
     ]);
 

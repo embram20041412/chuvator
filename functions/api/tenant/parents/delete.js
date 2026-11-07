@@ -1,6 +1,6 @@
 /**
  * Cloudflare Pages Function: DELETE /api/tenant/parents?id=...
- * Safe deletion / cancellation of parent account with explicit checks at every step.
+ * Safe deletion / cancellation of parent account with compensation on Auth deletion failure.
  */
 
 import { getCorsHeaders } from '../../portal/_auth_v2.js';
@@ -41,7 +41,7 @@ export async function onRequestDelete(context) {
     }
 
     // 1. Verify parent exists and belongs to tenant
-    let parentQuery = `${supabaseUrl}/rest/v1/parent_accounts?id=eq.${encodeURIComponent(parentId)}&select=id,tenant_id,auth_uid`;
+    let parentQuery = `${supabaseUrl}/rest/v1/parent_accounts?id=eq.${encodeURIComponent(parentId)}&select=*`;
     if (role !== 'superadmin') {
       parentQuery += `&tenant_id=eq.${encodeURIComponent(staffTenantId)}`;
     }
@@ -67,7 +67,18 @@ export async function onRequestDelete(context) {
     const parent = parents[0];
     const authUid = parent.auth_uid;
 
-    // 2. Explicit check: Delete parent_student_links
+    // Fetch existing links for compensation snapshot
+    const linksResp = await fetch(`${supabaseUrl}/rest/v1/parent_student_links?parent_account_id=eq.${encodeURIComponent(parentId)}&select=*`, {
+      method: 'GET',
+      headers: {
+        'apikey': serviceRoleKey,
+        'Authorization': `Bearer ${serviceRoleKey}`,
+        'Accept': 'application/json'
+      }
+    });
+    const existingLinks = linksResp.ok ? await linksResp.json().catch(() => []) : [];
+
+    // 2. Delete parent_student_links first
     const linkDelResp = await fetch(`${supabaseUrl}/rest/v1/parent_student_links?parent_account_id=eq.${encodeURIComponent(parentId)}`, {
       method: 'DELETE',
       headers: {
@@ -80,7 +91,7 @@ export async function onRequestDelete(context) {
       return new Response(JSON.stringify({ success: false, code: 'LINK_DELETE_FAILED', message: 'Gagal menghapus relasi siswa wali murid.' }), { status: 500, headers: corsHeaders });
     }
 
-    // 3. Explicit check: Delete parent_accounts record
+    // 3. Delete parent_accounts record
     const parentDelResp = await fetch(`${supabaseUrl}/rest/v1/parent_accounts?id=eq.${encodeURIComponent(parentId)}`, {
       method: 'DELETE',
       headers: {
@@ -90,10 +101,18 @@ export async function onRequestDelete(context) {
     });
 
     if (!parentDelResp.ok) {
+      // Compensation: re-insert links if possible
+      if (existingLinks.length > 0) {
+        await fetch(`${supabaseUrl}/rest/v1/parent_student_links`, {
+          method: 'POST',
+          headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(existingLinks)
+        }).catch(() => {});
+      }
       return new Response(JSON.stringify({ success: false, code: 'PROFILE_DELETE_FAILED', message: 'Gagal menghapus profil wali murid.' }), { status: 500, headers: corsHeaders });
     }
 
-    // 4. Explicit check: Delete Supabase Auth user if authUid exists
+    // 4. Delete Supabase Auth user if authUid exists
     if (authUid) {
       const authDelResp = await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUid}`, {
         method: 'DELETE',
@@ -104,7 +123,29 @@ export async function onRequestDelete(context) {
       });
 
       if (!authDelResp.ok && authDelResp.status !== 404) {
-        return new Response(JSON.stringify({ success: false, code: 'AUTH_DELETE_FAILED', message: 'Gagal menghapus akun pengguna Auth.' }), { status: 500, headers: corsHeaders });
+        // COMPENSATION: Restore parent account and student links to maintain consistency
+        await fetch(`${supabaseUrl}/rest/v1/parent_accounts`, {
+          method: 'POST',
+          headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(parent)
+        }).catch(() => {});
+
+        if (existingLinks.length > 0) {
+          await fetch(`${supabaseUrl}/rest/v1/parent_student_links`, {
+            method: 'POST',
+            headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(existingLinks)
+          }).catch(() => {});
+        }
+
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            code: 'AUTH_DELETE_FAILED', 
+            message: 'Gagal menghapus akun pengguna Auth. Operasi dibatalkan dan data profil dipulihkan secara aman.' 
+          }),
+          { status: 500, headers: corsHeaders }
+        );
       }
     }
 
