@@ -253,4 +253,55 @@ test('CHUVATOR — FASE 5.5-B: Dry-Run Categorization & Runtime Integration Suit
       global.fetch = originalFetch;
     }
   });
+
+  // =========================================================================
+  // 4. V2.3.0 PATCH: LOCKDOWN & METRIC FIXES
+  // =========================================================================
+
+  await t.test('23. Lockdown: Rejects execute=true with 403 (PHASE_5_5_B_LOCKDOWN)', async () => {
+    const context = {
+      request: new Request('http://localhost/api/admin/backfill_kk_hmac', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer superadmin-token',
+          'x-test-staff-role': 'superadmin',
+          'x-test-staff-uid': 'user-admin',
+          'x-test-tenant-id': 'global',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ dryRun: false, execute: true }) // Explicit execution attempt
+      }),
+      env: { KK_HMAC_SECRET: mockSecret, SUPABASE_URL: mockUrl, SUPABASE_SERVICE_ROLE_KEY: mockKey }
+    };
+
+    const res = await backfillIndexPost(context);
+    assert.strictEqual(res.status, 403);
+    const body: any = await res.json();
+    assert.strictEqual(body.code, 'BACKFILL_EXECUTION_DISABLED_PHASE_5_5_B');
+    assert.match(body.message, /Eksekusi backfill dinonaktifkan/);
+  });
+
+  await t.test('24. Metrics: reviewRequired includes MISSING_NO_KK and INVALID_NO_KK', async () => {
+    const originalFetch = global.fetch;
+    const mockStudents = [
+      { id: '1', no_kk: null }, // MISSING_NO_KK -> Review
+      { id: '2', no_kk: '123' }, // INVALID_NO_KK -> Review
+      { id: '3', no_kk: '1234567890123456', kk_hmac: 'broken' }, // CORRUPT_HMAC -> Review
+      { id: '4', no_kk: '1234567890123456', kk_hmac: null, kk_last4: null }, // ELIGIBLE -> Not Review
+      { id: '5', no_kk: '1234567890123456', kk_hmac: 'a'.repeat(64) } // HMAC_MISMATCH -> Review
+    ];
+
+    global.fetch = async () => new Response(JSON.stringify(mockStudents), { status: 200, headers: { 'Content-Type': 'application/json' } });
+
+    try {
+      const result = await performDryRunAnalysis(mockUrl, mockKey, mockSecret, 'global');
+      // Categories: 1 MISSING_NO_KK, 1 INVALID_NO_KK, 1 CORRUPT_HMAC, 1 ELIGIBLE, 1 HMAC_MISMATCH
+      // Total reviewRequired should be 4
+      assert.strictEqual(result.categories.MISSING_NO_KK, 1);
+      assert.strictEqual(result.categories.INVALID_NO_KK, 1);
+      assert.strictEqual(result.reviewRequired, 4); 
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
 });

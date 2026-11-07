@@ -169,8 +169,10 @@ export async function performDryRunAnalysis(supabaseUrl, serviceRoleKey, secret,
       // 1. Validasi No. KK
       if (!rawKK) {
         category = 'MISSING_NO_KK';
+        summary.reviewRequired++;
       } else if (!cleanKK) {
         category = 'INVALID_NO_KK';
+        summary.reviewRequired++;
       } else {
         // No. KK Valid (16 digits)
         const expectedHmac = secret ? await computeHMAC(cleanKK, secret) : null;

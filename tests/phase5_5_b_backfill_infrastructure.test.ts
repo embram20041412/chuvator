@@ -234,9 +234,9 @@ test('CHUVATOR — FASE 5.5-B: Hardened Backfill Infrastructure V2.2.4 (Security
       }
     });
 
-    assert.strictEqual(res.status, 400);
+    assert.strictEqual(res.status, 403);
     const body: any = await res.json();
-    assert.ok(body.code === 'CLIENT_CURSOR_REJECTED' || body.code === 'DRY_RUN_ONLY_MODE');
+    assert.ok(body.code === 'BACKFILL_EXECUTION_DISABLED_PHASE_5_5_B');
   });
 
   await t.test('18. Dry-Run Purity: Zero Database Mutation', async () => {
