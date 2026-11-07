@@ -27,6 +27,7 @@ const StaffManagementPage = lazy(() => import('./pages/StaffManagementPage'));
 const ParentManagementPage = lazy(() => import('./pages/ParentManagementPage'));
 const AcceptInvitationPage = lazy(() => import('./pages/AcceptInvitationPage'));
 const PortalDashboard = lazy(() => import('./pages/Portal/PortalDashboard'));
+const PortalAcceptInvitation = lazy(() => import('./pages/Portal/PortalAcceptInvitation'));
 
 function PageLoadingSkeleton() {
   return (
@@ -168,6 +169,7 @@ export default function App() {
             <Route element={<PortalLayout />}>
               {/* Primary Entry Point: Portal V2 Login */}
               <Route path="/portal" element={<PortalLoginV2 />} />
+              <Route path="/portal/accept-invitation" element={<PortalAcceptInvitation />} />
               <Route path="/portal/dashboard" element={<PortalDashboard />} />
               {/* V2 Canonical Route Redirect */}
               <Route path="/portal-v2" element={<Navigate to="/portal" replace />} />

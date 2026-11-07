@@ -258,6 +258,9 @@ export async function onRequestPost(context) {
     }
 
     // 8. Invite User via Supabase Auth Admin
+    const appUrl = env.APP_URL || 'https://chuvator.pages.dev';
+    const redirectUrl = `${appUrl.replace(/\/$/, '')}/portal/accept-invitation`;
+
     const inviteUrl = `${supabaseUrl}/auth/v1/invite`;
     const inviteResp = await fetch(inviteUrl, {
       method: 'POST',
@@ -272,7 +275,8 @@ export async function onRequestPost(context) {
           name: name,
           role: 'parent',
           tenantId: targetTenantId
-        }
+        },
+        redirectTo: redirectUrl
       })
     });
 
