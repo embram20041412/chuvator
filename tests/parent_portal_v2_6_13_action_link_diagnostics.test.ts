@@ -93,6 +93,57 @@ test('CHUVATOR PARENT PORTAL V2.6.13 — ACTION LINK DIAGNOSTICS & RESEND VALIDA
       });
     });
 
+    await t2.test('returns ACTION_LINK_WRONG_ORIGIN when supabaseUrl is missing, null, empty, or invalid URL string', () => {
+      const validLink = `${supabaseUrl}/auth/v1/verify?token=secret123&type=invite&redirect_to=${encodeURIComponent(validRedirect)}`;
+
+      // 1. null supabaseUrl
+      assert.deepStrictEqual(validateSupabaseActionLink(validLink, { supabaseUrl: null as any }), {
+        valid: false,
+        reason: 'ACTION_LINK_WRONG_ORIGIN'
+      });
+
+      // 2. undefined supabaseUrl
+      assert.deepStrictEqual(validateSupabaseActionLink(validLink, { supabaseUrl: undefined as any }), {
+        valid: false,
+        reason: 'ACTION_LINK_WRONG_ORIGIN'
+      });
+
+      // 3. empty string supabaseUrl
+      assert.deepStrictEqual(validateSupabaseActionLink(validLink, { supabaseUrl: '' }), {
+        valid: false,
+        reason: 'ACTION_LINK_WRONG_ORIGIN'
+      });
+
+      // 4. whitespace supabaseUrl
+      assert.deepStrictEqual(validateSupabaseActionLink(validLink, { supabaseUrl: '   ' }), {
+        valid: false,
+        reason: 'ACTION_LINK_WRONG_ORIGIN'
+      });
+
+      // 5. invalid URL format supabaseUrl
+      assert.deepStrictEqual(validateSupabaseActionLink(validLink, { supabaseUrl: 'not-a-valid-url' }), {
+        valid: false,
+        reason: 'ACTION_LINK_WRONG_ORIGIN'
+      });
+
+      // 6. options missing supabaseUrl completely
+      assert.deepStrictEqual(validateSupabaseActionLink(validLink, {} as any), {
+        valid: false,
+        reason: 'ACTION_LINK_WRONG_ORIGIN'
+      });
+
+      // 7. options undefined
+      assert.deepStrictEqual(validateSupabaseActionLink(validLink, undefined as any), {
+        valid: false,
+        reason: 'ACTION_LINK_WRONG_ORIGIN'
+      });
+
+      // 8. isValidSupabaseActionLink wrapper also returns false
+      assert.strictEqual(isValidSupabaseActionLink(validLink, { supabaseUrl: '' }), false);
+      assert.strictEqual(isValidSupabaseActionLink(validLink, { supabaseUrl: null as any }), false);
+      assert.strictEqual(isValidSupabaseActionLink(validLink, undefined as any), false);
+    });
+
     // 5. ACTION_LINK_WRONG_PATH
     await t2.test('returns ACTION_LINK_WRONG_PATH when path is not /auth/v1/verify', () => {
       const wrongPath1 = `${supabaseUrl}/auth/v1/authorize?token=secret123&type=invite&redirect_to=${encodeURIComponent(validRedirect)}`;

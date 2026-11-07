@@ -139,8 +139,7 @@ export function buildWhatsAppUrl(phone, message) {
  * - ACTION_LINK_REDIRECT_MISMATCH
  * - ACTION_LINK_VALID
  * 
- * @param {string} link
- * @param {string|{supabaseUrl: string, expectedType?: string, appUrl?: string}} options
+ * @param {string|{supabaseUrl?: string|null, expectedType?: string, appUrl?: string}} [options]
  * @returns {{ valid: boolean, reason: string }}
  */
 export function validateSupabaseActionLink(link, options) {
@@ -164,17 +163,19 @@ export function validateSupabaseActionLink(link, options) {
     return { valid: false, reason: 'ACTION_LINK_INVALID_SCHEME' };
   }
 
-  // 2. Origin check against SUPABASE_URL
-  if (supabaseUrl) {
-    try {
-      const baseClean = supabaseUrl.replace(/\/$/, '');
-      const baseOrigin = new URL(baseClean).origin;
-      if (url.origin !== baseOrigin) {
-        return { valid: false, reason: 'ACTION_LINK_WRONG_ORIGIN' };
-      }
-    } catch {
+  // 2. Origin check against SUPABASE_URL (Fail-closed: supabaseUrl must be provided and valid)
+  if (!supabaseUrl || typeof supabaseUrl !== 'string' || !supabaseUrl.trim()) {
+    return { valid: false, reason: 'ACTION_LINK_WRONG_ORIGIN' };
+  }
+
+  try {
+    const baseClean = supabaseUrl.trim().replace(/\/$/, '');
+    const baseOrigin = new URL(baseClean).origin;
+    if (url.origin !== baseOrigin) {
       return { valid: false, reason: 'ACTION_LINK_WRONG_ORIGIN' };
     }
+  } catch {
+    return { valid: false, reason: 'ACTION_LINK_WRONG_ORIGIN' };
   }
 
   // 3. Path check: must be /auth/v1/verify
@@ -231,7 +232,7 @@ export function validateSupabaseActionLink(link, options) {
  * Backward-compatible wrapper over validateSupabaseActionLink.
  * 
  * @param {string} link
- * @param {string|{supabaseUrl: string, expectedType?: string, appUrl?: string}} options
+ * @param {string|{supabaseUrl?: string|null, expectedType?: string, appUrl?: string}} [options]
  * @returns {boolean}
  */
 export function isValidSupabaseActionLink(link, options) {
