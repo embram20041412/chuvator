@@ -205,7 +205,24 @@ export async function onRequestPost(context) {
       );
     }
 
-    const existingParents = await parentCheckResp.json().catch(() => []);
+    let existingParents = [];
+    try {
+      existingParents = await parentCheckResp.json();
+    } catch (e) {
+      existingParents = null;
+    }
+
+    if (!Array.isArray(existingParents)) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          code: 'PARENT_VERIFICATION_FAILED', 
+          message: 'Data pemeriksaan email tidak valid (format salah).' 
+        }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
     if (existingParents.length > 0) {
       return new Response(
         JSON.stringify({ success: false, message: 'Email wali murid sudah terdaftar pada tenant ini.' }),
@@ -308,6 +325,10 @@ export async function onRequestPost(context) {
         method: 'DELETE',
         headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
       }).catch(e => ({ ok: false, statusText: e.message }));
+
+      if (!cleanupAuth.ok) {
+        console.error('[Cleanup Error] Failure deleting auth user during missing parentId recovery:', { authUid, error: cleanupAuth.statusText });
+      }
 
       return new Response(
         JSON.stringify({ 

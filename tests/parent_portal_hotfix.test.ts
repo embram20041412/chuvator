@@ -4,7 +4,7 @@ import { onRequestPost as createParentPost } from '../functions/api/tenant/paren
 import { onRequestGet as searchStudentsGet } from '../functions/api/tenant/parents/students.js';
 import { computeHMAC } from '../functions/api/tenant/_auth_staff.js';
 
-test('CHUVATOR — Parent Portal Hotfix V2.3.3 Verification Suite', async (t) => {
+test('CHUVATOR — Parent Portal Hotfix V2.3.4 Verification Suite', async (t) => {
   const mockSecret = 'test-secret-123';
   const mockUrl = 'http://mock-supabase.local';
   const mockServiceKey = 'service-role-key';
@@ -14,7 +14,7 @@ test('CHUVATOR — Parent Portal Hotfix V2.3.3 Verification Suite', async (t) =>
   const validUuid = '12345678-1234-1234-1234-123456789012';
 
   // Helper for mock context
-  const getMockContext = (bodyOverride = null, envOverrides = {}, staffOverrides = {}) => ({
+  const getMockContext = (bodyOverride: any = null, envOverrides: any = {}, staffOverrides: any = {}) => ({
     request: new Request('http://localhost/api/tenant/parents', {
       method: 'POST',
       headers: {
@@ -188,6 +188,94 @@ test('CHUVATOR — Parent Portal Hotfix V2.3.3 Verification Suite', async (t) =>
       const body: any = await res.json();
       assert.strictEqual(body.success, true);
       assert.strictEqual(body.data.parentId, 'p-ok');
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  // =========================================================================
+  // V2.3.4 NEW TEST CASES
+  // =========================================================================
+
+  await t.test('9. Parent email check with Malformed JSON rejected (500)', async () => {
+    const originalFetch = global.fetch;
+    global.fetch = async (url: any) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/rest/v1/students')) return new Response(JSON.stringify([{ id: validUuid, tenant_id: 'tenant-1', kk_hmac: validHmac }]), { status: 200 });
+      if (urlStr.includes('/parent_accounts?email=')) return new Response('invalid-json', { status: 200 });
+      return new Response(JSON.stringify([]), { status: 200 });
+    };
+
+    try {
+      const ctx = getMockContext();
+      const res = await createParentPost(ctx);
+      assert.strictEqual(res.status, 500);
+      const body: any = await res.json();
+      assert.strictEqual(body.code, 'PARENT_VERIFICATION_FAILED');
+      assert.match(body.message, /format salah/);
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  await t.test('10. Parent email check returning Object instead of Array rejected (500)', async () => {
+    const originalFetch = global.fetch;
+    global.fetch = async (url: any) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/rest/v1/students')) return new Response(JSON.stringify([{ id: validUuid, tenant_id: 'tenant-1', kk_hmac: validHmac }]), { status: 200 });
+      if (urlStr.includes('/parent_accounts?email=')) return new Response(JSON.stringify({ not: 'an-array' }), { status: 200 });
+      return new Response(JSON.stringify([]), { status: 200 });
+    };
+
+    try {
+      const ctx = getMockContext();
+      const res = await createParentPost(ctx);
+      assert.strictEqual(res.status, 500);
+      const body: any = await res.json();
+      assert.strictEqual(body.code, 'PARENT_VERIFICATION_FAILED');
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  await t.test('11. Fail-Closed: No Auth invitation if email check fails', async () => {
+    const originalFetch = global.fetch;
+    let inviteCalled = false;
+    global.fetch = async (url: any) => {
+      const urlStr = String(url);
+      if (urlStr.includes('/auth/v1/invite')) { inviteCalled = true; return new Response(JSON.stringify({ id: 'ok' }), { status: 200 }); }
+      if (urlStr.includes('/rest/v1/students')) return new Response(JSON.stringify([{ id: validUuid, tenant_id: 'tenant-1', kk_hmac: validHmac }]), { status: 200 });
+      if (urlStr.includes('/parent_accounts?email=')) return new Response(JSON.stringify({ error: 'fail' }), { status: 500 });
+      return new Response(JSON.stringify([]), { status: 200 });
+    };
+
+    try {
+      const ctx = getMockContext();
+      await createParentPost(ctx);
+      assert.strictEqual(inviteCalled, false, 'Should not proceed to invite if verification failed');
+    } finally {
+      global.fetch = originalFetch;
+    }
+  });
+
+  await t.test('12. Cleanup failure on missing parentId condition logs error and returns warning', async () => {
+    const originalFetch = global.fetch;
+    global.fetch = async (url: any, options: any) => {
+      const urlStr = String(url);
+      const method = (options?.method || 'GET').toUpperCase();
+      if (urlStr.includes('/rest/v1/students')) return new Response(JSON.stringify([{ id: validUuid, tenant_id: 'tenant-1', kk_hmac: validHmac }]), { status: 200 });
+      if (urlStr.includes('/auth/v1/invite')) return new Response(JSON.stringify({ id: 'cleanup-fail-id' }), { status: 200 });
+      if (urlStr.includes('/rest/v1/parent_accounts') && method === 'POST') return new Response(JSON.stringify([]), { status: 200 }); // missing parentId
+      if (urlStr.includes('/auth/v1/admin/users/cleanup-fail-id') && method === 'DELETE') return new Response(JSON.stringify({}), { status: 500 }); // cleanup fails
+      return new Response(JSON.stringify([]), { status: 200 });
+    };
+
+    try {
+      const ctx = getMockContext();
+      const res = await createParentPost(ctx);
+      assert.strictEqual(res.status, 500);
+      const body: any = await res.json();
+      assert.match(body.message, /PERINGATAN: Cleanup gagal/);
     } finally {
       global.fetch = originalFetch;
     }
