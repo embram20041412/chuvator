@@ -13,6 +13,7 @@ import {
   generateWhatsAppMessage,
   buildWhatsAppUrl,
   isValidSupabaseActionLink,
+  validateSupabaseActionLink,
   getVerifiedTenantName
 } from './_invitation_helper.js';
 
@@ -322,11 +323,13 @@ export async function onRequestPost(context) {
     const actionLink = linkData.properties?.action_link || linkData.action_link;
 
     // Strict action link validation (HTTPS, Supabase origin, /auth/v1/verify, type match, redirect_to match)
-    if (!isValidSupabaseActionLink(actionLink, { supabaseUrl, expectedType: linkType, appUrl })) {
+    const linkValidation = validateSupabaseActionLink(actionLink, { supabaseUrl, expectedType: linkType, appUrl });
+    if (!linkValidation.valid) {
       return new Response(
         JSON.stringify({ 
           success: false, 
           code: 'INVALID_ACTION_LINK', 
+          reason: linkValidation.reason,
           message: 'Tautan aksi tidak valid atau tidak memenuhi standar keamanan.' 
         }),
         { status: 500, headers: corsHeaders }

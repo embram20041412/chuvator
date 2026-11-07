@@ -12,6 +12,7 @@ import {
   generateWhatsAppMessage,
   buildWhatsAppUrl,
   isValidSupabaseActionLink,
+  validateSupabaseActionLink,
   getVerifiedTenantName,
   determineInvitationStatus
 } from './_invitation_helper.js';
@@ -506,7 +507,8 @@ export async function onRequestPost(context) {
     }
 
     // Strict Action Link Validation (HTTPS, Supabase origin, /auth/v1/verify, type: invite, redirect_to)
-    if (!isValidSupabaseActionLink(actionLink, { supabaseUrl, expectedType: 'invite', appUrl })) {
+    const linkValidation = validateSupabaseActionLink(actionLink, { supabaseUrl, expectedType: 'invite', appUrl });
+    if (!linkValidation.valid) {
       // Clean up Auth user immediately
       await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUid}`, {
         method: 'DELETE',
@@ -517,6 +519,7 @@ export async function onRequestPost(context) {
         JSON.stringify({
           success: false,
           code: 'INVALID_ACTION_LINK',
+          reason: linkValidation.reason,
           message: 'Tautan aktivasi yang dihasilkan tidak valid atau tidak memenuhi standar keamanan.'
         }),
         { status: 500, headers: corsHeaders }

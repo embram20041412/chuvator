@@ -124,65 +124,118 @@ export function buildWhatsAppUrl(phone, message) {
 }
 
 /**
- * Validate that action link:
- * - Is valid HTTPS
- * - Origin strictly matches SUPABASE_URL origin
- * - Path is the official Supabase verification endpoint (/auth/v1/verify)
- * - Contains a valid non-empty token
- * - Has matching action type ('invite' or 'recovery') if specified
- * - Has redirect_to matching APP_URL/portal/accept-invitation if specified
+ * Validate action link and return detailed diagnostic reason.
+ * 
+ * Reason codes:
+ * - ACTION_LINK_MISSING
+ * - ACTION_LINK_INVALID_URL
+ * - ACTION_LINK_INVALID_SCHEME
+ * - ACTION_LINK_WRONG_ORIGIN
+ * - ACTION_LINK_WRONG_PATH
+ * - ACTION_LINK_TOKEN_MISSING
+ * - ACTION_LINK_WRONG_TYPE
+ * - ACTION_LINK_REDIRECT_MISSING
+ * - ACTION_LINK_REDIRECT_INVALID
+ * - ACTION_LINK_REDIRECT_MISMATCH
+ * - ACTION_LINK_VALID
+ * 
+ * @param {string} link
+ * @param {string|{supabaseUrl: string, expectedType?: string, appUrl?: string}} options
+ * @returns {{ valid: boolean, reason: string }}
+ */
+export function validateSupabaseActionLink(link, options) {
+  if (!link || typeof link !== 'string' || !link.trim()) {
+    return { valid: false, reason: 'ACTION_LINK_MISSING' };
+  }
+
+  const supabaseUrl = typeof options === 'string' ? options : options?.supabaseUrl;
+  const expectedType = typeof options === 'object' ? options?.expectedType : null;
+  const appUrl = typeof options === 'object' ? options?.appUrl : null;
+
+  let url;
+  try {
+    url = new URL(link);
+  } catch {
+    return { valid: false, reason: 'ACTION_LINK_INVALID_URL' };
+  }
+
+  // 1. HTTPS Scheme check
+  if (url.protocol !== 'https:') {
+    return { valid: false, reason: 'ACTION_LINK_INVALID_SCHEME' };
+  }
+
+  // 2. Origin check against SUPABASE_URL
+  if (supabaseUrl) {
+    try {
+      const baseClean = supabaseUrl.replace(/\/$/, '');
+      const baseOrigin = new URL(baseClean).origin;
+      if (url.origin !== baseOrigin) {
+        return { valid: false, reason: 'ACTION_LINK_WRONG_ORIGIN' };
+      }
+    } catch {
+      return { valid: false, reason: 'ACTION_LINK_WRONG_ORIGIN' };
+    }
+  }
+
+  // 3. Path check: must be /auth/v1/verify
+  const cleanPath = url.pathname.replace(/\/$/, '');
+  if (cleanPath !== '/auth/v1/verify') {
+    return { valid: false, reason: 'ACTION_LINK_WRONG_PATH' };
+  }
+
+  // 4. Token query parameter must exist
+  const token = url.searchParams.get('token');
+  if (!token || !token.trim()) {
+    return { valid: false, reason: 'ACTION_LINK_TOKEN_MISSING' };
+  }
+
+  // 5. Type query parameter check
+  if (expectedType) {
+    const linkType = url.searchParams.get('type');
+    if (linkType !== expectedType) {
+      return { valid: false, reason: 'ACTION_LINK_WRONG_TYPE' };
+    }
+  }
+
+  // 6. Redirect_to check
+  if (appUrl) {
+    const redirectTo = url.searchParams.get('redirect_to');
+    if (!redirectTo || !redirectTo.trim()) {
+      return { valid: false, reason: 'ACTION_LINK_REDIRECT_MISSING' };
+    }
+
+    let parsedRedirect;
+    try {
+      parsedRedirect = new URL(redirectTo);
+    } catch {
+      return { valid: false, reason: 'ACTION_LINK_REDIRECT_INVALID' };
+    }
+
+    try {
+      const cleanApp = appUrl.replace(/\/$/, '');
+      const expectedRedirectBase = `${new URL(cleanApp).origin}/portal/accept-invitation`;
+      const actualRedirectBase = `${parsedRedirect.origin}${parsedRedirect.pathname.replace(/\/$/, '')}`;
+      if (actualRedirectBase !== expectedRedirectBase) {
+        return { valid: false, reason: 'ACTION_LINK_REDIRECT_MISMATCH' };
+      }
+    } catch {
+      return { valid: false, reason: 'ACTION_LINK_REDIRECT_MISMATCH' };
+    }
+  }
+
+  return { valid: true, reason: 'ACTION_LINK_VALID' };
+}
+
+/**
+ * Validate that action link is an authentic HTTPS link from the configured Supabase project.
+ * Backward-compatible wrapper over validateSupabaseActionLink.
  * 
  * @param {string} link
  * @param {string|{supabaseUrl: string, expectedType?: string, appUrl?: string}} options
  * @returns {boolean}
  */
 export function isValidSupabaseActionLink(link, options) {
-  if (!link || typeof link !== 'string') return false;
-
-  const supabaseUrl = typeof options === 'string' ? options : options?.supabaseUrl;
-  const expectedType = typeof options === 'object' ? options?.expectedType : null;
-  const appUrl = typeof options === 'object' ? options?.appUrl : null;
-
-  if (!supabaseUrl) return false;
-
-  try {
-    const url = new URL(link);
-    if (url.protocol !== 'https:') return false;
-
-    // Origin check against SUPABASE_URL
-    const baseClean = supabaseUrl.replace(/\/$/, '');
-    const baseOrigin = new URL(baseClean).origin;
-    if (url.origin !== baseOrigin) return false;
-
-    // Path check: must be /auth/v1/verify
-    const cleanPath = url.pathname.replace(/\/$/, '');
-    if (cleanPath !== '/auth/v1/verify') return false;
-
-    // Token query parameter must exist
-    const token = url.searchParams.get('token');
-    if (!token || !token.trim()) return false;
-
-    // Type query parameter check
-    if (expectedType) {
-      const linkType = url.searchParams.get('type');
-      if (linkType !== expectedType) return false;
-    }
-
-    // Redirect_to check
-    if (appUrl) {
-      const redirectTo = url.searchParams.get('redirect_to');
-      if (!redirectTo) return false;
-      const parsedRedirect = new URL(redirectTo);
-      const cleanApp = appUrl.replace(/\/$/, '');
-      const expectedRedirectBase = `${new URL(cleanApp).origin}/portal/accept-invitation`;
-      const actualRedirectBase = `${parsedRedirect.origin}${parsedRedirect.pathname.replace(/\/$/, '')}`;
-      if (actualRedirectBase !== expectedRedirectBase) return false;
-    }
-
-    return true;
-  } catch {
-    return false;
-  }
+  return validateSupabaseActionLink(link, options).valid;
 }
 
 /**
