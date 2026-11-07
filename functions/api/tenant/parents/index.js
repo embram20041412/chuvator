@@ -404,7 +404,7 @@ export async function onRequestPost(context) {
     );
 
   } catch (err) {
-    console.error('Create parent internal error:', err.message);
+    console.error('[Parent Portal] Internal error occurred.');
     return new Response(
       JSON.stringify({ success: false, message: 'Terjadi kesalahan internal pada server.' }),
       { status: 500, headers: corsHeaders }
