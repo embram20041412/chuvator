@@ -5,6 +5,8 @@
  * - Detects auth callback URL indicators (access_token, refresh_token, code, type=recovery, type=invite, token)
  * - Tolerates delayed async session recovery without premature timeout failures
  * - Synchronously tracks session arrival via sessionReceivedRef to prevent race conditions
+ * - Prevents duplicate onSuccess calls for the same session key via processedSessionKeyRef
+ * - Prevents late getSession() results from overwriting active sessions
  * - Cancels callback timeout as soon as a valid session arrives
  * - Validates role 'parent' (from user_metadata or app_metadata)
  * - Cleans up timeout and subscription on unmount
@@ -17,6 +19,7 @@ export function initInvitationSessionCallback({
   onError,
   timeoutMs = 5000,
   sessionReceivedRef = { current: false },
+  processedSessionKeyRef = { current: null },
   timeoutRef = { current: null }
 }) {
   let isMounted = true;
@@ -66,6 +69,14 @@ export function initInvitationSessionCallback({
       return;
     }
 
+    const sessionKey = currentSession.access_token || currentSession.user?.id || 'valid_session';
+
+    // Prevent duplicate onSuccess execution for the exact same session
+    if (sessionReceivedRef.current && processedSessionKeyRef.current === sessionKey) {
+      clearTimeoutSafe();
+      return;
+    }
+
     const currentUser = currentSession.user;
     const userRole = getUserRole(currentUser);
 
@@ -78,6 +89,7 @@ export function initInvitationSessionCallback({
 
     // Mark session received synchronously and cancel any pending timeout
     sessionReceivedRef.current = true;
+    processedSessionKeyRef.current = sessionKey;
     clearTimeoutSafe();
     onSuccess(currentSession, currentUser);
   };

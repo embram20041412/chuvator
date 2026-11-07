@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert';
+import { createClient } from '@supabase/supabase-js';
 import { initInvitationSessionCallback } from '../src/utils/portalAuthCallback.js';
 
 test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENING SUITE', async (t) => {
@@ -11,7 +12,9 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
     let capturedUser: any = null;
 
     const mockSession = {
+      access_token: 'token123',
       user: {
+        id: 'u1',
         email: 'parent1@example.com',
         user_metadata: { role: 'parent' }
       }
@@ -29,6 +32,7 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
 
     const locationMock: any = { hash: '#access_token=token123&type=invite', search: '' };
     const sessionReceivedRef = { current: false };
+    const processedSessionKeyRef = { current: null };
     const timeoutRef = { current: null };
 
     const { cleanup } = initInvitationSessionCallback({
@@ -42,6 +46,7 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
       onError: () => { errorCalled = true; },
       timeoutMs: 5000,
       sessionReceivedRef,
+      processedSessionKeyRef,
       timeoutRef
     });
 
@@ -62,7 +67,9 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
     let authListener: any = null;
 
     const mockSession = {
+      access_token: 'token456',
       user: {
+        id: 'u2',
         email: 'parent2@example.com',
         user_metadata: { role: 'parent' }
       }
@@ -83,6 +90,7 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
 
     const locationMock: any = { hash: '#access_token=token456&type=recovery', search: '' };
     const sessionReceivedRef = { current: false };
+    const processedSessionKeyRef = { current: null };
     const timeoutRef = { current: null };
 
     const { cleanup } = initInvitationSessionCallback({
@@ -92,6 +100,7 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
       onError: () => { errorCalled = true; },
       timeoutMs: 5000,
       sessionReceivedRef,
+      processedSessionKeyRef,
       timeoutRef
     });
 
@@ -110,13 +119,15 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
     cleanup();
   });
 
-  await t.test('3. Delayed session initialization (> 1500 ms, e.g. at 2500 ms) before 5000 ms timeout', async () => {
+  await t.test('3. Real 2500 ms delayed session initialization before 5000 ms timeout', async () => {
     let successCalled = false;
     let errorCalled = false;
     let authListener: any = null;
 
     const mockSession = {
+      access_token: 'delayed_token_789',
       user: {
+        id: 'u3',
         email: 'delayed_parent@example.com',
         user_metadata: { role: 'parent' }
       }
@@ -137,6 +148,7 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
 
     const locationMock: any = { hash: '', search: '?code=pkce_code_789&type=invite' };
     const sessionReceivedRef = { current: false };
+    const processedSessionKeyRef = { current: null };
     const timeoutRef = { current: null };
 
     const { cleanup } = initInvitationSessionCallback({
@@ -146,18 +158,25 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
       onError: () => { errorCalled = true; },
       timeoutMs: 5000,
       sessionReceivedRef,
+      processedSessionKeyRef,
       timeoutRef
     });
 
-    // Wait 200ms (exceeding old 1500ms when tested with small scale or real time delays)
-    await new Promise(r => setTimeout(r, 200));
-    assert.strictEqual(errorCalled, false, 'Must not time out prematurely at < 5000ms');
+    // Wait full 2500 ms
+    await new Promise(r => setTimeout(r, 2500));
 
-    // Now fire authListener (simulating 2500ms delayed token exchange completion)
+    // Strict assertions during 2500 ms waiting window
+    assert.strictEqual(errorCalled, false, 'onError MUST NOT be called before 2500 ms delay');
+    assert.strictEqual(successCalled, false, 'onSuccess not called yet before session triggers');
+    assert.ok(timeoutRef.current !== null, 'Timer must still be active during 2500 ms delay');
+
+    // Fire authListener now after 2500 ms
     authListener('SIGNED_IN', mockSession);
 
-    assert.strictEqual(successCalled, true, 'onSuccess called when delayed session completes');
-    assert.strictEqual(errorCalled, false, 'onError must NOT be called for delayed session');
+    assert.strictEqual(successCalled, true, 'onSuccess called when delayed session completes after 2500 ms');
+    assert.strictEqual(errorCalled, false, 'onError MUST NOT be called for delayed session');
+    assert.strictEqual(sessionReceivedRef.current, true);
+    assert.strictEqual(timeoutRef.current, null, 'Timer MUST be cleared when session succeeds');
 
     cleanup();
   });
@@ -167,9 +186,11 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
     let errorCalled = false;
 
     const mockSession = {
+      access_token: 'token_rec_123',
       user: {
+        id: 'u4',
         email: 'recovery_parent@example.com',
-        app_metadata: { role: 'parent' } // Testing app_metadata fallback
+        app_metadata: { role: 'parent' }
       }
     };
 
@@ -185,6 +206,7 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
 
     const locationMock: any = { hash: '#access_token=token_rec&type=recovery', search: '' };
     const sessionReceivedRef = { current: false };
+    const processedSessionKeyRef = { current: null };
     const timeoutRef = { current: null };
 
     const { cleanup } = initInvitationSessionCallback({
@@ -194,6 +216,7 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
       onError: () => { errorCalled = true; },
       timeoutMs: 5000,
       sessionReceivedRef,
+      processedSessionKeyRef,
       timeoutRef
     });
 
@@ -209,7 +232,9 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
     let errorCalled = false;
 
     const mockSession = {
+      access_token: 'token_inv_123',
       user: {
+        id: 'u5',
         email: 'invite_parent@example.com',
         user_metadata: { role: 'parent' }
       }
@@ -227,6 +252,7 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
 
     const locationMock: any = { hash: '', search: '?code=invite_code_123&type=invite' };
     const sessionReceivedRef = { current: false };
+    const processedSessionKeyRef = { current: null };
     const timeoutRef = { current: null };
 
     const { cleanup } = initInvitationSessionCallback({
@@ -236,6 +262,7 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
       onError: () => { errorCalled = true; },
       timeoutMs: 5000,
       sessionReceivedRef,
+      processedSessionKeyRef,
       timeoutRef
     });
 
@@ -263,6 +290,7 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
     // Case 6a: Direct navigation without URL token -> immediate error
     const noTokenLocation: any = { hash: '', search: '' };
     const sessionReceivedRef1 = { current: false };
+    const processedSessionKeyRef1 = { current: null };
     const timeoutRef1 = { current: null };
 
     const { cleanup: cleanup1 } = initInvitationSessionCallback({
@@ -272,6 +300,7 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
       onError: (msg: string) => { errorCalled = true; errorMsg = msg; },
       timeoutMs: 5000,
       sessionReceivedRef: sessionReceivedRef1,
+      processedSessionKeyRef: processedSessionKeyRef1,
       timeoutRef: timeoutRef1
     });
 
@@ -285,6 +314,7 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
     errorMsg = '';
     const tokenLocation: any = { hash: '#access_token=expired_token', search: '' };
     const sessionReceivedRef2 = { current: false };
+    const processedSessionKeyRef2 = { current: null };
     const timeoutRef2 = { current: null };
 
     const { cleanup: cleanup2 } = initInvitationSessionCallback({
@@ -294,6 +324,7 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
       onError: (msg: string) => { errorCalled = true; errorMsg = msg; },
       timeoutMs: 100, // Short timeout for test
       sessionReceivedRef: sessionReceivedRef2,
+      processedSessionKeyRef: processedSessionKeyRef2,
       timeoutRef: timeoutRef2
     });
 
@@ -308,7 +339,9 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
     let errorMsg = '';
 
     const mockStaffSession = {
+      access_token: 'staff_token_123',
       user: {
+        id: 'staff1',
         email: 'staff@example.com',
         user_metadata: { role: 'staff' }
       }
@@ -326,6 +359,7 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
 
     const locationMock: any = { hash: '#access_token=staff_token', search: '' };
     const sessionReceivedRef = { current: false };
+    const processedSessionKeyRef = { current: null };
     const timeoutRef = { current: null };
 
     const { cleanup } = initInvitationSessionCallback({
@@ -335,6 +369,7 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
       onError: (msg: string) => { errorCalled = true; errorMsg = msg; },
       timeoutMs: 5000,
       sessionReceivedRef,
+      processedSessionKeyRef,
       timeoutRef
     });
 
@@ -357,7 +392,9 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
     const secretRefreshToken = 'secret_refresh_token_88888';
 
     const mockSession = {
+      access_token: secretToken,
       user: {
+        id: 'sec1',
         email: 'security_parent@example.com',
         user_metadata: { role: 'parent' }
       }
@@ -378,6 +415,7 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
 
     const locationMock: any = { hash: `#access_token=${secretToken}&refresh_token=${secretRefreshToken}`, search: '' };
     const sessionReceivedRef = { current: false };
+    const processedSessionKeyRef = { current: null };
     const timeoutRef = { current: null };
 
     try {
@@ -388,6 +426,7 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
         onError: () => {},
         timeoutMs: 5000,
         sessionReceivedRef,
+        processedSessionKeyRef,
         timeoutRef
       });
       cleanup();
@@ -399,6 +438,164 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
       console.log = originalLog;
       console.error = originalError;
     }
+  });
+
+  await t.test('9. Real @supabase/supabase-js Client Integration: Auth instance compatibility with flowType pkce', async () => {
+    // Instantiate real GoTrueClient from @supabase/supabase-js v2.118.0
+    const realSupabase = createClient(
+      'https://wqnhlmvvyhpctmaukwyj.supabase.co',
+      'sb_publishable_vKzNAXC9V52eYH0-Gm9Rcg_23lCtz2P',
+      {
+        auth: {
+          flowType: 'pkce',
+          detectSessionInUrl: true,
+          persistSession: false,
+          autoRefreshToken: false
+        }
+      }
+    );
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    const locationMock: any = { hash: '#access_token=real_token_123&refresh_token=real_ref_123&type=recovery', search: '' };
+    const sessionReceivedRef = { current: false };
+    const processedSessionKeyRef = { current: null };
+    const timeoutRef = { current: null };
+
+    const { cleanup } = initInvitationSessionCallback({
+      supabaseClient: realSupabase,
+      locationObj: locationMock,
+      onSuccess: () => { successCount++; },
+      onError: () => { errorCount++; },
+      timeoutMs: 5000,
+      sessionReceivedRef,
+      processedSessionKeyRef,
+      timeoutRef
+    });
+
+    await new Promise(r => setTimeout(r, 100));
+
+    // Real client initial session is null without valid JWT verification against backend
+    // Verify that realSupabase did not throw or break, and that timeout is active without premature onError
+    assert.strictEqual(errorCount, 0, 'Real Supabase client must not trigger onError prematurely');
+    assert.ok(timeoutRef.current !== null, 'Real client should maintain active timeout while awaiting token processing');
+
+    cleanup();
+  });
+
+  await t.test('10. Lifecycle Audit: Duplicate onSuccess calls prevented for identical session', async () => {
+    let successCount = 0;
+    let authListener: any = null;
+
+    const mockSession = {
+      access_token: 'dup_token_123',
+      user: {
+        id: 'u_dup',
+        email: 'dup_parent@example.com',
+        user_metadata: { role: 'parent' }
+      }
+    };
+
+    const mockClient = {
+      auth: {
+        onAuthStateChange: (cb: any) => {
+          authListener = cb;
+          return { data: { subscription: { unsubscribe: () => {} } } };
+        },
+        getSession: async () => ({
+          data: { session: mockSession },
+          error: null
+        })
+      }
+    };
+
+    const locationMock: any = { hash: '#access_token=dup_token_123', search: '' };
+    const sessionReceivedRef = { current: false };
+    const processedSessionKeyRef = { current: null };
+    const timeoutRef = { current: null };
+
+    const { cleanup } = initInvitationSessionCallback({
+      supabaseClient: mockClient,
+      locationObj: locationMock,
+      onSuccess: () => { successCount++; },
+      onError: () => {},
+      timeoutMs: 5000,
+      sessionReceivedRef,
+      processedSessionKeyRef,
+      timeoutRef
+    });
+
+    await new Promise(r => setTimeout(r, 50));
+    assert.strictEqual(successCount, 1, 'First session reception calls onSuccess once');
+
+    // Fire onAuthStateChange event twice with identical session
+    authListener('SIGNED_IN', mockSession);
+    authListener('TOKEN_REFRESHED', mockSession);
+
+    assert.strictEqual(successCount, 1, 'Duplicate session events must NOT trigger duplicate onSuccess calls');
+
+    cleanup();
+  });
+
+  await t.test('11. Lifecycle Audit: Late getSession() null does NOT overwrite active onAuthStateChange session', async () => {
+    let successCount = 0;
+    let errorCount = 0;
+    let resolveGetSession: any = null;
+
+    const mockSession = {
+      access_token: 'active_token_123',
+      user: {
+        id: 'u_active',
+        email: 'active_parent@example.com',
+        user_metadata: { role: 'parent' }
+      }
+    };
+
+    let authListener: any = null;
+
+    const mockClient = {
+      auth: {
+        onAuthStateChange: (cb: any) => {
+          authListener = cb;
+          return { data: { subscription: { unsubscribe: () => {} } } };
+        },
+        getSession: () => new Promise(resolve => {
+          resolveGetSession = resolve;
+        })
+      }
+    };
+
+    const locationMock: any = { hash: '#access_token=active_token_123', search: '' };
+    const sessionReceivedRef = { current: false };
+    const processedSessionKeyRef = { current: null };
+    const timeoutRef = { current: null };
+
+    const { cleanup } = initInvitationSessionCallback({
+      supabaseClient: mockClient,
+      locationObj: locationMock,
+      onSuccess: () => { successCount++; },
+      onError: () => { errorCount++; },
+      timeoutMs: 5000,
+      sessionReceivedRef,
+      processedSessionKeyRef,
+      timeoutRef
+    });
+
+    // 1. onAuthStateChange fires FIRST with valid session
+    authListener('SIGNED_IN', mockSession);
+    assert.strictEqual(successCount, 1);
+    assert.strictEqual(sessionReceivedRef.current, true);
+
+    // 2. Later, delayed getSession() resolves with null
+    resolveGetSession({ data: { session: null }, error: null });
+    await new Promise(r => setTimeout(r, 50));
+
+    assert.strictEqual(successCount, 1, 'onSuccess count must stay 1');
+    assert.strictEqual(errorCount, 0, 'Late getSession() null must NOT trigger onError when session was already received');
+    assert.strictEqual(sessionReceivedRef.current, true, 'sessionReceivedRef must remain true');
+
+    cleanup();
   });
 
 });

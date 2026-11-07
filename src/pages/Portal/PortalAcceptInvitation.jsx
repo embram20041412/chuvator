@@ -34,6 +34,7 @@ export default function PortalAcceptInvitation() {
   const [successMsg, setSuccessMsg] = useState(null);
 
   const sessionReceivedRef = useRef(false);
+  const processedSessionKeyRef = useRef(null);
   const timeoutRef = useRef(null);
 
   useEffect(() => {
@@ -52,6 +53,7 @@ export default function PortalAcceptInvitation() {
       },
       timeoutMs: 5000,
       sessionReceivedRef,
+      processedSessionKeyRef,
       timeoutRef
     });
 
