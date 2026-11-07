@@ -31,7 +31,8 @@ export default function ParentManagementPage({ userProfile }) {
     name: '',
     email: '',
     phone: '',
-    kk: ''
+    kk: '',
+    relationship: 'father'
   });
   const [isSearchingStudents, setIsSearchingStudents] = useState(false);
   const [searchResults, setSearchStudents] = useState([]);
@@ -113,7 +114,7 @@ export default function ParentManagementPage({ userProfile }) {
 
   const closeAndReset = () => {
     setShowAddModal(false);
-    setFormData({ name: '', email: '', phone: '', kk: '' });
+    setFormData({ name: '', email: '', phone: '', kk: '', relationship: 'father' });
     setSearchStudents([]);
     setSelectedStudentIds([]);
     setFormError(null);
@@ -352,6 +353,20 @@ export default function ParentManagementPage({ userProfile }) {
                           <span>Cari Siswa</span>
                         </button>
                       </div>
+                    </div>
+                    <div className="space-y-1.5 text-left">
+                      <label className="block text-[11px] font-bold text-gray-700 uppercase px-1">Hubungan dengan Siswa <span className="text-red-500">*</span></label>
+                      <select 
+                        required
+                        value={formData.relationship}
+                        onChange={(e) => setFormData({...formData, relationship: e.target.value})}
+                        className="w-full px-4 py-2 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:border-indigo-500"
+                      >
+                        <option value="father">Ayah (Father)</option>
+                        <option value="mother">Ibu (Mother)</option>
+                        <option value="guardian">Wali (Guardian)</option>
+                        <option value="other">Lainnya (Other)</option>
+                      </select>
                     </div>
                   </div>
 

@@ -44,8 +44,6 @@ export async function onRequestPost(context) {
       );
     }
 
-    const targetTenantId = staffTenantId || 'global';
-
     // 3. Initialize Supabase Admin Config (Fail-Closed)
     const supabaseUrl = env.SUPABASE_URL;
     const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
@@ -64,7 +62,7 @@ export async function onRequestPost(context) {
 
     // 4. Parse and Validate Input
     const body = await request.json().catch(() => ({}));
-    const { name, email, phone, kk, studentIds } = body;
+    const { name, email, phone, kk, studentIds, relationship } = body;
 
     if (!name || !email || !kk || !Array.isArray(studentIds) || studentIds.length === 0) {
       return new Response(
@@ -72,6 +70,15 @@ export async function onRequestPost(context) {
         { status: 400, headers: corsHeaders }
       );
     }
+
+    const validRelationships = ['father', 'mother', 'guardian', 'other'];
+    if (relationship && !validRelationships.includes(relationship)) {
+      return new Response(
+        JSON.stringify({ success: false, message: 'Nilai relationship tidak valid. Gunakan: father, mother, guardian, atau other.' }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
+    const finalRelationship = relationship || 'guardian';
 
     // Validate studentIds (Type check, Duplicates, UUID or demo prefix)
     if (new Set(studentIds).size !== studentIds.length) {
@@ -152,17 +159,37 @@ export async function onRequestPost(context) {
       );
     }
 
+    // Determine targetTenantId (Hardened for consistency)
+    let targetTenantId = staffTenantId || 'global';
+    if (role === 'superadmin' && foundStudents.length > 0) {
+      targetTenantId = foundStudents[0].tenant_id || 'global';
+    }
+
     for (const s of foundStudents) {
-      // REQUIREMENT: Strict Tenant Isolation for Owner/Admin
+      const studentTenant = s.tenant_id || 'global';
+
+      // REQUIREMENT: Strict Tenant Isolation & Consistency
       if (role !== 'superadmin') {
-        if (!s.tenant_id || s.tenant_id !== staffTenantId) {
+        if (studentTenant !== staffTenantId) {
           return new Response(
             JSON.stringify({ 
               success: false, 
               code: 'STUDENT_TENANT_MISMATCH', 
-              message: `Siswa '${s.name || s.id}' tidak berasal dari tenant yang sama dengan Anda atau data tenant siswa tidak valid.` 
+              message: `Siswa '${s.name || s.id}' tidak berasal dari tenant yang sama dengan Anda.` 
             }),
             { status: 403, headers: corsHeaders }
+          );
+        }
+      } else {
+        // Superadmin must ensure all students belong to the same tenant determined as target
+        if (studentTenant !== targetTenantId) {
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              code: 'STUDENT_TENANT_MISMATCH', 
+              message: `Seluruh siswa yang dipilih harus berasal dari tenant yang sama (${targetTenantId}).` 
+            }),
+            { status: 400, headers: corsHeaders }
           );
         }
       }
@@ -403,7 +430,8 @@ export async function onRequestPost(context) {
     const linkPayloads = studentIds.map(sid => ({
       tenant_id: targetTenantId,
       parent_account_id: parentId,
-      student_id: sid
+      student_id: sid,
+      relationship: finalRelationship
     }));
 
     const linkResp = await fetch(`${supabaseUrl}/rest/v1/parent_student_links`, {
@@ -417,7 +445,52 @@ export async function onRequestPost(context) {
     });
 
     if (!linkResp.ok) {
-      // FULL COMPENSATION V2.3.6: Generic status only
+      // DIAGNOSTICS V2.4.0: Sanitized capture
+      const rawContentType = linkResp.headers.get('content-type') || '';
+      const contentType = rawContentType.toLowerCase().split(';')[0].trim();
+      const responseText = await linkResp.text().catch(() => '');
+      
+      let linkError = null;
+      let bodyFormat = 'EMPTY';
+      
+      if (responseText) {
+        if (contentType.includes('application/json')) {
+          try {
+            const parsed = JSON.parse(responseText);
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+              linkError = parsed;
+              bodyFormat = 'JSON_OBJECT';
+            } else if (Array.isArray(parsed)) {
+              bodyFormat = 'JSON_ARRAY';
+            } else if (parsed === null) {
+              bodyFormat = 'JSON_NULL';
+            } else {
+              bodyFormat = 'JSON_PRIMITIVE';
+            }
+          } catch (e) {
+            bodyFormat = 'MALFORMED_JSON';
+          }
+        } else {
+          bodyFormat = 'NON_JSON';
+        }
+      }
+
+      // SQLSTATE / PostgREST Code Sanitization
+      const rawCode = linkError ? String(linkError.code || '') : '';
+      let sqlState = 'UNKNOWN';
+      if (/^[0-9A-Z]{5}$/.test(rawCode) || /^PGRST\d{3}$/.test(rawCode)) {
+        sqlState = rawCode;
+      }
+      
+      let classification = 'UNKNOWN';
+      if (sqlState === '23505') classification = 'UNIQUE_VIOLATION';
+      else if (sqlState === '23503') classification = 'FOREIGN_KEY_VIOLATION';
+      else if (sqlState === '23502') classification = 'NOT_NULL_VIOLATION';
+      else if (sqlState === '23514') classification = 'CHECK_VIOLATION';
+      else if (/^PGRST\d{3}$/.test(sqlState)) classification = 'POSTGREST_ERROR';
+      else if (sqlState !== 'UNKNOWN') classification = 'DATABASE_ERROR';
+
+      // FULL COMPENSATION
       const cleanupParent = await fetch(`${supabaseUrl}/rest/v1/parent_accounts?id=eq.${parentId}`, {
         method: 'DELETE',
         headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
@@ -427,6 +500,19 @@ export async function onRequestPost(context) {
         method: 'DELETE',
         headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
       }).catch(() => ({ ok: false }));
+
+      console.error('[Database Error] Student link insertion failed (Sanitized):', {
+        status: linkResp.status,
+        contentType,
+        bodyFormat,
+        sqlState,
+        classification,
+        hasMessage: !!(linkError && linkError.message),
+        hasDetails: !!(linkError && linkError.details),
+        hasHint: !!(linkError && linkError.hint),
+        parentCleanup: cleanupParent.ok ? 'SUCCESS' : 'FAILED',
+        authCleanup: cleanupAuth.ok ? 'SUCCESS' : 'FAILED'
+      });
 
       if (!cleanupParent.ok || !cleanupAuth.ok) {
         console.error('[Cleanup Error] Critical failure during link failure recovery.', { parentOk: cleanupParent.ok, authOk: cleanupAuth.ok });
