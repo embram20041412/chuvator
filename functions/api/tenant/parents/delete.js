@@ -1,7 +1,7 @@
 /**
  * Cloudflare Pages Function: DELETE /api/tenant/parents?id=...
- * Safe deletion / cancellation of parent account with Auth user deletion first
- * and idempotent cross-service lifecycle handling.
+ * Safe deletion / cancellation of parent account with Supabase Auth deletion first,
+ * followed by atomic database deletion via PostgreSQL RPC.
  */
 
 import { getCorsHeaders } from '../../portal/_auth_v2.js';
@@ -67,8 +67,9 @@ export async function onRequestDelete(context) {
 
     const parent = parents[0];
     const authUid = parent.auth_uid;
+    const targetTenantId = parent.tenant_id;
 
-    // 2. Delete Supabase Auth user FIRST (Do not delete DB records before Auth is completed/resolved)
+    // 2. Delete Supabase Auth user FIRST. If Auth fails (other than 404), do not execute database RPC.
     if (authUid) {
       const authDelResp = await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUid}`, {
         method: 'DELETE',
@@ -83,43 +84,58 @@ export async function onRequestDelete(context) {
           JSON.stringify({ 
             success: false, 
             code: 'AUTH_DELETE_FAILED', 
-            message: 'Gagal menghapus akun pengguna Auth. Profil aplikasi dipertahankan secara aman untuk memungkinkan retry idempotent.' 
+            message: 'Gagal menghapus akun pengguna Auth. Profil aplikasi dipertahankan secara aman untuk retry idempotent.' 
           }),
           { status: 500, headers: corsHeaders }
         );
       }
     }
 
-    // 3. Delete parent_student_links (Idempotent cascade)
-    const linkDelResp = await fetch(`${supabaseUrl}/rest/v1/parent_student_links?parent_account_id=eq.${encodeURIComponent(parentId)}`, {
-      method: 'DELETE',
+    // 3. Call atomic PostgreSQL RPC `parent_portal_atomic_delete`
+    const rpcResp = await fetch(`${supabaseUrl}/rest/v1/rpc/parent_portal_atomic_delete`, {
+      method: 'POST',
       headers: {
         'apikey': serviceRoleKey,
-        'Authorization': `Bearer ${serviceRoleKey}`
-      }
+        'Authorization': `Bearer ${serviceRoleKey}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        p_tenant_id: targetTenantId,
+        p_parent_id: parentId
+      })
     });
 
-    if (!linkDelResp.ok && linkDelResp.status !== 404) {
-      return new Response(JSON.stringify({ success: false, code: 'LINK_DELETE_FAILED', message: 'Gagal menghapus relasi siswa wali murid.' }), { status: 500, headers: corsHeaders });
+    if (!rpcResp.ok) {
+      const rpcErr = await rpcResp.text().catch(() => '');
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          code: 'RPC_DELETE_FAILED', 
+          message: 'Gagal mengeksekusi penghapusan database atomik.' 
+        }),
+        { status: 500, headers: corsHeaders }
+      );
     }
 
-    // 4. Delete parent_accounts record (Final state)
-    const parentDelResp = await fetch(`${supabaseUrl}/rest/v1/parent_accounts?id=eq.${encodeURIComponent(parentId)}`, {
-      method: 'DELETE',
-      headers: {
-        'apikey': serviceRoleKey,
-        'Authorization': `Bearer ${serviceRoleKey}`
-      }
-    });
+    const rpcResult = await rpcResp.json().catch(() => []);
+    const resultItem = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult;
 
-    if (!parentDelResp.ok && parentDelResp.status !== 404) {
-      return new Response(JSON.stringify({ success: false, code: 'PROFILE_DELETE_FAILED', message: 'Gagal menghapus profil wali murid.' }), { status: 500, headers: corsHeaders });
+    if (!resultItem || !resultItem.success) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          code: 'ATOMIC_DELETE_FAILED', 
+          message: `Penghapusan database gagal: ${resultItem?.error_message || 'Unknown error'}` 
+        }),
+        { status: 500, headers: corsHeaders }
+      );
     }
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Akun wali murid berhasil dibatalkan dan dihapus secara aman.'
+        message: 'Akun wali murid berhasil dihapus secara atomik dan aman.'
       }),
       { status: 200, headers: corsHeaders }
     );

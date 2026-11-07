@@ -30,6 +30,7 @@ test('CHUVATOR — Parent Portal V2.6.3 Final Email Delivery & Safe Deletion Cor
       SUPABASE_SERVICE_ROLE_KEY: mockServiceKey,
       SUPABASE_ANON_KEY: 'mock-anon-key',
       RESEND_API_KEY: 'test-resend-key',
+      EMAIL_FROM: 'noreply@chuasport.com',
       APP_URL: appUrl,
       ENVIRONMENT: 'test',
       ALLOWED_ORIGINS: 'https://myapp.local',
@@ -105,7 +106,7 @@ test('CHUVATOR — Parent Portal V2.6.3 Final Email Delivery & Safe Deletion Cor
   await t.test('2. Successful email delivery and generate_link integration with type: invite', async () => {
     mockFetch([
       { pattern: '/rest/v1/parent_accounts?select=', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', email: 'parent@example.com', auth_uid: 'auth-123' }] },
-      { pattern: '/auth/v1/admin/users/auth-123', method: 'GET', body: { id: 'auth-123', email_confirmed_at: null } },
+      { pattern: '/auth/v1/admin/users/auth-123', method: 'GET', body: { id: 'auth-123', email_confirmed_at: null }, status: 200 },
       { pattern: '/auth/v1/admin/generate_link', method: 'POST', body: { properties: { action_link: 'http://mock-link' } }, status: 200 },
       { pattern: 'api.resend.com/emails', method: 'POST', body: { id: 'email-id-123' }, status: 200 }
     ]);
@@ -124,7 +125,7 @@ test('CHUVATOR — Parent Portal V2.6.3 Final Email Delivery & Safe Deletion Cor
   await t.test('3. Email delivery fails with EMAIL_SEND_FAILED when email provider returns error', async () => {
     mockFetch([
       { pattern: '/rest/v1/parent_accounts?select=', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', email: 'parent@example.com', auth_uid: 'auth-123' }] },
-      { pattern: '/auth/v1/admin/users/auth-123', method: 'GET', body: { id: 'auth-123', email_confirmed_at: '2026-01-01T00:00:00Z' } },
+      { pattern: '/auth/v1/admin/users/auth-123', method: 'GET', body: { id: 'auth-123', email_confirmed_at: '2026-01-01T00:00:00Z' }, status: 200 },
       { pattern: '/auth/v1/admin/generate_link', method: 'POST', body: { properties: { action_link: 'http://mock-link' } }, status: 200 },
       { pattern: 'api.resend.com/emails', method: 'POST', body: { error: 'Delivery failed' }, status: 500 }
     ]);
@@ -153,20 +154,19 @@ test('CHUVATOR — Parent Portal V2.6.3 Final Email Delivery & Safe Deletion Cor
       const data = await res.json();
       assert.strictEqual(data.code, 'AUTH_DELETE_FAILED');
       
-      // Verify parent_accounts DELETE was never called
-      const dbDeleteCalled = fetchHistory.some(f => f.url.includes('/rest/v1/parent_accounts') && f.options?.method === 'DELETE');
+      // Verify RPC or DB delete was never called
+      const dbDeleteCalled = fetchHistory.some(f => f.url.includes('/rest/v1/') && (f.options?.method === 'DELETE' || f.url.includes('rpc')));
       assert.strictEqual(dbDeleteCalled, false);
     } finally {
       resetFetch();
     }
   });
 
-  await t.test('5. Successful delete across Auth and DB', async () => {
+  await t.test('5. Successful delete across Auth and atomic RPC', async () => {
     mockFetch([
       { pattern: '/rest/v1/parent_accounts?id=eq.parent-uuid-123', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', auth_uid: 'auth-123' }] },
       { pattern: '/auth/v1/admin/users/auth-123', method: 'DELETE', status: 200 },
-      { pattern: '/rest/v1/parent_student_links', method: 'DELETE', status: 204 },
-      { pattern: '/rest/v1/parent_accounts?id=eq.parent-uuid-123', method: 'DELETE', status: 204 }
+      { pattern: '/rest/v1/rpc/parent_portal_atomic_delete', method: 'POST', body: [{ success: true }], status: 200 }
     ]);
 
     try {

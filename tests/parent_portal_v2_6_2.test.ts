@@ -31,6 +31,7 @@ test('CHUVATOR — Parent Portal V2.6.2 Final Invitation Recovery & Lifecycle Co
       SUPABASE_SERVICE_ROLE_KEY: mockServiceKey,
       SUPABASE_ANON_KEY: 'mock-anon-key',
       RESEND_API_KEY: 'test-resend-key',
+      EMAIL_FROM: 'noreply@chuasport.com',
       APP_URL: appUrl,
       ENVIRONMENT: 'test',
       ALLOWED_ORIGINS: 'https://myapp.local',
@@ -116,7 +117,7 @@ test('CHUVATOR — Parent Portal V2.6.2 Final Invitation Recovery & Lifecycle Co
   await t.test('1. Resend for unconfirmed user uses type: invite and email provider', async () => {
     mockFetch([
       { pattern: '/rest/v1/parent_accounts?select=', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', email: 'parent@example.com', auth_uid: 'auth-123' }] },
-      { pattern: '/auth/v1/admin/users/auth-123', method: 'GET', body: { id: 'auth-123', email_confirmed_at: null } },
+      { pattern: '/auth/v1/admin/users/auth-123', method: 'GET', body: { id: 'auth-123', email_confirmed_at: null }, status: 200 },
       { pattern: '/auth/v1/admin/generate_link', method: 'POST', body: { properties: { action_link: 'http://link' } }, status: 200 },
       { pattern: 'api.resend.com/emails', method: 'POST', body: { id: 'email-id' }, status: 200 }
     ]);
@@ -135,7 +136,7 @@ test('CHUVATOR — Parent Portal V2.6.2 Final Invitation Recovery & Lifecycle Co
   await t.test('2. Password recovery for confirmed user uses type: recovery and email provider', async () => {
     mockFetch([
       { pattern: '/rest/v1/parent_accounts?select=', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', email: 'parent@example.com', auth_uid: 'auth-123' }] },
-      { pattern: '/auth/v1/admin/users/auth-123', method: 'GET', body: { id: 'auth-123', email_confirmed_at: '2026-01-01T00:00:00Z' } },
+      { pattern: '/auth/v1/admin/users/auth-123', method: 'GET', body: { id: 'auth-123', email_confirmed_at: '2026-01-01T00:00:00Z' }, status: 200 },
       { pattern: '/auth/v1/admin/generate_link', method: 'POST', body: { properties: { action_link: 'http://link' } }, status: 200 },
       { pattern: 'api.resend.com/emails', method: 'POST', body: { id: 'email-id' }, status: 200 }
     ]);

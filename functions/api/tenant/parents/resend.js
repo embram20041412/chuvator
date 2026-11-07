@@ -1,10 +1,25 @@
 /**
  * Cloudflare Pages Function: POST /api/tenant/parents/resend
- * Invitation Recovery & Resend for existing parent accounts with strict email provider verification.
+ * Email Action Link Delivery via Resend with strict validation and HTML escaping.
  */
 
 import { getCorsHeaders } from '../../portal/_auth_v2.js';
 import { validateStaffSession } from '../_auth_staff.js';
+
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function isValidEmailFormat(email) {
+  if (!email || typeof email !== 'string') return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+}
 
 export async function onRequestOptions(context) {
   const corsHeaders = getCorsHeaders(context.request, context.env);
@@ -41,14 +56,37 @@ export async function onRequestPost(context) {
       return new Response(JSON.stringify({ success: false, code: 'SUPABASE_CONFIG_MISSING', message: 'Konfigurasi server tidak lengkap.' }), { status: 500, headers: corsHeaders });
     }
 
-    // Check email provider configuration (Fail-closed)
-    const emailApiToken = env.RESEND_API_KEY || env.SENDGRID_API_KEY || env.EMAIL_PROVIDER_API_KEY;
-    if (!emailApiToken) {
+    // 1. Strict Resend API Key check (Reject if only SendGrid or other provider keys are provided)
+    const resendApiKey = env.RESEND_API_KEY;
+    if (!resendApiKey) {
+      if (env.SENDGRID_API_KEY || env.EMAIL_PROVIDER_API_KEY) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            code: 'EMAIL_PROVIDER_NOT_CONFIGURED', 
+            message: 'Konfigurasi provider tidak didukung. Hanya Resend yang didukung untuk pengiriman email ini.' 
+          }),
+          { status: 500, headers: corsHeaders }
+        );
+      }
       return new Response(
         JSON.stringify({ 
           success: false, 
           code: 'EMAIL_PROVIDER_NOT_CONFIGURED', 
-          message: 'Layanan pengiriman email (provider) belum dikonfigurasi di server.' 
+          message: 'RESEND_API_KEY belum dikonfigurasi di server.' 
+        }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
+    // 2. Validate EMAIL_FROM format
+    const emailFrom = env.EMAIL_FROM;
+    if (!emailFrom || !isValidEmailFormat(emailFrom.includes('<') ? emailFrom.split('<')[1].replace('>', '') : emailFrom)) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          code: 'INVALID_EMAIL_FROM', 
+          message: 'Konfigurasi EMAIL_FROM tidak valid atau belum diset.' 
         }),
         { status: 500, headers: corsHeaders }
       );
@@ -103,7 +141,7 @@ export async function onRequestPost(context) {
       await kvBinding.put(rateKey, String(count + 1), { expirationTtl: 300 });
     }
 
-    // 1. Fetch Supabase Auth user to check confirmation status
+    // 3. Fail-closed Auth user verification
     let isConfirmed = false;
     if (authUid) {
       const authUserResp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/users/${authUid}`, {
@@ -113,19 +151,36 @@ export async function onRequestPost(context) {
           'Authorization': `Bearer ${serviceRoleKey}`
         }
       });
-      if (authUserResp.ok) {
-        const authUser = await authUserResp.json().catch(() => null);
-        if (authUser) {
-          isConfirmed = !!(authUser.email_confirmed_at || authUser.confirmed_at);
-        }
+      if (!authUserResp.ok) {
+        return new Response(
+          JSON.stringify({ 
+            success: false, 
+            code: 'AUTH_VERIFICATION_FAILED', 
+            message: 'Gagal memverifikasi status autentikasi user (Fail-closed).' 
+          }),
+          { status: 500, headers: corsHeaders }
+        );
       }
+      const authUser = await authUserResp.json().catch(() => null);
+      if (authUser) {
+        isConfirmed = !!(authUser.email_confirmed_at || authUser.confirmed_at);
+      }
+    } else {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          code: 'AUTH_UID_MISSING', 
+          message: 'Auth UID tidak ditemukan pada akun wali murid.' 
+        }),
+        { status: 400, headers: corsHeaders }
+      );
     }
 
     const appUrl = env.APP_URL || 'https://chuvator.pages.dev';
     const redirectUrl = `${appUrl.replace(/\/$/, '')}/portal/accept-invitation`;
     const linkType = isConfirmed ? 'recovery' : 'invite';
 
-    // 2. Generate action link from Supabase Auth Admin API
+    // 4. Generate action link from Supabase Auth Admin API
     const linkResp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/generate_link`, {
       method: 'POST',
       headers: {
@@ -168,29 +223,36 @@ export async function onRequestPost(context) {
       );
     }
 
-    // 3. Send email via provider and verify confirmation response
+    // 5. Send email via Resend with exact escaped actionLink in HTML
+    const escapedActionLink = escapeHtml(actionLink);
+    const emailHtml = `<p>Halo,</p><p>Silakan klik tautan berikut untuk ${linkType === 'invite' ? 'mengaktivasi akun Portal Wali Murid Anda' : 'memulihkan kata sandi akun Anda'}:</p><p><a href="${escapedActionLink}">Aktivasi / Pemulihan Akun</a></p>`;
+
     let emailSent = false;
+    let providerErrorMsg = '';
+
     try {
-      const emailProviderUrl = env.EMAIL_PROVIDER_API_URL || 'https://api.resend.com/emails';
-      const emailSendResp = await fetch(emailProviderUrl, {
+      const resendSendResp = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${emailApiToken}`,
+          'Authorization': `Bearer ${resendApiKey}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          from: env.EMAIL_FROM || 'noreply@chuasport.com',
+          from: emailFrom,
           to: [targetEmail],
           subject: linkType === 'invite' ? 'Undangan Portal Wali Murid CHUVATOR' : 'Pemulihan Kata Sandi Portal Wali Murid CHUVATOR',
-          html: `<p>Halo, silakan akses tautan berikut untuk ${linkType === 'invite' ? 'mengaktivasi akun' : 'memulihkan kata sandi'} Anda.</p>`
+          html: emailHtml
         })
       });
 
-      if (emailSendResp.ok) {
+      if (resendSendResp.ok) {
         emailSent = true;
+      } else {
+        const resendErr = await resendSendResp.json().catch(() => ({}));
+        providerErrorMsg = resendErr.message || 'Resend API error';
       }
     } catch (sendErr) {
-      console.error('Email provider dispatch exception:', sendErr.message);
+      providerErrorMsg = sendErr.message;
     }
 
     if (!emailSent) {
@@ -198,7 +260,7 @@ export async function onRequestPost(context) {
         JSON.stringify({ 
           success: false, 
           code: 'EMAIL_SEND_FAILED', 
-          message: 'Gagal mengirim email melalui provider pengiriman.' 
+          message: `Gagal mengirim email melalui Resend: ${providerErrorMsg}` 
         }),
         { status: 500, headers: corsHeaders }
       );

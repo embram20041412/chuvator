@@ -31,6 +31,7 @@ test('CHUVATOR — Parent Portal V2.6.1 Invitation Recovery & Lifecycle Safety H
       SUPABASE_SERVICE_ROLE_KEY: mockServiceKey,
       SUPABASE_ANON_KEY: 'mock-anon-key',
       RESEND_API_KEY: 'test-resend-key',
+      EMAIL_FROM: 'noreply@chuasport.com',
       APP_URL: appUrl,
       ENVIRONMENT: 'test',
       ALLOWED_ORIGINS: 'https://myapp.local',
@@ -115,7 +116,7 @@ test('CHUVATOR — Parent Portal V2.6.1 Invitation Recovery & Lifecycle Safety H
   await t.test('1. Invitation Recovery via generate_link and email provider succeeds', async () => {
     mockFetch([
       { pattern: '/rest/v1/parent_accounts?select=', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', email: 'parent@example.com', auth_uid: 'auth-123' }] },
-      { pattern: '/auth/v1/admin/users/auth-123', method: 'GET', body: { id: 'auth-123', email_confirmed_at: null } },
+      { pattern: '/auth/v1/admin/users/auth-123', method: 'GET', body: { id: 'auth-123', email_confirmed_at: null }, status: 200 },
       { pattern: '/auth/v1/admin/generate_link', method: 'POST', body: { properties: { action_link: 'http://link' } }, status: 200 },
       { pattern: 'api.resend.com/emails', method: 'POST', body: { id: 'email-id' }, status: 200 }
     ]);
