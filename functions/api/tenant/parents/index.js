@@ -27,7 +27,7 @@ export async function onRequestPost(context) {
 
     const { role, tenantId: staffTenantId } = authResult.user;
 
-    // 2. RBAC: Owner/Admin only
+    // 2. RBAC: Owner/Admin/Superadmin only
     const allowedRoles = ['superadmin', 'owner', 'admin'];
     if (!allowedRoles.includes(role)) {
       return new Response(
@@ -43,6 +43,8 @@ export async function onRequestPost(context) {
         { status: 403, headers: corsHeaders }
       );
     }
+
+    const targetTenantId = staffTenantId || 'global';
 
     // 3. Initialize Supabase Admin Config (Fail-Closed)
     const supabaseUrl = env.SUPABASE_URL;
@@ -71,7 +73,7 @@ export async function onRequestPost(context) {
       );
     }
 
-    // Validate studentIds (No duplicates, valid UUID or demo prefix)
+    // Validate studentIds (Type check, Duplicates, UUID or demo prefix)
     if (new Set(studentIds).size !== studentIds.length) {
       return new Response(
         JSON.stringify({ success: false, message: 'Daftar studentIds berisi duplikat.' }),
@@ -83,6 +85,12 @@ export async function onRequestPost(context) {
     const isProduction = env.ENVIRONMENT === 'production' || env.NODE_ENV === 'production';
 
     for (const sid of studentIds) {
+      if (typeof sid !== 'string') {
+        return new Response(
+          JSON.stringify({ success: false, message: 'Setiap ID siswa harus bertipe string.' }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
       if (sid.startsWith('student-demo-')) {
         if (isProduction) {
           return new Response(
@@ -145,16 +153,20 @@ export async function onRequestPost(context) {
     }
 
     for (const s of foundStudents) {
-      if (role !== 'superadmin' && s.tenant_id && s.tenant_id !== staffTenantId) {
-        return new Response(
-          JSON.stringify({ 
-            success: false, 
-            code: 'STUDENT_TENANT_MISMATCH', 
-            message: `Siswa '${s.name || s.id}' tidak berasal dari tenant yang sama dengan Anda.` 
-          }),
-          { status: 403, headers: corsHeaders }
-        );
+      // REQUIREMENT: Strict Tenant Isolation for Owner/Admin
+      if (role !== 'superadmin') {
+        if (!s.tenant_id || s.tenant_id !== staffTenantId) {
+          return new Response(
+            JSON.stringify({ 
+              success: false, 
+              code: 'STUDENT_TENANT_MISMATCH', 
+              message: `Siswa '${s.name || s.id}' tidak berasal dari tenant yang sama dengan Anda atau data tenant siswa tidak valid.` 
+            }),
+            { status: 403, headers: corsHeaders }
+          );
+        }
       }
+      
       if (s.kk_hmac !== kkHmac) {
         return new Response(
           JSON.stringify({ 
@@ -167,8 +179,12 @@ export async function onRequestPost(context) {
       }
     }
 
-    // 7. Check if Parent account record already exists
-    const parentCheckUrl = `${supabaseUrl}/rest/v1/parent_accounts?email=eq.${encodeURIComponent(normalizedEmail)}&select=id`;
+    // 7. Check if Parent account record already exists (Tenant-Scoped)
+    let parentCheckUrl = `${supabaseUrl}/rest/v1/parent_accounts?email=eq.${encodeURIComponent(normalizedEmail)}&select=id`;
+    if (role !== 'superadmin') {
+      parentCheckUrl += `&tenant_id=eq.${encodeURIComponent(targetTenantId)}`;
+    }
+    
     const parentCheckResp = await fetch(parentCheckUrl, {
       method: 'GET',
       headers: {
@@ -192,12 +208,12 @@ export async function onRequestPost(context) {
     const existingParents = await parentCheckResp.json().catch(() => []);
     if (existingParents.length > 0) {
       return new Response(
-        JSON.stringify({ success: false, message: 'Email wali murid sudah terdaftar di sistem.' }),
+        JSON.stringify({ success: false, message: 'Email wali murid sudah terdaftar pada tenant ini.' }),
         { status: 409, headers: corsHeaders }
       );
     }
 
-    // 8. Invite User via Supabase Auth Admin (Endpoint V2.3.2 Corrected)
+    // 8. Invite User via Supabase Auth Admin
     const inviteUrl = `${supabaseUrl}/auth/v1/invite`;
     const inviteResp = await fetch(inviteUrl, {
       method: 'POST',
@@ -211,7 +227,7 @@ export async function onRequestPost(context) {
         data: {
           name: name,
           role: 'parent',
-          tenantId: staffTenantId || 'global'
+          tenantId: targetTenantId
         }
       })
     });
@@ -242,8 +258,6 @@ export async function onRequestPost(context) {
     }
 
     // 9. Database Insertion (parent_accounts & parent_student_links)
-    const targetTenantId = staffTenantId || 'global';
-    
     const parentPayload = {
       tenant_id: targetTenantId,
       auth_uid: authUid,
@@ -266,16 +280,20 @@ export async function onRequestPost(context) {
 
     if (!parentInsertResp.ok) {
       // COMPENSATION
-      await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUid}`, {
+      const cleanupAuth = await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUid}`, {
         method: 'DELETE',
         headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
-      }).catch(e => console.error('[Cleanup Error] Auth cleanup failed:', e.message));
+      }).catch(e => ({ ok: false, statusText: e.message }));
+
+      if (!cleanupAuth.ok) {
+        console.error('[Cleanup Error] Critical failure deleting auth user:', authUid, cleanupAuth.statusText);
+      }
 
       return new Response(
         JSON.stringify({ 
           success: false, 
           code: 'PARENT_INSERT_FAILED', 
-          message: 'Gagal menyimpan profil wali murid ke database.' 
+          message: 'Gagal menyimpan profil wali murid. ' + (cleanupAuth.ok ? 'Sesi dibatalkan secara aman.' : 'PERINGATAN: Cleanup gagal, hubungi teknisi.')
         }),
         { status: 500, headers: corsHeaders }
       );
@@ -285,17 +303,17 @@ export async function onRequestPost(context) {
     const parentId = (newParents.length > 0) ? newParents[0].id : null;
 
     if (!parentId) {
-      // COMPENSATION: parentId missing despite 201 OK (rare edge case)
-      await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUid}`, {
+      // COMPENSATION
+      const cleanupAuth = await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUid}`, {
         method: 'DELETE',
         headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
-      }).catch(e => console.error('[Cleanup Error] Auth cleanup failed (missing parentId):', e.message));
+      }).catch(e => ({ ok: false, statusText: e.message }));
 
       return new Response(
         JSON.stringify({ 
           success: false, 
           code: 'PARENT_INSERT_FAILED', 
-          message: 'Gagal mengambil ID wali murid baru.' 
+          message: 'ID wali murid tidak ditemukan setelah penyimpanan. ' + (cleanupAuth.ok ? 'Sesi dibatalkan secara aman.' : 'PERINGATAN: Cleanup gagal.')
         }),
         { status: 500, headers: corsHeaders }
       );
@@ -319,21 +337,25 @@ export async function onRequestPost(context) {
 
     if (!linkResp.ok) {
       // FULL COMPENSATION
-      await fetch(`${supabaseUrl}/rest/v1/parent_accounts?id=eq.${parentId}`, {
+      const cleanupParent = await fetch(`${supabaseUrl}/rest/v1/parent_accounts?id=eq.${parentId}`, {
         method: 'DELETE',
         headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
-      }).catch(e => console.error('[Cleanup Error] DB parent cleanup failed:', e.message));
+      }).catch(e => ({ ok: false, statusText: e.message }));
 
-      await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUid}`, {
+      const cleanupAuth = await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUid}`, {
         method: 'DELETE',
         headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
-      }).catch(e => console.error('[Cleanup Error] Auth cleanup failed (link failure):', e.message));
+      }).catch(e => ({ ok: false, statusText: e.message }));
+
+      if (!cleanupParent.ok || !cleanupAuth.ok) {
+        console.error('[Cleanup Error] Critical failure during link failure cleanup.', { parentId, authUid, parentOk: cleanupParent.ok, authOk: cleanupAuth.ok });
+      }
 
       return new Response(
         JSON.stringify({ 
           success: false, 
           code: 'STUDENT_LINK_INSERT_FAILED', 
-          message: 'Gagal menghubungkan siswa ke akun wali. Pendaftaran dibatalkan.' 
+          message: 'Gagal menghubungkan siswa. ' + (cleanupParent.ok && cleanupAuth.ok ? 'Pendaftaran dibatalkan secara aman.' : 'PERINGATAN: Cleanup database/auth gagal.')
         }),
         { status: 500, headers: corsHeaders }
       );
@@ -349,12 +371,13 @@ export async function onRequestPost(context) {
     );
 
   } catch (err) {
-    console.error('Create parent error:', err.message);
+    console.error('Create parent internal error:', err.message);
     return new Response(
       JSON.stringify({ success: false, message: 'Terjadi kesalahan internal pada server.' }),
       { status: 500, headers: corsHeaders }
     );
   }
 }
+
 
 
