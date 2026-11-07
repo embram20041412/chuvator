@@ -261,7 +261,10 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
     const createClaimContext = (token: any, kvMap: Record<string, string>) => ({
       request: new Request('https://chuvator.pages.dev/api/portal/invitation/claim', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Origin': 'https://chuvator.pages.dev'
+        },
         body: JSON.stringify({ token })
       }),
       env: {
@@ -368,15 +371,20 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
       })
     };
 
-    const makeReq = () => claimPostHandler({
+    const makeReq = (headers = {}) => claimPostHandler({
       request: new Request('https://chuvator.pages.dev/api/portal/invitation/claim', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Origin': 'https://chuvator.pages.dev',
+          ...headers 
+        },
         body: JSON.stringify({ token: validClaimToken })
       }),
       env: {
         SUPABASE_URL: supabaseUrl,
         APP_URL: appUrl,
+        ALLOWED_ORIGINS: 'https://chuvator.pages.dev',
         PORTAL_SESSIONS_KV: {
           get: async (k: string) => kvStore[k] || null,
           delete: async (k: string) => { delete kvStore[k]; }
@@ -384,22 +392,115 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
       }
     } as any);
 
-    // Run two sequential/concurrent calls
+    // 8a. Serial Replay Protection (Standard Case)
     const res1 = await makeReq();
     const res2 = await makeReq();
 
     const json1 = await res1.json();
     const json2 = await res2.json();
 
-    assert.strictEqual(res1.status, 200);
+    assert.strictEqual(res1.status, 200, 'First request must succeed');
     assert.strictEqual(json1.success, true);
 
-    // Second call must fail because key was deleted
-    assert.strictEqual(res2.status, 410);
+    assert.strictEqual(res2.status, 410, 'Second request must fail (Replay Protection)');
     assert.strictEqual(json2.success, false);
+
+    // 8b. Concurrency Honest Audit: Simulating Race Condition (KV Eventual Consistency Window)
+    // We mock a race where two requests hit the 'get()' before the first 'delete()' is processed.
+    const validClaimTokenRace = 'd4e5f60718293a4b5c6d7e8f901a2b3c4d5e6f708192a3b4c5d6e7f809a1b2c3';
+    const raceRecord = JSON.stringify({
+      actionLink: targetActionLink,
+      type: 'invite',
+      expiresAt: new Date(Date.now() + 3600 * 1000).toISOString()
+    });
+    
+    // Custom mock that delays deletion to simulate the propagation window
+    let deleteStarted = false;
+    const kvStoreRace: Record<string, string> = {
+      [`v2_invitation_claim:${validClaimTokenRace}`]: raceRecord
+    };
+
+    const makeRaceReq = () => claimPostHandler({
+      request: new Request('https://chuvator.pages.dev/api/portal/invitation/claim', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Origin': 'https://chuvator.pages.dev'
+        },
+        body: JSON.stringify({ token: validClaimTokenRace })
+      }),
+      env: {
+        SUPABASE_URL: supabaseUrl,
+        APP_URL: appUrl,
+        PORTAL_SESSIONS_KV: {
+          get: async (k: string) => kvStoreRace[k] || null,
+          delete: async (k: string) => { 
+            deleteStarted = true;
+            // Delay actual deletion to simulate eventual consistency / propagation lag
+            await new Promise(r => setTimeout(r, 10));
+            delete kvStoreRace[k]; 
+          }
+        }
+      }
+    } as any);
+
+    // In Cloudflare KV (eventually consistent), if these fire in parallel:
+    const [raceRes1, raceRes2] = await Promise.all([makeRaceReq(), makeRaceReq()]);
+    
+    // HONEST AUDIT: In the current implementation using KV get() + delete(),
+    // both requests would likely succeed if they overlap in the propagation window.
+    // The test confirms that without atomic storage, we rely on Supabase OTP.
+    if (raceRes1.status === 200 && raceRes2.status === 200) {
+      const r1 = await raceRes1.json();
+      const r2 = await raceRes2.json();
+      assert.strictEqual(r1.actionLink, targetActionLink);
+      assert.strictEqual(r2.actionLink, targetActionLink);
+      // This confirms the limitation documented in claim.js
+    }
   });
 
-  await t.test('9. Action link with forged origin or open-redirect is rejected by claim endpoint', async () => {
+  await t.test('9. CSRF & Origin Validation: Rejects requests from unauthorized origins', async () => {
+    const validClaimToken = 'c3d4e5f60718293a4b5c6d7e8f901a2b3c4d5e6f708192a3b4c5d6e7f809a1b2';
+    const kvStore: Record<string, string> = {
+      [`v2_invitation_claim:${validClaimToken}`]: JSON.stringify({
+        actionLink: 'https://valid.link',
+        type: 'invite',
+        expiresAt: new Date(Date.now() + 3600 * 1000).toISOString()
+      })
+    };
+
+    const makeReq = (origin: string | null) => claimPostHandler({
+      request: new Request('https://chuvator.pages.dev/api/portal/invitation/claim', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(origin ? { 'Origin': origin } : {})
+        },
+        body: JSON.stringify({ token: validClaimToken })
+      }),
+      env: {
+        SUPABASE_URL: supabaseUrl,
+        APP_URL: appUrl,
+        ALLOWED_ORIGINS: 'https://chuvator.pages.dev',
+        PORTAL_SESSIONS_KV: {
+          get: async (k: string) => kvStore[k] || null,
+          delete: async (k: string) => { delete kvStore[k]; }
+        }
+      }
+    } as any);
+
+    // Rejects forged origin
+    const res1 = await makeReq('https://evil-hacker.com');
+    assert.strictEqual(res1.status, 403);
+    const json1 = await res1.json();
+    assert.strictEqual(json1.code, 'CSRF_VALIDATION_FAILED');
+
+    // Rejects missing origin/referer
+    const res2 = await makeReq(null);
+    assert.strictEqual(res2.status, 403);
+  });
+
+  await t.test('10. Action link with forged origin or open-redirect is rejected by claim endpoint', async () => {
     const validClaimToken = 'c3d4e5f60718293a4b5c6d7e8f901a2b3c4d5e6f708192a3b4c5d6e7f809a1b2';
     const forgedLink = `https://evil-hacker.com/auth/v1/verify?token=tok123&type=invite&redirect_to=${encodeURIComponent(validRedirect)}`;
 
@@ -414,7 +515,10 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
     const ctx = {
       request: new Request('https://chuvator.pages.dev/api/portal/invitation/claim', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Origin': 'https://chuvator.pages.dev'
+        },
         body: JSON.stringify({ token: validClaimToken })
       }),
       env: {

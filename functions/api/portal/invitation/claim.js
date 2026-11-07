@@ -8,7 +8,7 @@
  * to initiate browser-driven activation without crawler pre-fetching hazards.
  */
 
-import { getCorsHeaders } from '../_auth_v2.js';
+import { getCorsHeaders, verifyCsrf } from '../_auth_v2.js';
 import { validateSupabaseActionLink } from '../../tenant/parents/_invitation_helper.js';
 
 export async function onRequestOptions(context) {
@@ -53,6 +53,20 @@ export async function onRequestPost(context) {
     'Cache-Control': 'no-store',
     'Referrer-Policy': 'no-referrer'
   };
+
+  // 0. Strict CSRF & Origin Validation (Fail-Closed)
+  // Ensures request comes from the allowed CHUVATOR origin.
+  // Since this is a pre-session action, we verify Origin/Referer without a session-bound CSRF token.
+  if (!verifyCsrf(request, env)) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        code: 'CSRF_VALIDATION_FAILED',
+        message: 'Permintaan ditolak karena masalah keamanan (Invalid Origin/Referer).'
+      }),
+      { status: 403, headers: securityHeaders }
+    );
+  }
 
   try {
     const body = await request.json().catch(() => ({}));
@@ -178,9 +192,15 @@ export async function onRequestPost(context) {
     }
 
     // 6. One-Time Consumption / Invalidation
-    // KV delete is called immediately. Note: Due to Cloudflare KV's eventual consistency,
-    // concurrent rapid requests may execute within the propagation window.
-    // Supabase GoTrue Auth's atomic single-use OTP serves as the ultimate invariant.
+    // EVENTUAL CONSISTENCY WARNING:
+    // Cloudflare KV get() followed by delete() is NOT an atomic operation.
+    // In a distributed environment, two concurrent requests hitting different edge nodes
+    // at the exact same millisecond might both successfully execute get() before the
+    // first delete() propagates.
+    //
+    // NO atomic conditional claim storage (Durable Objects / D1) is currently available
+    // in this environment. We prioritize fail-closed behavior and rely on Supabase Auth's
+    // single-use OTP token as the final atomic invariant that prevents duplicate account activation.
     try {
       await kvBinding.delete(claimKey);
     } catch (_) {
