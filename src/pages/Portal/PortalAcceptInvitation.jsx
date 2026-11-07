@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../config/supabase';
+import { initInvitationSessionCallback } from '../../utils/portalAuthCallback.js';
 import {
   ShieldCheck,
   GraduationCap,
@@ -32,109 +33,30 @@ export default function PortalAcceptInvitation() {
   const [errorMsg, setErrorMsg] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
 
+  const sessionReceivedRef = useRef(false);
+  const timeoutRef = useRef(null);
+
   useEffect(() => {
-    let isMounted = true;
-
-    // Helper to validate user role & set session state
-    const processSession = (currentSession) => {
-      if (!isMounted) return;
-      if (!currentSession) {
-        setErrorMsg('Tautan undangan tidak valid atau telah kedaluwarsa. Silakan hubungi pengelola akademi.');
+    const { cleanup } = initInvitationSessionCallback({
+      supabaseClient: supabase,
+      locationObj: typeof window !== 'undefined' ? window.location : null,
+      onSuccess: (activeSession, activeUser) => {
+        setSession(activeSession);
+        setUser(activeUser);
+        setErrorMsg(null);
         setIsVerifying(false);
-        return;
-      }
-
-      const currentUser = currentSession.user;
-      if (currentUser?.user_metadata?.role !== 'parent') {
-        setErrorMsg('Akses ditolak. Akun ini bukan merupakan akun wali murid yang diizinkan.');
+      },
+      onError: (errMsg) => {
+        setErrorMsg(errMsg);
         setIsVerifying(false);
-        return;
-      }
-
-      setSession(currentSession);
-      setUser(currentUser);
-      setErrorMsg(null);
-      setIsVerifying(false);
-    };
-
-    // Check for explicit error parameters in URL (hash or query)
-    const checkUrlErrors = () => {
-      if (typeof window === 'undefined') return false;
-      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
-      const searchParams = new URLSearchParams(window.location.search);
-      const rawError = hashParams.get('error_description') || searchParams.get('error_description') || hashParams.get('error') || searchParams.get('error');
-
-      if (rawError) {
-        if (!isMounted) return true;
-        setErrorMsg(`Tautan undangan tidak valid atau telah kedaluwarsa: ${decodeURIComponent(rawError)}`);
-        setIsVerifying(false);
-        return true;
-      }
-      return false;
-    };
-
-    if (checkUrlErrors()) {
-      return;
-    }
-
-    // 1. Subscribe to auth state changes using the correct Supabase JS API method: onAuthStateChange
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, currentSession) => {
-      if (!isMounted) return;
-      if (currentSession) {
-        processSession(currentSession);
-      } else if (event === 'SIGNED_OUT') {
-        setErrorMsg('Tautan undangan tidak valid atau telah kedaluwarsa. Silakan hubungi pengelola akademi.');
-        setIsVerifying(false);
-      }
+      },
+      timeoutMs: 1500,
+      sessionReceivedRef,
+      timeoutRef
     });
 
-    // 2. Initial check for Supabase session (with tolerance for async PKCE / hash callback parsing)
-    const checkSession = async () => {
-      try {
-        const { data: { session: currentSession }, error } = await supabase.auth.getSession();
-        if (!isMounted) return;
-
-        if (error) {
-          setErrorMsg('Tautan undangan tidak valid atau telah kedaluwarsa. Silakan hubungi pengelola akademi.');
-          setIsVerifying(false);
-          return;
-        }
-
-        if (currentSession) {
-          processSession(currentSession);
-        } else {
-          // Check if there is an ongoing hash/PKCE callback in the URL
-          const hasUrlToken = typeof window !== 'undefined' && 
-            (window.location.hash.includes('access_token=') || window.location.search.includes('code='));
-
-          if (!hasUrlToken) {
-            setErrorMsg('Tautan undangan tidak valid atau telah kedaluwarsa. Silakan hubungi pengelola akademi.');
-            setIsVerifying(false);
-          } else {
-            // Give Supabase SDK time to parse URL callback if onAuthStateChange hasn't triggered yet
-            setTimeout(() => {
-              if (isMounted && !session) {
-                setErrorMsg('Tautan undangan tidak valid atau telah kedaluwarsa. Silakan hubungi pengelola akademi.');
-                setIsVerifying(false);
-              }
-            }, 1500);
-          }
-        }
-      } catch (err) {
-        if (isMounted) {
-          setErrorMsg('Terjadi kesalahan saat memverifikasi tautan.');
-          setIsVerifying(false);
-        }
-      }
-    };
-
-    checkSession();
-
     return () => {
-      isMounted = false;
-      if (subscription && typeof subscription.unsubscribe === 'function') {
-        subscription.unsubscribe();
-      }
+      cleanup();
     };
   }, []);
 

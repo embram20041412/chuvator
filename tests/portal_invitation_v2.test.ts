@@ -2,8 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert';
 import { onRequestPost as createParentPost } from '../functions/api/tenant/parents/index.js';
 import { onRequestPost as portalLoginPost } from '../functions/api/portal/v2/login.js';
+import { initInvitationSessionCallback } from '../src/utils/portalAuthCallback.js';
 
-test('CHUVATOR — Parent Portal V2.5.1 Comprehensive Invitation & Callback Flow', async (t) => {
+test('CHUVATOR — Parent Portal V2.5.2 Comprehensive Invitation & Callback Flow', async (t) => {
   const mockSecret = 'test-secret-123';
   const mockUrl = 'http://mock-supabase.local';
   const mockServiceKey = 'service-role-key';
@@ -47,7 +48,6 @@ test('CHUVATOR — Parent Portal V2.5.1 Comprehensive Invitation & Callback Flow
     }
   });
 
-  // Helper to capture fetch calls
   let fetchHistory: any[] = [];
   const originalFetch = global.fetch;
 
@@ -93,7 +93,6 @@ test('CHUVATOR — Parent Portal V2.5.1 Comprehensive Invitation & Callback Flow
       const inviteCall = fetchHistory.find(f => f.url.includes('/auth/v1/invite'));
       assert.ok(inviteCall, 'Should have called invite endpoint');
       
-      // Explicitly check URL query parameter redirect_to
       const inviteReqUrl = new URL(inviteCall.url);
       assert.strictEqual(
         inviteReqUrl.searchParams.get('redirect_to'),
@@ -101,7 +100,6 @@ test('CHUVATOR — Parent Portal V2.5.1 Comprehensive Invitation & Callback Flow
         'redirect_to query parameter must match activation page URL'
       );
 
-      // Explicitly check JSON body does NOT contain redirectTo property
       const invitePayload = JSON.parse(inviteCall.options.body);
       assert.strictEqual(invitePayload.redirectTo, undefined, 'redirectTo must not be in JSON body');
       assert.strictEqual(invitePayload.data.role, 'parent');
@@ -172,7 +170,6 @@ test('CHUVATOR — Parent Portal V2.5.1 Comprehensive Invitation & Callback Flow
       const data = await res.json();
       assert.strictEqual(data.code, 'PARENT_INSERT_FAILED');
 
-      // Verify log sanitization
       const dbErrorLog = logs.find(l => l[0].includes('[Database Error]'));
       assert.ok(dbErrorLog, 'Should log database error');
       const metadata = dbErrorLog[1];
@@ -183,7 +180,6 @@ test('CHUVATOR — Parent Portal V2.5.1 Comprehensive Invitation & Callback Flow
       assert.ok(!metadata.message, 'Should not contain raw message');
       assert.ok(!metadata.details, 'Should not contain raw details');
 
-      // Verify cleanup was called
       const cleanupCall = fetchHistory.find(f => f.url.includes('/auth/v1/admin/users/auth-id-to-delete') && f.options.method === 'DELETE');
       assert.ok(cleanupCall, 'Auth cleanup should be called');
     } finally {
@@ -192,76 +188,147 @@ test('CHUVATOR — Parent Portal V2.5.1 Comprehensive Invitation & Callback Flow
     }
   });
 
-  await t.test('5. Auth listener: onAuthStateChange handles valid parent session callback', async () => {
-    // Mock Supabase client auth methods
-    let authCallbackHandler: any = null;
-    let unsubscribeCalled = false;
+  await t.test('5. V2.5.2: Session received before timeout - no expiration error appears', async () => {
+    let successCalled = false;
+    let errorCalled = false;
 
-    const mockSupabase = {
+    const mockClient = {
       auth: {
-        onAuthStateChange: (cb: any) => {
-          authCallbackHandler = cb;
-          return {
-            data: {
-              subscription: {
-                unsubscribe: () => {
-                  unsubscribeCalled = true;
-                }
-              }
-            }
-          };
-        },
+        onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
         getSession: async () => ({
-          data: {
-            session: {
-              user: { email: 'parent@example.com', user_metadata: { role: 'parent' } }
-            }
-          },
+          data: { session: { user: { email: 'p@ex.com', user_metadata: { role: 'parent' } } } },
           error: null
         })
       }
     };
 
-    // Trigger listener callback
-    assert.ok(mockSupabase.auth.onAuthStateChange, 'onAuthStateChange method must exist');
-    const { data: { subscription } } = mockSupabase.auth.onAuthStateChange((event: string, session: any) => {
-      assert.strictEqual(event, 'SIGNED_IN');
-      assert.strictEqual(session.user.user_metadata.role, 'parent');
+    const locationMock: any = { hash: '#access_token=abc', search: '' };
+    const sessionReceivedRef = { current: false };
+    const timeoutRef = { current: null };
+
+    const { cleanup } = initInvitationSessionCallback({
+      supabaseClient: mockClient,
+      locationObj: locationMock,
+      onSuccess: () => { successCalled = true; },
+      onError: () => { errorCalled = true; },
+      timeoutMs: 100,
+      sessionReceivedRef,
+      timeoutRef
     });
 
-    authCallbackHandler('SIGNED_IN', {
-      user: { email: 'parent@example.com', user_metadata: { role: 'parent' } }
-    });
+    await new Promise(r => setTimeout(r, 50));
+    assert.strictEqual(successCalled, true, 'onSuccess should be called when session is valid');
+    assert.strictEqual(errorCalled, false, 'onError should NOT be called if session is received before timeout');
 
-    subscription.unsubscribe();
-    assert.strictEqual(unsubscribeCalled, true, 'subscription.unsubscribe() must be callable on unmount');
+    cleanup();
   });
 
-  await t.test('6. Auth listener: Handles invalid/expired token error in URL callback', async () => {
-    const hashParams = new URLSearchParams('error=access_denied&error_description=Email+link+is+invalid+or+has+expired');
-    const rawError = hashParams.get('error_description');
+  await t.test('6. V2.5.2: Session not received until timeout - expiration error appears', async () => {
+    let errorCalled = false;
+    let errorMsg = '';
 
-    assert.strictEqual(decodeURIComponent(rawError!), 'Email link is invalid or has expired');
-  });
-
-  await t.test('7. Auth listener: Missing session (No auth token present)', async () => {
-    const mockSupabase = {
+    const mockClient = {
       auth: {
-        getSession: async () => ({ data: { session: null }, error: null })
+        onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+        getSession: async () => ({
+          data: { session: null },
+          error: null
+        })
       }
     };
 
-    const res = await mockSupabase.auth.getSession();
-    assert.strictEqual(res.data.session, null, 'Should return null session when no token present');
+    const locationMock: any = { hash: '#access_token=abc', search: '' };
+    const sessionReceivedRef = { current: false };
+    const timeoutRef = { current: null };
+
+    const { cleanup } = initInvitationSessionCallback({
+      supabaseClient: mockClient,
+      locationObj: locationMock,
+      onSuccess: () => {},
+      onError: (msg: any) => { errorCalled = true; errorMsg = msg; },
+      timeoutMs: 50,
+      sessionReceivedRef,
+      timeoutRef
+    });
+
+    await new Promise(r => setTimeout(r, 120));
+    assert.strictEqual(errorCalled, true, 'onError should be called upon timeout if no session received');
+    assert.ok(errorMsg.includes('kedaluwarsa'), 'Error message should mention expiration');
+
+    cleanup();
   });
 
-  await t.test('8. Auth listener: Role mismatch (User is not parent)', async () => {
-    const staffSession = {
-      user: { email: 'staff@example.com', user_metadata: { role: 'staff' } }
+  await t.test('7. V2.5.2: Component unmount cleans up timeout and subscription', async () => {
+    let unsubscribed = false;
+
+    const mockClient = {
+      auth: {
+        onAuthStateChange: () => ({
+          data: {
+            subscription: {
+              unsubscribe: () => { unsubscribed = true; }
+            }
+          }
+        }),
+        getSession: async () => ({
+          data: { session: null },
+          error: null
+        })
+      }
     };
 
-    const isParentRole = staffSession.user.user_metadata?.role === 'parent';
-    assert.strictEqual(isParentRole, false, 'Non-parent role should be rejected');
+    const locationMock: any = { hash: '#access_token=abc', search: '' };
+    const sessionReceivedRef = { current: false };
+    const timeoutRef = { current: null };
+
+    const { cleanup } = initInvitationSessionCallback({
+      supabaseClient: mockClient,
+      locationObj: locationMock,
+      onSuccess: () => {},
+      onError: () => {},
+      timeoutMs: 500,
+      sessionReceivedRef,
+      timeoutRef
+    });
+
+    cleanup();
+    assert.strictEqual(unsubscribed, true, 'Subscription unsubscribe must be called on cleanup/unmount');
+    assert.strictEqual(timeoutRef.current, null, 'Timeout ref must be cleared on cleanup/unmount');
+  });
+
+  await t.test('8. V2.5.2: Callback role non-parent is rejected', async () => {
+    let errorCalled = false;
+    let errorMsg = '';
+
+    const mockClient = {
+      auth: {
+        onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+        getSession: async () => ({
+          data: { session: { user: { email: 'staff@ex.com', user_metadata: { role: 'staff' } } } },
+          error: null
+        })
+      }
+    };
+
+    const locationMock: any = { hash: '#access_token=abc', search: '' };
+    const sessionReceivedRef = { current: false };
+    const timeoutRef = { current: null };
+
+    const { cleanup } = initInvitationSessionCallback({
+      supabaseClient: mockClient,
+      locationObj: locationMock,
+      onSuccess: () => {},
+      onError: (msg: any) => { errorCalled = true; errorMsg = msg; },
+      timeoutMs: 100,
+      sessionReceivedRef,
+      timeoutRef
+    });
+
+    await new Promise(r => setTimeout(r, 50));
+    assert.strictEqual(errorCalled, true, 'onError should be called for non-parent role');
+    assert.ok(errorMsg.includes('Akses ditolak'), 'Error message should deny non-parent access');
+
+    cleanup();
   });
 
   await t.test('9. Password Update & V2 Session: Success flow', async () => {
@@ -299,7 +366,7 @@ test('CHUVATOR — Parent Portal V2.5.1 Comprehensive Invitation & Callback Flow
       '/auth/v1/token': { 
         body: { access_token: 'valid-token', user: { id: 'auth-id-123' }, expires_in: 3600 } 
       },
-      '/rest/v1/rpc/parent_get_children': { body: [] } // Empty = Unlinked
+      '/rest/v1/rpc/parent_get_children': { body: [] }
     });
 
     try {
