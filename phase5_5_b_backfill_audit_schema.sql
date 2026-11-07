@@ -1,10 +1,10 @@
 -- =============================================================================
--- CHUVATOR — FASE 5.5-B (HARDENING V2.1)
+-- CHUVATOR — FASE 5.5-B (KONSOLIDASI V2.2.2)
 -- PERSISTENT KK_HMAC BACKFILL AUDIT INFRASTRUCTURE & CONCURRENCY ENGINE
 -- File: phase5_5_b_backfill_audit_schema.sql
 -- Status: SPECIFICATION PREPARATION (DO NOT EXECUTE WITHOUT EXPLICIT APPROVAL)
 -- 
--- V2.1 HARDENING SPECIFICATION:
+-- V2.2.2 KONSOLIDASI SPECIFICATION:
 -- 1. Anti-Deadlock Row Locking: Eliminasi lock-upgrade dari FOR SHARE -> UPDATE.
 --    Seluruh RPC yang memodifikasi backfill_kk_runs menggunakan FOR UPDATE secara konsisten.
 -- 2. Strict Lock Hierarchy: Seluruh RPC mengunci tabel dalam urutan konsisten:
@@ -18,6 +18,8 @@
 --    dan trigger row-level untuk UPDATE/DELETE.
 -- 5. Strict Privilege Isolation: REVOKE EXECUTE dari PUBLIC, anon, authenticated.
 --    Hanya role service_role yang diberikan hak EXECUTE.
+-- 6. Source Mutability Guard: p_expected_no_kk wajib 16 digit dan divalidasi 
+--    terhadap nilai aktual di database sebelum mutasi (SOURCE_KK_MUTATED).
 -- =============================================================================
 
 BEGIN;
@@ -153,14 +155,6 @@ GRANT SELECT, INSERT ON TABLE public.backfill_kk_audit TO service_role;
 
 -- -----------------------------------------------------------------------------
 -- 5. RPC: acquire_backfill_kk_lease (DENGAN LEASE FENCING TOKEN & TENANT BINDING)
--- Serialisasi: Penguncian FOR UPDATE pada run aktif sebelum pembuatan run baru.
--- -----------------------------------------------------------------------------
-
-
-
-
--- -----------------------------------------------------------------------------
--- 5. RPC: acquire_backfill_kk_lease (DENGAN LEASE FENCING TOKEN & TENANT BINDING)
 -- Serialisasi: Transaction-level advisory lock + Penguncian FOR UPDATE pada run aktif.
 -- -----------------------------------------------------------------------------
 
@@ -179,12 +173,13 @@ DECLARE
     v_new_run_id UUID;
     v_new_token UUID;
     v_expires_at TIMESTAMPTZ;
+    v_safe_lease_seconds INTEGER;
 BEGIN
     -- 0. Lock transaksi global akuisisi lease untuk mencegah race condition antar-worker saat belum ada baris run
     PERFORM pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtext('chuvator_backfill_lease_acquisition'));
 
     -- 1. Validasi tenant_id wajib ada
-    IF p_tenant_id IS NULL OR p_tenant_id = '' THEN
+    IF p_tenant_id IS NULL OR pg_catalog.btrim(p_tenant_id) = '' THEN
         RETURN pg_catalog.jsonb_build_object(
             'success', false,
             'code', 'INVALID_TENANT_ID',
@@ -225,7 +220,8 @@ BEGIN
 
     -- 4. Terbitkan lease run baru dengan fencing token unik
     v_new_token := pg_catalog.gen_random_uuid();
-    v_expires_at := pg_catalog.now() + (GREATEST(p_lease_seconds, 30) || ' seconds')::pg_catalog.interval;
+    v_safe_lease_seconds := GREATEST(pg_catalog.coalesce(p_lease_seconds, 60), 30);
+    v_expires_at := pg_catalog.now() + (v_safe_lease_seconds || ' seconds')::pg_catalog.interval;
     
     INSERT INTO public.backfill_kk_runs (
         tenant_id,
@@ -274,10 +270,13 @@ SET search_path = ''
 AS $$
 DECLARE
     v_updated INTEGER;
+    v_safe_lease_seconds INTEGER;
 BEGIN
+    v_safe_lease_seconds := GREATEST(pg_catalog.coalesce(p_lease_seconds, 60), 30);
+
     UPDATE public.backfill_kk_runs
     SET heartbeat_at = pg_catalog.now(),
-        lease_expires_at = pg_catalog.now() + (GREATEST(p_lease_seconds, 30) || ' seconds')::pg_catalog.interval,
+        lease_expires_at = pg_catalog.now() + (v_safe_lease_seconds || ' seconds')::pg_catalog.interval,
         updated_at = pg_catalog.now()
     WHERE run_id = p_run_id
       AND lease_token = p_lease_token
@@ -333,8 +332,8 @@ DECLARE
     v_curr_last4 VARCHAR(4);
     v_curr_tenant TEXT;
 BEGIN
-    -- 0. Validasi Wajib Parameter p_expected_no_kk (16 digit angka murni)
-    IF p_expected_no_kk IS NULL OR pg_catalog.btrim(p_expected_no_kk) = '' OR p_expected_no_kk !~ '^[0-9]{16}$' THEN
+    -- 0. Validasi Wajib Parameter p_expected_no_kk (tepat 16 digit angka murni)
+    IF p_expected_no_kk IS NULL OR p_expected_no_kk !~ '^[0-9]{16}$' THEN
         RETURN pg_catalog.jsonb_build_object(
             'success', false,
             'code', 'INVALID_EXPECTED_NO_KK',
@@ -381,6 +380,7 @@ BEGIN
     END IF;
 
     -- 3. Validation of Source KK Mutability (Mandatory Unconditional Check)
+    -- Memastikan sumber data tidak berubah sejak dibaca oleh worker
     IF v_curr_no_kk IS DISTINCT FROM p_expected_no_kk THEN
         RETURN pg_catalog.jsonb_build_object(
             'success', false,
@@ -389,6 +389,7 @@ BEGIN
         );
     END IF;
 
+    -- Optimistic Concurrency Control untuk kolom hash
     IF (v_curr_hmac IS DISTINCT FROM p_expected_old_hmac) OR (v_curr_last4 IS DISTINCT FROM p_expected_old_last4) THEN
         RETURN pg_catalog.jsonb_build_object(
             'success', false,
@@ -461,8 +462,18 @@ SET search_path = ''
 AS $$
 DECLARE
     v_run RECORD;
+    v_student_exists BOOLEAN;
 BEGIN
-    -- Validasi lease token & kunci baris run dengan FOR UPDATE
+    -- 0. Validasi tenant_id wajib ada
+    IF p_tenant_id IS NULL OR pg_catalog.btrim(p_tenant_id) = '' THEN
+        RETURN pg_catalog.jsonb_build_object(
+            'success', false,
+            'code', 'INVALID_TENANT_ID',
+            'message', 'tenant_id wajib disertakan untuk mencatat riwayat skip.'
+        );
+    END IF;
+
+    -- 1. Validasi lease token & kunci baris run dengan FOR UPDATE
     SELECT run_id, tenant_id, lease_token, status, lease_expires_at INTO v_run
     FROM public.backfill_kk_runs
     WHERE run_id = p_run_id
@@ -484,7 +495,22 @@ BEGIN
         RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'LEASE_EXPIRED');
     END IF;
 
-    -- Catat skip event ke audit append-only
+    -- Validasi isolasi tenant run vs student tenant
+    IF v_run.tenant_id <> 'global' AND v_run.tenant_id <> p_tenant_id THEN
+        RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'TENANT_MISMATCH');
+    END IF;
+
+    -- 2. Validasi kepemilikan tenant atas siswa
+    SELECT EXISTS (
+        SELECT 1 FROM public.students 
+        WHERE id = p_student_id AND tenant_id = p_tenant_id
+    ) INTO v_student_exists;
+
+    IF NOT v_student_exists THEN
+        RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'STUDENT_NOT_FOUND');
+    END IF;
+
+    -- 3. Catat skip event ke audit append-only
     INSERT INTO public.backfill_kk_audit (
         run_id,
         event_type,
@@ -689,8 +715,7 @@ $$;
 
 
 -- -----------------------------------------------------------------------------
--- 10. RPC: complete_backfill_kk_run (VALIDASI FENCING TOKEN)
--- Operasi atomic single-statement update.
+-- 10. RPC: complete_backfill_kk_run (VALIDASI FENCING TOKEN & STATUS TERMINAL)
 -- -----------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION public.complete_backfill_kk_run(
@@ -704,18 +729,62 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
 AS $$
+DECLARE
+    v_run RECORD;
 BEGIN
+    -- 0. Validasi p_status tidak boleh NULL dan harus status terminal yang valid
+    IF p_status IS NULL OR p_status NOT IN ('COMPLETED', 'FAILED', 'ROLLED_BACK') THEN
+        RETURN pg_catalog.jsonb_build_object(
+            'success', false,
+            'code', 'INVALID_TERMINAL_STATUS',
+            'message', 'Status penyelesaian wajib disertakan (COMPLETED, FAILED, atau ROLLED_BACK).'
+        );
+    END IF;
+
+    -- 1. Kunci Baris Run dengan FOR UPDATE
+    SELECT run_id, lease_token, status, lease_expires_at INTO v_run
+    FROM public.backfill_kk_runs
+    WHERE run_id = p_run_id
+    FOR UPDATE;
+
+    IF NOT FOUND THEN
+        RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'RUN_NOT_FOUND');
+    END IF;
+
+    -- 2. Validasi status awal harus RUNNING (tidak boleh terminal yang sudah selesai)
+    IF v_run.status <> 'RUNNING' THEN
+        RETURN pg_catalog.jsonb_build_object(
+            'success', false, 
+            'code', 'RUN_ALREADY_TERMINAL',
+            'message', 'Siklus run tidak dapat diselesaikan karena sudah berada dalam status terminal: ' || v_run.status
+        );
+    END IF;
+
+    -- 3. Validasi fencing token
+    IF v_run.lease_token IS DISTINCT FROM p_lease_token THEN
+        RETURN pg_catalog.jsonb_build_object(
+            'success', false, 
+            'code', 'FENCING_TOKEN_MISMATCH',
+            'message', 'Lease token tidak valid atau telah diambil alih oleh worker lain.'
+        );
+    END IF;
+
+    -- 4. Validasi lease belum kedaluwarsa
+    IF v_run.lease_expires_at <= pg_catalog.now() THEN
+        RETURN pg_catalog.jsonb_build_object(
+            'success', false, 
+            'code', 'LEASE_EXPIRED',
+            'message', 'Masa berlaku lease telah kedaluwarsa sebelum penyelesaian run.'
+        );
+    END IF;
+
+    -- 5. Lakukan update status terminal
     UPDATE public.backfill_kk_runs
     SET status = p_status,
         completed_at = pg_catalog.now(),
         error_summary = p_error_summary,
         updated_at = pg_catalog.now()
-    WHERE run_id = p_run_id
-      AND lease_token = p_lease_token;
-
-    IF NOT FOUND THEN
-        RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'TOKEN_MISMATCH_OR_RUN_NOT_FOUND');
-    END IF;
+    WHERE run_id = p_run_id;
 
     RETURN pg_catalog.jsonb_build_object('success', true);
 END;

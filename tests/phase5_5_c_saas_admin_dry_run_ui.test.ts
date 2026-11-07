@@ -147,9 +147,9 @@ test('CHUVATOR — FASE 5.5-C: SaaS Admin & Tenant Controlled Backfill Integrati
   // 2. AUTHORIZATION & TENANT ISOLATION TESTS
   // =========================================================================
 
-  await t.test('4. Authorization: validateBackfillAdmin allows owner/admin/manager/superadmin and rejects kasir/coach/staff', async () => {
+  await t.test('4. Authorization: validateBackfillAdmin allows owner/admin/superadmin and rejects manager/kasir/coach/staff', async () => {
     // 1. Test allowed roles
-    for (const role of ['superadmin', 'owner', 'admin', 'manager']) {
+    for (const role of ['superadmin', 'owner', 'admin']) {
       const mockContext = {
         request: new Request('http://localhost/api/admin/backfill_kk_hmac', {
           headers: {
@@ -166,7 +166,7 @@ test('CHUVATOR — FASE 5.5-C: SaaS Admin & Tenant Controlled Backfill Integrati
     }
 
     // 2. Test forbidden roles
-    for (const role of ['kasir', 'coach', 'pelatih', 'staff']) {
+    for (const role of ['manager', 'kasir', 'coach', 'pelatih', 'staff']) {
       const mockContext = {
         request: new Request('http://localhost/api/admin/backfill_kk_hmac', {
           headers: {
