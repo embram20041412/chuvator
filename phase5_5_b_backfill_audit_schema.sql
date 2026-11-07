@@ -1,10 +1,10 @@
 -- =============================================================================
--- CHUVATOR — FASE 5.5-B (KONSOLIDASI V2.2.2)
+-- CHUVATOR — FASE 5.5-B (KONSOLIDASI V2.2.3)
 -- PERSISTENT KK_HMAC BACKFILL AUDIT INFRASTRUCTURE & CONCURRENCY ENGINE
 -- File: phase5_5_b_backfill_audit_schema.sql
 -- Status: SPECIFICATION PREPARATION (DO NOT EXECUTE WITHOUT EXPLICIT APPROVAL)
 -- 
--- V2.2.2 KONSOLIDASI SPECIFICATION:
+-- V2.2.3 PATCH SPECIFICATION:
 -- 1. Anti-Deadlock Row Locking: Eliminasi lock-upgrade dari FOR SHARE -> UPDATE.
 --    Seluruh RPC yang memodifikasi backfill_kk_runs menggunakan FOR UPDATE secara konsisten.
 -- 2. Strict Lock Hierarchy: Seluruh RPC mengunci tabel dalam urutan konsisten:
@@ -14,12 +14,15 @@
 -- 3. Hardened SECURITY DEFINER: SET search_path = '' pada seluruh fungsi.
 --    Semua tabel, view, dan fungsi pg_catalog (now, gen_random_uuid, jsonb_build_object, dll)
 --    wajib ber-kualifikasi schema eksplisit (public.*, pg_catalog.*).
+--    KECUALI konstruksi sintaks SQL murni seperti COALESCE.
 -- 4. True Append-Only (UPDATE, DELETE, TRUNCATE): Trigger statement-level untuk TRUNCATE
 --    dan trigger row-level untuk UPDATE/DELETE.
 -- 5. Strict Privilege Isolation: REVOKE EXECUTE dari PUBLIC, anon, authenticated.
 --    Hanya role service_role yang diberikan hak EXECUTE.
 -- 6. Source Mutability Guard: p_expected_no_kk wajib 16 digit dan divalidasi 
 --    terhadap nilai aktual di database sebelum mutasi (SOURCE_KK_MUTATED).
+-- 7. Consistent Skip Locking: record_backfill_kk_skip mengunci baris siswa (FOR UPDATE)
+--    untuk validasi kepemilikan tenant sebelum pencatatan audit.
 -- =============================================================================
 
 BEGIN;
@@ -220,7 +223,7 @@ BEGIN
 
     -- 4. Terbitkan lease run baru dengan fencing token unik
     v_new_token := pg_catalog.gen_random_uuid();
-    v_safe_lease_seconds := GREATEST(pg_catalog.coalesce(p_lease_seconds, 60), 30);
+    v_safe_lease_seconds := GREATEST(COALESCE(p_lease_seconds, 60), 30);
     v_expires_at := pg_catalog.now() + (v_safe_lease_seconds || ' seconds')::pg_catalog.interval;
     
     INSERT INTO public.backfill_kk_runs (
@@ -272,7 +275,7 @@ DECLARE
     v_updated INTEGER;
     v_safe_lease_seconds INTEGER;
 BEGIN
-    v_safe_lease_seconds := GREATEST(pg_catalog.coalesce(p_lease_seconds, 60), 30);
+    v_safe_lease_seconds := GREATEST(COALESCE(p_lease_seconds, 60), 30);
 
     UPDATE public.backfill_kk_runs
     SET heartbeat_at = pg_catalog.now(),
@@ -500,13 +503,12 @@ BEGIN
         RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'TENANT_MISMATCH');
     END IF;
 
-    -- 2. Validasi kepemilikan tenant atas siswa
-    SELECT EXISTS (
-        SELECT 1 FROM public.students 
-        WHERE id = p_student_id AND tenant_id = p_tenant_id
-    ) INTO v_student_exists;
+    -- 2. Validasi kepemilikan tenant atas siswa dengan penguncian (Lock Order Level 2)
+    SELECT 1 INTO v_student_exists FROM public.students 
+    WHERE id = p_student_id AND tenant_id = p_tenant_id
+    FOR UPDATE;
 
-    IF NOT v_student_exists THEN
+    IF NOT FOUND THEN
         RETURN pg_catalog.jsonb_build_object('success', false, 'code', 'STUDENT_NOT_FOUND');
     END IF;
 

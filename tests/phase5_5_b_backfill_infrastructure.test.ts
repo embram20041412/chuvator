@@ -13,7 +13,7 @@ const VERIFICATION_FILE_PATH = path.join(process.cwd(), 'phase5_5_b_backfill_ver
 const INDEX_FILE_PATH = path.join(process.cwd(), 'functions/api/admin/backfill_kk_hmac/index.js');
 const ROLLBACK_FILE_PATH = path.join(process.cwd(), 'functions/api/admin/backfill_kk_hmac/rollback.js');
 
-test('CHUVATOR — FASE 5.5-B: Hardened Backfill Infrastructure V2.2.2 (Security & Concurrency Suite)', async (t) => {
+test('CHUVATOR — FASE 5.5-B: Hardened Backfill Infrastructure V2.2.3 (Security & Concurrency Suite)', async (t) => {
   const schemaSql = fs.readFileSync(SCHEMA_FILE_PATH, 'utf8');
   const indexJs = fs.readFileSync(INDEX_FILE_PATH, 'utf8');
   const rollbackJs = fs.readFileSync(ROLLBACK_FILE_PATH, 'utf8');
@@ -95,6 +95,10 @@ test('CHUVATOR — FASE 5.5-B: Hardened Backfill Infrastructure V2.2.2 (Security
     assert.match(schemaSql, /(GREATEST|pg_catalog\.greatest)\(/);
     assert.match(schemaSql, /pg_catalog\.btrim\(/);
     assert.match(schemaSql, /pg_catalog\.interval/);
+
+    // V2.2.3 Patch: COALESCE is a syntax construct, must NOT have pg_catalog prefix
+    assert.match(schemaSql, /COALESCE\(p_lease_seconds, 60\)/);
+    assert.doesNotMatch(schemaSql, /pg_catalog\.coalesce/);
   });
 
   // =========================================================================
@@ -190,8 +194,8 @@ test('CHUVATOR — FASE 5.5-B: Hardened Backfill Infrastructure V2.2.2 (Security
     assert.match(schemaSql, /IF v_run\.tenant_id <> 'global' AND v_run\.tenant_id <> p_tenant_id THEN/);
     assert.match(schemaSql, /'code', 'TENANT_MISMATCH'/);
 
-    // Student ownership check
-    assert.match(schemaSql, /SELECT EXISTS \(\s+SELECT 1 FROM public\.students\s+WHERE id = p_student_id AND tenant_id = p_tenant_id\s+\) INTO v_student_exists;/);
+    // V2.2.3 Patch: Student ownership check WITH FOR UPDATE LOCK (Consolidated Hierarchy)
+    assert.match(schemaSql, /SELECT 1 INTO v_student_exists FROM public\.students\s+WHERE id = p_student_id AND tenant_id = p_tenant_id\s+FOR UPDATE;/);
     assert.match(schemaSql, /'code', 'STUDENT_NOT_FOUND'/);
   });
 
