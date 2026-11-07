@@ -1,6 +1,6 @@
 /**
  * Parent Management Service
- * Integrates with Cloudflare Pages Functions for FASE 5.5-B & V2.6.0
+ * Integrates with Cloudflare Pages Functions for V2.6.1 Lifecycle & Recovery
  */
 
 import { supabase } from '../config/supabase';
@@ -82,7 +82,7 @@ export const parentService = {
   },
 
   /**
-   * Resend activation invitation to existing parent account
+   * Resend activation invitation / recovery to existing parent account
    */
   resendInvitation: async (parentId) => {
     const headers = await getAuthHeaders();
@@ -100,7 +100,7 @@ export const parentService = {
   },
 
   /**
-   * Cancel / delete parent account registration and links
+   * Cancel / delete parent account registration and links securely
    */
   deleteParentAccount: async (parentId) => {
     const headers = await getAuthHeaders();
@@ -117,39 +117,19 @@ export const parentService = {
   },
 
   /**
-   * Fetch all parent accounts for the tenant
+   * Fetch all parent accounts with verified auth status from backend
    */
-  getParentAccounts: async (supabaseClient, tenantId) => {
-    try {
-      const { data, error } = await supabaseClient
-        .from('parent_accounts')
-        .select(`
-          *,
-          links:parent_student_links(
-            student:students(id, name, kk_last4)
-          )
-        `)
-        .eq('tenant_id', tenantId)
-        .order('created_at', { ascending: false });
+  getParentAccounts: async () => {
+    const headers = await getAuthHeaders();
+    const response = await fetch('/api/tenant/parents', {
+      method: 'GET',
+      headers
+    });
 
-      if (!error && Array.isArray(data)) return data;
-    } catch (_) {}
-
-    try {
-      const { data, error } = await supabaseClient
-        .from('parent_accounts')
-        .select(`
-          *,
-          links:parent_student_links(
-            student:students(id, name)
-          )
-        `)
-        .eq('tenant_id', tenantId)
-        .order('created_at', { ascending: false });
-
-      if (!error && Array.isArray(data)) return data;
-    } catch (_) {}
-
-    return [];
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || 'Gagal mengambil daftar akun wali murid.');
+    }
+    return data.data || [];
   }
 };

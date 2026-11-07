@@ -11,6 +11,117 @@ export async function onRequestOptions(context) {
   return new Response(null, { status: 204, headers: corsHeaders });
 }
 
+export async function onRequestGet(context) {
+  const { request, env = {} } = context;
+  const corsHeaders = getCorsHeaders(request, env);
+
+  try {
+    const authResult = await validateStaffSession(context);
+    if (!authResult.valid) {
+      return new Response(JSON.stringify({ success: false, message: authResult.message }), { status: 401, headers: corsHeaders });
+    }
+
+    const { role, tenantId: staffTenantId } = authResult.user;
+    if (!['superadmin', 'owner', 'admin'].includes(role)) {
+      return new Response(JSON.stringify({ success: false, message: 'Akses ditolak.' }), { status: 403, headers: corsHeaders });
+    }
+
+    const supabaseUrl = env.SUPABASE_URL;
+    const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return new Response(JSON.stringify({ success: false, message: 'Konfigurasi server tidak lengkap.' }), { status: 500, headers: corsHeaders });
+    }
+
+    let queryUrl = `${supabaseUrl}/rest/v1/parent_accounts?select=id,tenant_id,auth_uid,full_name,email,phone,created_at`;
+    if (role !== 'superadmin') {
+      queryUrl += `&tenant_id=eq.${encodeURIComponent(staffTenantId)}`;
+    }
+
+    const parentResp = await fetch(queryUrl, {
+      method: 'GET',
+      headers: {
+        'apikey': serviceRoleKey,
+        'Authorization': `Bearer ${serviceRoleKey}`,
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!parentResp.ok) {
+      return new Response(JSON.stringify({ success: false, message: 'Gagal mengambil data akun wali murid.' }), { status: 500, headers: corsHeaders });
+    }
+
+    const parents = await parentResp.json().catch(() => []);
+
+    const parentIds = parents.map(p => p.id);
+    let linksMap = {};
+    if (parentIds.length > 0) {
+      const linksUrl = `${supabaseUrl}/rest/v1/parent_student_links?parent_account_id=in.(${parentIds.map(id => `"${id}"`).join(',')})&select=parent_account_id,student:students(id,name,kk_last4)`;
+      const linksResp = await fetch(linksUrl, {
+        method: 'GET',
+        headers: {
+          'apikey': serviceRoleKey,
+          'Authorization': `Bearer ${serviceRoleKey}`,
+          'Accept': 'application/json'
+        }
+      });
+      if (linksResp.ok) {
+        const linksData = await linksResp.json().catch(() => []);
+        linksData.forEach(l => {
+          linksMap[l.parent_account_id] = linksMap[l.parent_account_id] || [];
+          linksMap[l.parent_account_id].push(l);
+        });
+      }
+    }
+
+    const enrichedParents = await Promise.all(parents.map(async (p) => {
+      let verificationStatus = 'unverifiable';
+      if (p.auth_uid) {
+        try {
+          const authUserResp = await fetch(`${supabaseUrl}/auth/v1/admin/users/${p.auth_uid}`, {
+            method: 'GET',
+            headers: {
+              'apikey': serviceRoleKey,
+              'Authorization': `Bearer ${serviceRoleKey}`
+            }
+          });
+          if (authUserResp.ok) {
+            const authUser = await authUserResp.json();
+            if (authUser && authUser.id) {
+              if (authUser.last_sign_in_at) {
+                verificationStatus = 'active';
+              } else {
+                verificationStatus = 'pending';
+              }
+            }
+          }
+        } catch (_) {
+          verificationStatus = 'unverifiable';
+        }
+      }
+
+      return {
+        ...p,
+        name: p.full_name,
+        status: verificationStatus,
+        links: linksMap[p.id] || []
+      };
+    }));
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        data: enrichedParents
+      }),
+      { status: 200, headers: corsHeaders }
+    );
+
+  } catch (err) {
+    console.error('List parents error:', err.message);
+    return new Response(JSON.stringify({ success: false, message: 'Terjadi kesalahan internal.' }), { status: 500, headers: corsHeaders });
+  }
+}
+
 export async function onRequestPost(context) {
   const { request, env = {} } = context;
   const corsHeaders = getCorsHeaders(request, env);

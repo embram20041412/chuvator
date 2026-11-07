@@ -1,6 +1,6 @@
 /**
  * Cloudflare Pages Function: POST /api/tenant/parents/resend
- * Resends invitation to an existing registered parent account.
+ * Invitation Recovery & Resend for existing parent accounts.
  */
 
 import { getCorsHeaders } from '../../portal/_auth_v2.js';
@@ -35,9 +35,17 @@ export async function onRequestPost(context) {
 
     const supabaseUrl = env.SUPABASE_URL;
     const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
+    const isProduction = env.ENVIRONMENT === 'production' || env.NODE_ENV === 'production';
 
     if (!supabaseUrl || !serviceRoleKey) {
       return new Response(JSON.stringify({ success: false, code: 'SUPABASE_CONFIG_MISSING', message: 'Konfigurasi server tidak lengkap.' }), { status: 500, headers: corsHeaders });
+    }
+
+    // Fail-closed rate limiting check
+    const kvBinding = env.PORTAL_RATELIMIT_KV || env.PORTAL_SESSIONS_KV;
+    if (isProduction && !kvBinding) {
+      console.error('FAIL_CLOSED: PORTAL_RATELIMIT_KV / PORTAL_SESSIONS_KV missing in production for resend.');
+      return new Response(JSON.stringify({ success: false, message: 'Konfigurasi rate limit server wajib tersedia di production.' }), { status: 500, headers: corsHeaders });
     }
 
     let queryUrl = `${supabaseUrl}/rest/v1/parent_accounts?select=id,tenant_id,email,auth_uid`;
@@ -69,11 +77,8 @@ export async function onRequestPost(context) {
     }
 
     const parent = parents[0];
-    const targetTenantId = parent.tenant_id;
     const targetEmail = parent.email;
 
-    // Rate limiting for resend (max 3 per 300s per parent)
-    const kvBinding = env.PORTAL_RATELIMIT_KV || env.PORTAL_SESSIONS_KV;
     if (kvBinding) {
       const rateKey = `v2_ratelimit:resend:${parent.id}`;
       const countStr = await kvBinding.get(rateKey);
@@ -84,51 +89,33 @@ export async function onRequestPost(context) {
       await kvBinding.put(rateKey, String(count + 1), { expirationTtl: 300 });
     }
 
-    const appUrl = env.APP_URL || 'https://chuvator.pages.dev';
-    const redirectUrl = `${appUrl.replace(/\/$/, '')}/portal/accept-invitation`;
-
-    const inviteUrlObj = new URL(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/generate_link`);
-    const inviteResp = await fetch(inviteUrlObj.toString(), {
+    // Use Supabase Auth recover endpoint to securely trigger recovery email for existing user
+    const recoverResp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/recover`, {
       method: 'POST',
       headers: {
         'apikey': serviceRoleKey,
         'Authorization': `Bearer ${serviceRoleKey}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        type: 'invite',
-        email: targetEmail,
-        options: {
-          redirectTo: redirectUrl
-        }
-      })
+      body: JSON.stringify({ email: targetEmail })
     });
 
-    if (!inviteResp.ok) {
-      const fallbackUrl = `${supabaseUrl.replace(/\/$/, '')}/auth/v1/invite`;
-      const fallbackResp = await fetch(fallbackUrl, {
-        method: 'POST',
-        headers: {
-          'apikey': serviceRoleKey,
-          'Authorization': `Bearer ${serviceRoleKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          email: targetEmail,
-          data: { role: 'parent', tenantId: targetTenantId },
-          redirectTo: redirectUrl
-        })
-      });
-
-      if (!fallbackResp.ok) {
-        return new Response(JSON.stringify({ success: false, code: 'RESEND_INVITATION_FAILED', message: 'Gagal mengirim ulang undangan melalui Supabase Auth.' }), { status: 500, headers: corsHeaders });
-      }
+    if (!recoverResp.ok) {
+      const errData = await recoverResp.json().catch(() => ({}));
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          code: 'RECOVERY_EMAIL_FAILED', 
+          message: `Gagal mengirim email pemulihan: ${errData.msg || errData.message || 'Error unknown'}` 
+        }),
+        { status: 500, headers: corsHeaders }
+      );
     }
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Undangan berhasil dikirim ulang ke email wali murid.'
+        message: 'Email pemulihan dan aktivasi berhasil dikirim ke wali murid.'
       }),
       { status: 200, headers: corsHeaders }
     );

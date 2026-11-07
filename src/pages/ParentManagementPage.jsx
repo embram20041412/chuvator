@@ -16,7 +16,6 @@ import {
   Send,
   Trash2
 } from 'lucide-react';
-import { supabase } from '../config/supabase';
 import { parentService } from '../services/parentService';
 
 export default function ParentManagementPage({ userProfile }) {
@@ -51,7 +50,7 @@ export default function ParentManagementPage({ userProfile }) {
     if (!tenantId) return;
     setLoading(true);
     try {
-      const data = await parentService.getParentAccounts(supabase, tenantId);
+      const data = await parentService.getParentAccounts();
       setParents(data);
     } catch (err) {
       console.error('Error fetching parents:', err);
@@ -122,9 +121,9 @@ export default function ParentManagementPage({ userProfile }) {
     setActionMessage(null);
     try {
       const res = await parentService.resendInvitation(parentId);
-      setActionMessage({ type: 'success', text: res.message || 'Undangan berhasil dikirim ulang.' });
+      setActionMessage({ type: 'success', text: res.message || 'Email pemulihan berhasil dikirim.' });
     } catch (err) {
-      setActionMessage({ type: 'error', text: err.message || 'Gagal mengirim ulang undangan.' });
+      setActionMessage({ type: 'error', text: err.message || 'Gagal mengirim email pemulihan.' });
     } finally {
       setActionLoadingId(null);
       setTimeout(() => setActionMessage(null), 4000);
@@ -139,7 +138,7 @@ export default function ParentManagementPage({ userProfile }) {
     setActionMessage(null);
     try {
       await parentService.deleteParentAccount(parentId);
-      setActionMessage({ type: 'success', text: 'Akun wali murid berhasil dihapus.' });
+      setActionMessage({ type: 'success', text: 'Akun wali murid berhasil dihapus secara aman.' });
       fetchParents();
     } catch (err) {
       setActionMessage({ type: 'error', text: err.message || 'Gagal menghapus akun.' });
@@ -173,9 +172,9 @@ export default function ParentManagementPage({ userProfile }) {
               <Users className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Manajemen Wali Murid V2.6.0</h1>
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Manajemen Wali Murid V2.6.1</h1>
               <p className="text-xs text-gray-500 mt-0.5">
-                Kelola siklus hidup akun portal wali murid, pengiriman ulang undangan, dan hubungan siswa.
+                Kelola siklus hidup akun portal wali murid, verifikasi status Auth, pemulihan undangan, dan hubungan siswa.
               </p>
             </div>
           </div>
@@ -224,7 +223,7 @@ export default function ParentManagementPage({ userProfile }) {
           {loading ? (
             <div className="p-12 text-center">
               <RefreshCw className="w-8 h-8 animate-spin text-indigo-500 mx-auto mb-3" />
-              <p className="text-sm text-gray-500 font-medium">Memuat data wali murid...</p>
+              <p className="text-sm text-gray-500 font-medium">Memverifikasi status akun wali murid...</p>
             </div>
           ) : filteredParents.length === 0 ? (
             <div className="p-12 text-center text-gray-500">
@@ -236,14 +235,21 @@ export default function ParentManagementPage({ userProfile }) {
                 <tr>
                   <th className="px-6 py-3">Nama Wali Murid</th>
                   <th className="px-6 py-3">Email & Telepon</th>
-                  <th className="px-6 py-3">Status Aktivasi</th>
+                  <th className="px-6 py-3">Status Aktivasi (Auth)</th>
                   <th className="px-6 py-3">Siswa Terhubung</th>
                   <th className="px-6 py-3 text-right">Aksi & Pemulihan</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filteredParents.map((parent) => {
-                  const isPending = !parent.activated_at && !parent.updated_at;
+                  const status = parent.status;
+                  let badge = { label: 'Menunggu Aktivasi', color: 'bg-amber-50 text-amber-700 border-amber-200' };
+                  if (status === 'active') {
+                    badge = { label: 'Aktif', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+                  } else if (status === 'unverifiable') {
+                    badge = { label: 'Tidak Dapat Diverifikasi', color: 'bg-red-50 text-red-700 border-red-200' };
+                  }
+
                   return (
                     <tr key={parent.id} className="hover:bg-gray-50/50 transition">
                       <td className="px-6 py-4">
@@ -263,10 +269,8 @@ export default function ParentManagementPage({ userProfile }) {
                         )}
                       </td>
                       <td className="px-6 py-4">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                          isPending ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        }`}>
-                          {isPending ? 'Menunggu Aktivasi' : 'Aktif'}
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${badge.color}`}>
+                          {badge.label}
                         </span>
                       </td>
                       <td className="px-6 py-4">
@@ -285,17 +289,17 @@ export default function ParentManagementPage({ userProfile }) {
                         <button 
                           onClick={() => handleResend(parent.id)}
                           disabled={actionLoadingId === parent.id}
-                          title="Kirim ulang undangan aktivasi"
-                          className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl font-bold transition inline-flex items-space space-x-1 disabled:opacity-50"
+                          title="Kirim ulang email pemulihan"
+                          className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl font-bold transition inline-flex items-center space-x-1 disabled:opacity-50"
                         >
                           {actionLoadingId === parent.id ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Send className="w-3 h-3" />}
-                          <span>Kirim Ulang</span>
+                          <span>Pemulihan Email</span>
                         </button>
                         <button 
                           onClick={() => handleDelete(parent.id, parent.name || parent.full_name)}
                           disabled={actionLoadingId === parent.id}
-                          title="Batalkan pendaftaran & hapus akun"
-                          className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl font-bold transition inline-flex items-space space-x-1 disabled:opacity-50"
+                          title="Batalkan pendaftaran & hapus akun secara aman"
+                          className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl font-bold transition inline-flex items-center space-x-1 disabled:opacity-50"
                         >
                           <Trash2 className="w-3 h-3" />
                           <span>Hapus</span>

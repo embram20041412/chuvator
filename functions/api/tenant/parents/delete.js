@@ -1,6 +1,6 @@
 /**
  * Cloudflare Pages Function: DELETE /api/tenant/parents?id=...
- * Cancels registration / deletes parent account and associated links.
+ * Safe deletion / cancellation of parent account with explicit checks at every step.
  */
 
 import { getCorsHeaders } from '../../portal/_auth_v2.js';
@@ -40,6 +40,7 @@ export async function onRequestDelete(context) {
       return new Response(JSON.stringify({ success: false, code: 'SUPABASE_CONFIG_MISSING', message: 'Konfigurasi server tidak lengkap.' }), { status: 500, headers: corsHeaders });
     }
 
+    // 1. Verify parent exists and belongs to tenant
     let parentQuery = `${supabaseUrl}/rest/v1/parent_accounts?id=eq.${encodeURIComponent(parentId)}&select=id,tenant_id,auth_uid`;
     if (role !== 'superadmin') {
       parentQuery += `&tenant_id=eq.${encodeURIComponent(staffTenantId)}`;
@@ -66,7 +67,7 @@ export async function onRequestDelete(context) {
     const parent = parents[0];
     const authUid = parent.auth_uid;
 
-    // Delete parent_student_links first
+    // 2. Explicit check: Delete parent_student_links
     const linkDelResp = await fetch(`${supabaseUrl}/rest/v1/parent_student_links?parent_account_id=eq.${encodeURIComponent(parentId)}`, {
       method: 'DELETE',
       headers: {
@@ -76,10 +77,10 @@ export async function onRequestDelete(context) {
     });
 
     if (!linkDelResp.ok && linkDelResp.status !== 404) {
-      return new Response(JSON.stringify({ success: false, message: 'Gagal menghapus relasi siswa wali murid.' }), { status: 500, headers: corsHeaders });
+      return new Response(JSON.stringify({ success: false, code: 'LINK_DELETE_FAILED', message: 'Gagal menghapus relasi siswa wali murid.' }), { status: 500, headers: corsHeaders });
     }
 
-    // Delete parent_accounts record
+    // 3. Explicit check: Delete parent_accounts record
     const parentDelResp = await fetch(`${supabaseUrl}/rest/v1/parent_accounts?id=eq.${encodeURIComponent(parentId)}`, {
       method: 'DELETE',
       headers: {
@@ -89,24 +90,28 @@ export async function onRequestDelete(context) {
     });
 
     if (!parentDelResp.ok) {
-      return new Response(JSON.stringify({ success: false, message: 'Gagal menghapus profil wali murid.' }), { status: 500, headers: corsHeaders });
+      return new Response(JSON.stringify({ success: false, code: 'PROFILE_DELETE_FAILED', message: 'Gagal menghapus profil wali murid.' }), { status: 500, headers: corsHeaders });
     }
 
-    // Delete Supabase Auth user
+    // 4. Explicit check: Delete Supabase Auth user if authUid exists
     if (authUid) {
-      await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUid}`, {
+      const authDelResp = await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUid}`, {
         method: 'DELETE',
         headers: {
           'apikey': serviceRoleKey,
           'Authorization': `Bearer ${serviceRoleKey}`
         }
-      }).catch(() => {});
+      });
+
+      if (!authDelResp.ok && authDelResp.status !== 404) {
+        return new Response(JSON.stringify({ success: false, code: 'AUTH_DELETE_FAILED', message: 'Gagal menghapus akun pengguna Auth.' }), { status: 500, headers: corsHeaders });
+      }
     }
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Akun wali murid berhasil dibatalkan dan dihapus.'
+        message: 'Akun wali murid berhasil dibatalkan dan dihapus secara aman.'
       }),
       { status: 200, headers: corsHeaders }
     );
