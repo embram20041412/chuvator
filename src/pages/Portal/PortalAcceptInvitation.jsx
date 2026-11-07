@@ -50,7 +50,7 @@ export default function PortalAcceptInvitation() {
         setErrorMsg(errMsg);
         setIsVerifying(false);
       },
-      timeoutMs: 1500,
+      timeoutMs: 5000,
       sessionReceivedRef,
       timeoutRef
     });

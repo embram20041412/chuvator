@@ -1,17 +1,21 @@
 /**
- * Handles Supabase invitation callback lifecycle:
+ * Handles Supabase invitation & recovery callback lifecycle:
  * - Detects URL errors without double-decoding
+ * - Supports both invite and recovery callback flows for parent role
+ * - Detects auth callback URL indicators (access_token, refresh_token, code, type=recovery, type=invite, token)
+ * - Tolerates delayed async session recovery without premature timeout failures
  * - Synchronously tracks session arrival via sessionReceivedRef to prevent race conditions
  * - Cancels callback timeout as soon as a valid session arrives
- * - Validates role 'parent'
+ * - Validates role 'parent' (from user_metadata or app_metadata)
  * - Cleans up timeout and subscription on unmount
+ * - NO logging of tokens, credentials, or hashes
  */
 export function initInvitationSessionCallback({
   supabaseClient,
   locationObj = typeof window !== 'undefined' ? window.location : null,
   onSuccess,
   onError,
-  timeoutMs = 1500,
+  timeoutMs = 5000,
   sessionReceivedRef = { current: false },
   timeoutRef = { current: null }
 }) {
@@ -45,6 +49,12 @@ export function initInvitationSessionCallback({
     }
   }
 
+  // Extract role safely from user_metadata or app_metadata
+  const getUserRole = (user) => {
+    if (!user) return null;
+    return user.user_metadata?.role || user.app_metadata?.role || null;
+  };
+
   // 2. Helper to validate user role & handle valid session
   const processSession = (currentSession) => {
     if (!isMounted) return;
@@ -57,7 +67,9 @@ export function initInvitationSessionCallback({
     }
 
     const currentUser = currentSession.user;
-    if (currentUser?.user_metadata?.role !== 'parent') {
+    const userRole = getUserRole(currentUser);
+
+    if (userRole !== 'parent') {
       clearTimeoutSafe();
       sessionReceivedRef.current = false;
       onError('Akses ditolak. Akun ini bukan merupakan akun wali murid yang diizinkan.');
@@ -70,7 +82,7 @@ export function initInvitationSessionCallback({
     onSuccess(currentSession, currentUser);
   };
 
-  // 3. Subscribe to onAuthStateChange
+  // 3. Subscribe to onAuthStateChange for all auth events (SIGNED_IN, INITIAL_SESSION, PASSWORD_RECOVERY, USER_UPDATED, TOKEN_REFRESHED)
   let subscription = null;
   if (supabaseClient?.auth?.onAuthStateChange) {
     const authStateRes = supabaseClient.auth.onAuthStateChange((event, currentSession) => {
@@ -108,14 +120,29 @@ export function initInvitationSessionCallback({
         // If session is already received via onAuthStateChange, do not start timeout or overwrite
         if (sessionReceivedRef.current) return;
 
-        const hasUrlToken = locationObj &&
-          (String(locationObj.hash || '').includes('access_token=') || String(locationObj.search || '').includes('code='));
+        const hashStr = String(locationObj?.hash || '');
+        const searchStr = String(locationObj?.search || '');
+        const hasUrlToken = locationObj && (
+          hashStr.includes('access_token=') ||
+          hashStr.includes('refresh_token=') ||
+          hashStr.includes('code=') ||
+          hashStr.includes('type=recovery') ||
+          hashStr.includes('type=invite') ||
+          searchStr.includes('access_token=') ||
+          searchStr.includes('refresh_token=') ||
+          searchStr.includes('code=') ||
+          searchStr.includes('type=recovery') ||
+          searchStr.includes('type=invite') ||
+          searchStr.includes('token=')
+        );
 
         if (!hasUrlToken) {
           clearTimeoutSafe();
-          onError('Tautan undangan tidak valid atau telah kedaluwarsa. Silakan hubungi pengelola akademi.');
+          if (!sessionReceivedRef.current) {
+            onError('Tautan undangan tidak valid atau telah kedaluwarsa. Silakan hubungi pengelola akademi.');
+          }
         } else {
-          // Ongoing URL callback parsing: set timeout
+          // Ongoing URL callback parsing: set timeout to allow async session parsing to complete
           clearTimeoutSafe();
           timeoutRef.current = setTimeout(() => {
             if (isMounted && !sessionReceivedRef.current) {
