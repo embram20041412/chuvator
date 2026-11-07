@@ -1,15 +1,15 @@
 /**
  * Cloudflare Pages Function: POST /api/tenant/parents/resend
- * Parent Portal WhatsApp-Only Invitation & Recovery (V2.6.11 Migration).
+ * Parent Portal WhatsApp-Only Invitation & Recovery (V2.6.11 Audit Hotfix).
  * Generates official Supabase Admin action link without email dispatch,
- * formats dynamic WhatsApp invitation template with verified tenant identity,
- * constructs safe wa.me URL, and tracks manual delivery confirmation.
+ * validates action link, strictly checks tenant identity from database,
+ * normalizes WhatsApp number, updates generatedAt, and ensures persistent status tracking.
  */
 
 import { getCorsHeaders } from '../../portal/_auth_v2.js';
 import { validateStaffSession } from '../_auth_staff.js';
 import {
-  normalizeWhatsAppNumber,
+  validateAndNormalizeWhatsAppNumber,
   generateWhatsAppMessage,
   buildWhatsAppUrl,
   isValidSupabaseActionLink,
@@ -188,33 +188,63 @@ export async function onRequestPost(context) {
       }
 
       const nowIso = new Date().toISOString();
+      let metaSaved = false;
+      let kvSaved = false;
 
-      // Persist in KV
-      if (kvBinding) {
-        await kvBinding.put(
-          `v2_invitation_status:${parent.id}`,
-          JSON.stringify({ status: 'SENT_MANUALLY', sentAt: nowIso, sentBy: staffUid }),
-          { expirationTtl: 86400 * 7 }
-        );
+      // 1. Primary: Persist in Supabase Auth user_metadata
+      try {
+        const metaResp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/users/${authUid}`, {
+          method: 'PUT',
+          headers: {
+            'apikey': serviceRoleKey,
+            'Authorization': `Bearer ${serviceRoleKey}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            user_metadata: {
+              ...(authUser.user_metadata || {}),
+              invitation_status: 'SENT_MANUALLY',
+              invitation_sent_at: nowIso,
+              invitation_sent_by: staffUid
+            }
+          })
+        });
+        metaSaved = metaResp.ok;
+      } catch (_) {
+        metaSaved = false;
       }
 
-      // Persist in Supabase Auth user_metadata
-      await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/users/${authUid}`, {
-        method: 'PUT',
-        headers: {
-          'apikey': serviceRoleKey,
-          'Authorization': `Bearer ${serviceRoleKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          user_metadata: {
-            ...(authUser.user_metadata || {}),
-            invitation_status: 'SENT_MANUALLY',
-            invitation_sent_at: nowIso,
-            invitation_sent_by: staffUid
-          }
-        })
-      }).catch(() => null);
+      // 2. Secondary/Cache: Persist in KV
+      if (kvBinding) {
+        try {
+          await kvBinding.put(
+            `v2_invitation_status:${parent.id}`,
+            JSON.stringify({
+              status: 'SENT_MANUALLY',
+              sentAt: nowIso,
+              sentBy: staffUid,
+              generatedAt: authUser.user_metadata?.invitation_generated_at || nowIso,
+              generatedBy: authUser.user_metadata?.invitation_generated_by || staffUid
+            }),
+            { expirationTtl: 86400 * 7 }
+          );
+          kvSaved = true;
+        } catch (_) {
+          kvSaved = false;
+        }
+      }
+
+      // Fail-closed if ALL persistence mechanisms failed
+      if (!metaSaved && !kvSaved) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            code: 'PERSISTENCE_FAILED',
+            message: 'Gagal mencatat status pengiriman manual ke database maupun penyimpanan sesi.'
+          }),
+          { status: 500, headers: corsHeaders }
+        );
+      }
 
       return new Response(
         JSON.stringify({
@@ -227,6 +257,35 @@ export async function onRequestPost(context) {
     }
 
     // 7. Handle Action: generate / resend WhatsApp invitation link
+    // Validate recipient WhatsApp phone number
+    const phoneCheck = validateAndNormalizeWhatsAppNumber(parent.phone);
+    if (!phoneCheck.valid) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          code: 'INVALID_PHONE_NUMBER',
+          message: `Nomor WhatsApp wali murid tidak valid: ${phoneCheck.error}`
+        }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    // Tenant Name Must Fail Closed (strictly from database)
+    let tenantName;
+    try {
+      tenantName = await getVerifiedTenantName(supabaseUrl, serviceRoleKey, targetTenantId);
+    } catch (tErr) {
+      const statusCode = tErr.code === 'TENANT_NOT_FOUND' ? 404 : 500;
+      return new Response(
+        JSON.stringify({
+          success: false,
+          code: tErr.code || 'TENANT_VERIFICATION_FAILED',
+          message: tErr.message || 'Gagal memverifikasi identitas tenant resmi.'
+        }),
+        { status: statusCode, headers: corsHeaders }
+      );
+    }
+
     const appUrl = env.APP_URL || 'https://chuvator.pages.dev';
     const redirectUrl = `${appUrl.replace(/\/$/, '')}/portal/accept-invitation`;
     const linkType = isConfirmed ? 'recovery' : 'invite';
@@ -262,19 +321,17 @@ export async function onRequestPost(context) {
     const linkData = await linkResp.json().catch(() => ({}));
     const actionLink = linkData.properties?.action_link || linkData.action_link;
 
-    if (!isValidSupabaseActionLink(actionLink, supabaseUrl)) {
+    // Strict action link validation (HTTPS, Supabase origin, /auth/v1/verify, type match, redirect_to match)
+    if (!isValidSupabaseActionLink(actionLink, { supabaseUrl, expectedType: linkType, appUrl })) {
       return new Response(
         JSON.stringify({ 
           success: false, 
-          code: 'GENERATE_LINK_FAILED', 
-          message: 'Tautan aksi tidak valid atau tidak berasal dari project Supabase yang dikonfigurasi.' 
+          code: 'INVALID_ACTION_LINK', 
+          message: 'Tautan aksi tidak valid atau tidak memenuhi standar keamanan.' 
         }),
         { status: 500, headers: corsHeaders }
       );
     }
-
-    // Fetch verified tenant name from database
-    const tenantName = await getVerifiedTenantName(supabaseUrl, serviceRoleKey, targetTenantId);
 
     // Build dynamic message and safe wa.me URL
     const parentName = parent.full_name || 'Bapak/Ibu';
@@ -284,16 +341,64 @@ export async function onRequestPost(context) {
       actionLink
     });
 
-    const normalizedPhone = normalizeWhatsAppNumber(parent.phone);
-    const whatsappUrl = buildWhatsAppUrl(parent.phone, message);
+    const whatsappUrl = buildWhatsAppUrl(phoneCheck.normalized, message);
 
-    // Reset status to READY_TO_SEND upon link regeneration
+    // Update generatedAt and RESET SENT_MANUALLY status in Supabase user_metadata & KV
     const nowIso = new Date().toISOString();
+    let metaUpdated = false;
+    let kvUpdated = false;
+
+    try {
+      const updateMetaResp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/users/${authUid}`, {
+        method: 'PUT',
+        headers: {
+          'apikey': serviceRoleKey,
+          'Authorization': `Bearer ${serviceRoleKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          user_metadata: {
+            ...(authUser.user_metadata || {}),
+            invitation_status: 'READY_TO_SEND',
+            invitation_generated_at: nowIso,
+            invitation_generated_by: staffUid,
+            invitation_sent_at: null,
+            invitation_sent_by: null
+          }
+        })
+      });
+      metaUpdated = updateMetaResp.ok;
+    } catch (_) {
+      metaUpdated = false;
+    }
+
     if (kvBinding) {
-      await kvBinding.put(
-        `v2_invitation_status:${parent.id}`,
-        JSON.stringify({ status: 'READY_TO_SEND', generatedAt: nowIso, generatedBy: staffUid }),
-        { expirationTtl: 86400 * 7 }
+      try {
+        await kvBinding.put(
+          `v2_invitation_status:${parent.id}`,
+          JSON.stringify({
+            status: 'READY_TO_SEND',
+            generatedAt: nowIso,
+            generatedBy: staffUid,
+            sentAt: null,
+            sentBy: null
+          }),
+          { expirationTtl: 86400 * 7 }
+        );
+        kvUpdated = true;
+      } catch (_) {
+        kvUpdated = false;
+      }
+    }
+
+    if (!metaUpdated && !kvUpdated) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          code: 'PERSISTENCE_FAILED',
+          message: 'Gagal memperbarui status dan waktu pembuatan undangan.'
+        }),
+        { status: 500, headers: corsHeaders }
       );
     }
 
@@ -309,19 +414,20 @@ export async function onRequestPost(context) {
         message: successMsg,
         actionLink,
         whatsappUrl,
-        phone: normalizedPhone,
+        phone: phoneCheck.normalized,
         data: {
           parentId: parent.id,
           parentName: parent.full_name,
           email: targetEmail,
-          phone: normalizedPhone,
+          phone: phoneCheck.normalized,
           rawPhone: parent.phone || '',
           tenantName,
           actionLink,
           message,
           whatsappUrl,
           isConfirmed,
-          type: linkType
+          type: linkType,
+          generatedAt: nowIso
         }
       }),
       { status: 200, headers: corsHeaders }

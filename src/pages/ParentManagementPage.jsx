@@ -104,6 +104,21 @@ export default function ParentManagementPage({ userProfile }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!formData.phone || !formData.phone.trim()) {
+      setFormError('Nomor WhatsApp wajib diisi.');
+      return;
+    }
+
+    const cleanedPhone = formData.phone.trim().replace(/\D/g, '');
+    let normalizedPhone = cleanedPhone;
+    if (normalizedPhone.startsWith('0')) normalizedPhone = '62' + normalizedPhone.slice(1);
+    else if (normalizedPhone.startsWith('8')) normalizedPhone = '62' + normalizedPhone;
+
+    if (normalizedPhone.length < 10 || normalizedPhone.length > 15 || (normalizedPhone.startsWith('62') && !normalizedPhone.startsWith('628'))) {
+      setFormError('Nomor WhatsApp tidak valid. Masukkan nomor seluler yang valid (contoh: 08123456789).');
+      return;
+    }
+
     if (selectedStudentIds.length === 0) {
       setFormError('Minimal pilih satu siswa untuk dihubungkan.');
       return;
@@ -114,6 +129,7 @@ export default function ParentManagementPage({ userProfile }) {
     try {
       const payload = {
         ...formData,
+        phone: normalizedPhone,
         studentIds: selectedStudentIds
       };
       const result = await parentService.createParentAccount(payload);
@@ -579,12 +595,13 @@ export default function ParentManagementPage({ userProfile }) {
                       </div>
                     </div>
                     <div className="space-y-1.5 text-left">
-                      <label className="block text-[11px] font-bold text-gray-700 uppercase px-1">Nomor WhatsApp / HP</label>
+                      <label className="block text-[11px] font-bold text-gray-700 uppercase px-1">Nomor WhatsApp <span className="text-red-500">*</span></label>
                       <div className="relative">
                         <Phone className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
                         <input 
                           type="tel"
-                          placeholder="08123456..."
+                          required
+                          placeholder="081234567890"
                           value={formData.phone}
                           onChange={(e) => setFormData({...formData, phone: e.target.value})}
                           className="w-full pl-9 pr-4 py-2 text-xs bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:border-emerald-500 font-mono"

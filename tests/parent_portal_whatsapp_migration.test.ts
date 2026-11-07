@@ -295,7 +295,7 @@ test('CHUVATOR PARENT PORTAL — WHATSAPP-ONLY INVITATION MIGRATION TEST SUITE',
 
   // --- 7. Resend token rotation ---
   await t.test('7. Resend token rotation: Pembuatan ulang invitation mereset status ke READY_TO_SEND dan memanggil generate_link', async () => {
-    const freshActionLink = 'https://mock-supabase.local/auth/v1/verify?token=rotated-token-999&type=invite';
+    const freshActionLink = 'https://mock-supabase.local/auth/v1/verify?token=rotated-token-999&type=invite&redirect_to=https://myapp.local/portal/accept-invitation';
 
     mockFetch([
       {
@@ -366,7 +366,7 @@ test('CHUVATOR PARENT PORTAL — WHATSAPP-ONLY INVITATION MIGRATION TEST SUITE',
 
   // --- 9. Existing activated account ---
   await t.test('9. Existing activated account: Akun yang sudah aktif menghasilkan tipe recovery dan status ACTIVATED', async () => {
-    const recoveryLink = 'https://mock-supabase.local/auth/v1/verify?token=recov-token-111&type=recovery';
+    const recoveryLink = 'https://mock-supabase.local/auth/v1/verify?token=recov-token-111&type=recovery&redirect_to=https://myapp.local/portal/accept-invitation';
 
     mockFetch([
       {
@@ -442,6 +442,13 @@ test('CHUVATOR PARENT PORTAL — WHATSAPP-ONLY INVITATION MIGRATION TEST SUITE',
           tenant_id: 'tenant_chua_01',
           kk_hmac: validHmac
         }],
+        status: 200
+      },
+      // Tenant lookup
+      {
+        pattern: '/rest/v1/tenants',
+        method: 'GET',
+        body: [{ id: 'tenant_chua_01', name: 'Chua Academy' }],
         status: 200
       },
       // Check existing parent email in same tenant

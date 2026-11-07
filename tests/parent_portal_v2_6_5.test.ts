@@ -129,9 +129,10 @@ test('CHUVATOR — Parent Portal V2.6.5 Final Type Alignment, Error Sanitization
 
   await t.test('3. Email delivery: Non-Supabase or non-HTTPS action link is rejected', async () => {
     mockFetch([
-      { pattern: '/rest/v1/parent_accounts?select=', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', email: 'parent@example.com', auth_uid: 'auth-123' }] },
+      { pattern: '/rest/v1/parent_accounts?select=', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', email: 'parent@example.com', phone: '081234567890', auth_uid: 'auth-123' }] },
       { pattern: '/auth/v1/admin/users/auth-123', method: 'GET', body: { id: 'auth-123', email_confirmed_at: null }, status: 200 },
-      { pattern: '/auth/v1/admin/generate_link', method: 'POST', body: { properties: { action_link: 'http://malicious-external.com/link' } }, status: 200 }
+      { pattern: '/auth/v1/admin/generate_link', method: 'POST', body: { properties: { action_link: 'http://malicious-external.com/link' } }, status: 200 },
+      { pattern: '/rest/v1/tenants', method: 'GET', body: [{ id: 'tenant-1', name: 'Tenant 1' }], status: 200 }
     ]);
 
     try {
@@ -139,7 +140,7 @@ test('CHUVATOR — Parent Portal V2.6.5 Final Type Alignment, Error Sanitization
       const res = await resendPost(ctx);
       assert.strictEqual(res.status, 500);
       const data = await res.json();
-      assert.strictEqual(data.code, 'GENERATE_LINK_FAILED');
+      assert.strictEqual(data.code, 'INVALID_ACTION_LINK');
     } finally {
       resetFetch();
     }
@@ -147,6 +148,7 @@ test('CHUVATOR — Parent Portal V2.6.5 Final Type Alignment, Error Sanitization
 
   await t.test('4. WhatsApp invitation: Successful action link with verified type: invite without email provider', async () => {
     let capturedGenerateBody: any = null;
+    const validLink = 'https://mock-supabase.local/auth/v1/verify?token=abc&xyz="test"&type=invite&redirect_to=https://myapp.local/portal/accept-invitation';
     mockFetch([
       { pattern: '/rest/v1/parent_accounts?select=', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', email: 'parent@example.com', auth_uid: 'auth-123', phone: '08123456789' }] },
       { pattern: '/auth/v1/admin/users/auth-123', method: 'GET', body: { id: 'auth-123', email_confirmed_at: null }, status: 200 },
@@ -155,7 +157,7 @@ test('CHUVATOR — Parent Portal V2.6.5 Final Type Alignment, Error Sanitization
         method: 'POST', 
         body: async (opts: any) => {
           capturedGenerateBody = JSON.parse(opts.body);
-          return { properties: { action_link: 'https://mock-supabase.local/verify?token=abc&xyz="test"' } };
+          return { properties: { action_link: validLink } };
         }, 
         status: 200 
       },

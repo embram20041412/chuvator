@@ -116,17 +116,18 @@ test('CHUVATOR — Parent Portal V2.6.8 Final Log Sanitization & Exception Test 
   // --- 1. ACTION LINK & WHATSAPP URL ASSERTIONS ---
 
   await t.test('A. Invite: Action link with special characters is returned for WhatsApp assistance and properly encoded', async () => {
-    const specialActionLink = 'https://mock-supabase.local/verify?token=abc&val="test"&quote=\'single\'&tag=<script>&end=>';
+    const specialActionLink = 'https://mock-supabase.local/auth/v1/verify?token=abc&val="test"&quote=\'single\'&tag=<script>&end=>&type=invite&redirect_to=https://myapp.local/portal/accept-invitation';
 
     mockFetch([
-      { pattern: '/rest/v1/parent_accounts?select=', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', email: 'parent@example.com', auth_uid: 'auth-123' }] },
+      { pattern: '/rest/v1/parent_accounts?select=', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', email: 'parent@example.com', phone: '081234567890', auth_uid: 'auth-123' }] },
       { pattern: '/auth/v1/admin/users/auth-123', method: 'GET', body: { id: 'auth-123', email_confirmed_at: null }, status: 200 },
       { 
         pattern: '/auth/v1/admin/generate_link', 
         method: 'POST', 
         body: { properties: { action_link: specialActionLink } }, 
         status: 200 
-      }
+      },
+      { pattern: '/rest/v1/tenants', method: 'GET', body: [{ id: 'tenant-1', name: 'Tenant One' }], status: 200 }
     ]);
 
     try {
@@ -137,7 +138,7 @@ test('CHUVATOR — Parent Portal V2.6.8 Final Log Sanitization & Exception Test 
       assert.strictEqual(data.success, true);
       assert.strictEqual(data.status, 'READY_TO_SEND');
       assert.strictEqual(data.actionLink, specialActionLink);
-      assert.ok(data.whatsappUrl.startsWith('https://wa.me/'));
+      assert.ok(data.whatsappUrl.startsWith('https://wa.me/6281234567890'));
       assert.ok(data.whatsappUrl.includes(encodeURIComponent(specialActionLink)));
 
       // Verify no Resend API calls were made
@@ -150,10 +151,10 @@ test('CHUVATOR — Parent Portal V2.6.8 Final Log Sanitization & Exception Test 
 
   await t.test('B. Recovery: Auth confirmed uses type recovery and returns WhatsApp url', async () => {
     let capturedGenerateBody: any = null;
-    const recoveryLink = 'https://mock-supabase.local/recovery?token=xyz&secure=true';
+    const recoveryLink = 'https://mock-supabase.local/auth/v1/verify?token=xyz&secure=true&type=recovery&redirect_to=https://myapp.local/portal/accept-invitation';
 
     mockFetch([
-      { pattern: '/rest/v1/parent_accounts?select=', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', email: 'parent@example.com', auth_uid: 'auth-123' }] },
+      { pattern: '/rest/v1/parent_accounts?select=', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', email: 'parent@example.com', phone: '081234567890', auth_uid: 'auth-123' }] },
       { pattern: '/auth/v1/admin/users/auth-123', method: 'GET', body: { id: 'auth-123', email_confirmed_at: '2026-01-01T00:00:00Z' }, status: 200 },
       { 
         pattern: '/auth/v1/admin/generate_link', 
@@ -163,7 +164,8 @@ test('CHUVATOR — Parent Portal V2.6.8 Final Log Sanitization & Exception Test 
           return { properties: { action_link: recoveryLink } };
         }, 
         status: 200 
-      }
+      },
+      { pattern: '/rest/v1/tenants', method: 'GET', body: [{ id: 'tenant-1', name: 'Tenant One' }], status: 200 }
     ]);
 
     try {
@@ -189,14 +191,15 @@ test('CHUVATOR — Parent Portal V2.6.8 Final Log Sanitization & Exception Test 
     const sensitiveEmail = 'private-parent@example.com';
 
     mockFetch([
-      { pattern: '/rest/v1/parent_accounts?select=', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', email: sensitiveEmail, auth_uid: 'auth-123' }] },
+      { pattern: '/rest/v1/parent_accounts?select=', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', email: sensitiveEmail, phone: '081234567890', auth_uid: 'auth-123' }] },
       { pattern: '/auth/v1/admin/users/auth-123', method: 'GET', body: { id: 'auth-123', email_confirmed_at: null }, status: 200 },
       { 
         pattern: '/auth/v1/admin/generate_link', 
         method: 'POST', 
         body: new Error(`Unexpected failure with token=${sensitiveToken} and email=${sensitiveEmail}`), 
         status: 500 
-      }
+      },
+      { pattern: '/rest/v1/tenants', method: 'GET', body: [{ id: 'tenant-1', name: 'Tenant One' }], status: 200 }
     ]);
 
     try {

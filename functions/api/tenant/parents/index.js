@@ -1,16 +1,17 @@
 /**
  * Cloudflare Pages Function: POST /api/tenant/parents & GET /api/tenant/parents
- * Parent Account Management & WhatsApp-Only Invitation (V2.6.11 Migration).
- * Creates Auth user via generateLink without sending email, enforces HMAC KK matching,
- * isolates tenants, and provides WhatsApp-ready dynamic invitation links.
+ * Parent Account Management & WhatsApp-Only Invitation (V2.6.11 Audit Hotfix).
+ * Creates Auth user via generateLink without sending email, enforces mandatory WhatsApp phone,
+ * validates action link, fail-closed tenant lookup, tracks persistent status, and enforces HMAC KK.
  */
 
 import { getCorsHeaders } from '../../portal/_auth_v2.js';
 import { validateStaffSession, normalizeKK, computeHMAC } from '../_auth_staff.js';
 import {
-  normalizeWhatsAppNumber,
+  validateAndNormalizeWhatsAppNumber,
   generateWhatsAppMessage,
   buildWhatsAppUrl,
+  isValidSupabaseActionLink,
   getVerifiedTenantName,
   determineInvitationStatus
 } from './_invitation_helper.js';
@@ -87,18 +88,15 @@ export async function onRequestGet(context) {
 
     const enrichedParents = await Promise.all(parents.map(async (p) => {
       let isConfirmed = false;
-      let isExpired = false;
       let manualSentAt = null;
+      let latestGeneratedAt = null;
 
-      // Check KV for manual sent status
+      let kvData = null;
       if (kvBinding) {
         try {
           const rawStatus = await kvBinding.get(`v2_invitation_status:${p.id}`);
           if (rawStatus) {
-            const parsed = JSON.parse(rawStatus);
-            if (parsed.status === 'SENT_MANUALLY') {
-              manualSentAt = parsed.sentAt;
-            }
+            kvData = JSON.parse(rawStatus);
           }
         } catch (_) {}
       }
@@ -116,31 +114,39 @@ export async function onRequestGet(context) {
             const authUser = await authUserResp.json();
             if (authUser && authUser.id) {
               isConfirmed = !!(authUser.email_confirmed_at || authUser.confirmed_at);
+              const meta = authUser.user_metadata || {};
 
-              // Check user_metadata for SENT_MANUALLY if not found in KV
-              if (!manualSentAt && authUser.user_metadata?.invitation_status === 'SENT_MANUALLY') {
-                manualSentAt = authUser.user_metadata.invitation_sent_at || true;
+              // Primary persistent source: Supabase Auth user_metadata
+              latestGeneratedAt = meta.invitation_generated_at || kvData?.generatedAt || authUser.invited_at || authUser.confirmation_sent_at || null;
+
+              if (meta.invitation_status === 'SENT_MANUALLY') {
+                manualSentAt = meta.invitation_sent_at || true;
+              } else if (kvData?.status === 'SENT_MANUALLY') {
+                manualSentAt = kvData.sentAt || true;
               }
 
-              // Check invitation expiration (TTL 24h without confirmation)
-              const inviteTime = authUser.invited_at || authUser.confirmation_sent_at || p.created_at;
-              if (inviteTime && !isConfirmed) {
-                const t = new Date(inviteTime).getTime();
-                if (!isNaN(t) && (Date.now() - t) > 86400 * 1000) {
-                  isExpired = true;
-                }
+              // If resend reset to READY_TO_SEND, ensure manualSentAt is cleared
+              if (meta.invitation_status === 'READY_TO_SEND' || (kvData?.status === 'READY_TO_SEND' && !meta.invitation_status)) {
+                manualSentAt = null;
               }
             }
           }
         } catch (_) {}
       }
 
+      // Fallback to KV if authUser fetch failed
+      if (!latestGeneratedAt && kvData?.generatedAt) {
+        latestGeneratedAt = kvData.generatedAt;
+      }
+      if (!manualSentAt && kvData?.status === 'SENT_MANUALLY') {
+        manualSentAt = kvData.sentAt || true;
+      }
+
       const invitationStatus = determineInvitationStatus({
         hasAuthUser: !!p.auth_uid,
         isConfirmed,
-        isExpired,
         manualSentAt,
-        invitationCreatedAt: p.created_at
+        invitationCreatedAt: latestGeneratedAt
       });
 
       return {
@@ -180,7 +186,7 @@ export async function onRequestPost(context) {
       );
     }
 
-    const { role, tenantId: staffTenantId } = authResult.user;
+    const { role, tenantId: staffTenantId, uid: staffUid } = authResult.user;
 
     // 2. RBAC: Owner/Admin/Superadmin only
     const allowedRoles = ['superadmin', 'owner', 'admin'];
@@ -222,6 +228,19 @@ export async function onRequestPost(context) {
     if (!name || !email || !kk || !Array.isArray(studentIds) || studentIds.length === 0) {
       return new Response(
         JSON.stringify({ success: false, message: 'Field name, email, kk, dan studentIds wajib diisi.' }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    // Mandatory WhatsApp phone validation (Backend independent validation)
+    const phoneCheck = validateAndNormalizeWhatsAppNumber(phone);
+    if (!phoneCheck.valid) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          code: 'INVALID_PHONE_NUMBER', 
+          message: phoneCheck.error || 'Nomor WhatsApp wajib diisi dengan format yang valid.' 
+        }),
         { status: 400, headers: corsHeaders }
       );
     }
@@ -308,63 +327,61 @@ export async function onRequestPost(context) {
         JSON.stringify({ 
           success: false, 
           code: 'STUDENT_VERIFICATION_FAILED', 
-          message: 'Sebagian atau seluruh data siswa yang dipilih tidak ditemukan atau tidak dapat diverifikasi.' 
+          message: 'Satu atau lebih siswa tidak ditemukan dalam sistem.' 
         }),
-        { status: 404, headers: corsHeaders }
+        { status: 400, headers: corsHeaders }
       );
     }
 
-    // Determine targetTenantId (Hardened for consistency)
-    let targetTenantId = staffTenantId || 'global';
-    if (role === 'superadmin' && foundStudents.length > 0) {
-      targetTenantId = foundStudents[0].tenant_id || 'global';
+    // Tenant Isolation Check across all selected students
+    const targetTenantId = (role === 'superadmin') ? foundStudents[0].tenant_id : staffTenantId;
+
+    if (!targetTenantId) {
+      return new Response(
+        JSON.stringify({ success: false, message: 'Siswa tidak memiliki tenant yang valid.' }),
+        { status: 400, headers: corsHeaders }
+      );
     }
 
-    for (const s of foundStudents) {
-      const studentTenant = s.tenant_id || 'global';
-
-      if (role !== 'superadmin') {
-        if (studentTenant !== staffTenantId) {
-          return new Response(
-            JSON.stringify({ 
-              success: false, 
-              code: 'STUDENT_TENANT_MISMATCH', 
-              message: `Siswa '${s.name || s.id}' tidak berasal dari tenant yang sama dengan Anda.` 
-            }),
-            { status: 403, headers: corsHeaders }
-          );
-        }
-      } else {
-        if (studentTenant !== targetTenantId) {
-          return new Response(
-            JSON.stringify({ 
-              success: false, 
-              code: 'STUDENT_TENANT_MISMATCH', 
-              message: `Seluruh siswa yang dipilih harus berasal dari tenant yang sama (${targetTenantId}).` 
-            }),
-            { status: 400, headers: corsHeaders }
-          );
-        }
-      }
-      
-      if (s.kk_hmac !== kkHmac) {
+    for (const student of foundStudents) {
+      if (!student.tenant_id) {
         return new Response(
-          JSON.stringify({ 
-            success: false, 
-            code: 'HMAC_MISMATCH', 
-            message: `Nomor KK tidak cocok dengan data siswa '${s.name || s.id}'.` 
-          }),
+          JSON.stringify({ success: false, message: `Siswa '${student.name}' belum memiliki data tenant_id.` }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+      if (student.tenant_id !== targetTenantId) {
+        return new Response(
+          JSON.stringify({ success: false, message: `Siswa '${student.name}' berada di tenant yang berbeda.` }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+      if (student.kk_hmac !== kkHmac) {
+        return new Response(
+          JSON.stringify({ success: false, message: `Verifikasi nomor KK gagal untuk siswa '${student.name}'.` }),
           { status: 400, headers: corsHeaders }
         );
       }
     }
 
-    // 7. Check if Parent account record already exists (Tenant-Scoped)
-    let parentCheckUrl = `${supabaseUrl}/rest/v1/parent_accounts?email=eq.${encodeURIComponent(normalizedEmail)}&select=id`;
-    if (role !== 'superadmin') {
-      parentCheckUrl += `&tenant_id=eq.${encodeURIComponent(targetTenantId)}`;
+    // 6.5 Fail-Closed Tenant Name Lookup (BEFORE generating Auth user)
+    let tenantName;
+    try {
+      tenantName = await getVerifiedTenantName(supabaseUrl, serviceRoleKey, targetTenantId);
+    } catch (tErr) {
+      const statusCode = tErr.code === 'TENANT_NOT_FOUND' ? 404 : 500;
+      return new Response(
+        JSON.stringify({
+          success: false,
+          code: tErr.code || 'TENANT_VERIFICATION_FAILED',
+          message: tErr.message || 'Gagal memverifikasi identitas tenant resmi.'
+        }),
+        { status: statusCode, headers: corsHeaders }
+      );
     }
-    
+
+    // 7. Check Duplicate Parent Email within the Target Tenant
+    const parentCheckUrl = `${supabaseUrl}/rest/v1/parent_accounts?email=eq.${encodeURIComponent(normalizedEmail)}&tenant_id=eq.${encodeURIComponent(targetTenantId)}&select=id`;
     const parentCheckResp = await fetch(parentCheckUrl, {
       method: 'GET',
       headers: {
@@ -373,19 +390,19 @@ export async function onRequestPost(context) {
         'Accept': 'application/json'
       }
     });
-    
+
     if (!parentCheckResp.ok) {
       return new Response(
         JSON.stringify({ 
           success: false, 
           code: 'PARENT_VERIFICATION_FAILED', 
-          message: 'Gagal memverifikasi status email wali murid.' 
+          message: 'Gagal memeriksa duplikasi email wali murid.' 
         }),
         { status: 500, headers: corsHeaders }
       );
     }
 
-    let existingParents = [];
+    let existingParents;
     try {
       existingParents = await parentCheckResp.json();
     } catch (e) {
@@ -412,6 +429,7 @@ export async function onRequestPost(context) {
 
     // 8. Generate Auth User & Activation Link via Supabase Auth Admin generate_link
     // (NO automatic email dispatched!)
+    const nowIso = new Date().toISOString();
     const appUrl = env.APP_URL || 'https://chuvator.pages.dev';
     const redirectUrl = `${appUrl.replace(/\/$/, '')}/portal/accept-invitation`;
 
@@ -430,7 +448,10 @@ export async function onRequestPost(context) {
           data: {
             name: name,
             role: 'parent',
-            tenantId: targetTenantId
+            tenantId: targetTenantId,
+            invitation_status: 'READY_TO_SEND',
+            invitation_generated_at: nowIso,
+            invitation_generated_by: staffUid
           }
         }
       })
@@ -463,14 +484,32 @@ export async function onRequestPost(context) {
       );
     }
 
+    // Strict Action Link Validation (HTTPS, Supabase origin, /auth/v1/verify, type: invite, redirect_to)
+    if (!isValidSupabaseActionLink(actionLink, { supabaseUrl, expectedType: 'invite', appUrl })) {
+      // Clean up Auth user immediately
+      await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUid}`, {
+        method: 'DELETE',
+        headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
+      }).catch(() => null);
+
+      return new Response(
+        JSON.stringify({
+          success: false,
+          code: 'INVALID_ACTION_LINK',
+          message: 'Tautan aktivasi yang dihasilkan tidak valid atau tidak memenuhi standar keamanan.'
+        }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
     // 9. Database Insertion (parent_accounts & parent_student_links)
     const parentPayload = {
       tenant_id: targetTenantId,
       auth_uid: authUid,
       email: normalizedEmail,
       full_name: name,
-      phone: phone || null,
-      created_at: new Date().toISOString()
+      phone: phoneCheck.normalized,
+      created_at: nowIso
     };
 
     const parentInsertResp = await fetch(`${supabaseUrl}/rest/v1/parent_accounts`, {
@@ -560,22 +599,24 @@ export async function onRequestPost(context) {
     }
 
     // 10. Generate WhatsApp Invitation message and wa.me URL
-    const tenantName = await getVerifiedTenantName(supabaseUrl, serviceRoleKey, targetTenantId);
     const message = generateWhatsAppMessage({
       parentName: name,
       tenantName,
       actionLink
     });
 
-    const normalizedPhone = normalizeWhatsAppNumber(phone);
-    const whatsappUrl = buildWhatsAppUrl(phone, message);
+    const whatsappUrl = buildWhatsAppUrl(phoneCheck.normalized, message);
 
-    // Record initial READY_TO_SEND status in KV
+    // Record initial READY_TO_SEND status in KV cache
     const kvBinding = env.PORTAL_RATELIMIT_KV || env.PORTAL_SESSIONS_KV;
     if (kvBinding) {
       await kvBinding.put(
         `v2_invitation_status:${parentId}`,
-        JSON.stringify({ status: 'READY_TO_SEND', generatedAt: new Date().toISOString() }),
+        JSON.stringify({
+          status: 'READY_TO_SEND',
+          generatedAt: nowIso,
+          generatedBy: staffUid
+        }),
         { expirationTtl: 86400 * 7 }
       );
     }
@@ -584,17 +625,21 @@ export async function onRequestPost(context) {
       JSON.stringify({
         success: true,
         message: 'Akun wali murid berhasil dibuat. Silakan kirim undangan melalui WhatsApp.',
+        actionLink,
+        whatsappUrl,
+        phone: phoneCheck.normalized,
         data: {
           parentId,
           authUid,
           email: normalizedEmail,
-          phone: normalizedPhone,
-          rawPhone: phone || '',
+          phone: phoneCheck.normalized,
+          rawPhone: phone,
           tenantName,
           actionLink,
           message,
           whatsappUrl,
-          status: 'READY_TO_SEND'
+          status: 'READY_TO_SEND',
+          generatedAt: nowIso
         }
       }),
       { status: 201, headers: corsHeaders }
