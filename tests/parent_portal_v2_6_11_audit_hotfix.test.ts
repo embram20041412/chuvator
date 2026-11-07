@@ -595,19 +595,21 @@ test('CHUVATOR PARENT PORTAL V2.6.11 — POST-MIGRATION AUDIT HOTFIX TEST SUITE'
     assert.strictEqual(isGoodValid, true, 'Action link with correct redirect destination must be accepted');
   });
 
-  // --- 13. Token lama dan baru diuji terhadap Supabase Auth sebenarnya atau integration test yang valid ---
-  await t.test('13. Token lama dan baru diuji terhadap Supabase Auth / GoTrue: Token pertama menjadi usang saat token kedua dihasilkan', async () => {
-    // Simulation of GoTrue token state inside auth.users table
+  // --- 13. Simulasi model rotasi token (Mock In-Memory) ---
+  // CATATAN: Ini adalah pengujian simulasi logika model single-slot overwriting in-memory,
+  // BUKAN integration test terhadap instance server Supabase/GoTrue sungguhan.
+  // Verifikasi pencabutan token pada server GoTrue aktual dicatat sebagai item tertunda
+  // menunggu lingkungan staging terisolasi. Tidak ada akun/data produksi yang digunakan.
+  await t.test('13. Simulasi model rotasi token (Mock In-Memory): Menguji asumsi logika bahwa token lama tertimpa ketika token baru dihasilkan', async () => {
+    // In-memory simulation of single-slot token state
     let currentStoredConfirmationToken: string | null = null;
 
     const simulateGenerateLink = (email: string, token: string) => {
-      // GoTrue updates confirmation_token on each generate_link call
       currentStoredConfirmationToken = token;
       return `https://mock-supabase.local/auth/v1/verify?token=${token}&type=invite&redirect_to=${encodeURIComponent(appUrl + '/portal/accept-invitation')}`;
     };
 
     const simulateVerifyLink = (token: string) => {
-      // GoTrue checks if incoming token matches the current stored token
       if (token === currentStoredConfirmationToken) {
         return { status: 200, success: true, message: 'Email confirmed successfully' };
       }
@@ -615,23 +617,23 @@ test('CHUVATOR PARENT PORTAL V2.6.11 — POST-MIGRATION AUDIT HOTFIX TEST SUITE'
     };
 
     // 1. Generate first invitation link
-    const token1 = 'supabase-gotrue-token-11111';
+    const token1 = 'simulated-token-11111';
     const link1 = simulateGenerateLink('parent.test@example.com', token1);
     assert.strictEqual(currentStoredConfirmationToken, token1);
 
-    // 2. Generate second invitation link (Token Rotation)
-    const token2 = 'supabase-gotrue-token-22222';
+    // 2. Generate second invitation link (Token Rotation simulation)
+    const token2 = 'simulated-token-22222';
     const link2 = simulateGenerateLink('parent.test@example.com', token2);
     assert.strictEqual(currentStoredConfirmationToken, token2);
 
-    // 3. Verify that Token 1 is now rejected (Revoked / Inactive)
+    // 3. Verify that Token 1 is now rejected under this model
     const verify1 = simulateVerifyLink(token1);
-    assert.strictEqual(verify1.status, 400, 'Old token must be rejected after rotation');
+    assert.strictEqual(verify1.status, 400, 'Under single-slot assumption, old token is rejected');
     assert.match(verify1.message, /expired or is invalid/i);
 
     // 4. Verify that Token 2 succeeds
     const verify2 = simulateVerifyLink(token2);
-    assert.strictEqual(verify2.status, 200, 'Newest token must be successfully verified');
+    assert.strictEqual(verify2.status, 200, 'Newest token succeeds');
     assert.strictEqual(verify2.success, true);
   });
 });

@@ -101,6 +101,8 @@ export async function onRequestGet(context) {
         } catch (_) {}
       }
 
+      let metaHasInvitationInfo = false;
+
       if (p.auth_uid) {
         try {
           const authUserResp = await fetch(`${supabaseUrl}/auth/v1/admin/users/${p.auth_uid}`, {
@@ -117,31 +119,50 @@ export async function onRequestGet(context) {
               const meta = authUser.user_metadata || {};
 
               // Primary persistent source: Supabase Auth user_metadata
-              latestGeneratedAt = meta.invitation_generated_at || kvData?.generatedAt || authUser.invited_at || authUser.confirmation_sent_at || null;
+              if (meta.invitation_status) {
+                metaHasInvitationInfo = true;
+                latestGeneratedAt = meta.invitation_generated_at || null;
 
-              if (meta.invitation_status === 'SENT_MANUALLY') {
-                manualSentAt = meta.invitation_sent_at || true;
-              } else if (kvData?.status === 'SENT_MANUALLY') {
-                manualSentAt = kvData.sentAt || true;
+                if (meta.invitation_status === 'SENT_MANUALLY') {
+                  manualSentAt = meta.invitation_sent_at || true;
+                } else if (meta.invitation_status === 'READY_TO_SEND') {
+                  // Explicitly READY_TO_SEND in primary source; NEVER beaten by stale KV SENT_MANUALLY!
+                  manualSentAt = null;
+                }
               }
 
-              // If resend reset to READY_TO_SEND, ensure manualSentAt is cleared
-              if (meta.invitation_status === 'READY_TO_SEND' || (kvData?.status === 'READY_TO_SEND' && !meta.invitation_status)) {
-                manualSentAt = null;
+              // Fallback to auth-level invitation timestamps if metadata doesn't have generatedAt
+              if (!latestGeneratedAt) {
+                latestGeneratedAt = authUser.invited_at || authUser.confirmation_sent_at || null;
               }
             }
           }
         } catch (_) {}
       }
 
-      // Fallback to KV if authUser fetch failed
-      if (!latestGeneratedAt && kvData?.generatedAt) {
-        latestGeneratedAt = kvData.generatedAt;
-      }
-      if (!manualSentAt && kvData?.status === 'SENT_MANUALLY') {
-        manualSentAt = kvData.sentAt || true;
+      // KV is strictly a secondary fallback if user_metadata does not contain invitation info or Auth fetch failed
+      if (!metaHasInvitationInfo && kvData) {
+        if (kvData.status === 'SENT_MANUALLY') {
+          manualSentAt = kvData.sentAt || true;
+        } else if (kvData.status === 'READY_TO_SEND') {
+          manualSentAt = null;
+        }
+        if (!latestGeneratedAt && kvData.generatedAt) {
+          latestGeneratedAt = kvData.generatedAt;
+        }
       }
 
+      // Timestamp consistency enforcement:
+      // If invitation was generated AFTER it was marked sent, the manual sent status is superseded/obsolete
+      if (manualSentAt && latestGeneratedAt && typeof manualSentAt === 'string' && typeof latestGeneratedAt === 'string') {
+        const genTime = new Date(latestGeneratedAt).getTime();
+        const sentTime = new Date(manualSentAt).getTime();
+        if (!isNaN(genTime) && !isNaN(sentTime) && genTime > sentTime) {
+          manualSentAt = null;
+        }
+      }
+
+      // Determine clear invitation status (invitationCreatedAt strictly uses latestGeneratedAt, NEVER p.created_at)
       const invitationStatus = determineInvitationStatus({
         hasAuthUser: !!p.auth_uid,
         isConfirmed,
@@ -607,18 +628,23 @@ export async function onRequestPost(context) {
 
     const whatsappUrl = buildWhatsAppUrl(phoneCheck.normalized, message);
 
-    // Record initial READY_TO_SEND status in KV cache
+    // Record initial READY_TO_SEND status in KV cache (non-blocking fallback)
     const kvBinding = env.PORTAL_RATELIMIT_KV || env.PORTAL_SESSIONS_KV;
     if (kvBinding) {
-      await kvBinding.put(
-        `v2_invitation_status:${parentId}`,
-        JSON.stringify({
-          status: 'READY_TO_SEND',
-          generatedAt: nowIso,
-          generatedBy: staffUid
-        }),
-        { expirationTtl: 86400 * 7 }
-      );
+      try {
+        await kvBinding.put(
+          `v2_invitation_status:${parentId}`,
+          JSON.stringify({
+            status: 'READY_TO_SEND',
+            generatedAt: nowIso,
+            generatedBy: staffUid
+          }),
+          { expirationTtl: 86400 * 7 }
+        );
+      } catch (_) {
+        // KV is only a cache/fallback. Failure to write to KV cache must not fail account creation
+        // or trigger cleanup of the newly created account.
+      }
     }
 
     return new Response(
