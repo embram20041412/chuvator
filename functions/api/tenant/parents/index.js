@@ -651,7 +651,7 @@ export async function onRequestPost(context) {
 
     const claimToken = generateClaimToken();
     const claimKey = `v2_invitation_claim:${claimToken}`;
-    const claimTtlSeconds = 3600; // 1 jam (tidak melebihi masa berlaku OTP Supabase)
+    const claimTtlSeconds = 3000; // 50 menit (dengan buffer 10 menit dari OTP Supabase 3600s)
     const claimExpiresAt = new Date(Date.now() + claimTtlSeconds * 1000).toISOString();
 
     try {

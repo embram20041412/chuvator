@@ -294,7 +294,7 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
           tenantId: 'tenant_chua_01',
           type: 'invite',
           createdAt: new Date().toISOString(),
-          expiresAt: new Date(Date.now() + 3600 * 1000).toISOString()
+          expiresAt: new Date(Date.now() + 3000 * 1000).toISOString()
         })
       };
 
@@ -351,7 +351,7 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
           parentId: 'parent-001',
           type: 'invite',
           createdAt: new Date(Date.now() - 7200 * 1000).toISOString(),
-          expiresAt: new Date(Date.now() - 3600 * 1000).toISOString() // Expired 1 hr ago
+          expiresAt: new Date(Date.now() - 3000 * 1000).toISOString() // Expired 1 hr ago
         })
       };
 
@@ -376,7 +376,7 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
         tenantId: 'tenant_chua_01',
         type: 'invite',
         createdAt: new Date().toISOString(),
-        expiresAt: new Date(Date.now() + 3600 * 1000).toISOString()
+        expiresAt: new Date(Date.now() + 3000 * 1000).toISOString()
       })
     };
 
@@ -420,7 +420,7 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
     const raceRecord = JSON.stringify({
       actionLink: targetActionLink,
       type: 'invite',
-      expiresAt: new Date(Date.now() + 3600 * 1000).toISOString()
+      expiresAt: new Date(Date.now() + 3000 * 1000).toISOString()
     });
     
     let reads = 0;
@@ -481,7 +481,7 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
       [`v2_invitation_claim:${validClaimToken}`]: JSON.stringify({
         actionLink: 'https://valid.link',
         type: 'invite',
-        expiresAt: new Date(Date.now() + 3600 * 1000).toISOString()
+        expiresAt: new Date(Date.now() + 3000 * 1000).toISOString()
       })
     };
 
@@ -524,7 +524,7 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
       [`v2_invitation_claim:${validClaimToken}`]: JSON.stringify({
         actionLink: forgedLink,
         type: 'invite',
-        expiresAt: new Date(Date.now() + 3600 * 1000).toISOString()
+        expiresAt: new Date(Date.now() + 3000 * 1000).toISOString()
       })
     };
 
@@ -669,7 +669,7 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
           get: async () => JSON.stringify({
             actionLink: targetActionLink,
             type: 'invite',
-            expiresAt: new Date(Date.now() + 3600 * 1000).toISOString()
+            expiresAt: new Date(Date.now() + 3000 * 1000).toISOString()
           }),
           delete: async () => { throw new Error('Simulated KV Delete Outage'); }
         }
