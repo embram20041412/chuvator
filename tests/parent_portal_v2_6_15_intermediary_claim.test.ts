@@ -415,7 +415,7 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
     assert.strictEqual(json2.success, false);
 
     // 8b. Concurrency Honest Audit: Simulating Race Condition (KV Eventual Consistency Window)
-    // We mock a race where two requests hit the 'get()' before the first 'delete()' is processed.
+    // We use a barrier to force two requests to hit the 'get' phase simultaneously.
     const validClaimTokenRace = 'd4e5f60718293a4b5c6d7e8f901a2b3c4d5e6f708192a3b4c5d6e7f809a1b2c3';
     const raceRecord = JSON.stringify({
       actionLink: targetActionLink,
@@ -423,8 +423,10 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
       expiresAt: new Date(Date.now() + 3600 * 1000).toISOString()
     });
     
-    // Custom mock that delays deletion to simulate the propagation window
-    let deleteStarted = false;
+    let reads = 0;
+    let barrierResolve: (v: any) => void;
+    const barrier = new Promise(resolve => { barrierResolve = resolve; });
+
     const kvStoreRace: Record<string, string> = {
       [`v2_invitation_claim:${validClaimTokenRace}`]: raceRecord
     };
@@ -442,10 +444,14 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
         SUPABASE_URL: supabaseUrl,
         APP_URL: appUrl,
         PORTAL_SESSIONS_KV: {
-          get: async (k: string) => kvStoreRace[k] || null,
+          get: async (k: string) => {
+            reads++;
+            if (reads >= 2) barrierResolve(true);
+            await barrier; // Force both to wait until both have entered 'get'
+            return kvStoreRace[k] || null;
+          },
           delete: async (k: string) => { 
-            deleteStarted = true;
-            // Delay actual deletion to simulate eventual consistency / propagation lag
+            // Simulated propagation delay
             await new Promise(r => setTimeout(r, 10));
             delete kvStoreRace[k]; 
           }
@@ -453,19 +459,20 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
       }
     } as any);
 
-    // In Cloudflare KV (eventually consistent), if these fire in parallel:
+    // HONEST AUDIT: Since Cloudflare KV get() + delete() is not atomic,
+    // if two requests overlap in the propagation window, both may succeed.
     const [raceRes1, raceRes2] = await Promise.all([makeRaceReq(), makeRaceReq()]);
     
-    // HONEST AUDIT: In the current implementation using KV get() + delete(),
-    // both requests would likely succeed if they overlap in the propagation window.
-    // The test confirms that without atomic storage, we rely on Supabase OTP.
-    if (raceRes1.status === 200 && raceRes2.status === 200) {
-      const r1 = await raceRes1.json();
-      const r2 = await raceRes2.json();
-      assert.strictEqual(r1.actionLink, targetActionLink);
-      assert.strictEqual(r2.actionLink, targetActionLink);
-      // This confirms the limitation documented in claim.js
-    }
+    assert.strictEqual(raceRes1.status, 200, 'First request in race should succeed');
+    assert.strictEqual(raceRes2.status, 200, 'Second request in race succeeds due to non-atomic KV get-then-delete');
+
+    const r1 = await raceRes1.json();
+    const r2 = await raceRes2.json();
+    assert.strictEqual(r1.actionLink, targetActionLink);
+    assert.strictEqual(r2.actionLink, targetActionLink);
+    
+    // Final state check: eventually it is deleted
+    assert.strictEqual(kvStoreRace[`v2_invitation_claim:${validClaimTokenRace}`], undefined);
   });
 
   await t.test('9. CSRF & Origin Validation: Rejects requests from unauthorized origins', async () => {
