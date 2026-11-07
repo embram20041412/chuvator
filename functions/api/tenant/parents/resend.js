@@ -302,9 +302,7 @@ export async function onRequestPost(context) {
       body: JSON.stringify({
         type: linkType,
         email: targetEmail,
-        options: {
-          redirectTo: redirectUrl
-        }
+        redirect_to: redirectUrl
       })
     });
 

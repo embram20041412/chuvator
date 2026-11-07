@@ -465,16 +465,14 @@ export async function onRequestPost(context) {
       body: JSON.stringify({
         type: 'invite',
         email: normalizedEmail,
-        options: {
-          redirectTo: redirectUrl,
-          data: {
-            name: name,
-            role: 'parent',
-            tenantId: targetTenantId,
-            invitation_status: 'READY_TO_SEND',
-            invitation_generated_at: nowIso,
-            invitation_generated_by: staffUid
-          }
+        redirect_to: redirectUrl,
+        data: {
+          name: name,
+          role: 'parent',
+          tenantId: targetTenantId,
+          invitation_status: 'READY_TO_SEND',
+          invitation_generated_at: nowIso,
+          invitation_generated_by: staffUid
         }
       })
     });
