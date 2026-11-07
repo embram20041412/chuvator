@@ -1,40 +1,20 @@
 /**
  * Cloudflare Pages Function: POST /api/tenant/parents/resend
- * Email Action Link Delivery via Resend with strict URL validation, error sanitization,
- * and fail-closed Auth user verification.
+ * Parent Portal WhatsApp-Only Invitation & Recovery (V2.6.11 Migration).
+ * Generates official Supabase Admin action link without email dispatch,
+ * formats dynamic WhatsApp invitation template with verified tenant identity,
+ * constructs safe wa.me URL, and tracks manual delivery confirmation.
  */
 
 import { getCorsHeaders } from '../../portal/_auth_v2.js';
 import { validateStaffSession } from '../_auth_staff.js';
-
-function escapeHtml(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
-function isValidEmailFormat(email) {
-  if (!email || typeof email !== 'string') return false;
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
-}
-
-function isValidSupabaseActionLink(link, supabaseUrl) {
-  if (!link || typeof link !== 'string') return false;
-  try {
-    const url = new URL(link);
-    if (url.protocol !== 'https:') return false;
-    const baseClean = supabaseUrl.replace(/\/$/, '');
-    const urlOrigin = url.origin;
-    const baseOrigin = new URL(baseClean).origin;
-    return urlOrigin === baseOrigin;
-  } catch {
-    return false;
-  }
-}
+import {
+  normalizeWhatsAppNumber,
+  generateWhatsAppMessage,
+  buildWhatsAppUrl,
+  isValidSupabaseActionLink,
+  getVerifiedTenantName
+} from './_invitation_helper.js';
 
 export async function onRequestOptions(context) {
   const corsHeaders = getCorsHeaders(context.request, context.env);
@@ -46,21 +26,32 @@ export async function onRequestPost(context) {
   const corsHeaders = getCorsHeaders(request, env);
 
   try {
+    // 1. Staff Authentication & RBAC
     const authResult = await validateStaffSession(context);
     if (!authResult.valid) {
-      return new Response(JSON.stringify({ success: false, message: authResult.message }), { status: 401, headers: corsHeaders });
+      return new Response(
+        JSON.stringify({ success: false, message: authResult.message }),
+        { status: 401, headers: corsHeaders }
+      );
     }
 
-    const { role, tenantId: staffTenantId } = authResult.user;
+    const { role, tenantId: staffTenantId, uid: staffUid } = authResult.user;
     if (!['superadmin', 'owner', 'admin'].includes(role)) {
-      return new Response(JSON.stringify({ success: false, message: 'Akses ditolak. Hanya Owner/Admin yang dapat mengirim ulang undangan.' }), { status: 403, headers: corsHeaders });
+      return new Response(
+        JSON.stringify({ success: false, message: 'Akses ditolak. Hanya Owner/Admin yang dapat mengelola undangan wali murid.' }),
+        { status: 403, headers: corsHeaders }
+      );
     }
 
+    // 2. Parse Body
     const body = await request.json().catch(() => ({}));
-    const { parentId, email } = body;
+    const { parentId, email, action = 'generate' } = body;
 
     if (!parentId && !email) {
-      return new Response(JSON.stringify({ success: false, message: 'Parent ID atau email wajib disertakan.' }), { status: 400, headers: corsHeaders });
+      return new Response(
+        JSON.stringify({ success: false, message: 'Parent ID atau email wajib disertakan.' }),
+        { status: 400, headers: corsHeaders }
+      );
     }
 
     const supabaseUrl = env.SUPABASE_URL;
@@ -68,53 +59,24 @@ export async function onRequestPost(context) {
     const isProduction = env.ENVIRONMENT === 'production' || env.NODE_ENV === 'production';
 
     if (!supabaseUrl || !serviceRoleKey) {
-      return new Response(JSON.stringify({ success: false, code: 'SUPABASE_CONFIG_MISSING', message: 'Konfigurasi server tidak lengkap.' }), { status: 500, headers: corsHeaders });
-    }
-
-    // 1. Strict Resend API Key check (Reject if only SendGrid or other provider keys are provided)
-    const resendApiKey = env.RESEND_API_KEY;
-    if (!resendApiKey) {
-      if (env.SENDGRID_API_KEY || env.EMAIL_PROVIDER_API_KEY) {
-        return new Response(
-          JSON.stringify({ 
-            success: false, 
-            code: 'EMAIL_PROVIDER_NOT_CONFIGURED', 
-            message: 'Konfigurasi provider tidak didukung. Hanya Resend yang didukung untuk pengiriman email ini.' 
-          }),
-          { status: 500, headers: corsHeaders }
-        );
-      }
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          code: 'EMAIL_PROVIDER_NOT_CONFIGURED', 
-          message: 'RESEND_API_KEY belum dikonfigurasi di server.' 
-        }),
+        JSON.stringify({ success: false, code: 'SUPABASE_CONFIG_MISSING', message: 'Konfigurasi server tidak lengkap.' }),
         { status: 500, headers: corsHeaders }
       );
     }
 
-    // 2. Validate EMAIL_FROM format
-    const emailFrom = env.EMAIL_FROM;
-    if (!emailFrom || !isValidEmailFormat(emailFrom.includes('<') ? emailFrom.split('<')[1].replace('>', '') : emailFrom)) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          code: 'INVALID_EMAIL_FROM', 
-          message: 'Konfigurasi EMAIL_FROM tidak valid atau belum diset.' 
-        }),
-        { status: 500, headers: corsHeaders }
-      );
-    }
-
-    // Fail-closed rate limiting check
+    // 3. Rate limiting check (KV with fallback)
     const kvBinding = env.PORTAL_RATELIMIT_KV || env.PORTAL_SESSIONS_KV;
     if (isProduction && !kvBinding) {
-      console.error('FAIL_CLOSED: PORTAL_RATELIMIT_KV / PORTAL_SESSIONS_KV missing in production for resend.');
-      return new Response(JSON.stringify({ success: false, message: 'Konfigurasi rate limit server wajib tersedia di production.' }), { status: 500, headers: corsHeaders });
+      console.error('FAIL_CLOSED: PORTAL_RATELIMIT_KV / PORTAL_SESSIONS_KV missing in production for invitation.');
+      return new Response(
+        JSON.stringify({ success: false, message: 'Konfigurasi rate limit server wajib tersedia di production.' }),
+        { status: 500, headers: corsHeaders }
+      );
     }
 
-    let queryUrl = `${supabaseUrl}/rest/v1/parent_accounts?select=id,tenant_id,email,auth_uid`;
+    // 4. Fetch Parent Account (Tenant Isolation)
+    let queryUrl = `${supabaseUrl}/rest/v1/parent_accounts?select=id,tenant_id,email,phone,full_name,auth_uid`;
     if (parentId) {
       queryUrl += `&id=eq.${encodeURIComponent(parentId)}`;
     } else {
@@ -134,61 +96,41 @@ export async function onRequestPost(context) {
     });
 
     if (!parentResp.ok) {
-      return new Response(JSON.stringify({ success: false, message: 'Gagal memverifikasi akun wali murid.' }), { status: 500, headers: corsHeaders });
+      return new Response(
+        JSON.stringify({ success: false, message: 'Gagal memverifikasi akun wali murid.' }),
+        { status: 500, headers: corsHeaders }
+      );
     }
 
     const parents = await parentResp.json().catch(() => []);
     if (!Array.isArray(parents) || parents.length === 0) {
-      return new Response(JSON.stringify({ success: false, message: 'Akun wali murid tidak ditemukan atau di luar tenant Anda.' }), { status: 404, headers: corsHeaders });
+      return new Response(
+        JSON.stringify({ success: false, message: 'Akun wali murid tidak ditemukan atau di luar tenant Anda.' }),
+        { status: 404, headers: corsHeaders }
+      );
     }
 
     const parent = parents[0];
     const targetEmail = parent.email;
     const authUid = parent.auth_uid;
+    const targetTenantId = parent.tenant_id;
 
-    if (kvBinding) {
+    // Rate limit increment for generating invitations
+    if (kvBinding && action === 'generate') {
       const rateKey = `v2_ratelimit:resend:${parent.id}`;
       const countStr = await kvBinding.get(rateKey);
       const count = countStr ? Number(countStr) : 0;
-      if (count >= 3) {
-        return new Response(JSON.stringify({ success: false, message: 'Terlalu banyak permintaan pengiriman ulang. Silakan tunggu beberapa menit.' }), { status: 429, headers: corsHeaders });
+      if (count >= 10) {
+        return new Response(
+          JSON.stringify({ success: false, message: 'Terlalu banyak permintaan pembuatan undangan. Silakan tunggu beberapa menit.' }),
+          { status: 429, headers: corsHeaders }
+        );
       }
       await kvBinding.put(rateKey, String(count + 1), { expirationTtl: 300 });
     }
 
-    // 3. Fail-closed Auth user verification
-    let isConfirmed = false;
-    if (authUid) {
-      const authUserResp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/users/${authUid}`, {
-        method: 'GET',
-        headers: {
-          'apikey': serviceRoleKey,
-          'Authorization': `Bearer ${serviceRoleKey}`
-        }
-      });
-      if (!authUserResp.ok) {
-        return new Response(
-          JSON.stringify({ 
-            success: false, 
-            code: 'AUTH_VERIFICATION_FAILED', 
-            message: 'Gagal memverifikasi status autentikasi user (Fail-closed).' 
-          }),
-          { status: 500, headers: corsHeaders }
-        );
-      }
-      const authUser = await authUserResp.json().catch(() => null);
-      if (!authUser || typeof authUser !== 'object' || authUser.id !== authUid) {
-        return new Response(
-          JSON.stringify({ 
-            success: false, 
-            code: 'AUTH_VERIFICATION_FAILED', 
-            message: 'Respons Auth tidak valid atau ID user tidak cocok (Fail-closed).' 
-          }),
-          { status: 500, headers: corsHeaders }
-        );
-      }
-      isConfirmed = !!(authUser.email_confirmed_at || authUser.confirmed_at);
-    } else {
+    // 5. Auth User Verification
+    if (!authUid) {
       return new Response(
         JSON.stringify({ 
           success: false, 
@@ -199,11 +141,97 @@ export async function onRequestPost(context) {
       );
     }
 
+    const authUserResp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/users/${authUid}`, {
+      method: 'GET',
+      headers: {
+        'apikey': serviceRoleKey,
+        'Authorization': `Bearer ${serviceRoleKey}`
+      }
+    });
+
+    if (!authUserResp.ok) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          code: 'AUTH_VERIFICATION_FAILED', 
+          message: 'Gagal memverifikasi status autentikasi user (Fail-closed).' 
+        }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
+    const authUser = await authUserResp.json().catch(() => null);
+    if (!authUser || typeof authUser !== 'object' || authUser.id !== authUid) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          code: 'AUTH_VERIFICATION_FAILED', 
+          message: 'Respons Auth tidak valid atau ID user tidak cocok (Fail-closed).' 
+        }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
+    const isConfirmed = !!(authUser.email_confirmed_at || authUser.confirmed_at);
+
+    // 6. Handle Action: confirm_sent (Manual Delivery Confirmation)
+    if (action === 'confirm_sent') {
+      if (isConfirmed) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            status: 'ACTIVATED',
+            message: 'Akun wali murid ini telah aktif sebelumnya.'
+          }),
+          { status: 200, headers: corsHeaders }
+        );
+      }
+
+      const nowIso = new Date().toISOString();
+
+      // Persist in KV
+      if (kvBinding) {
+        await kvBinding.put(
+          `v2_invitation_status:${parent.id}`,
+          JSON.stringify({ status: 'SENT_MANUALLY', sentAt: nowIso, sentBy: staffUid }),
+          { expirationTtl: 86400 * 7 }
+        );
+      }
+
+      // Persist in Supabase Auth user_metadata
+      await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/users/${authUid}`, {
+        method: 'PUT',
+        headers: {
+          'apikey': serviceRoleKey,
+          'Authorization': `Bearer ${serviceRoleKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          user_metadata: {
+            ...(authUser.user_metadata || {}),
+            invitation_status: 'SENT_MANUALLY',
+            invitation_sent_at: nowIso,
+            invitation_sent_by: staffUid
+          }
+        })
+      }).catch(() => null);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          status: 'SENT_MANUALLY',
+          message: 'Undangan berhasil dikonfirmasi telah dikirim secara manual via WhatsApp.'
+        }),
+        { status: 200, headers: corsHeaders }
+      );
+    }
+
+    // 7. Handle Action: generate / resend WhatsApp invitation link
     const appUrl = env.APP_URL || 'https://chuvator.pages.dev';
     const redirectUrl = `${appUrl.replace(/\/$/, '')}/portal/accept-invitation`;
     const linkType = isConfirmed ? 'recovery' : 'invite';
 
-    // 4. Generate action link from Supabase Auth Admin API
+    // Call Supabase Auth Admin generate_link (rotates token, generates action_link without sending email)
     const linkResp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/generate_link`, {
       method: 'POST',
       headers: {
@@ -245,59 +273,65 @@ export async function onRequestPost(context) {
       );
     }
 
-    // 5. Send email via Resend with exact escaped actionLink in HTML
-    const escapedActionLink = escapeHtml(actionLink);
-    const emailHtml = `<p>Halo,</p><p>Silakan klik tautan berikut untuk ${linkType === 'invite' ? 'mengaktivasi akun Portal Wali Murid Anda' : 'memulihkan kata sandi akun Anda'}:</p><p><a href="${escapedActionLink}">Aktivasi / Pemulihan Akun</a></p>`;
+    // Fetch verified tenant name from database
+    const tenantName = await getVerifiedTenantName(supabaseUrl, serviceRoleKey, targetTenantId);
 
-    let emailSent = false;
+    // Build dynamic message and safe wa.me URL
+    const parentName = parent.full_name || 'Bapak/Ibu';
+    const message = generateWhatsAppMessage({
+      parentName,
+      tenantName,
+      actionLink
+    });
 
-    try {
-      const resendSendResp = await fetch('https://api.resend.com/emails', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${resendApiKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          from: emailFrom,
-          to: [targetEmail],
-          subject: linkType === 'invite' ? 'Undangan Portal Wali Murid CHUVATOR' : 'Pemulihan Kata Sandi Portal Wali Murid CHUVATOR',
-          html: emailHtml
-        })
-      });
+    const normalizedPhone = normalizeWhatsAppNumber(parent.phone);
+    const whatsappUrl = buildWhatsAppUrl(parent.phone, message);
 
-      if (resendSendResp.ok) {
-        emailSent = true;
-      }
-    } catch (sendErr) {
-      // Sanitized: no raw exception message leaked
-    }
-
-    if (!emailSent) {
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          code: 'EMAIL_SEND_FAILED', 
-          message: 'Gagal mengirim email melalui Resend.' 
-        }),
-        { status: 500, headers: corsHeaders }
+    // Reset status to READY_TO_SEND upon link regeneration
+    const nowIso = new Date().toISOString();
+    if (kvBinding) {
+      await kvBinding.put(
+        `v2_invitation_status:${parent.id}`,
+        JSON.stringify({ status: 'READY_TO_SEND', generatedAt: nowIso, generatedBy: staffUid }),
+        { expirationTtl: 86400 * 7 }
       );
     }
 
-    const successMessage = linkType === 'invite' 
-      ? 'Undangan aktivasi berhasil dikirim ke email wali murid.' 
-      : 'Email pemulihan password berhasil dikirim ke email wali murid.';
+    const responseStatus = isConfirmed ? 'ACTIVATED' : 'READY_TO_SEND';
+    const successMsg = isConfirmed
+      ? 'Tautan pemulihan akun berhasil dibuat. Silakan bagikan melalui WhatsApp.'
+      : 'Tautan undangan aktivasi berhasil dibuat. Silakan bagikan melalui WhatsApp.';
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: successMessage
+        status: responseStatus,
+        message: successMsg,
+        actionLink,
+        whatsappUrl,
+        phone: normalizedPhone,
+        data: {
+          parentId: parent.id,
+          parentName: parent.full_name,
+          email: targetEmail,
+          phone: normalizedPhone,
+          rawPhone: parent.phone || '',
+          tenantName,
+          actionLink,
+          message,
+          whatsappUrl,
+          isConfirmed,
+          type: linkType
+        }
       }),
       { status: 200, headers: corsHeaders }
     );
 
   } catch (err) {
-    console.error('Resend invitation error.');
-    return new Response(JSON.stringify({ success: false, message: 'Terjadi kesalahan internal pada server.' }), { status: 500, headers: corsHeaders });
+    console.error('WhatsApp invitation error.');
+    return new Response(
+      JSON.stringify({ success: false, message: 'Terjadi kesalahan internal pada server.' }),
+      { status: 500, headers: corsHeaders }
+    );
   }
 }

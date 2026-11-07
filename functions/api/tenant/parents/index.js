@@ -1,10 +1,19 @@
 /**
- * Cloudflare Pages Function: POST /api/tenant/parents
- * Creates a Parent account, invites them via Supabase Auth, and links students.
+ * Cloudflare Pages Function: POST /api/tenant/parents & GET /api/tenant/parents
+ * Parent Account Management & WhatsApp-Only Invitation (V2.6.11 Migration).
+ * Creates Auth user via generateLink without sending email, enforces HMAC KK matching,
+ * isolates tenants, and provides WhatsApp-ready dynamic invitation links.
  */
 
 import { getCorsHeaders } from '../../portal/_auth_v2.js';
 import { validateStaffSession, normalizeKK, computeHMAC } from '../_auth_staff.js';
+import {
+  normalizeWhatsAppNumber,
+  generateWhatsAppMessage,
+  buildWhatsAppUrl,
+  getVerifiedTenantName,
+  determineInvitationStatus
+} from './_invitation_helper.js';
 
 export async function onRequestOptions(context) {
   const corsHeaders = getCorsHeaders(context.request, context.env);
@@ -74,8 +83,26 @@ export async function onRequestGet(context) {
       }
     }
 
+    const kvBinding = env.PORTAL_RATELIMIT_KV || env.PORTAL_SESSIONS_KV;
+
     const enrichedParents = await Promise.all(parents.map(async (p) => {
-      let verificationStatus = 'unverifiable';
+      let isConfirmed = false;
+      let isExpired = false;
+      let manualSentAt = null;
+
+      // Check KV for manual sent status
+      if (kvBinding) {
+        try {
+          const rawStatus = await kvBinding.get(`v2_invitation_status:${p.id}`);
+          if (rawStatus) {
+            const parsed = JSON.parse(rawStatus);
+            if (parsed.status === 'SENT_MANUALLY') {
+              manualSentAt = parsed.sentAt;
+            }
+          }
+        } catch (_) {}
+      }
+
       if (p.auth_uid) {
         try {
           const authUserResp = await fetch(`${supabaseUrl}/auth/v1/admin/users/${p.auth_uid}`, {
@@ -88,22 +115,39 @@ export async function onRequestGet(context) {
           if (authUserResp.ok) {
             const authUser = await authUserResp.json();
             if (authUser && authUser.id) {
-              if (authUser.email_confirmed_at || authUser.confirmed_at) {
-                verificationStatus = 'active';
-              } else {
-                verificationStatus = 'pending';
+              isConfirmed = !!(authUser.email_confirmed_at || authUser.confirmed_at);
+
+              // Check user_metadata for SENT_MANUALLY if not found in KV
+              if (!manualSentAt && authUser.user_metadata?.invitation_status === 'SENT_MANUALLY') {
+                manualSentAt = authUser.user_metadata.invitation_sent_at || true;
+              }
+
+              // Check invitation expiration (TTL 24h without confirmation)
+              const inviteTime = authUser.invited_at || authUser.confirmation_sent_at || p.created_at;
+              if (inviteTime && !isConfirmed) {
+                const t = new Date(inviteTime).getTime();
+                if (!isNaN(t) && (Date.now() - t) > 86400 * 1000) {
+                  isExpired = true;
+                }
               }
             }
           }
-        } catch (_) {
-          verificationStatus = 'unverifiable';
-        }
+        } catch (_) {}
       }
+
+      const invitationStatus = determineInvitationStatus({
+        hasAuthUser: !!p.auth_uid,
+        isConfirmed,
+        isExpired,
+        manualSentAt,
+        invitationCreatedAt: p.created_at
+      });
 
       return {
         ...p,
         name: p.full_name,
-        status: verificationStatus,
+        status: isConfirmed ? 'active' : (invitationStatus === 'EXPIRED' ? 'expired' : 'pending'),
+        invitationStatus,
         links: linksMap[p.id] || []
       };
     }));
@@ -279,7 +323,6 @@ export async function onRequestPost(context) {
     for (const s of foundStudents) {
       const studentTenant = s.tenant_id || 'global';
 
-      // REQUIREMENT: Strict Tenant Isolation & Consistency
       if (role !== 'superadmin') {
         if (studentTenant !== staffTenantId) {
           return new Response(
@@ -292,7 +335,6 @@ export async function onRequestPost(context) {
           );
         }
       } else {
-        // Superadmin must ensure all students belong to the same tenant determined as target
         if (studentTenant !== targetTenantId) {
           return new Response(
             JSON.stringify({ 
@@ -368,14 +410,12 @@ export async function onRequestPost(context) {
       );
     }
 
-    // 8. Invite User via Supabase Auth Admin
+    // 8. Generate Auth User & Activation Link via Supabase Auth Admin generate_link
+    // (NO automatic email dispatched!)
     const appUrl = env.APP_URL || 'https://chuvator.pages.dev';
     const redirectUrl = `${appUrl.replace(/\/$/, '')}/portal/accept-invitation`;
 
-    const inviteUrlObj = new URL(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/invite`);
-    inviteUrlObj.searchParams.set('redirect_to', redirectUrl);
-
-    const inviteResp = await fetch(inviteUrlObj.toString(), {
+    const linkResp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/generate_link`, {
       method: 'POST',
       headers: {
         'apikey': serviceRoleKey,
@@ -383,29 +423,35 @@ export async function onRequestPost(context) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
+        type: 'invite',
         email: normalizedEmail,
-        data: {
-          name: name,
-          role: 'parent',
-          tenantId: targetTenantId
+        options: {
+          redirectTo: redirectUrl,
+          data: {
+            name: name,
+            role: 'parent',
+            tenantId: targetTenantId
+          }
         }
       })
     });
 
-    if (!inviteResp.ok) {
-      const errData = await inviteResp.json().catch(() => ({}));
+    if (!linkResp.ok) {
+      const errData = await linkResp.json().catch(() => ({}));
       return new Response(
         JSON.stringify({ 
           success: false, 
           code: 'AUTH_INVITATION_FAILED', 
-          message: `Gagal mengirim undangan email: ${errData.msg || errData.message || 'Error unknown'}` 
+          message: `Gagal membuat akun autentikasi: ${errData.msg || errData.message || 'Error unknown'}` 
         }),
-        { status: inviteResp.status, headers: corsHeaders }
+        { status: linkResp.status, headers: corsHeaders }
       );
     }
 
-    const inviteData = await inviteResp.json();
-    const authUid = inviteData.id;
+    const linkData = await linkResp.json().catch(() => ({}));
+    const authUid = linkData.user?.id || linkData.id;
+    const actionLink = linkData.properties?.action_link || linkData.action_link;
+
     if (!authUid) {
       return new Response(
         JSON.stringify({ 
@@ -439,75 +485,11 @@ export async function onRequestPost(context) {
     });
 
     if (!parentInsertResp.ok) {
-      // DIAGNOSTICS V2.3.8: Defensive JSON handling & Strict regex
-      const rawContentType = parentInsertResp.headers.get('content-type') || '';
-      const contentType = rawContentType.toLowerCase().split(';')[0].trim();
-      const responseText = await parentInsertResp.text().catch(() => '');
-      
-      let dbError = null;
-      let bodyFormat = 'EMPTY';
-      
-      if (responseText) {
-        if (contentType.includes('application/json')) {
-          try {
-            const parsed = JSON.parse(responseText);
-            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-              dbError = parsed;
-              bodyFormat = 'JSON_OBJECT';
-            } else if (Array.isArray(parsed)) {
-              bodyFormat = 'JSON_ARRAY';
-            } else if (parsed === null) {
-              bodyFormat = 'JSON_NULL';
-            } else {
-              bodyFormat = 'JSON_PRIMITIVE';
-            }
-          } catch (e) {
-            bodyFormat = 'MALFORMED_JSON';
-          }
-        } else {
-          bodyFormat = 'NON_JSON';
-        }
-      }
-
-      // COMPENSATION
+      // Clean up Auth user on DB failure
       const cleanupAuth = await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUid}`, {
         method: 'DELETE',
         headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
       }).catch(() => ({ ok: false }));
-
-      // SQLSTATE / PostgREST Code Sanitization
-      const rawCode = dbError ? String(dbError.code || '') : '';
-      let sqlState = 'UNKNOWN';
-      
-      // Strict regex check: 5-char SQLSTATE or official PostgREST PGRSTxxx pattern
-      if (/^[0-9A-Z]{5}$/.test(rawCode) || /^PGRST\d{3}$/.test(rawCode)) {
-        sqlState = rawCode;
-      }
-      
-      // Classification
-      let classification = 'UNKNOWN';
-      if (sqlState === '23505') classification = 'UNIQUE_VIOLATION';
-      else if (sqlState === '23503') classification = 'FOREIGN_KEY_VIOLATION';
-      else if (sqlState === '23502') classification = 'NOT_NULL_VIOLATION';
-      else if (sqlState === '23514') classification = 'CHECK_VIOLATION';
-      else if (/^PGRST\d{3}$/.test(sqlState)) classification = 'POSTGREST_ERROR';
-      else if (sqlState !== 'UNKNOWN') classification = 'DATABASE_ERROR';
-
-      console.error('[Database Error] Parent account insertion failed (Sanitized):', {
-        status: parentInsertResp.status,
-        contentType,
-        bodyFormat,
-        sqlState,
-        classification,
-        hasMessage: !!(dbError && dbError.message),
-        hasDetails: !!(dbError && dbError.details),
-        hasHint: !!(dbError && dbError.hint),
-        authCleanup: cleanupAuth.ok ? 'SUCCESS' : 'FAILED'
-      });
-
-      if (!cleanupAuth.ok) {
-        console.error('[Cleanup Error] Critical failure deleting auth user after DB insert failure.');
-      }
 
       return new Response(
         JSON.stringify({ 
@@ -523,15 +505,10 @@ export async function onRequestPost(context) {
     const parentId = (newParents.length > 0) ? newParents[0].id : null;
 
     if (!parentId) {
-      // COMPENSATION V2.3.6: No UID or raw errors in log
       const cleanupAuth = await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUid}`, {
         method: 'DELETE',
         headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
       }).catch(() => ({ ok: false }));
-
-      if (!cleanupAuth.ok) {
-        console.error('[Cleanup Error] Failure deleting auth user during missing parentId recovery.');
-      }
 
       return new Response(
         JSON.stringify({ 
@@ -550,7 +527,7 @@ export async function onRequestPost(context) {
       relationship: finalRelationship
     }));
 
-    const linkResp = await fetch(`${supabaseUrl}/rest/v1/parent_student_links`, {
+    const studentLinkResp = await fetch(`${supabaseUrl}/rest/v1/parent_student_links`, {
       method: 'POST',
       headers: {
         'apikey': serviceRoleKey,
@@ -560,53 +537,8 @@ export async function onRequestPost(context) {
       body: JSON.stringify(linkPayloads)
     });
 
-    if (!linkResp.ok) {
-      // DIAGNOSTICS V2.4.0: Sanitized capture
-      const rawContentType = linkResp.headers.get('content-type') || '';
-      const contentType = rawContentType.toLowerCase().split(';')[0].trim();
-      const responseText = await linkResp.text().catch(() => '');
-      
-      let linkError = null;
-      let bodyFormat = 'EMPTY';
-      
-      if (responseText) {
-        if (contentType.includes('application/json')) {
-          try {
-            const parsed = JSON.parse(responseText);
-            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-              linkError = parsed;
-              bodyFormat = 'JSON_OBJECT';
-            } else if (Array.isArray(parsed)) {
-              bodyFormat = 'JSON_ARRAY';
-            } else if (parsed === null) {
-              bodyFormat = 'JSON_NULL';
-            } else {
-              bodyFormat = 'JSON_PRIMITIVE';
-            }
-          } catch (e) {
-            bodyFormat = 'MALFORMED_JSON';
-          }
-        } else {
-          bodyFormat = 'NON_JSON';
-        }
-      }
-
-      // SQLSTATE / PostgREST Code Sanitization
-      const rawCode = linkError ? String(linkError.code || '') : '';
-      let sqlState = 'UNKNOWN';
-      if (/^[0-9A-Z]{5}$/.test(rawCode) || /^PGRST\d{3}$/.test(rawCode)) {
-        sqlState = rawCode;
-      }
-      
-      let classification = 'UNKNOWN';
-      if (sqlState === '23505') classification = 'UNIQUE_VIOLATION';
-      else if (sqlState === '23503') classification = 'FOREIGN_KEY_VIOLATION';
-      else if (sqlState === '23502') classification = 'NOT_NULL_VIOLATION';
-      else if (sqlState === '23514') classification = 'CHECK_VIOLATION';
-      else if (/^PGRST\d{3}$/.test(sqlState)) classification = 'POSTGREST_ERROR';
-      else if (sqlState !== 'UNKNOWN') classification = 'DATABASE_ERROR';
-
-      // FULL COMPENSATION
+    if (!studentLinkResp.ok) {
+      // Full Compensation
       const cleanupParent = await fetch(`${supabaseUrl}/rest/v1/parent_accounts?id=eq.${parentId}`, {
         method: 'DELETE',
         headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
@@ -616,23 +548,6 @@ export async function onRequestPost(context) {
         method: 'DELETE',
         headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
       }).catch(() => ({ ok: false }));
-
-      console.error('[Database Error] Student link insertion failed (Sanitized):', {
-        status: linkResp.status,
-        contentType,
-        bodyFormat,
-        sqlState,
-        classification,
-        hasMessage: !!(linkError && linkError.message),
-        hasDetails: !!(linkError && linkError.details),
-        hasHint: !!(linkError && linkError.hint),
-        parentCleanup: cleanupParent.ok ? 'SUCCESS' : 'FAILED',
-        authCleanup: cleanupAuth.ok ? 'SUCCESS' : 'FAILED'
-      });
-
-      if (!cleanupParent.ok || !cleanupAuth.ok) {
-        console.error('[Cleanup Error] Critical failure during link failure recovery.', { parentOk: cleanupParent.ok, authOk: cleanupAuth.ok });
-      }
 
       return new Response(
         JSON.stringify({ 
@@ -644,11 +559,43 @@ export async function onRequestPost(context) {
       );
     }
 
+    // 10. Generate WhatsApp Invitation message and wa.me URL
+    const tenantName = await getVerifiedTenantName(supabaseUrl, serviceRoleKey, targetTenantId);
+    const message = generateWhatsAppMessage({
+      parentName: name,
+      tenantName,
+      actionLink
+    });
+
+    const normalizedPhone = normalizeWhatsAppNumber(phone);
+    const whatsappUrl = buildWhatsAppUrl(phone, message);
+
+    // Record initial READY_TO_SEND status in KV
+    const kvBinding = env.PORTAL_RATELIMIT_KV || env.PORTAL_SESSIONS_KV;
+    if (kvBinding) {
+      await kvBinding.put(
+        `v2_invitation_status:${parentId}`,
+        JSON.stringify({ status: 'READY_TO_SEND', generatedAt: new Date().toISOString() }),
+        { expirationTtl: 86400 * 7 }
+      );
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Akun wali murid berhasil dibuat dan undangan telah dikirim.',
-        data: { parentId, authUid, email: normalizedEmail }
+        message: 'Akun wali murid berhasil dibuat. Silakan kirim undangan melalui WhatsApp.',
+        data: {
+          parentId,
+          authUid,
+          email: normalizedEmail,
+          phone: normalizedPhone,
+          rawPhone: phone || '',
+          tenantName,
+          actionLink,
+          message,
+          whatsappUrl,
+          status: 'READY_TO_SEND'
+        }
       }),
       { status: 201, headers: corsHeaders }
     );
@@ -661,6 +608,3 @@ export async function onRequestPost(context) {
     );
   }
 }
-
-
-

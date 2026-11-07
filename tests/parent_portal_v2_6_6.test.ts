@@ -113,10 +113,9 @@ test('CHUVATOR — Parent Portal V2.6.8 Final Log Sanitization & Exception Test 
     console.error = originalConsoleError;
   };
 
-  // --- 1. ACTION LINK ESCAPING & HREF PRECISION ASSERTIONS ---
+  // --- 1. ACTION LINK & WHATSAPP URL ASSERTIONS ---
 
-  await t.test('A. Invite: Action link with special characters (&, ", \', <, >) is precisely placed in href and fully escaped', async () => {
-    let capturedResendBody: any = null;
+  await t.test('A. Invite: Action link with special characters is returned for WhatsApp assistance and properly encoded', async () => {
     const specialActionLink = 'https://mock-supabase.local/verify?token=abc&val="test"&quote=\'single\'&tag=<script>&end=>';
 
     mockFetch([
@@ -127,15 +126,6 @@ test('CHUVATOR — Parent Portal V2.6.8 Final Log Sanitization & Exception Test 
         method: 'POST', 
         body: { properties: { action_link: specialActionLink } }, 
         status: 200 
-      },
-      { 
-        pattern: 'api.resend.com/emails', 
-        method: 'POST', 
-        body: async (opts: any) => {
-          capturedResendBody = JSON.parse(opts.body);
-          return { id: 'resend-id-123' };
-        }, 
-        status: 200 
       }
     ]);
 
@@ -145,31 +135,21 @@ test('CHUVATOR — Parent Portal V2.6.8 Final Log Sanitization & Exception Test 
       assert.strictEqual(res.status, 200);
       const data = await res.json();
       assert.strictEqual(data.success, true);
+      assert.strictEqual(data.status, 'READY_TO_SEND');
+      assert.strictEqual(data.actionLink, specialActionLink);
+      assert.ok(data.whatsappUrl.startsWith('https://wa.me/'));
+      assert.ok(data.whatsappUrl.includes(encodeURIComponent(specialActionLink)));
 
-      // Verify no token or action link is returned in API response
-      const respStr = JSON.stringify(data);
-      assert.ok(!respStr.includes('token=abc'));
-      assert.ok(!respStr.includes('action_link'));
-
-      // Extract href attribute precisely from email HTML
-      const html = capturedResendBody.html;
-      const hrefMatch = html.match(/<a\s+href="([^"]+)"[^>]*>/i);
-      assert.ok(hrefMatch, 'Email HTML must contain an <a> tag with an href attribute');
-      
-      const hrefValue = hrefMatch[1];
-      const expectedEscaped = escapeHtml(specialActionLink);
-
-      // Ensure exact match between href value and properly escaped action link
-      assert.strictEqual(hrefValue, expectedEscaped, 'Action link in href attribute must be precisely placed and fully escaped');
-      assert.ok(!html.includes(specialActionLink), 'Raw unescaped action link must not appear in HTML body outside escaped href');
+      // Verify no Resend API calls were made
+      const resendCalls = fetchHistory.filter(f => f.url.includes('api.resend.com'));
+      assert.strictEqual(resendCalls.length, 0, 'No calls to Resend API allowed');
     } finally {
       resetFetch();
     }
   });
 
-  await t.test('B. Recovery: Auth confirmed uses type recovery and correct href', async () => {
+  await t.test('B. Recovery: Auth confirmed uses type recovery and returns WhatsApp url', async () => {
     let capturedGenerateBody: any = null;
-    let capturedResendBody: any = null;
     const recoveryLink = 'https://mock-supabase.local/recovery?token=xyz&secure=true';
 
     mockFetch([
@@ -183,15 +163,6 @@ test('CHUVATOR — Parent Portal V2.6.8 Final Log Sanitization & Exception Test 
           return { properties: { action_link: recoveryLink } };
         }, 
         status: 200 
-      },
-      { 
-        pattern: 'api.resend.com/emails', 
-        method: 'POST', 
-        body: async (opts: any) => {
-          capturedResendBody = JSON.parse(opts.body);
-          return { id: 'resend-id-123' };
-        }, 
-        status: 200 
       }
     ]);
 
@@ -201,9 +172,10 @@ test('CHUVATOR — Parent Portal V2.6.8 Final Log Sanitization & Exception Test 
       assert.strictEqual(res.status, 200);
       assert.strictEqual(capturedGenerateBody.type, 'recovery');
       
-      const hrefMatch = capturedResendBody.html.match(/<a\s+href="([^"]+)"[^>]*>/i);
-      assert.ok(hrefMatch);
-      assert.strictEqual(hrefMatch[1], escapeHtml(recoveryLink));
+      const data = await res.json();
+      assert.strictEqual(data.success, true);
+      assert.strictEqual(data.actionLink, recoveryLink);
+      assert.ok(data.whatsappUrl.includes(encodeURIComponent(recoveryLink)));
     } finally {
       resetFetch();
     }
@@ -246,28 +218,23 @@ test('CHUVATOR — Parent Portal V2.6.8 Final Log Sanitization & Exception Test 
         assert.ok(!log.includes(sensitiveToken), 'Log must not contain token');
         assert.ok(!log.includes(sensitiveEmail), 'Log must not contain email');
         assert.ok(!log.includes('Unexpected failure'), 'Log must not contain raw exception message');
-        assert.strictEqual(log, 'Resend invitation error.', 'Catch block must use static log message');
+        assert.strictEqual(log, 'WhatsApp invitation error.', 'Catch block must use static log message');
       }
     } finally {
       restoreConsoleError();
-      resetFetch();
     }
   });
 
-  await t.test('H. Resend provider exception: Resend fetch throws exception with sensitive tokens/email and is sanitized', async () => {
+  await t.test('H. Upstream exception: Database fetch throws exception with sensitive tokens/email and is sanitized', async () => {
     interceptConsoleError();
-    const sensitiveToken = 'resend-exc-token-xyz';
-    const sensitiveEmail = 'resend-exc-email@example.com';
-    const validActionLink = 'https://mock-supabase.local/verify?token=abc';
+    const sensitiveToken = 'upstream-exc-token-xyz';
+    const sensitiveEmail = 'upstream-exc-email@example.com';
 
     mockFetch([
-      { pattern: '/rest/v1/parent_accounts?select=', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', email: sensitiveEmail, auth_uid: 'auth-123' }] },
-      { pattern: '/auth/v1/admin/users/auth-123', method: 'GET', body: { id: 'auth-123', email_confirmed_at: null }, status: 200 },
-      { pattern: '/auth/v1/admin/generate_link', method: 'POST', body: { properties: { action_link: validActionLink } }, status: 200 },
       { 
-        pattern: 'api.resend.com/emails', 
-        method: 'POST', 
-        body: new Error(`Resend provider connection dropped for token=${sensitiveToken} and email=${sensitiveEmail}`), 
+        pattern: '/rest/v1/parent_accounts?select=', 
+        method: 'GET', 
+        body: new Error(`Database connection dropped for token=${sensitiveToken} and email=${sensitiveEmail}`), 
         status: 500 
       }
     ]);
@@ -278,17 +245,18 @@ test('CHUVATOR — Parent Portal V2.6.8 Final Log Sanitization & Exception Test 
       assert.strictEqual(res.status, 500);
       const data = await res.json();
       assert.strictEqual(data.success, false);
-      assert.strictEqual(data.code, 'EMAIL_SEND_FAILED');
+      assert.strictEqual(data.message, 'Terjadi kesalahan internal pada server.');
 
       const respStr = JSON.stringify(data);
       assert.ok(!respStr.includes(sensitiveToken));
       assert.ok(!respStr.includes(sensitiveEmail));
-      assert.ok(!respStr.includes('Resend provider connection dropped'));
+      assert.ok(!respStr.includes('Database connection dropped'));
 
       for (const log of consoleErrors) {
         assert.ok(!log.includes(sensitiveToken));
         assert.ok(!log.includes(sensitiveEmail));
-        assert.ok(!log.includes('Resend provider connection dropped'));
+        assert.ok(!log.includes('Database connection dropped'));
+        assert.strictEqual(log, 'WhatsApp invitation error.');
       }
     } finally {
       restoreConsoleError();

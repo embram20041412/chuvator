@@ -1,6 +1,6 @@
 /**
  * Parent Management Service
- * Integrates with Cloudflare Pages Functions for V2.6.1 Lifecycle & Recovery
+ * WhatsApp-Only Invitation & Recovery (V2.6.11 Migration)
  */
 
 import { supabase } from '../config/supabase';
@@ -64,7 +64,7 @@ export const parentService = {
   },
 
   /**
-   * Create a new parent account and link students
+   * Create a new parent account and link students (generates WhatsApp invite link)
    */
   createParentAccount: async (payload) => {
     const headers = await getAuthHeaders();
@@ -82,19 +82,44 @@ export const parentService = {
   },
 
   /**
-   * Resend activation invitation / recovery to existing parent account
+   * Generate / retrieve active WhatsApp invitation link for a parent
    */
-  resendInvitation: async (parentId) => {
+  generateWhatsAppInvitation: async (parentId) => {
     const headers = await getAuthHeaders();
     const response = await fetch('/api/tenant/parents/resend', {
       method: 'POST',
       headers,
-      body: JSON.stringify({ parentId })
+      body: JSON.stringify({ parentId, action: 'generate' })
     });
 
     const data = await response.json();
     if (!response.ok) {
-      throw new Error(data.message || 'Gagal mengirim ulang undangan.');
+      throw new Error(data.message || 'Gagal menyiapkan tautan undangan WhatsApp.');
+    }
+    return data;
+  },
+
+  /**
+   * Backward-compatible alias for re-invitation / link generation
+   */
+  resendInvitation: async (parentId) => {
+    return parentService.generateWhatsAppInvitation(parentId);
+  },
+
+  /**
+   * Confirm manual delivery via WhatsApp (Status: SENT_MANUALLY)
+   */
+  confirmManualSent: async (parentId) => {
+    const headers = await getAuthHeaders();
+    const response = await fetch('/api/tenant/parents/resend', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ parentId, action: 'confirm_sent' })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || 'Gagal mengonfirmasi pengiriman undangan.');
     }
     return data;
   },
@@ -117,7 +142,7 @@ export const parentService = {
   },
 
   /**
-   * Fetch all parent accounts with verified auth status from backend
+   * Fetch all parent accounts with verified auth & invitation statuses
    */
   getParentAccounts: async () => {
     const headers = await getAuthHeaders();
