@@ -4,7 +4,7 @@ import { onRequestPost as createParentPost } from '../functions/api/tenant/paren
 import { onRequestGet as searchStudentsGet } from '../functions/api/tenant/parents/students.js';
 import { computeHMAC } from '../functions/api/tenant/_auth_staff.js';
 
-test('CHUVATOR — Parent Portal Hotfix V2.3.5 Verification Suite', async (t) => {
+test('CHUVATOR — Parent Portal Hotfix V2.3.6 Verification Suite', async (t) => {
   const mockSecret = 'test-secret-123';
   const mockUrl = 'http://mock-supabase.local';
   const mockServiceKey = 'service-role-key';
@@ -277,14 +277,14 @@ test('CHUVATOR — Parent Portal Hotfix V2.3.5 Verification Suite', async (t) =>
     }
   });
 
-  await t.test('13. Database insert error logs diagnostics and triggers cleanup', async () => {
+  await t.test('13. Database insert error logs sanitized diagnostics and triggers cleanup', async () => {
     const originalFetch = global.fetch;
     const originalConsoleError = console.error;
-    let loggedError: any = null;
+    let loggedErrors: any[] = [];
     let authCleanupCalled = false;
 
     console.error = (...args: any[]) => {
-      loggedError = args;
+      loggedErrors.push(args);
     };
 
     global.fetch = async (url: any, options: any) => {
@@ -293,7 +293,12 @@ test('CHUVATOR — Parent Portal Hotfix V2.3.5 Verification Suite', async (t) =>
       if (urlStr.includes('/rest/v1/students')) return new Response(JSON.stringify([{ id: validUuid, tenant_id: 'tenant-1', kk_hmac: validHmac }]), { status: 200 });
       if (urlStr.includes('/auth/v1/invite')) return new Response(JSON.stringify({ id: 'auth-id-123' }), { status: 200 });
       if (urlStr.includes('/rest/v1/parent_accounts') && method === 'POST') {
-        return new Response(JSON.stringify({ code: '23505', message: 'Unique constraint violation', hint: 'Check email' }), { status: 409 });
+        return new Response(JSON.stringify({ 
+          code: '23505', 
+          message: 'PII Leakage: parent@example.com', 
+          details: 'PII Leakage: KK 1234567890123456',
+          hint: 'Check unique constraint' 
+        }), { status: 409 });
       }
       if (urlStr.includes('/auth/v1/admin/users/auth-id-123') && method === 'DELETE') {
         authCleanupCalled = true;
@@ -309,15 +314,25 @@ test('CHUVATOR — Parent Portal Hotfix V2.3.5 Verification Suite', async (t) =>
       assert.strictEqual(authCleanupCalled, true, 'Cleanup must be called');
       
       // Verify diagnostic log
-      const dbErrorLog = loggedError.find((arg: any) => typeof arg === 'object' && arg.status === 409);
-      assert.ok(dbErrorLog, 'Diagnostic log for DB error should exist');
-      assert.strictEqual(dbErrorLog.code, '23505');
-      assert.strictEqual(dbErrorLog.authCleanup, 'SUCCESS');
+      const dbErrorLogEntry = loggedErrors.find((args: any[]) => args[0].includes('[Database Error]'));
+      assert.ok(dbErrorLogEntry, 'Diagnostic log for DB error should exist');
       
-      // Ensure no PII in log (the mock request email is parent@example.com)
-      const logStr = JSON.stringify(loggedError);
+      const dbErrorData = dbErrorLogEntry[1];
+      assert.strictEqual(dbErrorData.status, 409);
+      assert.strictEqual(dbErrorData.sqlState, '23505');
+      assert.strictEqual(dbErrorData.hasDetails, true);
+      assert.strictEqual(dbErrorData.authCleanup, 'SUCCESS');
+      
+      // Ensure NO raw message or hint keys exist in the logged object
+      assert.ok(!('message' in dbErrorData), 'Log must not contain raw message key');
+      assert.ok(!('hint' in dbErrorData), 'Log must not contain raw hint key');
+      assert.ok(!('details' in dbErrorData), 'Log must not contain raw details key');
+      
+      // Ensure no PII in log at all
+      const logStr = JSON.stringify(loggedErrors);
       assert.ok(!logStr.includes('parent@example.com'), 'Log must not contain email');
       assert.ok(!logStr.includes(validKK), 'Log must not contain KK');
+      assert.ok(!logStr.includes('PII Leakage'), 'Log must not contain raw error strings');
     } finally {
       global.fetch = originalFetch;
       console.error = originalConsoleError;
