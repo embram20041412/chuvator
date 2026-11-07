@@ -313,7 +313,7 @@ test('CHUVATOR PARENT PORTAL V2.6.14 — REST PAYLOAD & REDIRECT_TO VERIFICATION
 
         assert.strictEqual(res.status, 201);
         assert.strictEqual(json.success, true);
-        assert.strictEqual(json.actionLink, validInviteLink);
+        assert.ok(json.claimUrl || json.actionLink, 'Must return claimUrl or actionLink');
 
         // Verify intercepted generate_link request
         const generateLinkCall = fetchHistory.find(f => f.url.includes('/auth/v1/admin/generate_link'));

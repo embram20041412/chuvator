@@ -25,6 +25,7 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
     const rawRecoveryLink = `${supabaseUrl}/auth/v1/verify?token=recovery_otp_secret_222&type=recovery&redirect_to=${encodeURIComponent(validRedirect)}`;
 
     const mockKVStore: Record<string, string> = {};
+    const kvPutCalls: Array<{ key: string; value: string; options?: any }> = [];
 
     const setupMocks = (isConfirmed = false) => {
       globalThis.fetch = async (url: any, opts: any) => {
@@ -110,8 +111,9 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
       globalThis.fetch = originalFetch;
     };
 
-    await t2.test('1. Create parent generates intermediary URL, puts claim record in KV, and excludes raw Supabase verify URL from WhatsApp', async () => {
+    await t2.test('1. Create parent generates intermediary URL, puts claim record in KV with expirationTtl === 3000, and excludes raw Supabase verify URL from WhatsApp', async () => {
       setupMocks(false);
+      kvPutCalls.length = 0;
       try {
         const ctx = {
           request: new Request('https://chuvator.pages.dev/api/tenant/parents', {
@@ -140,7 +142,10 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
             APP_URL: appUrl,
             PORTAL_SESSIONS_KV: {
               get: async (k: string) => mockKVStore[k] || null,
-              put: async (k: string, v: string) => { mockKVStore[k] = v; },
+              put: async (k: string, v: string, opts?: any) => {
+                mockKVStore[k] = v;
+                kvPutCalls.push({ key: k, value: v, options: opts });
+              },
               delete: async (k: string) => { delete mockKVStore[k]; }
             }
           }
@@ -169,13 +174,24 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
         const stored = JSON.parse(mockKVStore[claimKeys[0]]);
         assert.strictEqual(stored.actionLink, rawInviteLink, 'Stored record must securely hold the verified actionLink');
         assert.strictEqual(stored.type, 'invite');
+
+        // EXPLICIT TTL HARDENING ASSERTION: Verify 3rd argument (options) passed to KV.put() for claim key
+        const claimPutCall = kvPutCalls.find(c => c.key.startsWith('v2_invitation_claim:'));
+        assert.ok(claimPutCall, 'Claim token record must be saved to KV via put()');
+        assert.ok(claimPutCall.options, 'KV.put() 3rd argument (options) must be provided');
+        assert.strictEqual(
+          claimPutCall.options.expirationTtl,
+          3000,
+          'Create parent claim storage MUST use expirationTtl === 3000 seconds (50 mins with 10 min buffer)'
+        );
       } finally {
         cleanup();
       }
     });
 
-    await t2.test('2. Resend generates intermediary URL for recovery flow, updates KV, and protects WhatsApp from raw link', async () => {
+    await t2.test('2. Resend generates intermediary URL for recovery flow, updates KV with expirationTtl === 3000, and protects WhatsApp from raw link', async () => {
       setupMocks(true); // isConfirmed = true
+      kvPutCalls.length = 0;
       try {
         const ctx = {
           request: new Request('https://chuvator.pages.dev/api/tenant/parents/resend', {
@@ -196,7 +212,10 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
             APP_URL: appUrl,
             PORTAL_SESSIONS_KV: {
               get: async (k: string) => mockKVStore[k] || null,
-              put: async (k: string, v: string) => { mockKVStore[k] = v; },
+              put: async (k: string, v: string, opts?: any) => {
+                mockKVStore[k] = v;
+                kvPutCalls.push({ key: k, value: v, options: opts });
+              },
               delete: async (k: string) => { delete mockKVStore[k]; }
             }
           }
@@ -217,6 +236,16 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
         assert.ok(json.data.message.includes(json.claimUrl));
         assert.strictEqual(json.data.message.includes('/auth/v1/verify'), false);
         assert.strictEqual(json.whatsappUrl.includes('/auth/v1/verify'), false);
+
+        // EXPLICIT TTL HARDENING ASSERTION: Verify 3rd argument (options) passed to KV.put() for claim key during resend
+        const claimResendPutCall = kvPutCalls.find(c => c.key.startsWith('v2_invitation_claim:'));
+        assert.ok(claimResendPutCall, 'Claim token record must be saved to KV via put() during resend');
+        assert.ok(claimResendPutCall.options, 'KV.put() 3rd argument (options) must be provided during resend');
+        assert.strictEqual(
+          claimResendPutCall.options.expirationTtl,
+          3000,
+          'Resend invitation claim storage MUST use expirationTtl === 3000 seconds (50 mins with 10 min buffer)'
+        );
       } finally {
         cleanup();
       }
