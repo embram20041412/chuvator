@@ -447,7 +447,7 @@ export default function ParentManagementPage({ userProfile }) {
               <div className="flex flex-wrap gap-2 pt-1">
                 <button
                   type="button"
-                  onClick={() => handleCopyLink(activeWhatsAppModal.claimUrl || activeWhatsAppModal.actionLink)}
+                  onClick={() => handleCopyLink(activeWhatsAppModal.claimUrl)}
                   className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold rounded-xl transition flex items-center space-x-1.5"
                 >
                   {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
@@ -546,7 +546,7 @@ export default function ParentManagementPage({ userProfile }) {
                     )}
                     <button
                       type="button"
-                      onClick={() => handleCopyLink(successResult.data?.claimUrl || successResult.data?.actionLink)}
+                      onClick={() => handleCopyLink(successResult.data?.claimUrl)}
                       className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 text-xs font-bold rounded-xl flex items-center justify-center space-x-1"
                     >
                       {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}

@@ -203,8 +203,16 @@ export async function onRequestPost(context) {
     // single-use OTP token as the final atomic invariant that prevents duplicate account activation.
     try {
       await kvBinding.delete(claimKey);
-    } catch (_) {
-      // Non-fatal if delete fails, Supabase OTP still guards single-use
+    } catch (deleteErr) {
+      console.error('[Claim Error] KV delete failed during consumption:', deleteErr);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          code: 'CLAIM_CONSUMPTION_FAILED',
+          message: 'Terjadi kesalahan sistem saat memproses aktivasi akun.'
+        }),
+        { status: 500, headers: securityHeaders }
+      );
     }
 
     // 7. Successful Response returning only the verified actionLink (Zero PII / internals returned)

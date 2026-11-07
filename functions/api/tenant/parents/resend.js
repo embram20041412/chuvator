@@ -69,7 +69,7 @@ export async function onRequestPost(context) {
     }
 
     // 3. Rate limiting check (KV with fallback)
-    const kvBinding = env.PORTAL_RATELIMIT_KV || env.PORTAL_SESSIONS_KV;
+    const kvBinding = env.PORTAL_SESSIONS_KV || env.PORTAL_RATELIMIT_KV;
     if (isProduction && !kvBinding) {
       console.error('FAIL_CLOSED: PORTAL_RATELIMIT_KV / PORTAL_SESSIONS_KV missing in production for invitation.');
       return new Response(
@@ -458,7 +458,6 @@ export async function onRequestPost(context) {
         success: true,
         status: responseStatus,
         message: successMsg,
-        actionLink,
         claimUrl: intermediaryUrl,
         whatsappUrl,
         phone: phoneCheck.normalized,
@@ -469,7 +468,6 @@ export async function onRequestPost(context) {
           phone: phoneCheck.normalized,
           rawPhone: parent.phone || '',
           tenantName,
-          actionLink,
           claimUrl: intermediaryUrl,
           message,
           whatsappUrl,

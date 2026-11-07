@@ -154,6 +154,10 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
         assert.ok(json.claimUrl, 'claimUrl must be present');
         assert.ok(json.claimUrl.includes('/portal/claim?token='), 'claimUrl must use CHUVATOR portal/claim route');
 
+        // SECURITY: actionLink MUST NOT be returned in JSON response
+        assert.strictEqual(json.actionLink, undefined, 'actionLink must be removed from response root');
+        assert.strictEqual(json.data.actionLink, undefined, 'actionLink must be removed from response data');
+
         // Check WhatsApp message: MUST NOT contain raw Supabase link
         assert.ok(json.data.message.includes(json.claimUrl), 'WhatsApp message must include intermediary URL');
         assert.strictEqual(json.data.message.includes('/auth/v1/verify'), false, 'WhatsApp message must NOT contain Supabase /auth/v1/verify');
@@ -205,6 +209,11 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
         assert.strictEqual(json.success, true);
         assert.strictEqual(json.status, 'ACTIVATED');
         assert.ok(json.claimUrl.includes('/portal/claim?token='));
+
+        // SECURITY: actionLink MUST NOT be returned in JSON response
+        assert.strictEqual(json.actionLink, undefined);
+        assert.strictEqual(json.data.actionLink, undefined);
+
         assert.ok(json.data.message.includes(json.claimUrl));
         assert.strictEqual(json.data.message.includes('/auth/v1/verify'), false);
         assert.strictEqual(json.whatsappUrl.includes('/auth/v1/verify'), false);
@@ -633,7 +642,42 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
     }
   });
 
-  await t.test('11. generateClaimToken produces 64-char hex string with high entropy', () => {
+  await t.test('12. POST /api/portal/invitation/claim fails closed if KV deletion fails', async () => {
+    const validClaimToken = 'd4e5f60718293a4b5c6d7e8f901a2b3c4d5e6f708192a3b4c5d6e7f809a1b2c3';
+    const targetActionLink = `${supabaseUrl}/auth/v1/verify?token=valid_otp_999&type=invite&redirect_to=${encodeURIComponent(validRedirect)}`;
+
+    const ctx = {
+      request: new Request('https://chuvator.pages.dev/api/portal/invitation/claim', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Origin': 'https://chuvator.pages.dev'
+        },
+        body: JSON.stringify({ token: validClaimToken })
+      }),
+      env: {
+        SUPABASE_URL: supabaseUrl,
+        APP_URL: appUrl,
+        PORTAL_SESSIONS_KV: {
+          get: async () => JSON.stringify({
+            actionLink: targetActionLink,
+            type: 'invite',
+            expiresAt: new Date(Date.now() + 3600 * 1000).toISOString()
+          }),
+          delete: async () => { throw new Error('Simulated KV Delete Outage'); }
+        }
+      }
+    };
+
+    const res = await claimPostHandler(ctx as any);
+    assert.strictEqual(res.status, 500);
+    const json = await res.json();
+    assert.strictEqual(json.success, false);
+    assert.strictEqual(json.code, 'CLAIM_CONSUMPTION_FAILED');
+    assert.strictEqual(json.actionLink, undefined, 'Must not return actionLink if consumption (delete) fails');
+  });
+
+  await t.test('13. generateClaimToken produces 64-char hex string with high entropy', () => {
     const token1 = generateClaimToken();
     const token2 = generateClaimToken();
 
@@ -644,7 +688,7 @@ test('CHUVATOR PARENT PORTAL V2.6.15 — SECURE INTERMEDIARY INVITATION CLAIM TE
     assert.notStrictEqual(token1, token2);
   });
 
-  await t.test('12. buildIntermediaryClaimUrl correctly forms CHUVATOR claim URL', () => {
+  await t.test('14. buildIntermediaryClaimUrl correctly forms CHUVATOR claim URL', () => {
     const url = buildIntermediaryClaimUrl('https://chuvator.pages.dev', 'dummy_token_123');
     assert.strictEqual(url, 'https://chuvator.pages.dev/portal/claim?token=dummy_token_123');
 

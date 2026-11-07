@@ -87,7 +87,7 @@ export async function onRequestGet(context) {
       }
     }
 
-    const kvBinding = env.PORTAL_RATELIMIT_KV || env.PORTAL_SESSIONS_KV;
+    const kvBinding = env.PORTAL_SESSIONS_KV || env.PORTAL_RATELIMIT_KV;
 
     const enrichedParents = await Promise.all(parents.map(async (p) => {
       let isConfirmed = false;
@@ -623,7 +623,7 @@ export async function onRequestPost(context) {
     }
 
     // 10. Secure Intermediary Claim: Generate 256-bit entropy token & store mapping in KV (Fail-Closed)
-    const kvBinding = env.PORTAL_RATELIMIT_KV || env.PORTAL_SESSIONS_KV;
+    const kvBinding = env.PORTAL_SESSIONS_KV || env.PORTAL_RATELIMIT_KV;
     if (!kvBinding) {
       // Clean up newly created student links, parent, and auth user
       await fetch(`${supabaseUrl}/rest/v1/parent_student_links?parent_account_id=eq.${parentId}`, {
@@ -720,7 +720,6 @@ export async function onRequestPost(context) {
       JSON.stringify({
         success: true,
         message: 'Akun wali murid berhasil dibuat. Silakan kirim undangan melalui WhatsApp.',
-        actionLink,
         claimUrl: intermediaryUrl,
         whatsappUrl,
         phone: phoneCheck.normalized,
@@ -731,7 +730,6 @@ export async function onRequestPost(context) {
           phone: phoneCheck.normalized,
           rawPhone: phone,
           tenantName,
-          actionLink,
           claimUrl: intermediaryUrl,
           message,
           whatsappUrl,
