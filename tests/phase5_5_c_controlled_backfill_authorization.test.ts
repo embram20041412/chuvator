@@ -147,8 +147,8 @@ test('CHUVATOR — FASE 5.5-C: Controlled Backfill & Authorization Verification 
   // =========================================================================
   // BUKTI TEST 3: Administrator tenant dengan izin yang sesuai dapat menjalankan
   // =========================================================================
-  await t.test('3. Bukti: Administrator tenant (admin & manager) dapat menjalankan backfill tenant sendiri', async () => {
-    for (const role of ['admin', 'manager']) {
+  await t.test('3. Bukti: Administrator tenant (admin) dapat menjalankan backfill tenant sendiri', async () => {
+    for (const role of ['admin']) {
       const context = {
         request: new Request('http://localhost/api/admin/backfill_kk_hmac?dryRun=true', {
           method: 'POST',
@@ -165,7 +165,7 @@ test('CHUVATOR — FASE 5.5-C: Controlled Backfill & Authorization Verification 
       };
 
       const res = await backfillIndexPost(context);
-      assert.strictEqual(res.status, 200, `Peran tenant admin/manager '${role}' harus diizinkan`);
+      assert.strictEqual(res.status, 200, `Peran tenant admin '${role}' harus diizinkan`);
       const body = await res.json();
       assert.strictEqual(body.success, true);
     }
@@ -174,8 +174,8 @@ test('CHUVATOR — FASE 5.5-C: Controlled Backfill & Authorization Verification 
   // =========================================================================
   // BUKTI TEST 4: Staf tanpa izin ditolak
   // =========================================================================
-  await t.test('4. Bukti: Staf tanpa izin (kasir, coach, staff) ditolak (HTTP 403)', async () => {
-    for (const role of ['kasir', 'coach', 'staff']) {
+  await t.test('4. Bukti: Staf tanpa izin (manager, kasir, coach, staff) ditolak (HTTP 403)', async () => {
+    for (const role of ['manager', 'kasir', 'coach', 'staff']) {
       const context = {
         request: new Request('http://localhost/api/admin/backfill_kk_hmac?dryRun=true', {
           method: 'POST',
@@ -226,8 +226,25 @@ test('CHUVATOR — FASE 5.5-C: Controlled Backfill & Authorization Verification 
   // =========================================================================
   // BUKTI TEST 6: runId saja tidak dapat mengotorisasi eksekusi
   // =========================================================================
-  await t.test('6. Bukti: runId saja tidak dapat mengotorisasi eksekusi (Permintaan tanpa sesi valid / role terlarang / tenant salah ditolak)', async () => {
-    // 6a. Tanpa header otorisasi sesi
+  await t.test('6. Bukti: runId saja tidak dapat mengotorisasi eksekusi (Permintaan tanpa execute: true ditolak)', async () => {
+    // 6a. Resume dengan runId tapi TANPA execute: true
+    const resumeNoExecReq = new Request('http://localhost/api/admin/backfill_kk_hmac', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer owner-token',
+        'x-test-staff-role': 'owner',
+        'x-test-staff-uid': 'uid-owner-1',
+        'x-test-tenant-id': 'tenant-owner-1',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ runId: 'run-belonging-to-tenant-owner-1', execute: false })
+    });
+    const resumeNoExecRes = await backfillIndexPost({ request: resumeNoExecReq, env: { KK_HMAC_SECRET: mockSecret, SUPABASE_URL: mockUrl, SUPABASE_SERVICE_ROLE_KEY: mockKey } });
+    assert.strictEqual(resumeNoExecRes.status, 400, 'Resume dengan runId tapi execute: false harus ditolak HTTP 400');
+    const bodyNoExec = await resumeNoExecRes.json();
+    assert.strictEqual(bodyNoExec.code, 'DRY_RUN_ONLY_MODE');
+
+    // 6b. Tanpa header otorisasi sesi
     const unauthReq = new Request('http://localhost/api/admin/backfill_kk_hmac', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -235,21 +252,6 @@ test('CHUVATOR — FASE 5.5-C: Controlled Backfill & Authorization Verification 
     });
     const unauthRes = await backfillIndexPost({ request: unauthReq, env: { KK_HMAC_SECRET: mockSecret, SUPABASE_URL: mockUrl, SUPABASE_SERVICE_ROLE_KEY: mockKey } });
     assert.strictEqual(unauthRes.status, 401, 'Request dengan runId tanpa sesi autentikasi harus ditolak HTTP 401');
-
-    // 6b. Dengan role staf tidak berwenang (kasir)
-    const forbiddenRoleReq = new Request('http://localhost/api/admin/backfill_kk_hmac', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer kasir-token',
-        'x-test-staff-role': 'kasir',
-        'x-test-staff-uid': 'uid-kasir-1',
-        'x-test-tenant-id': 'tenant-owner-1',
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ runId: 'run-belonging-to-tenant-owner-1', execute: true })
-    });
-    const forbiddenRoleRes = await backfillIndexPost({ request: forbiddenRoleReq, env: { KK_HMAC_SECRET: mockSecret, SUPABASE_URL: mockUrl, SUPABASE_SERVICE_ROLE_KEY: mockKey } });
-    assert.strictEqual(forbiddenRoleRes.status, 403, 'Request dengan runId oleh peran kasir harus ditolak HTTP 403');
 
     // 6c. Dengan owner Tenant A mencoba mengakses runId milik Tenant B
     const crossTenantRunReq = new Request('http://localhost/api/admin/backfill_kk_hmac', {

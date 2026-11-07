@@ -115,13 +115,13 @@ export async function onRequestPost(context) {
       );
     }
 
-    // Mandatory check: If non-dryRun is requested without explicit execute: true or active runId, reject with 400 DRY_RUN_ONLY_MODE
-    if (!isDryRun && body.execute !== true && !body.runId) {
+    // Mandatory check: All active execution requests (new or resume) MUST have explicit execute: true
+    if (!isDryRun && body.execute !== true) {
       return new Response(
         JSON.stringify({
           success: false,
           code: 'DRY_RUN_ONLY_MODE',
-          message: 'Mode eksekusi aktif memerlukan konfirmasi (execute: true). Permintaan tanpa dryRun=true ditolak dalam mode Dry-Run READ-ONLY.'
+          message: 'Konfirmasi eksekusi (execute: true) wajib disertakan. Permintaan tanpa konfirmasi ditolak dalam mode Dry-Run READ-ONLY.'
         }),
         { status: 400, headers: corsHeaders }
       );

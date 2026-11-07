@@ -17,13 +17,13 @@ export async function validateBackfillAdmin(context) {
   }
 
   const user = authResult.user;
-  const allowedRoles = new Set(['superadmin', 'owner', 'admin', 'manager']);
+  const allowedRoles = new Set(['superadmin', 'owner', 'admin']);
 
   if (!allowedRoles.has(user.role)) {
     return {
       authorized: false,
       status: 403,
-      message: `Akses ditolak. Peran '${user.role}' tidak memiliki wewenang administratif untuk mengelola data atau backfill siswa.`
+      message: `Akses ditolak. Peran '${user.role}' tidak memiliki wewenang administratif untuk mengelola data siswa (Hanya Superadmin, Owner, dan Admin).`
     };
   }
 
