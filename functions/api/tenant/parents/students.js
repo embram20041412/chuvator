@@ -35,69 +35,65 @@ export async function onRequestGet(context) {
       );
     }
 
-    // 3. Get KK from query params
+    // 3. Initialize Supabase Admin Config (Fail-Closed)
+    const supabaseUrl = env.SUPABASE_URL;
+    const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
+    const secret = env.KK_HMAC_SECRET;
+
+    if (!supabaseUrl || !serviceRoleKey || !secret) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          code: 'SUPABASE_CONFIG_MISSING', 
+          message: 'Konfigurasi server (Supabase/Security) tidak lengkap.' 
+        }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
+    // 4. Get and Normalize KK
     const url = new URL(request.url);
     const rawKK = url.searchParams.get('kk');
-    const normalizedKK = normalizeKK(rawKK);
+    const normalizedKKVal = normalizeKK(rawKK);
 
-    if (!normalizedKK) {
+    if (!normalizedKKVal) {
       return new Response(
         JSON.stringify({ success: false, message: 'Nomor KK harus 16 digit angka.' }),
         { status: 400, headers: corsHeaders }
       );
     }
 
-    // 4. Compute HMAC
-    const secret = env.KK_HMAC_SECRET;
-    if (!secret) {
+    // 5. Compute HMAC
+    const kkHmac = await computeHMAC(normalizedKKVal, secret);
+    const kkLast4 = normalizedKKVal.slice(-4);
+
+    // 6. Query Supabase using Service Role (Bypass RLS for verification if needed, or stick to tenant isolation)
+    let queryUrl = `${supabaseUrl}/rest/v1/students?kk_hmac=eq.${encodeURIComponent(kkHmac)}&select=id,name,birth_date,kk_last4,tenant_id`;
+    if (role !== 'superadmin') {
+      queryUrl += `&tenant_id=eq.${encodeURIComponent(tenantId)}`;
+    }
+
+    const resp = await fetch(queryUrl, {
+      method: 'GET',
+      headers: {
+        'apikey': serviceRoleKey,
+        'Authorization': `Bearer ${serviceRoleKey}`,
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!resp.ok) {
       return new Response(
-        JSON.stringify({ success: false, message: 'Konfigurasi keamanan (KK_HMAC_SECRET) belum tersedia.' }),
+        JSON.stringify({ 
+          success: false, 
+          code: 'STUDENT_VERIFICATION_FAILED', 
+          message: 'Gagal mencari data siswa di database.' 
+        }),
         { status: 500, headers: corsHeaders }
       );
     }
-    const kkHmac = await computeHMAC(normalizedKK, secret);
-    const kkLast4 = normalizedKK.slice(-4);
 
-    // 5. Query Supabase
-    const supabaseUrl = env.SUPABASE_URL || env.VITE_SUPABASE_URL;
-    const anonKey = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY;
-
-    let students = [];
-    if (supabaseUrl && anonKey) {
-      let queryUrl = `${supabaseUrl}/rest/v1/students?kk_hmac=eq.${encodeURIComponent(kkHmac)}&select=id,name,birth_date,kk_last4`;
-      if (role !== 'superadmin') {
-        queryUrl += `&tenant_id=eq.${encodeURIComponent(tenantId)}`;
-      }
-
-      const resp = await fetch(queryUrl, {
-        method: 'GET',
-        headers: {
-          'apikey': anonKey,
-          'Authorization': request.headers.get('Authorization') || `Bearer ${anonKey}`,
-          'Accept': 'application/json'
-        }
-      }).catch(() => null);
-
-      if (resp && resp.ok) {
-        students = await resp.json().catch(() => []);
-      } else {
-        // PERLINDUNGAN KEAMANAN: Jangan pernah fallback mengambil seluruh siswa tenant!
-        students = [];
-      }
-    }
-
-    // Demo/test environment mock data: DILARANG KERAS di environment production
-    const isProduction = env.ENVIRONMENT === 'production' || env.NODE_ENV === 'production';
-    if (!isProduction && students.length === 0 && tenantId && tenantId.startsWith('demo-')) {
-      students = [
-        {
-          id: `student-demo-${normalizedKK.slice(-4)}-1`,
-          name: `Siswa Akademi (${kkLast4})`,
-          birth_date: '2015-05-15',
-          kk_last4: kkLast4
-        }
-      ];
-    }
+    const students = await resp.json().catch(() => []);
 
     return new Response(
       JSON.stringify({
@@ -115,8 +111,9 @@ export async function onRequestGet(context) {
   } catch (err) {
     console.error('Search students by KK error:', err.message);
     return new Response(
-      JSON.stringify({ success: false, message: 'Terjadi kesalahan internal.' }),
+      JSON.stringify({ success: false, message: 'Terjadi kesalahan internal pada server.' }),
       { status: 500, headers: corsHeaders }
     );
   }
 }
+
