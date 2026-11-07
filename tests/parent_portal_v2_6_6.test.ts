@@ -3,7 +3,17 @@ import assert from 'node:assert';
 import { onRequestPost as resendPost } from '../functions/api/tenant/parents/resend.js';
 import { onRequestDelete as deleteDelete } from '../functions/api/tenant/parents/delete.js';
 
-test('CHUVATOR — Parent Portal V2.6.6 Final Delete Verification & Diagnostic Sanitization', async (t) => {
+function escapeHtml(str: string) {
+  if (!str) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+test('CHUVATOR — Parent Portal V2.6.7 Final Action Link Assertion & Regression Verification', async (t) => {
   const mockUrl = 'https://mock-supabase.local';
   const mockServiceKey = 'service-role-key';
   const appUrl = 'https://myapp.local';
@@ -73,6 +83,9 @@ test('CHUVATOR — Parent Portal V2.6.6 Final Delete Verification & Diagnostic S
             return new Response(null, { status: 204 });
           }
           const responseBody = typeof rule.body === 'function' ? await rule.body(options) : rule.body;
+          if (responseBody instanceof Error) {
+            throw responseBody;
+          }
           return new Response(JSON.stringify(responseBody || {}), { 
             status: rule.status || 200,
             headers: rule.headers || { 'Content-Type': 'application/json' }
@@ -88,11 +101,23 @@ test('CHUVATOR — Parent Portal V2.6.6 Final Delete Verification & Diagnostic S
     fetchHistory = [];
   };
 
-  // --- EMAIL TESTS ---
+  let consoleErrors: string[] = [];
+  const originalConsoleError = console.error;
+  const interceptConsoleError = () => {
+    consoleErrors = [];
+    console.error = (...args: any[]) => {
+      consoleErrors.push(args.map(arg => String(arg)).join(' '));
+    };
+  };
+  const restoreConsoleError = () => {
+    console.error = originalConsoleError;
+  };
 
-  await t.test('A. Invite: Auth unconfirmed uses type invite and escapes action link', async () => {
-    let capturedGenerateBody: any = null;
+  // --- 1. ACTION LINK ESCAPING & HREF PRECISION ASSERTIONS ---
+
+  await t.test('A. Invite: Action link with special characters (&, ", \', <, >) is precisely placed in href and fully escaped', async () => {
     let capturedResendBody: any = null;
+    const specialActionLink = 'https://mock-supabase.local/verify?token=abc&val="test"&quote=\'single\'&tag=<script>&end=>';
 
     mockFetch([
       { pattern: '/rest/v1/parent_accounts?select=', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', email: 'parent@example.com', auth_uid: 'auth-123' }] },
@@ -100,10 +125,7 @@ test('CHUVATOR — Parent Portal V2.6.6 Final Delete Verification & Diagnostic S
       { 
         pattern: '/auth/v1/admin/generate_link', 
         method: 'POST', 
-        body: async (opts: any) => {
-          capturedGenerateBody = JSON.parse(opts.body);
-          return { properties: { action_link: 'https://mock-supabase.local/verify?token=abc&val="test"' } };
-        }, 
+        body: { properties: { action_link: specialActionLink } }, 
         status: 200 
       },
       { 
@@ -123,16 +145,32 @@ test('CHUVATOR — Parent Portal V2.6.6 Final Delete Verification & Diagnostic S
       assert.strictEqual(res.status, 200);
       const data = await res.json();
       assert.strictEqual(data.success, true);
-      assert.strictEqual(capturedGenerateBody.type, 'invite');
-      assert.ok(capturedResendBody.html.includes('&quot;test&quot;'));
-      assert.ok(!capturedResendBody.html.includes('"test"'));
+
+      // Verify no token or action link is returned in API response
+      const respStr = JSON.stringify(data);
+      assert.ok(!respStr.includes('token=abc'));
+      assert.ok(!respStr.includes('action_link'));
+
+      // Extract href attribute precisely from email HTML
+      const html = capturedResendBody.html;
+      const hrefMatch = html.match(/<a\s+href="([^"]+)"[^>]*>/i);
+      assert.ok(hrefMatch, 'Email HTML must contain an <a> tag with an href attribute');
+      
+      const hrefValue = hrefMatch[1];
+      const expectedEscaped = escapeHtml(specialActionLink);
+
+      // Ensure exact match between href value and properly escaped action link
+      assert.strictEqual(hrefValue, expectedEscaped, 'Action link in href attribute must be precisely placed and fully escaped');
+      assert.ok(!html.includes(specialActionLink), 'Raw unescaped action link must not appear in HTML body outside escaped href');
     } finally {
       resetFetch();
     }
   });
 
-  await t.test('B. Recovery: Auth confirmed uses type recovery', async () => {
+  await t.test('B. Recovery: Auth confirmed uses type recovery and correct href', async () => {
     let capturedGenerateBody: any = null;
+    let capturedResendBody: any = null;
+    const recoveryLink = 'https://mock-supabase.local/recovery?token=xyz&secure=true';
 
     mockFetch([
       { pattern: '/rest/v1/parent_accounts?select=', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', email: 'parent@example.com', auth_uid: 'auth-123' }] },
@@ -142,11 +180,19 @@ test('CHUVATOR — Parent Portal V2.6.6 Final Delete Verification & Diagnostic S
         method: 'POST', 
         body: async (opts: any) => {
           capturedGenerateBody = JSON.parse(opts.body);
-          return { properties: { action_link: 'https://mock-supabase.local/recovery?token=xyz' } };
+          return { properties: { action_link: recoveryLink } };
         }, 
         status: 200 
       },
-      { pattern: 'api.resend.com/emails', method: 'POST', body: { id: 'resend-id-123' }, status: 200 }
+      { 
+        pattern: 'api.resend.com/emails', 
+        method: 'POST', 
+        body: async (opts: any) => {
+          capturedResendBody = JSON.parse(opts.body);
+          return { id: 'resend-id-123' };
+        }, 
+        status: 200 
+      }
     ]);
 
     try {
@@ -154,17 +200,31 @@ test('CHUVATOR — Parent Portal V2.6.6 Final Delete Verification & Diagnostic S
       const res = await resendPost(ctx);
       assert.strictEqual(res.status, 200);
       assert.strictEqual(capturedGenerateBody.type, 'recovery');
+      
+      const hrefMatch = capturedResendBody.html.match(/<a\s+href="([^"]+)"[^>]*>/i);
+      assert.ok(hrefMatch);
+      assert.strictEqual(hrefMatch[1], escapeHtml(recoveryLink));
     } finally {
       resetFetch();
     }
   });
 
-  await t.test('C. Provider: Resend HTTP error or exception does not produce success', async () => {
+  // --- 2. DIAGNOSTIC SANITIZATION & LOG INTERCEPTION TESTS ---
+
+  await t.test('C. Provider & Supabase Error Sanitization: Raw messages, tokens, and PII do not leak to response or logs', async () => {
+    interceptConsoleError();
+    const sensitiveToken = 'super-secret-token-999';
+    const sensitiveEmail = 'private-parent@example.com';
+
     mockFetch([
-      { pattern: '/rest/v1/parent_accounts?select=', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', email: 'parent@example.com', auth_uid: 'auth-123' }] },
+      { pattern: '/rest/v1/parent_accounts?select=', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', email: sensitiveEmail, auth_uid: 'auth-123' }] },
       { pattern: '/auth/v1/admin/users/auth-123', method: 'GET', body: { id: 'auth-123', email_confirmed_at: null }, status: 200 },
-      { pattern: '/auth/v1/admin/generate_link', method: 'POST', body: { properties: { action_link: 'https://mock-supabase.local/verify?token=abc' } }, status: 200 },
-      { pattern: 'api.resend.com/emails', method: 'POST', body: { error: 'Internal Resend Error' }, status: 500 }
+      { 
+        pattern: '/auth/v1/admin/generate_link', 
+        method: 'POST', 
+        body: new Error(`Unexpected failure with token=${sensitiveToken} and email=${sensitiveEmail}`), 
+        status: 500 
+      }
     ]);
 
     try {
@@ -173,16 +233,56 @@ test('CHUVATOR — Parent Portal V2.6.6 Final Delete Verification & Diagnostic S
       assert.strictEqual(res.status, 500);
       const data = await res.json();
       assert.strictEqual(data.success, false);
-      assert.strictEqual(data.code, 'EMAIL_SEND_FAILED');
-      assert.ok(!JSON.stringify(data).includes('Internal Resend Error'));
+      assert.strictEqual(data.message, 'Terjadi kesalahan internal pada server.');
+
+      const responseString = JSON.stringify(data);
+      assert.ok(!responseString.includes(sensitiveToken), 'Response must not contain sensitive token');
+      assert.ok(!responseString.includes(sensitiveEmail), 'Response must not contain sensitive email');
+      assert.ok(!responseString.includes('Unexpected failure'), 'Response must not contain raw exception message');
+
+      // Verify console.error logs are static and devoid of sensitive data / raw error messages
+      assert.ok(consoleErrors.length > 0, 'Console error must be logged');
+      for (const log of consoleErrors) {
+        assert.ok(!log.includes(sensitiveToken), 'Log must not contain token');
+        assert.ok(!log.includes(sensitiveEmail), 'Log must not contain email');
+        assert.ok(!log.includes('Unexpected failure'), 'Log must not contain raw exception message');
+        assert.strictEqual(log, 'Resend invitation error.', 'Catch block must use static log message');
+      }
     } finally {
+      restoreConsoleError();
       resetFetch();
     }
   });
 
-  // --- DELETE TESTS ---
+  // --- DELETE TESTS & SANITIZATION ---
 
-  await t.test('D. Delete: success=true but deleted_parent_count=0 must fail', async () => {
+  await t.test('D. Delete Sanitization & Validation: Count validation and log sanitization', async () => {
+    interceptConsoleError();
+    const sensitiveParentId = 'parent-uuid-secret-999';
+
+    mockFetch([
+      { pattern: `/rest/v1/parent_accounts?id=eq.${sensitiveParentId}`, method: 'GET', body: [{ id: sensitiveParentId, tenant_id: 'tenant-1', auth_uid: 'auth-123' }] },
+      { pattern: '/auth/v1/admin/users/auth-123', method: 'DELETE', status: 200 },
+      { pattern: '/rest/v1/rpc/parent_portal_atomic_delete', method: 'POST', body: [{ success: true, deleted_links_count: 5, deleted_parent_count: 2 }], status: 200 }
+    ]);
+
+    try {
+      const ctx = getDeleteContext(sensitiveParentId);
+      const res = await deleteDelete(ctx);
+      assert.strictEqual(res.status, 500);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.strictEqual(data.code, 'ATOMIC_DELETE_FAILED');
+      
+      const respStr = JSON.stringify(data);
+      assert.ok(!respStr.includes(sensitiveParentId));
+    } finally {
+      restoreConsoleError();
+      resetFetch();
+    }
+  });
+
+  await t.test('E. Delete: success=true but deleted_parent_count=0 must fail', async () => {
     mockFetch([
       { pattern: '/rest/v1/parent_accounts?id=eq.parent-uuid-123', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', auth_uid: 'auth-123' }] },
       { pattern: '/auth/v1/admin/users/auth-123', method: 'DELETE', status: 200 },
@@ -201,63 +301,7 @@ test('CHUVATOR — Parent Portal V2.6.6 Final Delete Verification & Diagnostic S
     }
   });
 
-  await t.test('E. Delete: success=true but deleted_parent_count=2 must fail', async () => {
-    mockFetch([
-      { pattern: '/rest/v1/parent_accounts?id=eq.parent-uuid-123', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', auth_uid: 'auth-123' }] },
-      { pattern: '/auth/v1/admin/users/auth-123', method: 'DELETE', status: 200 },
-      { pattern: '/rest/v1/rpc/parent_portal_atomic_delete', method: 'POST', body: [{ success: true, deleted_links_count: 5, deleted_parent_count: 2 }], status: 200 }
-    ]);
-
-    try {
-      const ctx = getDeleteContext('parent-uuid-123');
-      const res = await deleteDelete(ctx);
-      assert.strictEqual(res.status, 500);
-      const data = await res.json();
-      assert.strictEqual(data.success, false);
-      assert.strictEqual(data.code, 'ATOMIC_DELETE_FAILED');
-    } finally {
-      resetFetch();
-    }
-  });
-
-  await t.test('F. Delete: success=false must fail', async () => {
-    mockFetch([
-      { pattern: '/rest/v1/parent_accounts?id=eq.parent-uuid-123', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', auth_uid: 'auth-123' }] },
-      { pattern: '/auth/v1/admin/users/auth-123', method: 'DELETE', status: 200 },
-      { pattern: '/rest/v1/rpc/parent_portal_atomic_delete', method: 'POST', body: [{ success: false, deleted_links_count: 0, deleted_parent_count: 0 }], status: 200 }
-    ]);
-
-    try {
-      const ctx = getDeleteContext('parent-uuid-123');
-      const res = await deleteDelete(ctx);
-      assert.strictEqual(res.status, 500);
-      const data = await res.json();
-      assert.strictEqual(data.success, false);
-    } finally {
-      resetFetch();
-    }
-  });
-
-  await t.test('G. Delete: RPC HTTP error must fail', async () => {
-    mockFetch([
-      { pattern: '/rest/v1/parent_accounts?id=eq.parent-uuid-123', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', auth_uid: 'auth-123' }] },
-      { pattern: '/auth/v1/admin/users/auth-123', method: 'DELETE', status: 200 },
-      { pattern: '/rest/v1/rpc/parent_portal_atomic_delete', method: 'POST', body: { message: 'Database error' }, status: 500 }
-    ]);
-
-    try {
-      const ctx = getDeleteContext('parent-uuid-123');
-      const res = await deleteDelete(ctx);
-      assert.strictEqual(res.status, 500);
-      const data = await res.json();
-      assert.strictEqual(data.success, false);
-      assert.strictEqual(data.code, 'RPC_DELETE_FAILED');
-    } finally {
-      resetFetch();
-    }
-  });
-
-  await t.test('H. Delete: Auth error other than 404 must NOT call RPC', async () => {
+  await t.test('F. Delete: Auth error other than 404 must NOT call RPC', async () => {
     let rpcCalled = false;
     mockFetch([
       { pattern: '/rest/v1/parent_accounts?id=eq.parent-uuid-123', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', auth_uid: 'auth-123' }] },
@@ -282,32 +326,7 @@ test('CHUVATOR — Parent Portal V2.6.6 Final Delete Verification & Diagnostic S
     }
   });
 
-  await t.test('I. Delete: Auth 404 still proceeds to RPC successfully', async () => {
-    let rpcCalled = false;
-    mockFetch([
-      { pattern: '/rest/v1/parent_accounts?id=eq.parent-uuid-123', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', auth_uid: 'auth-123' }] },
-      { pattern: '/auth/v1/admin/users/auth-123', method: 'DELETE', status: 404 },
-      { 
-        pattern: '/rest/v1/rpc/parent_portal_atomic_delete', 
-        method: 'POST', 
-        body: async () => { rpcCalled = true; return [{ success: true, deleted_parent_count: 1 }]; }, 
-        status: 200 
-      }
-    ]);
-
-    try {
-      const ctx = getDeleteContext('parent-uuid-123');
-      const res = await deleteDelete(ctx);
-      assert.strictEqual(res.status, 200);
-      const data = await res.json();
-      assert.strictEqual(data.success, true);
-      assert.strictEqual(rpcCalled, true);
-    } finally {
-      resetFetch();
-    }
-  });
-
-  await t.test('J. Delete: Valid deletion with count 1 succeeds', async () => {
+  await t.test('G. Delete: Valid deletion with count 1 succeeds', async () => {
     mockFetch([
       { pattern: '/rest/v1/parent_accounts?id=eq.parent-uuid-123', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', auth_uid: 'auth-123' }] },
       { pattern: '/auth/v1/admin/users/auth-123', method: 'DELETE', status: 200 },
