@@ -13,7 +13,7 @@ function escapeHtml(str: string) {
     .replace(/'/g, '&#039;');
 }
 
-test('CHUVATOR — Parent Portal V2.6.7 Final Action Link Assertion & Regression Verification', async (t) => {
+test('CHUVATOR — Parent Portal V2.6.8 Final Log Sanitization & Exception Test Completion', async (t) => {
   const mockUrl = 'https://mock-supabase.local';
   const mockServiceKey = 'service-role-key';
   const appUrl = 'https://myapp.local';
@@ -254,7 +254,87 @@ test('CHUVATOR — Parent Portal V2.6.7 Final Action Link Assertion & Regression
     }
   });
 
+  await t.test('H. Resend provider exception: Resend fetch throws exception with sensitive tokens/email and is sanitized', async () => {
+    interceptConsoleError();
+    const sensitiveToken = 'resend-exc-token-xyz';
+    const sensitiveEmail = 'resend-exc-email@example.com';
+    const validActionLink = 'https://mock-supabase.local/verify?token=abc';
+
+    mockFetch([
+      { pattern: '/rest/v1/parent_accounts?select=', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', email: sensitiveEmail, auth_uid: 'auth-123' }] },
+      { pattern: '/auth/v1/admin/users/auth-123', method: 'GET', body: { id: 'auth-123', email_confirmed_at: null }, status: 200 },
+      { pattern: '/auth/v1/admin/generate_link', method: 'POST', body: { properties: { action_link: validActionLink } }, status: 200 },
+      { 
+        pattern: 'api.resend.com/emails', 
+        method: 'POST', 
+        body: new Error(`Resend provider connection dropped for token=${sensitiveToken} and email=${sensitiveEmail}`), 
+        status: 500 
+      }
+    ]);
+
+    try {
+      const ctx = getResendContext();
+      const res = await resendPost(ctx);
+      assert.strictEqual(res.status, 500);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.strictEqual(data.code, 'EMAIL_SEND_FAILED');
+
+      const respStr = JSON.stringify(data);
+      assert.ok(!respStr.includes(sensitiveToken));
+      assert.ok(!respStr.includes(sensitiveEmail));
+      assert.ok(!respStr.includes('Resend provider connection dropped'));
+
+      for (const log of consoleErrors) {
+        assert.ok(!log.includes(sensitiveToken));
+        assert.ok(!log.includes(sensitiveEmail));
+        assert.ok(!log.includes('Resend provider connection dropped'));
+      }
+    } finally {
+      restoreConsoleError();
+      resetFetch();
+    }
+  });
+
   // --- DELETE TESTS & SANITIZATION ---
+
+  await t.test('I. Delete log sanitization: Unexpected exception in delete enters catch block and logs static message without PII/tokens', async () => {
+    interceptConsoleError();
+    const sensitiveParentId = 'parent-uuid-sql-err-999';
+    const sensitiveToken = 'db-error-token-secret';
+
+    mockFetch([
+      { 
+        pattern: `/rest/v1/parent_accounts?id=eq.${sensitiveParentId}`, 
+        method: 'GET', 
+        body: new Error(`Database connection timeout for parent=${sensitiveParentId} token=${sensitiveToken}`), 
+        status: 500 
+      }
+    ]);
+
+    try {
+      const ctx = getDeleteContext(sensitiveParentId);
+      const res = await deleteDelete(ctx);
+      assert.strictEqual(res.status, 500);
+      const data = await res.json();
+      assert.strictEqual(data.success, false);
+      assert.strictEqual(data.message, 'Terjadi kesalahan internal pada server.');
+
+      const respStr = JSON.stringify(data);
+      assert.ok(!respStr.includes(sensitiveParentId));
+      assert.ok(!respStr.includes(sensitiveToken));
+      assert.ok(!respStr.includes('Database connection timeout'));
+
+      assert.strictEqual(consoleErrors.length, 1, 'Exactly one console.error call expected in catch block');
+      assert.strictEqual(consoleErrors[0], 'Delete parent account error.', 'Log must be strictly the static message');
+      assert.ok(!consoleErrors[0].includes(sensitiveParentId));
+      assert.ok(!consoleErrors[0].includes(sensitiveToken));
+      assert.ok(!consoleErrors[0].includes('Database connection timeout'));
+    } finally {
+      restoreConsoleError();
+      resetFetch();
+    }
+  });
 
   await t.test('D. Delete Sanitization & Validation: Count validation and log sanitization', async () => {
     interceptConsoleError();
