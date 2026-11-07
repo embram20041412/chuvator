@@ -296,14 +296,26 @@ export async function onRequestPost(context) {
     });
 
     if (!parentInsertResp.ok) {
+      // DIAGNOSTICS V2.3.5: Capture and log database error details safely
+      const dbError = await parentInsertResp.json().catch(() => ({}));
+      
       // COMPENSATION
       const cleanupAuth = await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUid}`, {
         method: 'DELETE',
         headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
       }).catch(e => ({ ok: false, statusText: e.message }));
 
+      console.error('[Database Error] Parent account insertion failed:', {
+        status: parentInsertResp.status,
+        code: dbError.code,
+        message: dbError.message,
+        hint: dbError.hint,
+        details: dbError.details ? 'available' : 'none',
+        authCleanup: cleanupAuth.ok ? 'SUCCESS' : `FAILED (${cleanupAuth.statusText})`
+      });
+
       if (!cleanupAuth.ok) {
-        console.error('[Cleanup Error] Critical failure deleting auth user:', authUid, cleanupAuth.statusText);
+        console.error('[Cleanup Error] Critical failure deleting auth user after DB insert failure:', { error: cleanupAuth.statusText });
       }
 
       return new Response(
@@ -320,13 +332,14 @@ export async function onRequestPost(context) {
     const parentId = (newParents.length > 0) ? newParents[0].id : null;
 
     if (!parentId) {
-      // COMPENSATION
+      // COMPENSATION V2.3.5
       const cleanupAuth = await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUid}`, {
         method: 'DELETE',
         headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
       }).catch(e => ({ ok: false, statusText: e.message }));
 
       if (!cleanupAuth.ok) {
+        // Log failure with UID for recovery (only in cleanup failure block as per specific instruction)
         console.error('[Cleanup Error] Failure deleting auth user during missing parentId recovery:', { authUid, error: cleanupAuth.statusText });
       }
 
