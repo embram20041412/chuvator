@@ -29,6 +29,7 @@ test('CHUVATOR — Parent Portal V2.6.0 Lifecycle & Invitation Recovery', async 
     env: {
       SUPABASE_URL: mockUrl,
       SUPABASE_SERVICE_ROLE_KEY: mockServiceKey,
+      RESEND_API_KEY: 'test-resend-key',
       APP_URL: appUrl,
       ENVIRONMENT: 'test',
       ALLOWED_ORIGINS: 'https://myapp.local'
@@ -87,7 +88,9 @@ test('CHUVATOR — Parent Portal V2.6.0 Lifecycle & Invitation Recovery', async 
   await t.test('1. Resend invitation for existing parent account succeeds', async () => {
     mockFetch({
       '/rest/v1/parent_accounts?select=': { body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', email: 'parent@example.com', auth_uid: 'auth-123' }] },
-      '/auth/v1/admin/generate_link': { body: { properties: { action_link: 'http://link' } }, status: 200 }
+      '/auth/v1/admin/users/auth-123': { body: { id: 'auth-123', email_confirmed_at: null }, status: 200 },
+      '/auth/v1/admin/generate_link': { body: { properties: { action_link: 'http://link' } }, status: 200 },
+      'api.resend.com/emails': { body: { id: 'email-id' }, status: 200 }
     });
 
     try {

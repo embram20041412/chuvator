@@ -1,7 +1,6 @@
 /**
  * Cloudflare Pages Function: POST /api/tenant/parents/resend
- * Invitation Recovery & Resend for existing parent accounts with strict separation
- * between unconfirmed (invite) and confirmed (recovery) users.
+ * Invitation Recovery & Resend for existing parent accounts with strict email provider verification.
  */
 
 import { getCorsHeaders } from '../../portal/_auth_v2.js';
@@ -40,6 +39,19 @@ export async function onRequestPost(context) {
 
     if (!supabaseUrl || !serviceRoleKey) {
       return new Response(JSON.stringify({ success: false, code: 'SUPABASE_CONFIG_MISSING', message: 'Konfigurasi server tidak lengkap.' }), { status: 500, headers: corsHeaders });
+    }
+
+    // Check email provider configuration (Fail-closed)
+    const emailApiToken = env.RESEND_API_KEY || env.SENDGRID_API_KEY || env.EMAIL_PROVIDER_API_KEY;
+    if (!emailApiToken) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          code: 'EMAIL_PROVIDER_NOT_CONFIGURED', 
+          message: 'Layanan pengiriman email (provider) belum dikonfigurasi di server.' 
+        }),
+        { status: 500, headers: corsHeaders }
+      );
     }
 
     // Fail-closed rate limiting check
@@ -91,7 +103,7 @@ export async function onRequestPost(context) {
       await kvBinding.put(rateKey, String(count + 1), { expirationTtl: 300 });
     }
 
-    // 1. Fetch actual Supabase Auth user to check confirmation status
+    // 1. Fetch Supabase Auth user to check confirmation status
     let isConfirmed = false;
     if (authUid) {
       const authUserResp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/users/${authUid}`, {
@@ -111,59 +123,90 @@ export async function onRequestPost(context) {
 
     const appUrl = env.APP_URL || 'https://chuvator.pages.dev';
     const redirectUrl = `${appUrl.replace(/\/$/, '')}/portal/accept-invitation`;
+    const linkType = isConfirmed ? 'recovery' : 'invite';
 
-    let actionResp;
-    let successMessage;
+    // 2. Generate action link from Supabase Auth Admin API
+    const linkResp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/generate_link`, {
+      method: 'POST',
+      headers: {
+        'apikey': serviceRoleKey,
+        'Authorization': `Bearer ${serviceRoleKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        type: linkType,
+        email: targetEmail,
+        options: {
+          redirectTo: redirectUrl
+        }
+      })
+    });
 
-    if (!isConfirmed) {
-      // Unconfirmed user -> Generate invite link / resend invitation
-      actionResp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/generate_link`, {
-        method: 'POST',
-        headers: {
-          'apikey': serviceRoleKey,
-          'Authorization': `Bearer ${serviceRoleKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          type: 'invite',
-          email: targetEmail,
-          options: {
-            redirectTo: redirectUrl
-          }
-        })
-      });
-      successMessage = 'Undangan aktivasi berhasil dikirim ulang ke wali murid.';
-    } else {
-      // Confirmed user -> Password recovery
-      actionResp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/generate_link`, {
-        method: 'POST',
-        headers: {
-          'apikey': serviceRoleKey,
-          'Authorization': `Bearer ${serviceRoleKey}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          type: 'recovery',
-          email: targetEmail,
-          options: {
-            redirectTo: redirectUrl
-          }
-        })
-      });
-      successMessage = 'Email pemulihan password berhasil dikirim ke wali murid.';
-    }
-
-    if (!actionResp.ok) {
-      const errData = await actionResp.json().catch(() => ({}));
+    if (!linkResp.ok) {
+      const errData = await linkResp.json().catch(() => ({}));
       return new Response(
         JSON.stringify({ 
           success: false, 
-          code: 'RECOVERY_OR_INVITE_FAILED', 
-          message: `Gagal mengirim email: ${errData.msg || errData.message || 'Error unknown'}` 
+          code: 'GENERATE_LINK_FAILED', 
+          message: `Gagal menghasilkan tautan dari Supabase Auth: ${errData.msg || errData.message || 'Error unknown'}` 
         }),
         { status: 500, headers: corsHeaders }
       );
     }
+
+    const linkData = await linkResp.json().catch(() => ({}));
+    const actionLink = linkData.properties?.action_link || linkData.action_link;
+
+    if (!actionLink) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          code: 'GENERATE_LINK_FAILED', 
+          message: 'Tautan aksi tidak ditemukan dalam respons Supabase.' 
+        }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
+    // 3. Send email via provider and verify confirmation response
+    let emailSent = false;
+    try {
+      const emailProviderUrl = env.EMAIL_PROVIDER_API_URL || 'https://api.resend.com/emails';
+      const emailSendResp = await fetch(emailProviderUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${emailApiToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          from: env.EMAIL_FROM || 'noreply@chuasport.com',
+          to: [targetEmail],
+          subject: linkType === 'invite' ? 'Undangan Portal Wali Murid CHUVATOR' : 'Pemulihan Kata Sandi Portal Wali Murid CHUVATOR',
+          html: `<p>Halo, silakan akses tautan berikut untuk ${linkType === 'invite' ? 'mengaktivasi akun' : 'memulihkan kata sandi'} Anda.</p>`
+        })
+      });
+
+      if (emailSendResp.ok) {
+        emailSent = true;
+      }
+    } catch (sendErr) {
+      console.error('Email provider dispatch exception:', sendErr.message);
+    }
+
+    if (!emailSent) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          code: 'EMAIL_SEND_FAILED', 
+          message: 'Gagal mengirim email melalui provider pengiriman.' 
+        }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
+    const successMessage = linkType === 'invite' 
+      ? 'Undangan aktivasi berhasil dikirim ke email wali murid.' 
+      : 'Email pemulihan password berhasil dikirim ke email wali murid.';
 
     return new Response(
       JSON.stringify({

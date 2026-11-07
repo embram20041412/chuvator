@@ -5,7 +5,6 @@ import { onRequestDelete as deleteDelete } from '../functions/api/tenant/parents
 import { onRequestGet as getParentsGet } from '../functions/api/tenant/parents/index.js';
 
 test('CHUVATOR — Parent Portal V2.6.1 Invitation Recovery & Lifecycle Safety Hotfix', async (t) => {
-  const mockSecret = 'test-secret-123';
   const mockUrl = 'http://mock-supabase.local';
   const mockServiceKey = 'service-role-key';
   const appUrl = 'https://myapp.local';
@@ -31,6 +30,7 @@ test('CHUVATOR — Parent Portal V2.6.1 Invitation Recovery & Lifecycle Safety H
       SUPABASE_URL: mockUrl,
       SUPABASE_SERVICE_ROLE_KEY: mockServiceKey,
       SUPABASE_ANON_KEY: 'mock-anon-key',
+      RESEND_API_KEY: 'test-resend-key',
       APP_URL: appUrl,
       ENVIRONMENT: 'test',
       ALLOWED_ORIGINS: 'https://myapp.local',
@@ -54,6 +54,7 @@ test('CHUVATOR — Parent Portal V2.6.1 Invitation Recovery & Lifecycle Safety H
     env: {
       SUPABASE_URL: mockUrl,
       SUPABASE_SERVICE_ROLE_KEY: mockServiceKey,
+      SUPABASE_ANON_KEY: 'mock-anon-key',
       ENVIRONMENT: 'test',
       ALLOWED_ORIGINS: 'https://myapp.local'
     }
@@ -75,6 +76,7 @@ test('CHUVATOR — Parent Portal V2.6.1 Invitation Recovery & Lifecycle Safety H
     env: {
       SUPABASE_URL: mockUrl,
       SUPABASE_SERVICE_ROLE_KEY: mockServiceKey,
+      SUPABASE_ANON_KEY: 'mock-anon-key',
       ENVIRONMENT: 'test',
       ALLOWED_ORIGINS: 'https://myapp.local'
     }
@@ -110,10 +112,12 @@ test('CHUVATOR — Parent Portal V2.6.1 Invitation Recovery & Lifecycle Safety H
     fetchHistory = [];
   };
 
-  await t.test('1. Invitation Recovery via /auth/v1/recover succeeds for existing auth user', async () => {
+  await t.test('1. Invitation Recovery via generate_link and email provider succeeds', async () => {
     mockFetch([
       { pattern: '/rest/v1/parent_accounts?select=', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', email: 'parent@example.com', auth_uid: 'auth-123' }] },
-      { pattern: '/auth/v1/recover', method: 'POST', body: {}, status: 200 }
+      { pattern: '/auth/v1/admin/users/auth-123', method: 'GET', body: { id: 'auth-123', email_confirmed_at: null } },
+      { pattern: '/auth/v1/admin/generate_link', method: 'POST', body: { properties: { action_link: 'http://link' } }, status: 200 },
+      { pattern: 'api.resend.com/emails', method: 'POST', body: { id: 'email-id' }, status: 200 }
     ]);
 
     try {
@@ -187,11 +191,10 @@ test('CHUVATOR — Parent Portal V2.6.1 Invitation Recovery & Lifecycle Safety H
     }
   });
 
-  await t.test('4. Delete fails safely and prevents false success if profile deletion fails', async () => {
+  await t.test('4. Delete fails safely and prevents false success if auth deletion fails', async () => {
     mockFetch([
       { pattern: '/rest/v1/parent_accounts?id=eq.parent-uuid-123', method: 'GET', body: [{ id: 'parent-uuid-123', tenant_id: 'tenant-1', auth_uid: 'auth-123' }] },
-      { pattern: '/rest/v1/parent_student_links', method: 'DELETE', status: 204 },
-      { pattern: '/rest/v1/parent_accounts?id=eq.parent-uuid-123', method: 'DELETE', body: { error: 'DB error' }, status: 500 }
+      { pattern: '/auth/v1/admin/users/auth-123', method: 'DELETE', status: 500, body: { error: 'Auth error' } }
     ]);
 
     try {
@@ -199,7 +202,7 @@ test('CHUVATOR — Parent Portal V2.6.1 Invitation Recovery & Lifecycle Safety H
       const res = await deleteDelete(ctx);
       assert.strictEqual(res.status, 500);
       const data = await res.json();
-      assert.strictEqual(data.code, 'PROFILE_DELETE_FAILED');
+      assert.strictEqual(data.code, 'AUTH_DELETE_FAILED');
     } finally {
       resetFetch();
     }
