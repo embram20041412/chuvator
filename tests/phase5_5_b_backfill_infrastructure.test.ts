@@ -13,7 +13,7 @@ const VERIFICATION_FILE_PATH = path.join(process.cwd(), 'phase5_5_b_backfill_ver
 const INDEX_FILE_PATH = path.join(process.cwd(), 'functions/api/admin/backfill_kk_hmac/index.js');
 const ROLLBACK_FILE_PATH = path.join(process.cwd(), 'functions/api/admin/backfill_kk_hmac/rollback.js');
 
-test('CHUVATOR — FASE 5.5-B: Hardened Backfill Infrastructure V2.2.3 (Security & Concurrency Suite)', async (t) => {
+test('CHUVATOR — FASE 5.5-B: Hardened Backfill Infrastructure V2.2.4 (Security & Concurrency Suite)', async (t) => {
   const schemaSql = fs.readFileSync(SCHEMA_FILE_PATH, 'utf8');
   const indexJs = fs.readFileSync(INDEX_FILE_PATH, 'utf8');
   const rollbackJs = fs.readFileSync(ROLLBACK_FILE_PATH, 'utf8');
@@ -194,12 +194,22 @@ test('CHUVATOR — FASE 5.5-B: Hardened Backfill Infrastructure V2.2.3 (Security
     assert.match(schemaSql, /IF v_run\.tenant_id <> 'global' AND v_run\.tenant_id <> p_tenant_id THEN/);
     assert.match(schemaSql, /'code', 'TENANT_MISMATCH'/);
 
-    // V2.2.3 Patch: Student ownership check WITH FOR UPDATE LOCK (Consolidated Hierarchy)
-    assert.match(schemaSql, /SELECT 1 INTO v_student_exists FROM public\.students\s+WHERE id = p_student_id AND tenant_id = p_tenant_id\s+FOR UPDATE;/);
+    // V2.2.4 Patch: Student ownership check WITH PERFORM ... FOR UPDATE LOCK (Consolidated Hierarchy)
+    assert.match(schemaSql, /PERFORM 1 FROM public\.students\s+WHERE id = p_student_id AND tenant_id = p_tenant_id\s+FOR UPDATE;/);
+    assert.doesNotMatch(schemaSql, /SELECT 1 INTO v_student_exists/);
     assert.match(schemaSql, /'code', 'STUDENT_NOT_FOUND'/);
   });
 
-  await t.test('16. Runtime Integration: Active Execution Lock Rejection', async () => {
+  await t.test('16. Rollback Safety: Rejection of Active Runs', () => {
+    // Memastikan rollback memeriksa status run dan menolak ACQUIRED/RUNNING
+    assert.match(schemaSql, /IF v_run\.status IN \('ACQUIRED', 'RUNNING'\) THEN/);
+    assert.match(schemaSql, /'code', 'RUN_STILL_ACTIVE'/);
+    
+    // Memastikan status terminal tetap diproses (idempotensi)
+    assert.match(schemaSql, /event_type = 'BACKFILL_APPLIED'/);
+  });
+
+  await t.test('17. Runtime Integration: Active Execution Lock Rejection', async () => {
     const req = new Request('http://localhost:3000/api/admin/backfill_kk_hmac', {
       method: 'POST',
       headers: {
@@ -229,7 +239,7 @@ test('CHUVATOR — FASE 5.5-B: Hardened Backfill Infrastructure V2.2.3 (Security
     assert.ok(body.code === 'CLIENT_CURSOR_REJECTED' || body.code === 'DRY_RUN_ONLY_MODE');
   });
 
-  await t.test('17. Dry-Run Purity: Zero Database Mutation', async () => {
+  await t.test('18. Dry-Run Purity: Zero Database Mutation', async () => {
     let attemptedMutations = 0;
     const originalFetch = global.fetch;
 

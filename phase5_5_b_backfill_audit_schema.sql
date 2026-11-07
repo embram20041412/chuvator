@@ -1,28 +1,16 @@
 -- =============================================================================
--- CHUVATOR — FASE 5.5-B (KONSOLIDASI V2.2.3)
+-- CHUVATOR — FASE 5.5-B (KONSOLIDASI V2.2.4)
 -- PERSISTENT KK_HMAC BACKFILL AUDIT INFRASTRUCTURE & CONCURRENCY ENGINE
 -- File: phase5_5_b_backfill_audit_schema.sql
 -- Status: SPECIFICATION PREPARATION (DO NOT EXECUTE WITHOUT EXPLICIT APPROVAL)
 -- 
--- V2.2.3 PATCH SPECIFICATION:
--- 1. Anti-Deadlock Row Locking: Eliminasi lock-upgrade dari FOR SHARE -> UPDATE.
---    Seluruh RPC yang memodifikasi backfill_kk_runs menggunakan FOR UPDATE secara konsisten.
--- 2. Strict Lock Hierarchy: Seluruh RPC mengunci tabel dalam urutan konsisten:
---    Urutan 1: public.backfill_kk_runs (FOR UPDATE)
---    Urutan 2: public.students (FOR UPDATE)
---    Urutan 3: public.backfill_kk_audit (INSERT append-only)
--- 3. Hardened SECURITY DEFINER: SET search_path = '' pada seluruh fungsi.
---    Semua tabel, view, dan fungsi pg_catalog (now, gen_random_uuid, jsonb_build_object, dll)
---    wajib ber-kualifikasi schema eksplisit (public.*, pg_catalog.*).
---    KECUALI konstruksi sintaks SQL murni seperti COALESCE.
--- 4. True Append-Only (UPDATE, DELETE, TRUNCATE): Trigger statement-level untuk TRUNCATE
---    dan trigger row-level untuk UPDATE/DELETE.
--- 5. Strict Privilege Isolation: REVOKE EXECUTE dari PUBLIC, anon, authenticated.
---    Hanya role service_role yang diberikan hak EXECUTE.
--- 6. Source Mutability Guard: p_expected_no_kk wajib 16 digit dan divalidasi 
---    terhadap nilai aktual di database sebelum mutasi (SOURCE_KK_MUTATED).
--- 7. Consistent Skip Locking: record_backfill_kk_skip mengunci baris siswa (FOR UPDATE)
---    untuk validasi kepemilikan tenant sebelum pencatatan audit.
+-- V2.2.4 PATCH SPECIFICATION:
+-- 1. Final Skip Locking: record_backfill_kk_skip menggunakan PERFORM 1 ... FOR UPDATE
+--    untuk penguncian baris siswa tanpa variabel Boolean perantara.
+-- 2. Rollback Status Protection: rollback_backfill_kk_atomic menolak operasi 
+--    pada run yang masih aktif (ACQUIRED, RUNNING).
+-- 3. Terminal Safety: Rollback hanya diizinkan pada status terminal (COMPLETED, FAILED, ROLLED_BACK).
+-- 4. Consistent Lock Hierarchy: Seluruh RPC mematuhi Urutan 1 (Runs) -> Urutan 2 (Students).
 -- =============================================================================
 
 BEGIN;
@@ -465,7 +453,6 @@ SET search_path = ''
 AS $$
 DECLARE
     v_run RECORD;
-    v_student_exists BOOLEAN;
 BEGIN
     -- 0. Validasi tenant_id wajib ada
     IF p_tenant_id IS NULL OR pg_catalog.btrim(p_tenant_id) = '' THEN
@@ -504,7 +491,7 @@ BEGIN
     END IF;
 
     -- 2. Validasi kepemilikan tenant atas siswa dengan penguncian (Lock Order Level 2)
-    SELECT 1 INTO v_student_exists FROM public.students 
+    PERFORM 1 FROM public.students 
     WHERE id = p_student_id AND tenant_id = p_tenant_id
     FOR UPDATE;
 
@@ -582,6 +569,15 @@ BEGIN
             'success', false,
             'code', 'RUN_NOT_FOUND',
             'message', 'Siklus run tidak ditemukan.'
+        );
+    END IF;
+
+    -- 1.1 Proteksi Status: Tolak rollback jika run masih aktif (ACQUIRED atau RUNNING)
+    IF v_run.status IN ('ACQUIRED', 'RUNNING') THEN
+        RETURN pg_catalog.jsonb_build_object(
+            'success', false,
+            'code', 'RUN_STILL_ACTIVE',
+            'message', 'Rollback tidak dapat dilakukan pada proses yang masih berjalan. Selesaikan atau batalkan run terlebih dahulu.'
         );
     END IF;
 
