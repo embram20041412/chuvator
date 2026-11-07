@@ -4,7 +4,7 @@ import { onRequestPost as createParentPost } from '../functions/api/tenant/paren
 import { onRequestGet as searchStudentsGet } from '../functions/api/tenant/parents/students.js';
 import { computeHMAC } from '../functions/api/tenant/_auth_staff.js';
 
-test('CHUVATOR — Parent Portal Hotfix V2.3.7 Verification Suite', async (t) => {
+test('CHUVATOR — Parent Portal Hotfix V2.3.8 Verification Suite', async (t) => {
   const mockSecret = 'test-secret-123';
   const mockUrl = 'http://mock-supabase.local';
   const mockServiceKey = 'service-role-key';
@@ -277,10 +277,11 @@ test('CHUVATOR — Parent Portal Hotfix V2.3.7 Verification Suite', async (t) =>
     }
   });
 
-  await t.test('13. Database insert error logs hardened diagnostics (V2.3.7)', async (st) => {
+  await t.test('13. Database insert error logs hardened diagnostics (V2.3.8)', async (st) => {
     const originalFetch = global.fetch;
     const originalConsoleError = console.error;
     let loggedErrors: any[] = [];
+    let authCleanupCalled = false;
 
     console.error = (...args: any[]) => {
       loggedErrors.push(args);
@@ -299,6 +300,7 @@ test('CHUVATOR — Parent Portal Hotfix V2.3.7 Verification Suite', async (t) =>
           });
         }
         if (urlStr.includes('/auth/v1/admin/users/auth-id') && method === 'DELETE') {
+          authCleanupCalled = true;
           return new Response(JSON.stringify({}), { status: 200 });
         }
         return new Response(JSON.stringify([]), { status: 200 });
@@ -313,43 +315,71 @@ test('CHUVATOR — Parent Portal Hotfix V2.3.7 Verification Suite', async (t) =>
         const log = loggedErrors.find(l => l[0].includes('[Database Error]'))[1];
         assert.strictEqual(log.sqlState, '23505');
         assert.strictEqual(log.classification, 'UNIQUE_VIOLATION');
-        assert.strictEqual(log.bodyFormat, 'JSON');
+        assert.strictEqual(log.bodyFormat, 'JSON_OBJECT');
         assert.ok(!JSON.stringify(loggedErrors).includes('parent@example.com'));
       });
 
-      await st.test('13b. PostgREST Error Code P0001', async () => {
+      await st.test('13b. PostgREST Error Code PGRST116', async () => {
         loggedErrors = [];
-        setupFetchMock(JSON.stringify({ code: 'P0001', hint: 'Sensitive hint' }), 'application/json');
+        setupFetchMock(JSON.stringify({ code: 'PGRST116', hint: 'Sensitive hint' }), 'application/json');
         await createParentPost(getMockContext());
         const log = loggedErrors.find(l => l[0].includes('[Database Error]'))[1];
-        assert.strictEqual(log.sqlState, 'P0001');
+        assert.strictEqual(log.sqlState, 'PGRST116');
         assert.strictEqual(log.classification, 'POSTGREST_ERROR');
         assert.ok(!JSON.stringify(loggedErrors).includes('Sensitive hint'));
       });
 
-      await st.test('13c. Malformed JSON', async () => {
+      await st.test('13c. Invalid Code Pattern (Unknown)', async () => {
         loggedErrors = [];
-        setupFetchMock('{ malformed: ', 'application/json');
+        setupFetchMock(JSON.stringify({ code: 'INVALID-CODE', message: 'Fail' }), 'application/json');
         await createParentPost(getMockContext());
         const log = loggedErrors.find(l => l[0].includes('[Database Error]'))[1];
-        assert.strictEqual(log.bodyFormat, 'MALFORMED_JSON');
+        assert.strictEqual(log.sqlState, 'UNKNOWN');
+        assert.strictEqual(log.classification, 'UNKNOWN');
+      });
+
+      await st.test('13d. JSON null handling', async () => {
+        loggedErrors = [];
+        setupFetchMock('null', 'application/json');
+        await createParentPost(getMockContext());
+        const log = loggedErrors.find(l => l[0].includes('[Database Error]'))[1];
+        assert.strictEqual(log.bodyFormat, 'JSON_NULL');
         assert.strictEqual(log.sqlState, 'UNKNOWN');
       });
 
-      await st.test('13d. Empty Body', async () => {
+      await st.test('13e. JSON array handling', async () => {
         loggedErrors = [];
-        setupFetchMock('', 'application/json');
+        setupFetchMock('[]', 'application/json');
         await createParentPost(getMockContext());
         const log = loggedErrors.find(l => l[0].includes('[Database Error]'))[1];
-        assert.strictEqual(log.bodyFormat, 'EMPTY');
+        assert.strictEqual(log.bodyFormat, 'JSON_ARRAY');
       });
 
-      await st.test('13e. Non-JSON Response', async () => {
+      await st.test('13f. JSON primitive handling (string)', async () => {
         loggedErrors = [];
-        setupFetchMock('<html>Error</html>', 'text/html');
+        setupFetchMock('"error"', 'application/json');
         await createParentPost(getMockContext());
         const log = loggedErrors.find(l => l[0].includes('[Database Error]'))[1];
-        assert.strictEqual(log.bodyFormat, 'NON_JSON');
+        assert.strictEqual(log.bodyFormat, 'JSON_PRIMITIVE');
+      });
+
+      await st.test('13g. Cleanup runs on malformed JSON', async () => {
+        loggedErrors = [];
+        authCleanupCalled = false;
+        setupFetchMock('{ bad json', 'application/json');
+        await createParentPost(getMockContext());
+        assert.strictEqual(authCleanupCalled, true, 'Auth cleanup must run even if JSON is malformed');
+        const log = loggedErrors.find(l => l[0].includes('[Database Error]'))[1];
+        assert.strictEqual(log.bodyFormat, 'MALFORMED_JSON');
+      });
+
+      await st.test('13h. Content-Type normalization check', async () => {
+        loggedErrors = [];
+        setupFetchMock('{"code":"23505"}', 'APPLICATION/JSON; CHARSET=UTF-8');
+        await createParentPost(getMockContext());
+        const log = loggedErrors.find(l => l[0].includes('[Database Error]'))[1];
+        assert.strictEqual(log.contentType, 'application/json');
+        assert.strictEqual(log.sqlState, '23505');
       });
 
     } finally {

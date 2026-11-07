@@ -296,18 +296,28 @@ export async function onRequestPost(context) {
     });
 
     if (!parentInsertResp.ok) {
-      // DIAGNOSTICS V2.3.7: Refined capture, strictly no PII
-      const contentType = parentInsertResp.headers.get('content-type') || '';
+      // DIAGNOSTICS V2.3.8: Defensive JSON handling & Strict regex
+      const rawContentType = parentInsertResp.headers.get('content-type') || '';
+      const contentType = rawContentType.toLowerCase().split(';')[0].trim();
       const responseText = await parentInsertResp.text().catch(() => '');
       
-      let dbError = {};
+      let dbError = null;
       let bodyFormat = 'EMPTY';
       
       if (responseText) {
         if (contentType.includes('application/json')) {
           try {
-            dbError = JSON.parse(responseText);
-            bodyFormat = (dbError && typeof dbError === 'object') ? 'JSON' : 'NON_OBJECT_JSON';
+            const parsed = JSON.parse(responseText);
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+              dbError = parsed;
+              bodyFormat = 'JSON_OBJECT';
+            } else if (Array.isArray(parsed)) {
+              bodyFormat = 'JSON_ARRAY';
+            } else if (parsed === null) {
+              bodyFormat = 'JSON_NULL';
+            } else {
+              bodyFormat = 'JSON_PRIMITIVE';
+            }
           } catch (e) {
             bodyFormat = 'MALFORMED_JSON';
           }
@@ -322,28 +332,33 @@ export async function onRequestPost(context) {
         headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
       }).catch(() => ({ ok: false }));
 
-      // SQLSTATE / Code Extraction (Allowlist/Pattern)
-      const rawCode = String(dbError.code || '');
-      const sqlState = /^[0-9A-Z]{5}$/.test(rawCode) ? rawCode : (rawCode || 'UNKNOWN');
+      // SQLSTATE / PostgREST Code Sanitization
+      const rawCode = dbError ? String(dbError.code || '') : '';
+      let sqlState = 'UNKNOWN';
       
-      // Classification (Internal mapping for log context)
+      // Strict regex check: 5-char SQLSTATE or official PostgREST PGRSTxxx pattern
+      if (/^[0-9A-Z]{5}$/.test(rawCode) || /^PGRST\d{3}$/.test(rawCode)) {
+        sqlState = rawCode;
+      }
+      
+      // Classification
       let classification = 'UNKNOWN';
       if (sqlState === '23505') classification = 'UNIQUE_VIOLATION';
       else if (sqlState === '23503') classification = 'FOREIGN_KEY_VIOLATION';
       else if (sqlState === '23502') classification = 'NOT_NULL_VIOLATION';
       else if (sqlState === '23514') classification = 'CHECK_VIOLATION';
-      else if (sqlState.startsWith('P')) classification = 'POSTGREST_ERROR';
+      else if (/^PGRST\d{3}$/.test(sqlState)) classification = 'POSTGREST_ERROR';
       else if (sqlState !== 'UNKNOWN') classification = 'DATABASE_ERROR';
 
-      console.error('[Database Error] Parent account insertion failed (Hardened):', {
+      console.error('[Database Error] Parent account insertion failed (Sanitized):', {
         status: parentInsertResp.status,
         contentType,
         bodyFormat,
         sqlState,
         classification,
-        hasMessage: !!dbError.message,
-        hasDetails: !!dbError.details,
-        hasHint: !!dbError.hint,
+        hasMessage: !!(dbError && dbError.message),
+        hasDetails: !!(dbError && dbError.details),
+        hasHint: !!(dbError && dbError.hint),
         authCleanup: cleanupAuth.ok ? 'SUCCESS' : 'FAILED'
       });
 
