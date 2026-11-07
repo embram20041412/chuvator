@@ -440,8 +440,11 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
     }
   });
 
-  await t.test('9. Real @supabase/supabase-js Client Integration: Auth instance compatibility with flowType pkce', async () => {
-    // Instantiate real GoTrueClient from @supabase/supabase-js v2.118.0
+  await t.test('9. SDK Smoke Test: Supabase client contract verification with flowType pkce', async () => {
+    // Note: This is an SDK contract smoke test verifying that initInvitationSessionCallback
+    // correctly accepts a live @supabase/supabase-js v2 GoTrueClient instance (with flowType: 'pkce')
+    // and correctly registers listeners without runtime exception.
+    // End-to-end network PKCE code exchange and real JWT verification requires live browser runtime + live OTP server issuance.
     const realSupabase = createClient(
       'https://wqnhlmvvyhpctmaukwyj.supabase.co',
       'sb_publishable_vKzNAXC9V52eYH0-Gm9Rcg_23lCtz2P',
@@ -458,7 +461,7 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
     let successCount = 0;
     let errorCount = 0;
 
-    const locationMock: any = { hash: '#access_token=real_token_123&refresh_token=real_ref_123&type=recovery', search: '' };
+    const locationMock: any = { hash: '#access_token=dummy_token_123&refresh_token=dummy_ref_123&type=recovery', search: '' };
     const sessionReceivedRef = { current: false };
     const processedSessionKeyRef = { current: null };
     const timeoutRef = { current: null };
@@ -476,10 +479,9 @@ test('CHUVATOR PARENT PORTAL V2.6.16 — AUTH CALLBACK SESSION DETECTION HARDENI
 
     await new Promise(r => setTimeout(r, 100));
 
-    // Real client initial session is null without valid JWT verification against backend
-    // Verify that realSupabase did not throw or break, and that timeout is active without premature onError
-    assert.strictEqual(errorCount, 0, 'Real Supabase client must not trigger onError prematurely');
-    assert.ok(timeoutRef.current !== null, 'Real client should maintain active timeout while awaiting token processing');
+    // Verify SDK contract handling: real client initializes gracefully, registers onAuthStateChange, and maintains timeout during pending async state
+    assert.strictEqual(errorCount, 0, 'SDK smoke test: real Supabase client contract must not trigger onError prematurely');
+    assert.ok(timeoutRef.current !== null, 'SDK smoke test: active timeout must be maintained while awaiting token processing');
 
     cleanup();
   });
