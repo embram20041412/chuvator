@@ -297,7 +297,7 @@ export async function onRequestPost(context) {
     );
 
   } catch (err) {
-    console.error('Resend invitation error:', err.message);
+    console.error('Resend invitation error.');
     return new Response(JSON.stringify({ success: false, message: 'Terjadi kesalahan internal pada server.' }), { status: 500, headers: corsHeaders });
   }
 }

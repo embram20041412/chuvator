@@ -118,15 +118,15 @@ export async function onRequestDelete(context) {
       );
     }
 
-    const rpcResult = await rpcResp.json().catch(() => []);
+    const rpcResult = await rpcResp.json().catch(() => null);
     const resultItem = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult;
 
-    if (!resultItem || !resultItem.success) {
+    if (!resultItem || !resultItem.success || Number(resultItem.deleted_parent_count) !== 1) {
       return new Response(
         JSON.stringify({ 
           success: false, 
           code: 'ATOMIC_DELETE_FAILED', 
-          message: `Penghapusan database gagal: ${resultItem?.error_message || 'Unknown error'}` 
+          message: 'Gagal menghapus data secara atomik di database.' 
         }),
         { status: 500, headers: corsHeaders }
       );
@@ -141,7 +141,7 @@ export async function onRequestDelete(context) {
     );
 
   } catch (err) {
-    console.error('Delete parent account error:', err.message);
+    console.error('Delete parent account error.');
     return new Response(JSON.stringify({ success: false, message: 'Terjadi kesalahan internal pada server.' }), { status: 500, headers: corsHeaders });
   }
 }
