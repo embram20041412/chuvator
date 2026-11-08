@@ -20,7 +20,17 @@ JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public' 
   AND c.relname IN ('parent_invitations', 'parent_continuation_tickets');
 
--- 2. Verify direct table privileges (Revoked from PUBLIC, anon, authenticated)
+-- 2. Verify student_id column on parent_invitations
+SELECT 
+    column_name, 
+    data_type, 
+    is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'public' 
+  AND table_name = 'parent_invitations'
+  AND column_name = 'student_id';
+
+-- 3. Verify direct table privileges (Revoked from PUBLIC, anon, authenticated)
 SELECT 
     table_name, 
     grantee, 
@@ -29,7 +39,7 @@ FROM information_schema.role_table_grants
 WHERE table_schema = 'public'
   AND table_name IN ('parent_invitations', 'parent_continuation_tickets');
 
--- 3. Verify composite foreign key constraints on V3 tables
+-- 4. Verify composite foreign key constraints on V3 tables (including student_id FK)
 SELECT
     tc.table_name,
     kcu.column_name,
@@ -46,14 +56,14 @@ WHERE tc.constraint_type = 'FOREIGN KEY'
   AND tc.table_schema = 'public'
   AND tc.table_name IN ('parent_invitations', 'parent_continuation_tickets');
 
--- 4. Verify baseline status check constraint on parent_accounts (pending, active, suspended)
+-- 5. Verify baseline status check constraint on parent_accounts (pending, active, suspended)
 SELECT 
     conname AS constraint_name, 
     pg_catalog.pg_get_constraintdef(oid) AS constraint_definition
 FROM pg_catalog.pg_constraint 
 WHERE conname = 'chk_parent_accounts_status';
 
--- 5. Verify 6 RPC routines, SECURITY DEFINER, and search_path settings
+-- 6. Verify 6 RPC routines, SECURITY DEFINER, and search_path settings
 SELECT 
     p.proname AS rpc_name,
     pg_catalog.pg_get_function_identity_arguments(p.oid) AS rpc_signature,
@@ -71,7 +81,7 @@ WHERE n.nspname = 'public'
     'recover_parent_session'
   );
 
--- 6. Verify RPC Execute permissions (Granted exclusively to service_role)
+-- 7. Verify RPC Execute permissions (Granted exclusively to service_role)
 SELECT 
     routine_name, 
     grantee, 
@@ -87,7 +97,7 @@ WHERE routine_schema = 'public'
     'recover_parent_session'
   );
 
--- 7. Unfiltered record inspection for parent_accounts (Preserved baseline data)
+-- 8. Unfiltered record inspection for parent_accounts (Preserved baseline data)
 SELECT 
     id,
     tenant_id,
@@ -102,7 +112,7 @@ SELECT
 FROM public.parent_accounts
 ORDER BY created_at DESC;
 
--- 8. Unfiltered record inspection for parent_student_links (Confirmed actual schema)
+-- 9. Unfiltered record inspection for parent_student_links (Confirmed actual schema)
 SELECT 
     id,
     tenant_id,

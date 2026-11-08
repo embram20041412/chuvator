@@ -139,11 +139,12 @@ END $$;
 CREATE UNIQUE INDEX idx_uq_parent_accounts_tenant_lower_email
 ON public.parent_accounts (tenant_id, LOWER(email));
 
--- 2.2 Table: parent_invitations
+-- 2.2 Table: parent_invitations (With explicit student_id binding)
 CREATE TABLE public.parent_invitations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
     parent_account_id UUID NOT NULL,
+    student_id UUID NOT NULL,
     invitation_token_hash TEXT NOT NULL UNIQUE,
     created_by UUID NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -157,6 +158,11 @@ CREATE TABLE public.parent_invitations (
     CONSTRAINT fk_parent_invitations_parent_account
         FOREIGN KEY (tenant_id, parent_account_id)
         REFERENCES public.parent_accounts (tenant_id, id)
+        ON DELETE CASCADE,
+    -- FK 2: Composite reference to students
+    CONSTRAINT fk_parent_invitations_student
+        FOREIGN KEY (tenant_id, student_id)
+        REFERENCES public.students (tenant_id, id)
         ON DELETE CASCADE,
     -- Supporting composite unique key for child FK reference
     CONSTRAINT uq_parent_invitations_tenant_id_id_parent
@@ -227,7 +233,7 @@ FOR ALL TO PUBLIC USING (FALSE);
 -- ----------------------------------------------------------------------------
 
 -- ----------------------------------------------------------------------------
--- RPC 1: create_parent_invitation
+-- RPC 1: create_parent_invitation (Explicit student_id binding)
 -- ----------------------------------------------------------------------------
 CREATE FUNCTION public.create_parent_invitation(
     p_tenant_id TEXT,
@@ -347,6 +353,7 @@ BEGIN
     INSERT INTO public.parent_invitations (
         tenant_id,
         parent_account_id,
+        student_id,
         invitation_token_hash,
         created_by,
         created_at,
@@ -355,6 +362,7 @@ BEGIN
     ) VALUES (
         p_tenant_id,
         v_parent_id,
+        p_target_student_id,
         v_token_hash,
         p_actor_uid,
         v_now,
@@ -516,7 +524,7 @@ BEGIN
     v_inv_hash := pg_catalog.encode(extensions.digest(pg_catalog.btrim(p_raw_invitation_token), 'sha256'), 'hex');
 
     -- Initial peek lookup
-    SELECT i.id, i.tenant_id, i.parent_account_id, i.status, i.expires_at
+    SELECT i.id, i.tenant_id, i.parent_account_id, i.student_id, i.status, i.expires_at
     INTO v_inv_peek
     FROM public.parent_invitations i
     WHERE i.invitation_token_hash = v_inv_hash;
@@ -576,7 +584,7 @@ BEGIN
     END IF;
 
     -- LOCK ORDER 2: Lock parent_invitations and revalidate
-    SELECT i.id, i.tenant_id, i.parent_account_id, i.status, i.expires_at
+    SELECT i.id, i.tenant_id, i.parent_account_id, i.student_id, i.status, i.expires_at
     INTO v_inv
     FROM public.parent_invitations i
     WHERE i.id = v_inv_peek.id
@@ -633,7 +641,7 @@ $$;
 
 
 -- ----------------------------------------------------------------------------
--- RPC 4: claim_parent_invitation_by_ticket
+-- RPC 4: claim_parent_invitation_by_ticket (Targeted student_id link activation)
 -- ----------------------------------------------------------------------------
 CREATE FUNCTION public.claim_parent_invitation_by_ticket(
     p_raw_ticket_token TEXT,
@@ -702,8 +710,8 @@ BEGIN
         RAISE EXCEPTION 'AUTH_UID_MISMATCH_WITH_EXISTING_BINDING';
     END IF;
 
-    -- LOCK ORDER 2: Lock parent_invitations & validate pending status and relation match
-    SELECT i.id, i.tenant_id, i.parent_account_id, i.status, i.expires_at
+    -- LOCK ORDER 2: Lock parent_invitations & validate pending status, relation match, and fetch student_id
+    SELECT i.id, i.tenant_id, i.parent_account_id, i.student_id, i.status, i.expires_at
     INTO v_inv
     FROM public.parent_invitations i
     WHERE i.id = v_tkt_peek.invitation_id
@@ -755,12 +763,14 @@ BEGIN
     WHERE tenant_id = v_ticket.tenant_id
       AND id = v_ticket.parent_account_id;
 
+    -- CRITICAL SECURITY FIX: Activate ONLY the parent_student_link bound to this invitation's student_id
     UPDATE public.parent_student_links
     SET status = 'active',
         verified_at = v_now,
         updated_at = v_now
     WHERE tenant_id = v_ticket.tenant_id
       AND parent_account_id = v_ticket.parent_account_id
+      AND student_id = v_inv.student_id
       AND status = 'pending';
 
     UPDATE public.parent_continuation_tickets
