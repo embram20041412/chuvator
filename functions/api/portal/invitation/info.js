@@ -82,20 +82,32 @@ async function handleInfoRequest(context) {
     }
 
     const results = await resp.json();
-    const inv = Array.isArray(results) ? results[0] : null;
+    const invitation = Array.isArray(results) ? results[0] : null;
 
-    if (!inv || !inv.id) {
+    if (!invitation) {
       return new Response(
-        JSON.stringify({
-          success: false,
-          message: 'Undangan tidak ditemukan atau token tidak valid.'
-        }),
-        { status: 404, headers: corsHeaders }
+        JSON.stringify({ success: false, error: 'Undangan tidak ditemukan atau token tidak valid.' }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    if (invitation.status !== 'pending') {
+      return new Response(
+        JSON.stringify({ success: false, error: `Undangan tidak dapat digunakan (Status: ${invitation.status}).` }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    const expiryDate = new Date(invitation.expires_at);
+    if (new Date() > expiryDate) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Tautan undangan telah kedaluwarsa.' }),
+        { status: 400, headers: corsHeaders }
       );
     }
 
     // Manual Email Masking in JS
-    const rawEmail = inv.parent_accounts?.email || '';
+    const rawEmail = invitation.parent_accounts?.email || '';
     let maskedEmail = '';
     if (rawEmail.includes('@')) {
       const [name, domain] = rawEmail.split('@');
@@ -107,20 +119,20 @@ async function handleInfoRequest(context) {
     }
 
     const invitationData = {
-      invitationId: inv.id,
-      tenantId: inv.tenant_id,
-      parentAccountId: inv.parent_account_id,
+      invitationId: invitation.id,
+      tenantId: invitation.tenant_id,
+      parentAccountId: invitation.parent_account_id,
       maskedEmail: maskedEmail,
-      invitationStatus: inv.status,
-      expiresAt: inv.expires_at,
-      isValid: inv.status === 'pending' && new Date(inv.expires_at) > new Date()
+      invitationStatus: invitation.status,
+      expiresAt: invitation.expires_at,
+      isValid: true
     };
 
     return new Response(
       JSON.stringify({
         success: true,
         invitation: invitationData,
-        data: invitationData // Structure requested in prompt
+        data: invitationData
       }),
       { status: 200, headers: corsHeaders }
     );

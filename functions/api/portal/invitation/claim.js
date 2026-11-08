@@ -111,35 +111,32 @@ export async function onRequestPost(context) {
       }
 
       const results = await resp.json();
-      const invRecord = Array.isArray(results) ? results[0] : null;
+      const invitation = Array.isArray(results) ? results[0] : null;
 
-      if (!invRecord || !invRecord.id) {
+      if (!invitation) {
         return new Response(
-          JSON.stringify({
-            success: false,
-            code: 'INVITATION_NOT_FOUND',
-            message: 'Tautan undangan tidak valid atau tidak ditemukan.'
-          }),
-          { status: 404, headers: securityHeaders }
+          JSON.stringify({ success: false, error: 'Undangan tidak ditemukan atau token tidak valid.' }),
+          { status: 400, headers: securityHeaders }
         );
       }
 
-      const isExpired = new Date(invRecord.expires_at) <= new Date();
-      const isValid = invRecord.status === 'pending' && !isExpired;
-
-      if (!isValid) {
+      if (invitation.status !== 'pending') {
         return new Response(
-          JSON.stringify({
-            success: false,
-            code: 'INVITATION_INVALID_OR_EXPIRED',
-            message: isExpired ? 'Tautan undangan telah kedaluwarsa.' : 'Tautan undangan sudah diproses atau dicabut.'
-          }),
+          JSON.stringify({ success: false, error: `Undangan tidak dapat digunakan (Status: ${invitation.status}).` }),
+          { status: 400, headers: securityHeaders }
+        );
+      }
+
+      const expiryDate = new Date(invitation.expires_at);
+      if (new Date() > expiryDate) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Tautan undangan telah kedaluwarsa.' }),
           { status: 400, headers: securityHeaders }
         );
       }
 
       // Prepare info object for downstream logic
-      const rawEmail = invRecord.parent_accounts?.email || '';
+      const rawEmail = invitation.parent_accounts?.email || '';
       let maskedEmail = '';
       if (rawEmail.includes('@')) {
         const [name, domain] = rawEmail.split('@');
@@ -151,12 +148,12 @@ export async function onRequestPost(context) {
       }
 
       const info = {
-        invitation_id: invRecord.id,
-        tenant_id: invRecord.tenant_id,
-        parent_account_id: invRecord.parent_account_id,
+        invitation_id: invitation.id,
+        tenant_id: invitation.tenant_id,
+        parent_account_id: invitation.parent_account_id,
         masked_email: maskedEmail,
-        expires_at: invRecord.expires_at,
-        is_valid: isValid
+        expires_at: invitation.expires_at,
+        is_valid: true
       };
 
       // If authUid is present, execute continuation ticket creation and ticket claim
@@ -225,54 +222,14 @@ export async function onRequestPost(context) {
       );
     }
 
-    // 2. Handling Intermediary KV Claim Tokens (64 hex string)
-    const kvBinding = env.PORTAL_SESSIONS_KV || env.PORTAL_RATELIMIT_KV;
-    if (!kvBinding) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          code: 'SERVER_CONFIG_ERROR',
-          message: 'Layanan aktivasi saat ini sedang tidak tersedia.'
-        }),
-        { status: 500, headers: securityHeaders }
-      );
-    }
-
-    const claimKey = `v2_invitation_claim:${rawToken}`;
-    const rawRecord = await kvBinding.get(claimKey).catch(() => null);
-
-    if (!rawRecord) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          code: 'CLAIM_NOT_FOUND_OR_EXPIRED',
-          message: 'Tautan aktivasi tidak valid, telah kedaluwarsa, atau sudah digunakan.'
-        }),
-        { status: 410, headers: securityHeaders }
-      );
-    }
-
-    let record = JSON.parse(rawRecord || '{}');
-    if (!record || !record.actionLink) {
-      await kvBinding.delete(claimKey).catch(() => {});
-      return new Response(
-        JSON.stringify({
-          success: false,
-          code: 'CLAIM_DATA_CORRUPT',
-          message: 'Tautan aktivasi tidak valid.'
-        }),
-        { status: 410, headers: securityHeaders }
-      );
-    }
-
-    await kvBinding.delete(claimKey).catch(() => {});
-
+    // Fallback for non-V3 tokens or unexpected formats
     return new Response(
       JSON.stringify({
-        success: true,
-        actionLink: record.actionLink
+        success: false,
+        code: 'INVALID_TOKEN_FORMAT',
+        message: 'Format tautan aktivasi tidak dikenali.'
       }),
-      { status: 200, headers: securityHeaders }
+      { status: 400, headers: securityHeaders }
     );
 
   } catch (err) {
