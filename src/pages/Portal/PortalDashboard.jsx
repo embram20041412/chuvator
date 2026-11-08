@@ -35,7 +35,8 @@ import {
   HeartPulse,
   Bell,
   Megaphone,
-  Check
+  Check,
+  Trophy
 } from 'lucide-react';
 import { getStudentInitials, calculateAge } from '../../utils/helpers';
 
