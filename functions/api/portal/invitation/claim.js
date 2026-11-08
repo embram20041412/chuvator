@@ -26,8 +26,7 @@ export async function onRequestGet(context) {
   return new Response(
     JSON.stringify({
       success: false,
-      code: 'METHOD_NOT_ALLOWED',
-      message: 'Metode GET tidak diizinkan. Tautan aktivasi harus diklaim melalui permintaan POST.'
+      error: 'Metode GET tidak diizinkan. Tautan aktivasi harus diklaim melalui permintaan POST.'
     }),
     { status: 405, headers: corsHeaders }
   );
@@ -56,8 +55,7 @@ export async function onRequestPost(context) {
     return new Response(
       JSON.stringify({
         success: false,
-        code: 'CSRF_VALIDATION_FAILED',
-        message: 'Permintaan ditolak karena masalah keamanan (Invalid Origin/Referer).'
+        error: 'Permintaan ditolak karena masalah keamanan (Invalid Origin/Referer).'
       }),
       { status: 403, headers: securityHeaders }
     );
@@ -72,8 +70,7 @@ export async function onRequestPost(context) {
       return new Response(
         JSON.stringify({
           success: false,
-          code: 'INVALID_CLAIM_TOKEN',
-          message: 'Tautan aktivasi tidak valid, telah kedaluwarsa, atau sudah digunakan.'
+          error: 'Tautan aktivasi tidak valid, telah kedaluwarsa, atau sudah digunakan.'
         }),
         { status: 400, headers: securityHeaders }
       );
@@ -86,14 +83,15 @@ export async function onRequestPost(context) {
     if (rawToken.startsWith('inv_')) {
       if (!supabaseUrl || !serviceKey) {
         return new Response(
-          JSON.stringify({ success: false, message: 'Konfigurasi server tidak lengkap.' }),
+          JSON.stringify({ success: false, error: 'Konfigurasi server tidak lengkap.' }),
           { status: 500, headers: securityHeaders }
         );
       }
 
+      // Hashing raw token utuh (including 'inv_' prefix)
       const hashedToken = await hashToken(rawToken.trim());
 
-      // Query table directly as requested using serviceKey to bypass RLS
+      // Query table 'parent_invitations' directly using serviceKey to bypass RLS
       const queryUrl = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/parent_invitations?invitation_token_hash=eq.${hashedToken}&select=id,tenant_id,parent_account_id,status,expires_at,parent_accounts(email)`;
       const resp = await fetch(queryUrl, {
         method: 'GET',
@@ -127,6 +125,7 @@ export async function onRequestPost(context) {
         );
       }
 
+      // Null-safe date check for expires_at
       if (invitation.expires_at && new Date() > new Date(invitation.expires_at)) {
         return new Response(
           JSON.stringify({ success: false, error: 'Tautan undangan telah kedaluwarsa.' }),
@@ -134,7 +133,7 @@ export async function onRequestPost(context) {
         );
       }
 
-      // Prepare info object for downstream logic
+      // Manual Email Masking in JS
       const rawEmail = invitation.parent_accounts?.email || '';
       let maskedEmail = '';
       if (rawEmail.includes('@')) {
@@ -146,28 +145,29 @@ export async function onRequestPost(context) {
         }
       }
 
-      const info = {
-        invitation_id: invitation.id,
-        tenant_id: invitation.tenant_id,
-        parent_account_id: invitation.parent_account_id,
-        masked_email: maskedEmail,
-        expires_at: invitation.expires_at,
-        is_valid: true
+      const invitationData = {
+        invitationId: invitation.id,
+        tenantId: invitation.tenant_id,
+        parentAccountId: invitation.parent_account_id,
+        maskedEmail: maskedEmail,
+        invitationStatus: invitation.status,
+        expiresAt: invitation.expires_at,
+        isValid: true
       };
 
       // If authUid is present, execute continuation ticket creation and ticket claim
       if (authUid) {
         try {
           const ticketRes = await invokeCreateContinuationTicket(supabaseUrl, serviceKey, {
-            rawInvitationToken: rawToken, // Still pass raw token to RPC as it hashes internally
-            tenantId: info.tenant_id,
+            rawInvitationToken: rawToken, 
+            tenantId: invitation.tenant_id,
             authUid: authUid
           });
 
           const ticketToken = ticketRes?.raw_ticket_token;
           if (!ticketToken) {
             return new Response(
-              JSON.stringify({ success: false, message: 'Gagal membuat tiket kelanjutan klaim.' }),
+              JSON.stringify({ success: false, error: 'Gagal membuat tiket kelanjutan klaim.' }),
               { status: 500, headers: securityHeaders }
             );
           }
@@ -183,7 +183,9 @@ export async function onRequestPost(context) {
               message: 'Akun wali murid dan keterikatan siswa berhasil diaktifkan!',
               tenantId: claimRes.tenant_id,
               parentAccountId: claimRes.parent_account_id,
-              claimedAt: claimRes.claimed_at
+              claimedAt: claimRes.claimed_at,
+              invitation: invitationData, // Include for consistency
+              data: invitationData
             }),
             { status: 200, headers: securityHeaders }
           );
@@ -193,8 +195,7 @@ export async function onRequestPost(context) {
           return new Response(
             JSON.stringify({
               success: false,
-              code: 'TICKET_CLAIM_FAILED',
-              message: `Proses klaim tiket gagal: ${rpcErr.message}`
+              error: `Proses klaim tiket gagal: ${rpcErr.message}`
             }),
             { status: 400, headers: securityHeaders }
           );
@@ -202,20 +203,11 @@ export async function onRequestPost(context) {
       }
 
       // If authUid is not yet available, return invitation info
-      const responseData = {
-        invitationId: info.invitation_id,
-        tenantId: info.tenant_id,
-        parentAccountId: info.parent_account_id,
-        maskedEmail: info.masked_email,
-        expiresAt: info.expires_at,
-        isValid: info.is_valid
-      };
-
       return new Response(
         JSON.stringify({
           success: true,
-          invitation: responseData,
-          data: responseData
+          invitation: invitationData,
+          data: invitationData
         }),
         { status: 200, headers: securityHeaders }
       );
@@ -225,8 +217,7 @@ export async function onRequestPost(context) {
     return new Response(
       JSON.stringify({
         success: false,
-        code: 'INVALID_TOKEN_FORMAT',
-        message: 'Format tautan aktivasi tidak dikenali.'
+        error: 'Format tautan aktivasi tidak dikenali.'
       }),
       { status: 400, headers: securityHeaders }
     );
@@ -236,8 +227,7 @@ export async function onRequestPost(context) {
     return new Response(
       JSON.stringify({
         success: false,
-        code: 'INTERNAL_CLAIM_ERROR',
-        message: 'Terjadi kesalahan sistem saat memproses aktivasi akun.'
+        error: 'Terjadi kesalahan sistem saat memproses aktivasi akun.'
       }),
       { status: 500, headers: securityHeaders }
     );

@@ -47,7 +47,7 @@ async function handleInfoRequest(context) {
 
     if (!rawToken || !rawToken.trim()) {
       return new Response(
-        JSON.stringify({ success: false, message: 'Token undangan wajib disertakan.' }),
+        JSON.stringify({ success: false, error: 'Token undangan wajib disertakan.' }),
         { status: 400, headers: corsHeaders }
       );
     }
@@ -57,15 +57,16 @@ async function handleInfoRequest(context) {
 
     if (!supabaseUrl || !serviceKey) {
       return new Response(
-        JSON.stringify({ success: false, message: 'Konfigurasi server tidak lengkap.' }),
+        JSON.stringify({ success: false, error: 'Konfigurasi server tidak lengkap.' }),
         { status: 500, headers: corsHeaders }
       );
     }
 
+    // Hashing raw token utuh (including 'inv_' prefix)
     const hashedToken = await hashToken(rawToken.trim());
 
-    // Query table directly as requested using serviceKey to bypass RLS
-    const queryUrl = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/parent_invitations?invitation_token_hash=eq.${hashedToken}&select=id,tenant_id,parent_account_id,status,expires_at,parent_accounts(email)`;
+    // Query table 'parent_invitations' directly using serviceKey to bypass RLS
+    const queryUrl = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/parent_invitations?invitation_token_hash=eq.${hashedToken}&select=*,parent_accounts(email)`;
     const resp = await fetch(queryUrl, {
       method: 'GET',
       headers: {
@@ -139,7 +140,7 @@ async function handleInfoRequest(context) {
   } catch (err) {
     console.error('get_parent_invitation_info handler error:', err.message || err);
     return new Response(
-      JSON.stringify({ success: false, message: 'Terjadi kesalahan sistem saat mengambil data undangan.' }),
+      JSON.stringify({ success: false, error: 'Terjadi kesalahan sistem saat mengambil data undangan.' }),
       { status: 500, headers: corsHeaders }
     );
   }
