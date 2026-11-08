@@ -389,13 +389,15 @@ export async function invokeCreateParentInvitation(supabaseUrl, serviceRoleKey, 
   parentEmail,
   targetStudentId,
   relationship = 'guardian',
-  expiryDays = 7
+  expiryDays = 7,
+  userJwt = null
 }) {
+  const authToken = userJwt || serviceRoleKey;
   const resp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/rest/v1/rpc/create_parent_invitation`, {
     method: 'POST',
     headers: {
       'apikey': serviceRoleKey,
-      'Authorization': `Bearer ${serviceRoleKey}`,
+      'Authorization': `Bearer ${authToken}`,
       'Content-Type': 'application/json',
       'Accept': 'application/json'
     },
@@ -410,7 +412,15 @@ export async function invokeCreateParentInvitation(supabaseUrl, serviceRoleKey, 
   });
   if (!resp.ok) {
     const errText = await resp.text().catch(() => '');
-    throw new Error(`RPC create_parent_invitation gagal (${resp.status}): ${errText}`);
+    let errData = null;
+    try {
+      errData = JSON.parse(errText);
+    } catch (_) {}
+    const msg = errData?.message || errData?.msg || errText || 'Gagal memproses undangan';
+    const err = new Error(msg);
+    /** @type {any} */ (err).status = resp.status;
+    /** @type {any} */ (err).data = errData;
+    throw err;
   }
   const data = await resp.json();
   return Array.isArray(data) ? data[0] : data;

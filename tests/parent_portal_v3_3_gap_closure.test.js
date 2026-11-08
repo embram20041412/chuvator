@@ -37,13 +37,38 @@ describe('CHUVATOR PARENT PORTAL V3.3 — FINAL VALIDATION TEST SUITE (12 MANDAT
     assert.ok(waUrl.includes(encodeURIComponent('Budi Santoso')));
   });
 
-  test('2. Unauthorized Staff Rejection Validation', () => {
+  test('2. Staff & Tenant Owner RBAC Authorization Validation', () => {
     const allowedRoles = ['superadmin', 'owner', 'admin'];
     assert.equal(allowedRoles.includes('kasir'), false);
     assert.equal(allowedRoles.includes('pelatih'), false);
     assert.equal(allowedRoles.includes('coach'), false);
     assert.equal(allowedRoles.includes('admin'), true);
     assert.equal(allowedRoles.includes('owner'), true);
+
+    // Test Tenant Owner fallback resolution logic
+    const resolveStaffOrOwnerRole = (actorUid, tenantId, staffDb, tenantDb) => {
+      // 1. Check users_staff
+      const staff = staffDb.find(s => s.uid === actorUid && s.tenant_id === tenantId && s.status === 'active');
+      if (staff) return staff.role;
+      // 2. Fallback check tenants.owner_uid
+      const tenant = tenantDb.find(t => t.id === tenantId && t.owner_uid === actorUid);
+      if (tenant) return 'owner';
+      return null;
+    };
+
+    const mockStaffDb = [
+      { uid: 'staff-1', tenant_id: 't-1', role: 'admin', status: 'active' }
+    ];
+    const mockTenantDb = [
+      { id: 't-1', owner_uid: 'owner-uid-999' }
+    ];
+
+    // Staff user
+    assert.equal(resolveStaffOrOwnerRole('staff-1', 't-1', mockStaffDb, mockTenantDb), 'admin');
+    // Tenant Owner user (not in users_staff)
+    assert.equal(resolveStaffOrOwnerRole('owner-uid-999', 't-1', mockStaffDb, mockTenantDb), 'owner');
+    // Unauthorized user
+    assert.equal(resolveStaffOrOwnerRole('stranger', 't-1', mockStaffDb, mockTenantDb), null);
   });
 
   test('3. Sequential Invitation for Two Children Logic', () => {

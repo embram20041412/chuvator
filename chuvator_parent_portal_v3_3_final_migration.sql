@@ -256,7 +256,7 @@ AS $$
 DECLARE
     v_clean_email TEXT;
     v_relationship TEXT;
-    v_staff_exists BOOLEAN;
+    v_staff_role TEXT := NULL;
     v_parent_id UUID;
     v_parent_status TEXT;
     v_inv_id UUID;
@@ -294,15 +294,24 @@ BEGIN
 
     v_clean_email := pg_catalog.lower(pg_catalog.btrim(p_parent_email));
 
-    -- Validate staff authorization and tenant binding
-    SELECT EXISTS (
-        SELECT 1 FROM public.users_staff s
-        WHERE s.uid = p_actor_uid::pg_catalog.text
-          AND s.tenant_id = p_tenant_id
-    ) INTO v_staff_exists;
+    -- 1. Cek di tabel users_staff terlebih dahulu
+    SELECT s.role INTO v_staff_role 
+    FROM public.users_staff s
+    WHERE s.uid = p_actor_uid::pg_catalog.text 
+      AND s.tenant_id = p_tenant_id 
+      AND (s.status IS NULL OR s.status = 'active');
 
-    IF NOT v_staff_exists THEN
-        RAISE EXCEPTION 'UNAUTHORIZED_STAFF_ACTOR_OR_TENANT_MISMATCH';
+    -- 2. Fallback: Cek di tabel tenants jika user adalah Owner
+    IF v_staff_role IS NULL THEN
+        SELECT 'owner' INTO v_staff_role 
+        FROM public.tenants t
+        WHERE t.id::pg_catalog.text = p_tenant_id 
+          AND t.owner_uid = p_actor_uid::pg_catalog.text;
+    END IF;
+
+    -- 3. Tolak jika tetap tidak ditemukan
+    IF v_staff_role IS NULL THEN
+        RAISE EXCEPTION 'UNAUTHORIZED_STAFF_ACTOR_OR_TENANT_MISMATCH' USING ERRCODE = 'P0001';
     END IF;
 
     -- Validate student existence in tenant

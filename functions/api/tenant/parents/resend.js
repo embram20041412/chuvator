@@ -32,6 +32,9 @@ export async function onRequestPost(context) {
 
   try {
     // 1. Staff Authentication & RBAC
+    const authHeader = request.headers.get('Authorization') || '';
+    const userJwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+
     const authResult = await validateStaffSession(context);
     if (!authResult.valid) {
       return new Response(
@@ -182,12 +185,25 @@ export async function onRequestPost(context) {
     // 6. Handle Action: revoke
     if (action === 'revoke') {
       const revokeReason = body.reason || 'Dicabut oleh pengelola';
-      const rpcResult = await invokeRevokeParentInvitation(supabaseUrl, serviceRoleKey, {
-        tenantId: targetTenantId,
-        actorUid: staffUid,
-        invitationIdOrToken: parent.id,
-        reason: revokeReason
-      });
+      let rpcResult;
+      try {
+        rpcResult = await invokeRevokeParentInvitation(supabaseUrl, serviceRoleKey, {
+          tenantId: targetTenantId,
+          actorUid: staffUid,
+          invitationIdOrToken: parent.id,
+          reason: revokeReason
+        });
+      } catch (rpcErr) {
+        console.error('RPC revoke_parent_invitation failed:', rpcErr.message || rpcErr);
+        const errMsg = rpcErr.data?.message || rpcErr.data?.msg || rpcErr.message || 'Gagal mencabut undangan';
+        return new Response(
+          JSON.stringify({
+            success: false,
+            message: errMsg
+          }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
 
       return new Response(
         JSON.stringify({
@@ -259,15 +275,29 @@ export async function onRequestPost(context) {
       );
     }
 
-    // Invoke V3.3 RPC create_parent_invitation
-    const rpcRes = await invokeCreateParentInvitation(supabaseUrl, serviceRoleKey, {
-      tenantId: targetTenantId,
-      actorUid: staffUid,
-      parentEmail: targetEmail,
-      targetStudentId: targetStudentId,
-      relationship: relationship,
-      expiryDays: 7
-    });
+    // Invoke V3.3 RPC create_parent_invitation safely
+    let rpcRes;
+    try {
+      rpcRes = await invokeCreateParentInvitation(supabaseUrl, serviceRoleKey, {
+        tenantId: targetTenantId,
+        actorUid: staffUid,
+        parentEmail: targetEmail,
+        targetStudentId: targetStudentId,
+        relationship: relationship,
+        expiryDays: 7,
+        userJwt
+      });
+    } catch (rpcErr) {
+      console.error('RPC create_parent_invitation failed:', rpcErr.message || rpcErr);
+      const errMsg = rpcErr.data?.message || rpcErr.data?.msg || rpcErr.message || 'Gagal memproses undangan';
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: errMsg
+        }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
 
     const rawInvitationToken = rpcRes?.raw_invitation_token;
     if (!rawInvitationToken) {

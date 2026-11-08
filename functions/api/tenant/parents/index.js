@@ -586,15 +586,31 @@ export async function onRequestPost(context) {
 
     // 10. Invoke V3.3 RPC `create_parent_invitation` for each target student
     let lastRpcResult = null;
-    for (const sid of studentIds) {
-      lastRpcResult = await invokeCreateParentInvitation(supabaseUrl, serviceRoleKey, {
-        tenantId: targetTenantId,
-        actorUid: staffUid,
-        parentEmail: normalizedEmail,
-        targetStudentId: sid,
-        relationship: finalRelationship,
-        expiryDays: 7
-      });
+    const authHeader = request.headers.get('Authorization') || '';
+    const userJwt = authHeader.startsWith('Bearer ') ? authHeader.slice(7).trim() : null;
+
+    try {
+      for (const sid of studentIds) {
+        lastRpcResult = await invokeCreateParentInvitation(supabaseUrl, serviceRoleKey, {
+          tenantId: targetTenantId,
+          actorUid: staffUid,
+          parentEmail: normalizedEmail,
+          targetStudentId: sid,
+          relationship: finalRelationship,
+          expiryDays: 7,
+          userJwt
+        });
+      }
+    } catch (rpcErr) {
+      console.error('RPC create_parent_invitation failed in index.js:', rpcErr.message || rpcErr);
+      const errMsg = rpcErr.data?.message || rpcErr.data?.msg || rpcErr.message || 'Gagal membuat undangan wali murid';
+      return new Response(
+        JSON.stringify({
+          success: false,
+          message: errMsg
+        }),
+        { status: 400, headers: corsHeaders }
+      );
     }
 
     const rawInvitationToken = lastRpcResult?.raw_invitation_token;
