@@ -5,10 +5,6 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { getCorsHeaders, verifyCsrf } from '../_auth_v2.js';
-import {
-  invokeCreateContinuationTicket,
-  invokeClaimParentInvitationByTicket
-} from '../../tenant/parents/_invitation_helper.js';
 
 export async function onRequestOptions(context) {
   const corsHeaders = getCorsHeaders(context.request, context.env);
@@ -415,71 +411,64 @@ export async function onRequestPost(context) {
       }
     }
 
-    // 4. Create continuation ticket using RPC create_parent_continuation_ticket
-    try {
-      const ticketRes = await invokeCreateContinuationTicket(supabaseUrl, serviceKey, {
-        rawInvitationToken: rawToken, 
-        tenantId: invitation.tenant_id,
-        authUid: confirmedAuthUid
-      });
+    // 4. Eksekusi RPC create_parent_continuation_ticket via REST API (Fungsi ini sekarang melakukan segalanya)
+    const rpcUrl = `${supabaseUrl}/rest/v1/rpc/create_parent_continuation_ticket`;
+    const rpcResp = await fetch(rpcUrl, {
+      method: 'POST',
+      headers: {
+        'apikey': serviceKey,
+        'Authorization': `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      },
+      body: JSON.stringify({
+        p_raw_invitation_token: rawToken,
+        p_tenant_id: invitation.tenant_id,
+        p_auth_uid: confirmedAuthUid
+      })
+    });
 
-      const ticketToken = ticketRes?.raw_ticket_token;
-      if (!ticketToken) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Gagal membuat tiket kelanjutan klaim.' }),
-          { status: 500, headers: securityHeaders }
-        );
-      }
-
-      // 5. Claim invitation using RPC claim_parent_invitation_by_ticket
-      const claimRes = await invokeClaimParentInvitationByTicket(supabaseUrl, serviceKey, {
-        rawTicketToken: ticketToken,
-        authUid: confirmedAuthUid
-      });
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          message: 'Akun wali murid dan keterikatan siswa berhasil diaktifkan!',
-          tenantId: claimRes.tenant_id || invitation.tenant_id,
-          parentAccountId: claimRes.parent_account_id || invitation.parent_account_id,
-          claimedAt: claimRes.claimed_at || new Date().toISOString(),
-          email: targetEmail,
-          authUid: confirmedAuthUid,
-          auth_uid: confirmedAuthUid,
-          data: {
-            ...responseData,
-            claimed: true,
-            tenantId: claimRes.tenant_id || invitation.tenant_id,
-            tenant_id: claimRes.tenant_id || invitation.tenant_id,
-            parentAccountId: claimRes.parent_account_id || invitation.parent_account_id,
-            parent_account_id: claimRes.parent_account_id || invitation.parent_account_id,
-            claimedAt: claimRes.claimed_at || new Date().toISOString(),
-            claimed_at: claimRes.claimed_at || new Date().toISOString()
-          },
-          invitation: responseData
-        }),
-        { status: 200, headers: securityHeaders }
-      );
-
-    } catch (rpcErr) {
-      console.error('[Claim Error] Ticket creation/claim error:', rpcErr.message || rpcErr);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          error: `Proses aktivasi gagal: ${rpcErr.message || 'Terjadi kesalahan sistem'}`,
-          message: `Proses aktivasi gagal: ${rpcErr.message || 'Terjadi kesalahan sistem'}`
-        }),
-        { status: 400, headers: securityHeaders }
-      );
+    if (!rpcResp.ok) {
+      const errText = await rpcResp.text();
+      throw new Error(`Gagal memproses aktivasi di database: ${errText}`);
     }
 
+    let claimRes = await rpcResp.json();
+    if (Array.isArray(claimRes) && claimRes.length > 0) {
+      claimRes = claimRes[0];
+    }
+    if (claimRes && !claimRes.ticket_token && claimRes.raw_ticket_token) {
+      claimRes.ticket_token = claimRes.raw_ticket_token;
+    }
+
+    if (!claimRes || !claimRes.ticket_token) {
+      throw new Error('Gagal mendapatkan tiket kelanjutan dari database.');
+    }
+
+    // 5. Kembalikan respons sukses
+    return new Response(
+      JSON.stringify({
+        success: true,
+        message: 'Akun wali murid berhasil diaktifkan!',
+        tenantId: invitation.tenant_id,
+        parentAccountId: invitation.parent_account_id,
+        email: targetEmail,
+        authUid: confirmedAuthUid,
+        data: {
+          ...responseData,
+          claimed: true,
+          ticket_token: claimRes.ticket_token
+        }
+      }),
+      { status: 200, headers: securityHeaders }
+    );
+
   } catch (err) {
-    console.error('[Claim Error] Unexpected exception in claim handler:', err.message || err);
+    console.error('[Claim Error]:', err.message || err);
     return new Response(
       JSON.stringify({
         success: false,
-        error: 'Terjadi kesalahan sistem saat memproses aktivasi akun.'
+        error: err.message || 'Terjadi kesalahan sistem saat memproses aktivasi akun.'
       }),
       { status: 500, headers: securityHeaders }
     );
