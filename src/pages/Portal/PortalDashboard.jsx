@@ -1573,9 +1573,35 @@ export default function PortalDashboard() {
             : (Array.isArray(evaluationData?.evaluations) ? evaluationData.evaluations : []);
           const latestAssessment = evaluationData?.latestAssessment || evaluationData?.latestEvaluation || assessmentList[0] || null;
 
-          const growthList = Array.isArray(evaluationData?.growth_records)
+          const rawGrowthArray = Array.isArray(evaluationData?.growth_records) && evaluationData.growth_records.length > 0
             ? evaluationData.growth_records
-            : (Array.isArray(evaluationData?.growthRecords) ? evaluationData.growthRecords : []);
+            : (Array.isArray(evaluationData?.growthRecords) && evaluationData.growthRecords.length > 0
+                ? evaluationData.growthRecords
+                : (Array.isArray(evaluationData?.growth_history) && evaluationData.growth_history.length > 0
+                    ? evaluationData.growth_history
+                    : (Array.isArray(evaluationData?.student?.growth_history) ? evaluationData.student.growth_history : [])));
+
+          const growthList = rawGrowthArray.map((g, idx) => {
+            const h = Number(g.height !== undefined && g.height !== null ? g.height : 0);
+            const w = Number(g.weight !== undefined && g.weight !== null ? g.weight : 0);
+            let bmi = g.bmi !== undefined && g.bmi !== null ? Number(g.bmi) : null;
+            if ((bmi === null || isNaN(bmi) || bmi <= 0) && h > 0 && w > 0) {
+              const hM = h / 100;
+              bmi = Math.round((w / (hM * hM)) * 10) / 10;
+            }
+            const status = g.status || (bmi ? (bmi < 18.5 ? 'Underweight' : bmi <= 24.9 ? 'Proporsional' : 'Overweight') : 'Normal');
+            return {
+              id: g.id || `g-${idx}`,
+              date: g.date || (g.recordedAt ? String(g.recordedAt).substring(0, 10) : (g.recorded_at ? String(g.recorded_at).substring(0, 10) : null)),
+              height: h > 0 ? h : null,
+              weight: w > 0 ? w : null,
+              bmi,
+              status,
+              notes: g.notes || g.note || null,
+              recordedAt: g.recordedAt || g.recorded_at || null
+            };
+          });
+
           const latestGrowth = evaluationData?.latestGrowth || growthList[0] || null;
 
           return (

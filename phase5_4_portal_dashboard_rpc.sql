@@ -32,6 +32,7 @@ DECLARE
     v_student_school_origin TEXT := NULL;
     v_student_sport_category TEXT := NULL;
     v_student_monthly_fee NUMERIC := 0;
+    v_student_growth_history JSONB := '[]'::jsonb;
     
     -- Class & Coach Scalar Fields (Verified Schema: is_archived BOOLEAN)
     v_class_name TEXT := NULL;
@@ -104,7 +105,8 @@ BEGIN
         s.birth_date,
         COALESCE(s.school_origin, ''),
         COALESCE(s.sport_category, 'Badminton'),
-        COALESCE(s.monthly_fee, 0)
+        COALESCE(s.monthly_fee, 0),
+        COALESCE(s.growth_history, '[]'::jsonb)
     INTO 
         v_student_id,
         v_student_name,
@@ -117,7 +119,8 @@ BEGIN
         v_student_birth_date,
         v_student_school_origin,
         v_student_sport_category,
-        v_student_monthly_fee
+        v_student_monthly_fee,
+        v_student_growth_history
     FROM public.students s
     WHERE s.id = p_student_id
       AND (p_tenant_id IS NULL OR s.tenant_id = p_tenant_id);
@@ -382,6 +385,13 @@ BEGIN
         ORDER BY date DESC, created_at DESC
     ) gt;
 
+    -- Fallback to students.growth_history JSONB column if growth_tracker table has no records
+    IF v_growth_records IS NULL OR v_growth_records = '[]'::jsonb THEN
+        IF v_student_growth_history IS NOT NULL AND jsonb_typeof(v_student_growth_history) = 'array' AND jsonb_array_length(v_student_growth_history) > 0 THEN
+            v_growth_records := v_student_growth_history;
+        END IF;
+    END IF;
+
     v_growth_records := COALESCE(v_growth_records, '[]'::jsonb);
 
     -- 9. FETCH SPP PAYMENTS (VERIFIED COLUMNS ONLY: NO payment_date)
@@ -431,7 +441,8 @@ BEGIN
             'schoolOrigin', v_student_school_origin,
             'sport_category', v_student_sport_category,
             'sportCategory', v_student_sport_category,
-            'monthly_fee', v_student_monthly_fee
+            'monthly_fee', v_student_monthly_fee,
+            'growth_history', v_student_growth_history
         ),
         'tenant', jsonb_build_object(
             'id', COALESCE(v_tenant_db_id::text, v_student_tenant_id),
@@ -451,6 +462,7 @@ BEGIN
         'evaluations', v_evaluations,
         'growth_records', v_growth_records,
         'growthRecords', v_growth_records,
+        'growth_history', v_student_growth_history,
         'spp_payments', v_spp_payments
     );
 END;
