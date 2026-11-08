@@ -67,12 +67,12 @@ test('Coach / Admin Students API: Atomically appends new entry to growth_history
       assert.equal(json.new_entry.status, 'Proporsional');
       assert.equal(json.new_entry.notes, 'Tes Pengukuran Rutin Nov');
 
-      // Verify DB update payload
+      // Verify DB update payload uses scalar keys 'height' & 'weight'
       assert.ok(updatedPayload);
-      assert.equal(updatedPayload.height_cm, 170);
-      assert.equal(updatedPayload.weight_kg, 65);
       assert.equal(updatedPayload.height, 170);
       assert.equal(updatedPayload.weight, 65);
+      assert.equal(updatedPayload.height_cm, undefined);
+      assert.equal(updatedPayload.weight_kg, undefined);
       assert.equal(updatedPayload.growth_history.length, 2);
       assert.equal(updatedPayload.growth_history[1].height_cm, 170);
     } finally {

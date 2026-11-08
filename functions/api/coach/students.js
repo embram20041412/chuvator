@@ -77,7 +77,7 @@ export async function onRequest(context) {
     }
 
     // 1. Ambil data siswa yang ada saat ini dari database
-    const fetchUrl = `${supabaseUrl}/rest/v1/students?id=eq.${encodeURIComponent(studentId)}&select=id,student_name,height,weight,height_cm,weight_kg,growth_history`;
+    const fetchUrl = `${supabaseUrl}/rest/v1/students?id=eq.${encodeURIComponent(studentId)}&select=id,student_name,height,weight,growth_history`;
     const fetchResp = await fetch(fetchUrl, {
       method: 'GET',
       headers: {
@@ -120,8 +120,8 @@ export async function onRequest(context) {
     }
 
     // Determine final height & weight for scalar fields
-    const finalHeight = numHeight !== null && !isNaN(numHeight) ? numHeight : Number(currentStudent.height_cm || currentStudent.height || 0);
-    const finalWeight = numWeight !== null && !isNaN(numWeight) ? numWeight : Number(currentStudent.weight_kg || currentStudent.weight || 0);
+    const finalHeight = numHeight !== null && !isNaN(numHeight) ? numHeight : Number(currentStudent.height || 0);
+    const finalWeight = numWeight !== null && !isNaN(numWeight) ? numWeight : Number(currentStudent.weight || 0);
 
     // Hitung BMI jika tinggi & berat valid
     let bmiVal = null;
@@ -147,10 +147,8 @@ export async function onRequest(context) {
 
     const updatedHistory = [...existingHistory, newGrowthEntry];
 
-    // 4. Lakukan UPDATE ke database Supabase
+    // 4. Lakukan UPDATE ke database Supabase (HANYA KOLOM SKALAR height DAN weight)
     const updatePayload = {
-      height_cm: finalHeight,
-      weight_kg: finalWeight,
       height: finalHeight,
       weight: finalWeight,
       growth_history: updatedHistory,

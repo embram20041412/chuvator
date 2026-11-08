@@ -824,8 +824,6 @@ export const ALLOWED_STUDENT_UPDATE_COLUMNS = new Set([
   'last_spp_paid_at',
   'height',
   'weight',
-  'height_cm',
-  'weight_kg',
   'photo_url',
   'tournaments',
   'growth_history',
@@ -887,18 +885,14 @@ export async function updateStudent(studentId, updateFields) {
   if (updateFields.lastPaidDate !== undefined) mapped.last_paid_date = toDateOrNull(updateFields.lastPaidDate);
   if (updateFields.lastSppPaidAt !== undefined) mapped.last_spp_paid_at = toDateOrNull(updateFields.lastSppPaidAt);
 
-  const inputHeight = updateFields.height_cm !== undefined ? updateFields.height_cm : updateFields.height;
-  const inputWeight = updateFields.weight_kg !== undefined ? updateFields.weight_kg : updateFields.weight;
+  const inputHeight = updateFields.height !== undefined ? updateFields.height : updateFields.height_cm;
+  const inputWeight = updateFields.weight !== undefined ? updateFields.weight : updateFields.weight_kg;
 
   if (inputHeight !== undefined) {
-    const val = inputHeight ? Number(inputHeight) : null;
-    mapped.height = val;
-    mapped.height_cm = val;
+    mapped.height = inputHeight ? Number(inputHeight) : null;
   }
   if (inputWeight !== undefined) {
-    const val = inputWeight ? Number(inputWeight) : null;
-    mapped.weight = val;
-    mapped.weight_kg = val;
+    mapped.weight = inputWeight ? Number(inputWeight) : null;
   }
 
   if (updateFields.photoUrl !== undefined) mapped.photo_url = updateFields.photoUrl;
@@ -909,7 +903,7 @@ export async function updateStudent(studentId, updateFields) {
   if ((inputHeight !== undefined || inputWeight !== undefined) && updateFields.growthHistory === undefined) {
     const { data: currStudent } = await supabase
       .from('students')
-      .select('growth_history, height, height_cm, weight, weight_kg')
+      .select('growth_history, height, weight')
       .eq('id', studentId)
       .maybeSingle();
 
@@ -927,8 +921,8 @@ export async function updateStudent(studentId, updateFields) {
         }
       }
 
-      const hVal = inputHeight !== undefined && inputHeight ? Number(inputHeight) : Number(currStudent.height_cm || currStudent.height || 0);
-      const wVal = inputWeight !== undefined && inputWeight ? Number(inputWeight) : Number(currStudent.weight_kg || currStudent.weight || 0);
+      const hVal = inputHeight !== undefined && inputHeight ? Number(inputHeight) : Number(currStudent.height || 0);
+      const wVal = inputWeight !== undefined && inputWeight ? Number(inputWeight) : Number(currStudent.weight || 0);
 
       if (hVal > 0 || wVal > 0) {
         let bmiVal = null;
@@ -1023,14 +1017,14 @@ export async function updateStudentGrowth(studentId, { height, weight, height_cm
     }
   }
 
-  const effHeight = height_cm !== undefined ? height_cm : height;
-  const effWeight = weight_kg !== undefined ? weight_kg : weight;
+  const effHeight = height !== undefined ? height : height_cm;
+  const effWeight = weight !== undefined ? weight : weight_kg;
 
   // 3. Tambahkan entri baru dengan tanggal, tinggi, berat, BMI, status, dan waktu pencatatan
   let updatedHistory = currentHistory;
   if (growthEntry) {
-    const entryHeight = Number(growthEntry.height_cm !== undefined ? growthEntry.height_cm : (growthEntry.height !== undefined ? growthEntry.height : effHeight));
-    const entryWeight = Number(growthEntry.weight_kg !== undefined ? growthEntry.weight_kg : (growthEntry.weight !== undefined ? growthEntry.weight : effWeight));
+    const entryHeight = Number(growthEntry.height !== undefined ? growthEntry.height : (growthEntry.height_cm !== undefined ? growthEntry.height_cm : effHeight));
+    const entryWeight = Number(growthEntry.weight !== undefined ? growthEntry.weight : (growthEntry.weight_kg !== undefined ? growthEntry.weight_kg : effWeight));
     let entryBmi = growthEntry.bmi !== undefined && growthEntry.bmi !== null ? Number(growthEntry.bmi) : null;
     if ((entryBmi === null || isNaN(entryBmi) || entryBmi <= 0) && entryHeight > 0 && entryWeight > 0) {
       const hM = entryHeight / 100;
@@ -1071,21 +1065,19 @@ export async function updateStudentGrowth(studentId, { height, weight, height_cm
     updatedHistory = [...currentHistory, formattedEntry];
   }
 
-  // 4. Pastikan tinggi dan berat badan terbaru tersimpan pada kolom utama siswa
+  // 4. Pastikan tinggi dan berat badan terbaru tersimpan pada kolom utama (height & weight) siswa
   const finalHeight = effHeight !== undefined && effHeight !== null && effHeight !== ''
     ? Number(effHeight)
-    : (growthEntry?.height_cm !== undefined ? Number(growthEntry.height_cm) : (growthEntry?.height !== undefined ? Number(growthEntry.height) : (currentStudent.height_cm || currentStudent.height ? Number(currentStudent.height_cm || currentStudent.height) : null)));
+    : (growthEntry?.height !== undefined ? Number(growthEntry.height) : (growthEntry?.height_cm !== undefined ? Number(growthEntry.height_cm) : (currentStudent.height ? Number(currentStudent.height) : null)));
 
   const finalWeight = effWeight !== undefined && effWeight !== null && effWeight !== ''
     ? Number(effWeight)
-    : (growthEntry?.weight_kg !== undefined ? Number(growthEntry.weight_kg) : (growthEntry?.weight !== undefined ? Number(growthEntry.weight) : (currentStudent.weight_kg || currentStudent.weight ? Number(currentStudent.weight_kg || currentStudent.weight) : null)));
+    : (growthEntry?.weight !== undefined ? Number(growthEntry.weight) : (growthEntry?.weight_kg !== undefined ? Number(growthEntry.weight_kg) : (currentStudent.weight ? Number(currentStudent.weight) : null)));
 
-  // 5. Lakukan UPDATE ke database
+  // 5. Lakukan UPDATE ke database (HANYA MENGGUNAKAN KOLOM SAKALAR 'height' DAN 'weight')
   const updatePayload = {
     height: finalHeight,
-    height_cm: finalHeight,
     weight: finalWeight,
-    weight_kg: finalWeight,
     growth_history: updatedHistory,
     updated_at: new Date().toISOString()
   };
