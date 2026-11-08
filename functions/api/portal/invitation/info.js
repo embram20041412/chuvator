@@ -98,8 +98,7 @@ async function handleInfoRequest(context) {
       );
     }
 
-    const expiryDate = new Date(invitation.expires_at);
-    if (new Date() > expiryDate) {
+    if (invitation.expires_at && new Date() > new Date(invitation.expires_at)) {
       return new Response(
         JSON.stringify({ success: false, error: 'Tautan undangan telah kedaluwarsa.' }),
         { status: 400, headers: corsHeaders }
