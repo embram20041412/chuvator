@@ -16,7 +16,8 @@ import {
   getVerifiedTenantName,
   determineInvitationStatus,
   generateClaimToken,
-  buildIntermediaryClaimUrl
+  buildIntermediaryClaimUrl,
+  invokeCreateParentInvitation
 } from './_invitation_helper.js';
 
 export async function onRequestOptions(context) {
@@ -583,144 +584,42 @@ export async function onRequestPost(context) {
       );
     }
 
-    const linkPayloads = studentIds.map(sid => ({
-      tenant_id: targetTenantId,
-      parent_account_id: parentId,
-      student_id: sid,
-      relationship: finalRelationship
-    }));
+    // 10. Invoke V3.3 RPC `create_parent_invitation` for each target student
+    let lastRpcResult = null;
+    for (const sid of studentIds) {
+      lastRpcResult = await invokeCreateParentInvitation(supabaseUrl, serviceRoleKey, {
+        tenantId: targetTenantId,
+        actorUid: staffUid,
+        parentEmail: normalizedEmail,
+        targetStudentId: sid,
+        relationship: finalRelationship,
+        expiryDays: 7
+      });
+    }
 
-    const studentLinkResp = await fetch(`${supabaseUrl}/rest/v1/parent_student_links`, {
-      method: 'POST',
-      headers: {
-        'apikey': serviceRoleKey,
-        'Authorization': `Bearer ${serviceRoleKey}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(linkPayloads)
-    });
-
-    if (!studentLinkResp.ok) {
-      // Full Compensation
-      const cleanupParent = await fetch(`${supabaseUrl}/rest/v1/parent_accounts?id=eq.${parentId}`, {
-        method: 'DELETE',
-        headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
-      }).catch(() => ({ ok: false }));
-
-      const cleanupAuth = await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUid}`, {
-        method: 'DELETE',
-        headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
-      }).catch(() => ({ ok: false }));
-
+    const rawInvitationToken = lastRpcResult?.raw_invitation_token;
+    if (!rawInvitationToken) {
       return new Response(
-        JSON.stringify({ 
-          success: false, 
-          code: 'STUDENT_LINK_INSERT_FAILED', 
-          message: 'Gagal menghubungkan siswa. ' + (cleanupParent.ok && cleanupAuth.ok ? 'Pendaftaran dibatalkan secara aman.' : 'PERINGATAN: Cleanup database/auth gagal.')
-        }),
+        JSON.stringify({ success: false, message: 'RPC create_parent_invitation gagal mengembalikan token undangan.' }),
         { status: 500, headers: corsHeaders }
       );
     }
 
-    // 10. Secure Intermediary Claim: Generate 256-bit entropy token & store mapping in KV (Fail-Closed)
-    const kvBinding = env.PORTAL_SESSIONS_KV || env.PORTAL_RATELIMIT_KV;
-    if (!kvBinding) {
-      // Clean up newly created student links, parent, and auth user
-      await fetch(`${supabaseUrl}/rest/v1/parent_student_links?parent_account_id=eq.${parentId}`, {
-        method: 'DELETE',
-        headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
-      }).catch(() => null);
-      await fetch(`${supabaseUrl}/rest/v1/parent_accounts?id=eq.${parentId}`, {
-        method: 'DELETE',
-        headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
-      }).catch(() => null);
-      await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUid}`, {
-        method: 'DELETE',
-        headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
-      }).catch(() => null);
-
-      return new Response(
-        JSON.stringify({
-          success: false,
-          code: 'KV_BINDING_MISSING',
-          message: 'Penyimpanan server tidak tersedia untuk tautan undangan.'
-        }),
-        { status: 500, headers: corsHeaders }
-      );
-    }
-
-    const claimToken = generateClaimToken();
-    const claimKey = `v2_invitation_claim:${claimToken}`;
-    const claimTtlSeconds = 3000; // 50 menit (dengan buffer 10 menit dari OTP Supabase 3600s)
-    const claimExpiresAt = new Date(Date.now() + claimTtlSeconds * 1000).toISOString();
-
-    try {
-      await kvBinding.put(
-        claimKey,
-        JSON.stringify({
-          actionLink,
-          parentId,
-          tenantId: targetTenantId,
-          type: 'invite',
-          createdAt: nowIso,
-          expiresAt: claimExpiresAt
-        }),
-        { expirationTtl: claimTtlSeconds }
-      );
-    } catch (_) {
-      // Clean up newly created student links, parent, and auth user on storage failure
-      await fetch(`${supabaseUrl}/rest/v1/parent_student_links?parent_account_id=eq.${parentId}`, {
-        method: 'DELETE',
-        headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
-      }).catch(() => null);
-      await fetch(`${supabaseUrl}/rest/v1/parent_accounts?id=eq.${parentId}`, {
-        method: 'DELETE',
-        headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
-      }).catch(() => null);
-      await fetch(`${supabaseUrl}/auth/v1/admin/users/${authUid}`, {
-        method: 'DELETE',
-        headers: { 'apikey': serviceRoleKey, 'Authorization': `Bearer ${serviceRoleKey}` }
-      }).catch(() => null);
-
-      return new Response(
-        JSON.stringify({
-          success: false,
-          code: 'CLAIM_STORAGE_FAILED',
-          message: 'Gagal menyiapkan tautan aktivasi yang aman di server.'
-        }),
-        { status: 500, headers: corsHeaders }
-      );
-    }
-
-    const intermediaryUrl = buildIntermediaryClaimUrl(appUrl, claimToken);
-
-    // Generate WhatsApp Invitation message and wa.me URL with INTERMEDIARY URL
+    // 11. Construct WhatsApp distribution links
+    const claimUrl = `${appUrl.replace(/\/$/, '')}/portal/claim-invitation?token=${encodeURIComponent(rawInvitationToken)}`;
     const message = generateWhatsAppMessage({
       parentName: name,
       tenantName,
-      actionLink: intermediaryUrl
+      actionLink: claimUrl
     });
 
     const whatsappUrl = buildWhatsAppUrl(phoneCheck.normalized, message);
 
-    // Record initial READY_TO_SEND status in KV cache (non-blocking fallback)
-    try {
-      await kvBinding.put(
-        `v2_invitation_status:${parentId}`,
-        JSON.stringify({
-          status: 'READY_TO_SEND',
-          generatedAt: nowIso,
-          generatedBy: staffUid
-        }),
-        { expirationTtl: 86400 * 7 }
-      );
-    } catch (_) {}
-
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Akun wali murid berhasil dibuat. Silakan kirim undangan melalui WhatsApp.',
-        claimUrl: intermediaryUrl,
+        message: 'Akun wali murid dan undangan berhasil dibuat. Silakan kirimkan link undangan via WhatsApp.',
+        claimUrl,
         whatsappUrl,
         phone: phoneCheck.normalized,
         data: {
@@ -728,11 +627,10 @@ export async function onRequestPost(context) {
           authUid,
           email: normalizedEmail,
           phone: phoneCheck.normalized,
-          rawPhone: phone,
           tenantName,
-          claimUrl: intermediaryUrl,
-          message,
+          claimUrl,
           whatsappUrl,
+          rawInvitationToken,
           status: 'READY_TO_SEND',
           generatedAt: nowIso
         }
@@ -741,7 +639,7 @@ export async function onRequestPost(context) {
     );
 
   } catch (err) {
-    console.error('[Parent Portal] Internal error occurred.');
+    console.error('[Parent Portal] Internal error occurred:', err.message || err);
     return new Response(
       JSON.stringify({ success: false, message: 'Terjadi kesalahan internal pada server.' }),
       { status: 500, headers: corsHeaders }

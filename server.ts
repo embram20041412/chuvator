@@ -23,7 +23,15 @@ import { onRequest as portalProfile } from './functions/api/portal/profile.js';
 // @ts-ignore
 import { onRequestGet as searchStudentsByKK } from './functions/api/tenant/parents/students.js';
 // @ts-ignore
-import { onRequestPost as createParentAccount } from './functions/api/tenant/parents/index.js';
+import { onRequestPost as createParentAccount, onRequestGet as listParentAccounts } from './functions/api/tenant/parents/index.js';
+// @ts-ignore
+import { onRequestPost as resendParentInvitation } from './functions/api/tenant/parents/resend.js';
+// @ts-ignore
+import { onRequestDelete as deleteParentAccount } from './functions/api/tenant/parents/delete.js';
+// @ts-ignore
+import { onRequestPost as portalInvitationClaim } from './functions/api/portal/invitation/claim.js';
+// @ts-ignore
+import { onRequest as portalInvitationInfo } from './functions/api/portal/invitation/info.js';
 // @ts-ignore
 import { onRequestPost as backfillKkHmac } from './functions/api/admin/backfill_kk_hmac/index.js';
 // @ts-ignore
@@ -266,9 +274,16 @@ async function handleCloudflareFunction(
     app.all('/api/portal/evaluations', (req, res) => handleCloudflareFunction(portalEvaluations, req, res));
     app.all('/api/portal/profile', (req, res) => handleCloudflareFunction(portalProfile, req, res));
     
-    // Parent Management (FASE 5.5-B)
+    // Parent Management (FASE 5.5-B & V3.3)
     app.get('/api/tenant/parents/students', (req, res) => handleCloudflareFunction(searchStudentsByKK, req, res));
+    app.get('/api/tenant/parents', (req, res) => handleCloudflareFunction(listParentAccounts, req, res));
     app.post('/api/tenant/parents', (req, res) => handleCloudflareFunction(createParentAccount, req, res));
+    app.post('/api/tenant/parents/resend', (req, res) => handleCloudflareFunction(resendParentInvitation, req, res));
+    app.delete('/api/tenant/parents/delete', (req, res) => handleCloudflareFunction(deleteParentAccount, req, res));
+
+    // Portal Invitation Claim & Info (V3.3)
+    app.all('/api/portal/invitation/info', (req, res) => handleCloudflareFunction(portalInvitationInfo, req, res));
+    app.post('/api/portal/invitation/claim', (req, res) => handleCloudflareFunction(portalInvitationClaim, req, res));
 
     // Persistent KK_HMAC Backfill Infrastructure (FASE 5.5-B)
     app.post('/api/admin/backfill_kk_hmac', (req, res) => handleCloudflareFunction(backfillKkHmac, req, res));

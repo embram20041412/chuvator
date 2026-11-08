@@ -171,6 +171,7 @@ export default function App() {
               {/* Primary Entry Point: Portal V2 Login */}
               <Route path="/portal" element={<PortalLoginV2 />} />
               <Route path="/portal/claim" element={<PortalClaimInvitation />} />
+              <Route path="/portal/claim-invitation" element={<PortalClaimInvitation />} />
               <Route path="/portal/accept-invitation" element={<PortalAcceptInvitation />} />
               <Route path="/portal/dashboard" element={<PortalDashboard />} />
               {/* V2 Canonical Route Redirect */}

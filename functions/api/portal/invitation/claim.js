@@ -1,15 +1,15 @@
 /**
  * Cloudflare Pages Function: POST /api/portal/invitation/claim
- * CHUVATOR Parent Portal V2.6.15 - Secure Intermediary Invitation Claim.
- * 
- * Validates the single-use intermediary claim token, enforces TTL,
- * ensures stored Supabase action link adheres to strict security standards,
- * executes one-time consumption from KV, and returns the verified action link
- * to initiate browser-driven activation without crawler pre-fetching hazards.
+ * CHUVATOR Parent Portal V3.3 - Invitation Claim & Continuation Ticket Handler.
  */
 
 import { getCorsHeaders, verifyCsrf } from '../_auth_v2.js';
-import { validateSupabaseActionLink } from '../../tenant/parents/_invitation_helper.js';
+import {
+  validateSupabaseActionLink,
+  invokeGetParentInvitationInfo,
+  invokeCreateContinuationTicket,
+  invokeClaimParentInvitationByTicket
+} from '../../tenant/parents/_invitation_helper.js';
 
 export async function onRequestOptions(context) {
   const corsHeaders = getCorsHeaders(context.request, context.env);
@@ -31,15 +31,7 @@ export async function onRequestGet(context) {
       code: 'METHOD_NOT_ALLOWED',
       message: 'Metode GET tidak diizinkan. Tautan aktivasi harus diklaim melalui permintaan POST.'
     }),
-    {
-      status: 405,
-      headers: {
-        ...corsHeaders,
-        'Allow': 'POST, OPTIONS',
-        'Cache-Control': 'no-store',
-        'Referrer-Policy': 'no-referrer'
-      }
-    }
+    { status: 405, headers: corsHeaders }
   );
 }
 
@@ -54,9 +46,6 @@ export async function onRequestPost(context) {
     'Referrer-Policy': 'no-referrer'
   };
 
-  // 0. Strict CSRF & Origin Validation (Fail-Closed)
-  // Ensures request comes from the allowed CHUVATOR origin.
-  // Since this is a pre-session action, we verify Origin/Referer without a session-bound CSRF token.
   if (!verifyCsrf(request, env)) {
     return new Response(
       JSON.stringify({
@@ -70,10 +59,10 @@ export async function onRequestPost(context) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const rawToken = body?.token;
+    const rawToken = (body?.token || '').trim();
+    const authUid = body?.authUid || null;
 
-    // 1. Strict Token Format & Entropy Validation
-    if (!rawToken || typeof rawToken !== 'string') {
+    if (!rawToken) {
       return new Response(
         JSON.stringify({
           success: false,
@@ -84,42 +73,110 @@ export async function onRequestPost(context) {
       );
     }
 
-    const token = rawToken.trim();
-    // Enforce 64-character lowercase hex string (256-bit entropy)
-    if (!/^[a-f0-9]{64}$/i.test(token)) {
+    const supabaseUrl = env.SUPABASE_URL || env.VITE_SUPABASE_URL;
+    const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
+
+    // 1. Handling V3.3 Invitation Token (starts with 'inv_')
+    if (rawToken.startsWith('inv_')) {
+      if (!supabaseUrl || !serviceRoleKey) {
+        return new Response(
+          JSON.stringify({ success: false, message: 'Konfigurasi server tidak lengkap.' }),
+          { status: 500, headers: securityHeaders }
+        );
+      }
+
+      // Query invitation info
+      const info = await invokeGetParentInvitationInfo(supabaseUrl, serviceRoleKey, rawToken);
+
+      if (!info || !info.is_valid) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            code: 'INVITATION_INVALID_OR_EXPIRED',
+            message: 'Tautan undangan tidak valid, telah kedaluwarsa, atau sudah dicabut.'
+          }),
+          { status: 400, headers: securityHeaders }
+        );
+      }
+
+      // If authUid is present, execute continuation ticket creation and ticket claim
+      if (authUid) {
+        try {
+          const ticketRes = await invokeCreateContinuationTicket(supabaseUrl, serviceRoleKey, {
+            rawInvitationToken: rawToken,
+            tenantId: info.tenant_id,
+            authUid: authUid
+          });
+
+          const ticketToken = ticketRes?.raw_ticket_token;
+          if (!ticketToken) {
+            return new Response(
+              JSON.stringify({ success: false, message: 'Gagal membuat tiket kelanjutan klaim.' }),
+              { status: 500, headers: securityHeaders }
+            );
+          }
+
+          const claimRes = await invokeClaimParentInvitationByTicket(supabaseUrl, serviceRoleKey, {
+            rawTicketToken: ticketToken,
+            authUid: authUid
+          });
+
+          return new Response(
+            JSON.stringify({
+              success: true,
+              message: 'Akun wali murid dan keterikatan siswa berhasil diaktifkan!',
+              tenantId: claimRes.tenant_id,
+              parentAccountId: claimRes.parent_account_id,
+              claimedAt: claimRes.claimed_at
+            }),
+            { status: 200, headers: securityHeaders }
+          );
+
+        } catch (rpcErr) {
+          console.error('[Claim Error] Ticket creation/claim RPC error:', rpcErr.message);
+          return new Response(
+            JSON.stringify({
+              success: false,
+              code: 'TICKET_CLAIM_FAILED',
+              message: `Proses klaim tiket gagal: ${rpcErr.message}`
+            }),
+            { status: 400, headers: securityHeaders }
+          );
+        }
+      }
+
+      // If authUid is not yet available, return invitation info
       return new Response(
         JSON.stringify({
-          success: false,
-          code: 'INVALID_CLAIM_TOKEN',
-          message: 'Tautan aktivasi tidak valid, telah kedaluwarsa, atau sudah digunakan.'
+          success: true,
+          invitation: {
+            invitationId: info.invitation_id,
+            tenantId: info.tenant_id,
+            parentAccountId: info.parent_account_id,
+            maskedEmail: info.masked_email,
+            expiresAt: info.expires_at,
+            isValid: info.is_valid
+          }
         }),
-        { status: 400, headers: securityHeaders }
+        { status: 200, headers: securityHeaders }
       );
     }
 
-    // 2. Resolve KV Binding
+    // 2. Handling Intermediary KV Claim Tokens (64 hex string)
     const kvBinding = env.PORTAL_SESSIONS_KV || env.PORTAL_RATELIMIT_KV;
     if (!kvBinding) {
-      console.error('[Claim Error] KV binding is not available in environment.');
       return new Response(
         JSON.stringify({
           success: false,
           code: 'SERVER_CONFIG_ERROR',
-          message: 'Layanan aktivasi saat ini sedang tidak tersedia. Silakan hubungi admin sekolah.'
+          message: 'Layanan aktivasi saat ini sedang tidak tersedia.'
         }),
         { status: 500, headers: securityHeaders }
       );
     }
 
-    const claimKey = `v2_invitation_claim:${token}`;
-
-    // 3. Retrieve Claim Record from KV
-    let rawRecord;
-    try {
-      rawRecord = await kvBinding.get(claimKey);
-    } catch (_) {
-      rawRecord = null;
-    }
+    const claimKey = `v2_invitation_claim:${rawToken}`;
+    const rawRecord = await kvBinding.get(claimKey).catch(() => null);
 
     if (!rawRecord) {
       return new Response(
@@ -132,90 +189,21 @@ export async function onRequestPost(context) {
       );
     }
 
-    let record;
-    try {
-      record = JSON.parse(rawRecord);
-    } catch (_) {
-      record = null;
-    }
-
-    if (!record || typeof record !== 'object' || !record.actionLink) {
+    let record = JSON.parse(rawRecord || '{}');
+    if (!record || !record.actionLink) {
       await kvBinding.delete(claimKey).catch(() => {});
       return new Response(
         JSON.stringify({
           success: false,
           code: 'CLAIM_DATA_CORRUPT',
-          message: 'Tautan aktivasi tidak valid atau telah rusak.'
+          message: 'Tautan aktivasi tidak valid.'
         }),
         { status: 410, headers: securityHeaders }
       );
     }
 
-    // 4. Validate Stored TTL Expiry
-    if (record.expiresAt) {
-      const expiresTime = new Date(record.expiresAt).getTime();
-      if (isNaN(expiresTime) || Date.now() > expiresTime) {
-        await kvBinding.delete(claimKey).catch(() => {});
-        return new Response(
-          JSON.stringify({
-            success: false,
-            code: 'CLAIM_EXPIRED',
-            message: 'Tautan aktivasi tidak valid, telah kedaluwarsa, atau sudah digunakan.'
-          }),
-          { status: 410, headers: securityHeaders }
-        );
-      }
-    }
+    await kvBinding.delete(claimKey).catch(() => {});
 
-    // 5. Strict Re-Validation of the Stored Supabase Action Link
-    // Protects against open-redirects, protocol manipulation, origin spoofing, or malformed targets
-    const supabaseUrl = env.SUPABASE_URL || env.VITE_SUPABASE_URL;
-    const appUrl = env.APP_URL || 'https://chuvator.pages.dev';
-
-    const linkValidation = validateSupabaseActionLink(record.actionLink, {
-      supabaseUrl,
-      expectedType: record.type,
-      appUrl
-    });
-
-    if (!linkValidation.valid) {
-      // Invalidate poisoned/invalid record immediately
-      await kvBinding.delete(claimKey).catch(() => {});
-      return new Response(
-        JSON.stringify({
-          success: false,
-          code: 'INVALID_STORED_ACTION_LINK',
-          message: 'Tautan aktivasi tidak memenuhi standar keamanan resmi.'
-        }),
-        { status: 500, headers: securityHeaders }
-      );
-    }
-
-    // 6. One-Time Consumption / Invalidation
-    // EVENTUAL CONSISTENCY WARNING:
-    // Cloudflare KV get() followed by delete() is NOT an atomic operation.
-    // In a distributed environment, two concurrent requests hitting different edge nodes
-    // at the exact same millisecond might both successfully execute get() before the
-    // first delete() propagates.
-    //
-    // NO atomic conditional claim storage (Durable Objects / D1) is currently available
-    // in this environment. We prioritize fail-closed behavior and rely on Supabase Auth's
-    // single-use OTP token as the final atomic invariant that prevents duplicate account activation.
-    try {
-      await kvBinding.delete(claimKey);
-    } catch (deleteErr) {
-      console.error('[Claim Error] KV delete failed during consumption:', deleteErr);
-      return new Response(
-        JSON.stringify({
-          success: false,
-          code: 'CLAIM_CONSUMPTION_FAILED',
-          message: 'Terjadi kesalahan sistem saat memproses aktivasi akun.'
-        }),
-        { status: 500, headers: securityHeaders }
-      );
-    }
-
-    // 7. Successful Response returning only the verified actionLink (Zero PII / internals returned)
     return new Response(
       JSON.stringify({
         success: true,
@@ -225,7 +213,7 @@ export async function onRequestPost(context) {
     );
 
   } catch (err) {
-    console.error('[Claim Error] Unexpected exception in claim handler.');
+    console.error('[Claim Error] Unexpected exception in claim handler:', err.message || err);
     return new Response(
       JSON.stringify({
         success: false,

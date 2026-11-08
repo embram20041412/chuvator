@@ -125,6 +125,24 @@ export const parentService = {
   },
 
   /**
+   * Revoke an active invitation for a parent
+   */
+  revokeInvitation: async (parentId, reason) => {
+    const headers = await getAuthHeaders();
+    const response = await fetch('/api/tenant/parents/resend', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ parentId, action: 'revoke', reason })
+    });
+
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.message || 'Gagal mencabut undangan wali murid.');
+    }
+    return data;
+  },
+
+  /**
    * Cancel / delete parent account registration and links securely
    */
   deleteParentAccount: async (parentId) => {

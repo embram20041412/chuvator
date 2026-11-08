@@ -1,23 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   ShieldCheck,
   GraduationCap,
   ArrowRight,
   Loader2,
-  AlertCircle
+  AlertCircle,
+  Mail
 } from 'lucide-react';
 
 /**
  * PortalClaimInvitation - Intermediary landing page for Parent Portal activation.
  * 
- * Protects Supabase single-use OTP links from being consumed by automated
- * messaging crawlers (WhatsApp Link Preview, bot pre-fetchers, antivirus scanners).
- * 
- * CRAWLER SAFETY INVARIANTS:
- * - NO action link or OTP is rendered in the HTML/DOM/meta tags.
- * - NO automated fetch or redirect occurs on initial GET mount.
- * - Token is claimed ONLY upon explicit user interaction (button press).
+ * Protects Supabase single-use OTP links and V3.3 invitation tokens from crawler pre-fetching.
  */
 export default function PortalClaimInvitation() {
   const [searchParams] = useSearchParams();
@@ -25,7 +20,30 @@ export default function PortalClaimInvitation() {
   const token = searchParams.get('token') || '';
 
   const [isLoading, setIsLoading] = useState(false);
+  const [isFetchingInfo, setIsFetchingInfo] = useState(false);
+  const [invitationInfo, setInvitationInfo] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
+
+  useEffect(() => {
+    if (!token) return;
+
+    if (token.startsWith('inv_')) {
+      setIsFetchingInfo(true);
+      fetch(`/api/portal/invitation/info?token=${encodeURIComponent(token)}`)
+        .then(res => res.json())
+        .then(data => {
+          setIsFetchingInfo(false);
+          if (data.success && data.invitation) {
+            setInvitationInfo(data.invitation);
+          } else {
+            setErrorMsg(data.message || 'Undangan tidak ditemukan atau token tidak valid.');
+          }
+        })
+        .catch(() => {
+          setIsFetchingInfo(false);
+        });
+    }
+  }, [token]);
 
   const handleProceedActivation = async (e) => {
     e.preventDefault();
@@ -40,6 +58,12 @@ export default function PortalClaimInvitation() {
     setErrorMsg(null);
 
     try {
+      if (token.startsWith('inv_')) {
+        // Redirect directly to accept-invitation page with token for password setting & claim
+        navigate(`/portal/accept-invitation?token=${encodeURIComponent(token.trim())}`);
+        return;
+      }
+
       const response = await fetch('/api/portal/invitation/claim', {
         method: 'POST',
         headers: {
@@ -52,9 +76,9 @@ export default function PortalClaimInvitation() {
       const data = await response.json().catch(() => ({}));
 
       if (response.ok && data.success && data.actionLink) {
-        // Direct browser navigation to the verified Supabase action link.
-        // The user's active browser performs the single-use OTP verification.
         window.location.href = data.actionLink;
+      } else if (response.ok && data.success) {
+        navigate(`/portal/accept-invitation?token=${encodeURIComponent(token.trim())}`);
       } else {
         setErrorMsg(
           data.message || 'Tautan aktivasi tidak valid, telah kedaluwarsa, atau sudah digunakan.'
@@ -89,6 +113,19 @@ export default function PortalClaimInvitation() {
           Selamat datang di Parent Portal. Tekan tombol di bawah untuk melanjutkan aktivasi dan pembuatan kata sandi akun Anda.
         </p>
 
+        {/* Masked Email Info Card */}
+        {invitationInfo?.maskedEmail && (
+          <div className="mb-6 p-4 rounded-2xl bg-slate-50 border border-slate-200 flex items-center gap-3 text-left">
+            <div className="p-2 bg-emerald-100 rounded-xl text-emerald-700">
+              <Mail className="w-5 h-5" />
+            </div>
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Target Akun</p>
+              <p className="text-sm font-bold text-slate-800">{invitationInfo.maskedEmail}</p>
+            </div>
+          </div>
+        )}
+
         {/* Error Alert */}
         {errorMsg && (
           <div className="mb-6 p-4 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-3 text-left">
@@ -110,10 +147,10 @@ export default function PortalClaimInvitation() {
         <form onSubmit={handleProceedActivation} className="space-y-4">
           <button
             type="submit"
-            disabled={isLoading || !token}
-            className="w-full py-3.5 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-bold shadow-lg shadow-emerald-600/25 transition flex items-center justify-center gap-2"
+            disabled={isLoading || isFetchingInfo || !token}
+            className="w-full py-3.5 px-6 rounded-2xl bg-emerald-600 hover:bg-emerald-700 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed text-white text-sm font-bold shadow-lg shadow-emerald-600/25 transition flex items-center justify-center gap-2 cursor-pointer"
           >
-            {isLoading ? (
+            {isLoading || isFetchingInfo ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
                 <span>Menyiapkan Sesi Aktivasi...</span>

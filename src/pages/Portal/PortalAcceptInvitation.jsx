@@ -91,10 +91,33 @@ export default function PortalAcceptInvitation() {
         return;
       }
 
-      setSuccessMsg('Kata sandi berhasil dikonfigurasi. Menyiapkan sesi portal...');
+      setSuccessMsg('Kata sandi berhasil dikonfigurasi. Mengklaim undangan...');
+
+      // 1.5 Claim invitation token if token exists in URL
+      const searchParams = new URLSearchParams(window.location.search);
+      const invitationToken = searchParams.get('token');
+
+      if (invitationToken && user?.id) {
+        try {
+          await fetch('/api/portal/invitation/claim', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            body: JSON.stringify({
+              token: invitationToken.trim(),
+              authUid: user.id
+            })
+          });
+        } catch (claimErr) {
+          console.warn('Invitation token claim call error:', claimErr);
+        }
+      }
+
+      setSuccessMsg('Menyiapkan sesi portal...');
 
       // 2. Establish Parent Portal V2 Session via Backend
-      // We use the existing login endpoint with the newly set password
       const loginResponse = await fetch('/api/portal/v2/login', {
         method: 'POST',
         headers: {

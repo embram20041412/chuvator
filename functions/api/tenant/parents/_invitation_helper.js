@@ -379,3 +379,182 @@ export function determineInvitationStatus({
 
   return 'READY_TO_SEND';
 }
+
+/**
+ * Invoke V3.3 RPC create_parent_invitation
+ */
+export async function invokeCreateParentInvitation(supabaseUrl, serviceRoleKey, {
+  tenantId,
+  actorUid,
+  parentEmail,
+  targetStudentId,
+  relationship = 'guardian',
+  expiryDays = 7
+}) {
+  const resp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/rest/v1/rpc/create_parent_invitation`, {
+    method: 'POST',
+    headers: {
+      'apikey': serviceRoleKey,
+      'Authorization': `Bearer ${serviceRoleKey}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify({
+      p_tenant_id: tenantId,
+      p_actor_uid: actorUid,
+      p_parent_email: parentEmail,
+      p_target_student_id: targetStudentId,
+      p_relationship: relationship,
+      p_expiry_days: expiryDays
+    })
+  });
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => '');
+    throw new Error(`RPC create_parent_invitation gagal (${resp.status}): ${errText}`);
+  }
+  const data = await resp.json();
+  return Array.isArray(data) ? data[0] : data;
+}
+
+/**
+ * Invoke V3.3 RPC get_parent_invitation_info
+ */
+export async function invokeGetParentInvitationInfo(supabaseUrl, serviceRoleKey, rawToken) {
+  const resp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/rest/v1/rpc/get_parent_invitation_info`, {
+    method: 'POST',
+    headers: {
+      'apikey': serviceRoleKey,
+      'Authorization': `Bearer ${serviceRoleKey}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify({
+      p_raw_invitation_token: rawToken
+    })
+  });
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => '');
+    throw new Error(`RPC get_parent_invitation_info gagal (${resp.status}): ${errText}`);
+  }
+  const data = await resp.json();
+  return Array.isArray(data) ? data[0] : data;
+}
+
+/**
+ * Invoke V3.3 RPC create_parent_continuation_ticket
+ */
+export async function invokeCreateContinuationTicket(supabaseUrl, serviceRoleKey, {
+  rawInvitationToken,
+  tenantId,
+  authUid
+}) {
+  const resp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/rest/v1/rpc/create_parent_continuation_ticket`, {
+    method: 'POST',
+    headers: {
+      'apikey': serviceRoleKey,
+      'Authorization': `Bearer ${serviceRoleKey}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify({
+      p_raw_invitation_token: rawInvitationToken,
+      p_tenant_id: tenantId,
+      p_auth_uid: authUid
+    })
+  });
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => '');
+    throw new Error(`RPC create_parent_continuation_ticket gagal (${resp.status}): ${errText}`);
+  }
+  const data = await resp.json();
+  return Array.isArray(data) ? data[0] : data;
+}
+
+/**
+ * Invoke V3.3 RPC claim_parent_invitation_by_ticket
+ */
+export async function invokeClaimParentInvitationByTicket(supabaseUrl, serviceRoleKey, {
+  rawTicketToken,
+  authUid
+}) {
+  const resp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/rest/v1/rpc/claim_parent_invitation_by_ticket`, {
+    method: 'POST',
+    headers: {
+      'apikey': serviceRoleKey,
+      'Authorization': `Bearer ${serviceRoleKey}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify({
+      p_raw_ticket_token: rawTicketToken,
+      p_auth_uid: authUid
+    })
+  });
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => '');
+    throw new Error(`RPC claim_parent_invitation_by_ticket gagal (${resp.status}): ${errText}`);
+  }
+  const data = await resp.json();
+  return Array.isArray(data) ? data[0] : data;
+}
+
+/**
+ * Invoke V3.3 RPC revoke_parent_invitation
+ */
+export async function invokeRevokeParentInvitation(supabaseUrl, serviceRoleKey, {
+  tenantId,
+  actorUid,
+  invitationIdOrToken,
+  reason = null
+}) {
+  const resp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/rest/v1/rpc/revoke_parent_invitation`, {
+    method: 'POST',
+    headers: {
+      'apikey': serviceRoleKey,
+      'Authorization': `Bearer ${serviceRoleKey}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify({
+      p_tenant_id: tenantId,
+      p_actor_uid: actorUid,
+      p_invitation_id_or_token: invitationIdOrToken,
+      p_reason: reason
+    })
+  });
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => '');
+    throw new Error(`RPC revoke_parent_invitation gagal (${resp.status}): ${errText}`);
+  }
+  const data = await resp.json();
+  return Array.isArray(data) ? data[0] : data;
+}
+
+/**
+ * Invoke V3.3 RPC recover_parent_session
+ */
+export async function invokeRecoverParentSession(supabaseUrl, serviceRoleKey, {
+  authUid,
+  tenantId
+}) {
+  const resp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/rest/v1/rpc/recover_parent_session`, {
+    method: 'POST',
+    headers: {
+      'apikey': serviceRoleKey,
+      'Authorization': `Bearer ${serviceRoleKey}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify({
+      p_auth_uid: authUid,
+      p_tenant_id: tenantId
+    })
+  });
+  if (!resp.ok) {
+    const errText = await resp.text().catch(() => '');
+    throw new Error(`RPC recover_parent_session gagal (${resp.status}): ${errText}`);
+  }
+  const data = await resp.json();
+  return Array.isArray(data) ? data[0] : data;
+}
+
