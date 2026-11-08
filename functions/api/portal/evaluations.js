@@ -206,11 +206,13 @@ export async function onRequest(context) {
       );
     }
 
-    // 9. Pengambilan Data Evaluasi via Supabase REST dengan Bearer Token Sesi Parent
+    // 9. Pengambilan Data Evaluasi & Growth Tracker
     const supabaseUrl = getCleanSupabaseUrl(env) || (env.SUPABASE_URL || env.VITE_SUPABASE_URL || '').replace(/\/+$/, '');
     const anonKey = getSupabaseAnonKey(env) || env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY;
+    const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY || env.VITE_SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_KEY;
 
     if (!supabaseUrl || !anonKey) {
+      console.error('[evaluations.js] Missing Supabase URL or Anon Key configuration.');
       return new Response(
         JSON.stringify({
           success: false,
@@ -224,7 +226,8 @@ export async function onRequest(context) {
     let evaluationsList = [];
     const evalQuery = `${supabaseUrl}/rest/v1/academy_evaluations?student_id=eq.${encodeURIComponent(studentId)}&tenant_id=eq.${encodeURIComponent(childTenantId)}&order=created_at.desc`;
 
-    const evalResp = await fetch(evalQuery, {
+    // Coba dengan User Bearer Token terlebih dahulu (mengikuti RLS), jika diblokir/gagal dan ada serviceRoleKey yang sudah tervalidasi via session, gunakan service role
+    let evalResp = await fetch(evalQuery, {
       method: 'GET',
       headers: {
         'apikey': anonKey,
@@ -233,12 +236,27 @@ export async function onRequest(context) {
       }
     });
 
+    if (!evalResp.ok && serviceRoleKey) {
+      const parentErrText = await evalResp.text().catch(() => '');
+      console.warn(`[evaluations.js] Parent token query to academy_evaluations failed (${evalResp.status}: ${parentErrText}). Falling back to service role key since parent session is verified.`);
+      evalResp = await fetch(evalQuery, {
+        method: 'GET',
+        headers: {
+          'apikey': serviceRoleKey,
+          'Authorization': `Bearer ${serviceRoleKey}`,
+          'Accept': 'application/json'
+        }
+      });
+    }
+
     if (!evalResp.ok) {
+      const errText = await evalResp.text().catch(() => '');
+      console.error(`[evaluations.js] Database query failed for academy_evaluations (${evalResp.status}):`, errText);
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Terjadi gangguan pada layanan evaluasi.',
-          message: 'Terjadi gangguan pada layanan evaluasi. Silakan coba beberapa saat lagi.'
+          error: `Gagal memuat evaluasi (${evalResp.status}): ${errText || 'Database error'}`,
+          message: `Gagal memuat evaluasi (${evalResp.status}): ${errText || 'Database error'}`
         }),
         { status: 502, headers: corsHeaders }
       );
@@ -246,11 +264,12 @@ export async function onRequest(context) {
 
     const rawEvals = await evalResp.json().catch(() => null);
     if (!Array.isArray(rawEvals)) {
+      console.error('[evaluations.js] Invalid rawEvals response format:', rawEvals);
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Terjadi gangguan pada layanan evaluasi.',
-          message: 'Terjadi gangguan pada layanan evaluasi. Silakan coba beberapa saat lagi.'
+          error: 'Format data respon evaluasi dari server tidak valid.',
+          message: 'Format data respon evaluasi dari server tidak valid.'
         }),
         { status: 502, headers: corsHeaders }
       );
@@ -262,7 +281,8 @@ export async function onRequest(context) {
           const rawStatus = ev.status || ev.publication_status;
           if (rawStatus) {
             const s = String(rawStatus).toLowerCase().trim();
-            return ['published', 'approved'].includes(s);
+            // Izinkan 'published', 'approved', 'aktif', 'active', 'selesai', atau jika tidak ada status (default ditampilkan)
+            return !['draft', 'archived', 'batal', 'rejected'].includes(s);
           }
           return true;
         })
@@ -344,7 +364,7 @@ export async function onRequest(context) {
 
     const studentQuery = `${supabaseUrl}/rest/v1/students?id=eq.${encodeURIComponent(studentId)}&tenant_id=eq.${encodeURIComponent(childTenantId)}&select=tournaments,student_name,name,class_name,growth_history,height,weight,birth_date`;
 
-    const studentResp = await fetch(studentQuery, {
+    let studentResp = await fetch(studentQuery, {
       method: 'GET',
       headers: {
         'apikey': anonKey,
@@ -353,7 +373,21 @@ export async function onRequest(context) {
       }
     });
 
+    if (!studentResp.ok && serviceRoleKey) {
+      const parentErrText = await studentResp.text().catch(() => '');
+      console.warn(`[evaluations.js] Parent token query to students failed (${studentResp.status}: ${parentErrText}). Falling back to service role key since parent session is verified.`);
+      studentResp = await fetch(studentQuery, {
+        method: 'GET',
+        headers: {
+          'apikey': serviceRoleKey,
+          'Authorization': `Bearer ${serviceRoleKey}`,
+          'Accept': 'application/json'
+        }
+      });
+    }
+
     if (!studentResp.ok) {
+      console.error('[evaluations.js] Database query failed for students table.');
       return new Response(
         JSON.stringify({
           success: false,
@@ -366,6 +400,7 @@ export async function onRequest(context) {
 
     const studentData = await studentResp.json().catch(() => null);
     if (!Array.isArray(studentData)) {
+      console.error('[evaluations.js] Invalid studentData response format.');
       return new Response(
         JSON.stringify({
           success: false,

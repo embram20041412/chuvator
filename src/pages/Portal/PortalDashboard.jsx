@@ -563,15 +563,28 @@ export default function PortalDashboard() {
             setIsLoadingEvaluation(false);
             return;
           }
+          if (isMounted && !res.success && targetStudentId === verifiedStudentId) {
+            setEvaluationError(res.error || res.message || 'Gagal memuat evaluasi pelatih dari server.');
+            setIsLoadingEvaluation(false);
+            return;
+          }
+        } else {
+          const errRes = await response.json().catch(() => ({}));
+          console.error('[PortalDashboard] Evaluations endpoint returned HTTP', response.status, errRes);
+          if (isMounted && targetStudentId === verifiedStudentId) {
+            setEvaluationError(errRes.error || errRes.message || `Gagal memuat evaluasi pelatih dari server (HTTP ${response.status}).`);
+            setIsLoadingEvaluation(false);
+            return;
+          }
         }
 
         if (isMounted && targetStudentId === verifiedStudentId) {
           setEvaluationError('Gagal memuat evaluasi pelatih dari server.');
         }
       } catch (err) {
-        console.error('Evaluations fetch error:', err);
+        console.error('[PortalDashboard] Evaluations fetch error:', err);
         if (isMounted && targetStudentId === verifiedStudentId) {
-          setEvaluationError('Gagal terhubung ke server evaluasi.');
+          setEvaluationError(err?.message || 'Gagal terhubung ke server evaluasi.');
         }
       } finally {
         if (isMounted && targetStudentId === verifiedStudentId) {
