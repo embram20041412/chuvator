@@ -19,7 +19,6 @@ export default function TenantBackfillControlCard({ tenantId = 'global', tenantN
   const [dryRunResult, setDryRunResult] = useState(null);
   const [dryRunError, setDryRunError] = useState(null);
 
-  const [showExecuteConfirm, setShowExecuteConfirm] = useState(false);
   const [loadingExecute, setLoadingExecute] = useState(false);
   const [executeResult, setExecuteResult] = useState(null);
   const [executeError, setExecuteError] = useState(null);
@@ -42,8 +41,8 @@ export default function TenantBackfillControlCard({ tenantId = 'global', tenantN
   };
 
   // Run Controlled Backfill Execution
-  const handleConfirmExecute = async () => {
-    setShowExecuteConfirm(false);
+  const handleExecuteBackfill = async () => {
+    if (eligibleCount === 0 || loadingExecute) return;
     setLoadingExecute(true);
     setExecuteError(null);
 
@@ -90,7 +89,7 @@ export default function TenantBackfillControlCard({ tenantId = 'global', tenantN
             data-testid="tenant-btn-dryrun"
             onClick={handleRunDryRun}
             disabled={loadingDryRun || loadingExecute}
-            className="px-3.5 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold text-xs rounded-xl border border-indigo-200 transition-colors cursor-pointer disabled:opacity-60 flex items-center space-x-1.5"
+            className="px-3.5 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold text-xs rounded-xl border border-indigo-200 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center space-x-1.5"
           >
             {loadingDryRun ? (
               <>
@@ -107,13 +106,26 @@ export default function TenantBackfillControlCard({ tenantId = 'global', tenantN
 
           <button
             data-testid="tenant-btn-execute"
-            onClick={() => setShowExecuteConfirm(true)}
-            disabled={true}
-            className="px-4 py-2 bg-gray-200 text-gray-500 font-semibold text-xs rounded-xl shadow-sm transition-colors cursor-not-allowed flex items-center space-x-1.5 opacity-50"
-            title="Eksekusi Backfill dinonaktifkan selama fase validasi Dry-Run."
+            onClick={handleExecuteBackfill}
+            disabled={eligibleCount === 0 || loadingExecute}
+            className={`px-4 py-2 font-semibold text-xs rounded-xl shadow-sm transition-colors flex items-center space-x-1.5 ${
+              eligibleCount === 0 || loadingExecute
+                ? 'bg-gray-200 text-gray-400 cursor-not-allowed opacity-60'
+                : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer active:scale-95 shadow-emerald-600/20'
+            }`}
+            title={eligibleCount === 0 ? "Tidak ada kandidat ELIGIBLE untuk dieksekusi." : "Eksekusi backfill data ELIGIBLE secara atomik."}
           >
-            <Play className="w-4 h-4" />
-            <span>Eksekusi Terkunci</span>
+            {loadingExecute ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Mengeksekusi...</span>
+              </>
+            ) : (
+              <>
+                <Play className="w-4 h-4" />
+                <span>Eksekusi Backfill</span>
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -138,6 +150,24 @@ export default function TenantBackfillControlCard({ tenantId = 'global', tenantN
           <div>
             <p className="font-bold">Gagal Mengoperasikan Backfill</p>
             <p className="text-xs text-red-700">{dryRunError || executeError}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Alert Sukses Eksekusi */}
+      {executeResult && (
+        <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex items-start space-x-3 text-emerald-800 text-sm">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="font-bold">Eksekusi Backfill Berhasil</p>
+            <p className="text-xs text-emerald-700 mt-0.5">
+              {executeResult.message || `Berhasil memproses backfill untuk tenant ${tenantName}. Data kandidat ELIGIBLE telah diperbarui secara atomik.`}
+            </p>
+            {executeResult.processedCount !== undefined && (
+              <p className="text-[11px] font-mono text-emerald-800 mt-1">
+                Diproses: {executeResult.processedCount} | Berhasil: {executeResult.successCount ?? executeResult.processedCount}
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -216,10 +246,10 @@ export default function TenantBackfillControlCard({ tenantId = 'global', tenantN
             </div>
           </div>
 
-          <div className="p-3 bg-gray-50 rounded-xl border border-gray-200 flex items-center space-x-2 text-[11px] text-gray-500">
-            <Lock className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+          <div className="p-3 bg-emerald-50/60 rounded-xl border border-emerald-200/80 flex items-center space-x-2 text-[11px] text-emerald-800">
+            <Info className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
             <span>
-              Analisis simulasi tidak melakukan mutasi database. Tombol eksekusi dinonaktifkan selama fase audit.
+              Eksekusi akan memproses data ELIGIBLE secara atomik.
             </span>
           </div>
         </div>
