@@ -983,16 +983,15 @@ export default function PortalDashboard() {
               {/* Status SPP / Keuangan Card */}
               <div
                 onClick={() => setActiveTab('billing')}
-                className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between group"
+                className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-emerald-300 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between group"
               >
                 <div className="flex items-center space-x-3 min-w-0">
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
-                    isLoadingBilling ? 'bg-slate-50 text-slate-400 border border-slate-200' :
-                    !isBillingValid ? 'bg-rose-50 text-rose-600 border border-rose-100' :
-                    (isBillingValid && isPaid === true) ? 'bg-emerald-50 text-emerald-600 border border-emerald-100 group-hover:bg-emerald-100' :
-                    'bg-amber-50 text-amber-600 border border-amber-100 group-hover:bg-amber-100'
-                  }`}>
-                    <CreditCard className="w-5 h-5" />
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-50/70 border border-emerald-100 flex items-center justify-center shrink-0 p-1 group-hover:scale-105 transition-transform">
+                    <img 
+                      src="/icons/portal/tab-billing.png" 
+                      alt="Keuangan" 
+                      className="w-10 h-10 object-contain drop-shadow-xs" 
+                    />
                   </div>
                   <div className="min-w-0">
                     <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
@@ -1023,11 +1022,15 @@ export default function PortalDashboard() {
               {/* Status Jadwal & Kehadiran Card */}
               <div
                 onClick={() => setActiveTab('schedule')}
-                className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between group"
+                className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-blue-300 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between group"
               >
                 <div className="flex items-center space-x-3 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100 shrink-0 group-hover:bg-blue-100 transition-colors">
-                    <CalendarDays className="w-5 h-5" />
+                  <div className="w-12 h-12 rounded-2xl bg-blue-50/70 border border-blue-100 flex items-center justify-center shrink-0 p-1 group-hover:scale-105 transition-transform">
+                    <img 
+                      src="/icons/portal/tab-schedule.png" 
+                      alt="Jadwal" 
+                      className="w-10 h-10 object-contain drop-shadow-xs" 
+                    />
                   </div>
                   <div className="min-w-0">
                     <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
@@ -1053,11 +1056,15 @@ export default function PortalDashboard() {
                   setActiveEvalTab('assessment');
                   setActiveTab('evaluation');
                 }}
-                className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between group"
+                className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-purple-300 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between group"
               >
                 <div className="flex items-center space-x-3 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100 shrink-0 group-hover:bg-blue-100 transition-colors">
-                    <Activity className="w-5 h-5" />
+                  <div className="w-12 h-12 rounded-2xl bg-purple-50/70 border border-purple-100 flex items-center justify-center shrink-0 p-1 group-hover:scale-105 transition-transform">
+                    <img 
+                      src="/icons/portal/tab-evaluation.png" 
+                      alt="Assessment & Rapor" 
+                      className="w-10 h-10 object-contain drop-shadow-xs" 
+                    />
                   </div>
                   <div className="min-w-0">
                     <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
@@ -1084,11 +1091,15 @@ export default function PortalDashboard() {
               {/* Status Pengumuman Terbaru Card (GROUP 8) */}
               <div
                 onClick={() => setActiveTab('announcements')}
-                className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between group"
+                className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-amber-300 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between group"
               >
                 <div className="flex items-center space-x-3 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100 shrink-0 group-hover:bg-amber-100 transition-colors">
-                    <Bell className="w-5 h-5" />
+                  <div className="w-12 h-12 rounded-2xl bg-amber-50/70 border border-amber-100 flex items-center justify-center shrink-0 p-1 group-hover:scale-105 transition-transform">
+                    <img 
+                      src="/icons/portal/tab-announcements.png" 
+                      alt="Pengumuman" 
+                      className="w-10 h-10 object-contain drop-shadow-xs" 
+                    />
                   </div>
                   <div className="min-w-0">
                     <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
@@ -1116,8 +1127,8 @@ export default function PortalDashboard() {
                 onClick={() => setActiveTab('billing')}
                 className="p-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-2xl text-center flex flex-col items-center justify-center space-y-1.5 transition-all shadow-2xs cursor-pointer group active:scale-95"
               >
-                <div className="w-8 h-8 rounded-xl bg-amber-50 group-hover:bg-amber-100 text-amber-600 flex items-center justify-center transition-colors">
-                  <CreditCard className="w-4 h-4" />
+                <div className="w-9 h-9 rounded-xl bg-emerald-50/80 group-hover:bg-emerald-100 border border-emerald-100/60 flex items-center justify-center transition-colors p-1">
+                  <img src="/icons/portal/tab-billing.png" alt="Keuangan" className="w-7 h-7 object-contain" />
                 </div>
                 <span className="text-[10px] font-bold text-slate-700">Keuangan</span>
               </button>
@@ -1127,8 +1138,8 @@ export default function PortalDashboard() {
                 onClick={() => setActiveTab('schedule')}
                 className="p-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-2xl text-center flex flex-col items-center justify-center space-y-1.5 transition-all shadow-2xs cursor-pointer group active:scale-95"
               >
-                <div className="w-8 h-8 rounded-xl bg-blue-50 group-hover:bg-blue-100 text-blue-600 flex items-center justify-center transition-colors">
-                  <CalendarDays className="w-4 h-4" />
+                <div className="w-9 h-9 rounded-xl bg-blue-50/80 group-hover:bg-blue-100 border border-blue-100/60 flex items-center justify-center transition-colors p-1">
+                  <img src="/icons/portal/tab-schedule.png" alt="Jadwal" className="w-7 h-7 object-contain" />
                 </div>
                 <span className="text-[10px] font-bold text-slate-700">Jadwal</span>
               </button>
@@ -1138,8 +1149,8 @@ export default function PortalDashboard() {
                 onClick={() => setActiveTab('evaluation')}
                 className="p-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-2xl text-center flex flex-col items-center justify-center space-y-1.5 transition-all shadow-2xs cursor-pointer group active:scale-95"
               >
-                <div className="w-8 h-8 rounded-xl bg-purple-50 group-hover:bg-purple-100 text-purple-600 flex items-center justify-center transition-colors">
-                  <Trophy className="w-4 h-4" />
+                <div className="w-9 h-9 rounded-xl bg-purple-50/80 group-hover:bg-purple-100 border border-purple-100/60 flex items-center justify-center transition-colors p-1">
+                  <img src="/icons/portal/tab-evaluation.png" alt="Rapor" className="w-7 h-7 object-contain" />
                 </div>
                 <span className="text-[10px] font-bold text-slate-700">Rapor</span>
               </button>
@@ -1149,8 +1160,8 @@ export default function PortalDashboard() {
                 onClick={() => setActiveTab('announcements')}
                 className="p-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-2xl text-center flex flex-col items-center justify-center space-y-1.5 transition-all shadow-2xs cursor-pointer group active:scale-95"
               >
-                <div className="w-8 h-8 rounded-xl bg-amber-50 group-hover:bg-amber-100 text-amber-600 flex items-center justify-center transition-colors">
-                  <Bell className="w-4 h-4" />
+                <div className="w-9 h-9 rounded-xl bg-amber-50/80 group-hover:bg-amber-100 border border-amber-100/60 flex items-center justify-center transition-colors p-1">
+                  <img src="/icons/portal/tab-announcements.png" alt="Info" className="w-7 h-7 object-contain" />
                 </div>
                 <span className="text-[10px] font-bold text-slate-700">Info</span>
               </button>
@@ -1167,8 +1178,8 @@ export default function PortalDashboard() {
             <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
-                    <CreditCard className="w-4 h-4" />
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50/80 border border-emerald-100/60 flex items-center justify-center p-1 shrink-0">
+                    <img src="/icons/portal/tab-billing.png" alt="Keuangan" className="w-7 h-7 object-contain" />
                   </div>
                   <div>
                     <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
@@ -1323,8 +1334,8 @@ export default function PortalDashboard() {
             <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
-                    <CalendarDays className="w-4 h-4" />
+                  <div className="w-9 h-9 rounded-xl bg-blue-50/80 border border-blue-100/60 flex items-center justify-center p-1 shrink-0">
+                    <img src="/icons/portal/tab-schedule.png" alt="Jadwal" className="w-7 h-7 object-contain" />
                   </div>
                   <div>
                     <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
@@ -1558,8 +1569,8 @@ export default function PortalDashboard() {
               <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
-                    <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
-                      <Activity className="w-4 h-4" />
+                    <div className="w-9 h-9 rounded-xl bg-purple-50/80 border border-purple-100/60 flex items-center justify-center p-1 shrink-0">
+                      <img src="/icons/portal/tab-evaluation.png" alt="Rapor & Assessment" className="w-7 h-7 object-contain" />
                     </div>
                     <div>
                       <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
@@ -1968,8 +1979,8 @@ export default function PortalDashboard() {
           <div className="space-y-4 animate-in fade-in duration-200">
             <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3.5">
               <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
-                  <Megaphone className="w-4 h-4" />
+                <div className="w-9 h-9 rounded-xl bg-amber-50/80 border border-amber-100/60 flex items-center justify-center p-1 shrink-0">
+                  <img src="/icons/portal/tab-announcements.png" alt="Pengumuman" className="w-7 h-7 object-contain" />
                 </div>
                 <div>
                   <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
@@ -2050,18 +2061,26 @@ export default function PortalDashboard() {
       </footer>
 
       {/* FIXED BOTTOM NAVIGATION BAR (5 TABS) */}
-      <nav className="fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto z-50 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-2 py-2 flex justify-around items-center shadow-2xl">
+      <nav className="fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto z-50 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-1.5 py-1.5 flex justify-around items-center shadow-2xl">
         {/* Tab 1: Beranda */}
         <button
           type="button"
           onClick={() => setActiveTab('home')}
-          className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all cursor-pointer ${
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer group ${
             activeTab === 'home'
               ? 'text-blue-400 font-bold'
               : 'text-slate-400 hover:text-slate-200 font-medium'
           }`}
         >
-          <Home className={`w-4 h-4 mb-0.5 transition-transform ${activeTab === 'home' ? 'text-blue-400 scale-110' : 'text-slate-400'}`} />
+          <img 
+            src="/icons/portal/tab-home.png" 
+            alt="Beranda" 
+            className={`w-6 h-6 object-contain mb-0.5 transition-all ${
+              activeTab === 'home' 
+                ? 'scale-115 drop-shadow-[0_2px_8px_rgba(96,165,250,0.5)]' 
+                : 'opacity-70 group-hover:opacity-100 group-hover:scale-105'
+            }`} 
+          />
           <span className="text-[9px] tracking-tight">Beranda</span>
         </button>
 
@@ -2069,16 +2088,24 @@ export default function PortalDashboard() {
         <button
           type="button"
           onClick={() => setActiveTab('billing')}
-          className={`relative flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all cursor-pointer ${
+          className={`relative flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer group ${
             activeTab === 'billing'
-              ? 'text-blue-400 font-bold'
+              ? 'text-emerald-400 font-bold'
               : 'text-slate-400 hover:text-slate-200 font-medium'
           }`}
         >
           <div className="relative">
-            <CreditCard className={`w-4 h-4 mb-0.5 transition-transform ${activeTab === 'billing' ? 'text-blue-400 scale-110' : 'text-slate-400'}`} />
+            <img 
+              src="/icons/portal/tab-billing.png" 
+              alt="Keuangan" 
+              className={`w-6 h-6 object-contain mb-0.5 transition-all ${
+                activeTab === 'billing' 
+                  ? 'scale-115 drop-shadow-[0_2px_8px_rgba(52,211,153,0.5)]' 
+                  : 'opacity-70 group-hover:opacity-100 group-hover:scale-105'
+              }`} 
+            />
             {isBillingValid === true && isPaid === false && (
-              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-amber-500 animate-pulse ring-2 ring-slate-900" />
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse ring-2 ring-slate-900" />
             )}
           </div>
           <span className="text-[9px] tracking-tight">Keuangan</span>
@@ -2088,13 +2115,21 @@ export default function PortalDashboard() {
         <button
           type="button"
           onClick={() => setActiveTab('schedule')}
-          className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all cursor-pointer ${
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer group ${
             activeTab === 'schedule'
               ? 'text-blue-400 font-bold'
               : 'text-slate-400 hover:text-slate-200 font-medium'
           }`}
         >
-          <CalendarDays className={`w-4 h-4 mb-0.5 transition-transform ${activeTab === 'schedule' ? 'text-blue-400 scale-110' : 'text-slate-400'}`} />
+          <img 
+            src="/icons/portal/tab-schedule.png" 
+            alt="Jadwal" 
+            className={`w-6 h-6 object-contain mb-0.5 transition-all ${
+              activeTab === 'schedule' 
+                ? 'scale-115 drop-shadow-[0_2px_8px_rgba(96,165,250,0.5)]' 
+                : 'opacity-70 group-hover:opacity-100 group-hover:scale-105'
+            }`} 
+          />
           <span className="text-[9px] tracking-tight">Jadwal</span>
         </button>
 
@@ -2102,13 +2137,21 @@ export default function PortalDashboard() {
         <button
           type="button"
           onClick={() => setActiveTab('evaluation')}
-          className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all cursor-pointer ${
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer group ${
             activeTab === 'evaluation'
-              ? 'text-blue-400 font-bold'
+              ? 'text-purple-400 font-bold'
               : 'text-slate-400 hover:text-slate-200 font-medium'
           }`}
         >
-          <Activity className={`w-4 h-4 mb-0.5 transition-transform ${activeTab === 'evaluation' ? 'text-blue-400 scale-110' : 'text-slate-400'}`} />
+          <img 
+            src="/icons/portal/tab-evaluation.png" 
+            alt="Rapor" 
+            className={`w-6 h-6 object-contain mb-0.5 transition-all ${
+              activeTab === 'evaluation' 
+                ? 'scale-115 drop-shadow-[0_2px_8px_rgba(192,132,252,0.5)]' 
+                : 'opacity-70 group-hover:opacity-100 group-hover:scale-105'
+            }`} 
+          />
           <span className="text-[9px] tracking-tight">Rapor</span>
         </button>
 
@@ -2116,13 +2159,21 @@ export default function PortalDashboard() {
         <button
           type="button"
           onClick={() => setActiveTab('announcements')}
-          className={`flex flex-col items-center justify-center py-1 px-2.5 rounded-xl transition-all cursor-pointer ${
+          className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer group ${
             activeTab === 'announcements'
-              ? 'text-blue-400 font-bold'
+              ? 'text-amber-400 font-bold'
               : 'text-slate-400 hover:text-slate-200 font-medium'
           }`}
         >
-          <Bell className={`w-4 h-4 mb-0.5 transition-transform ${activeTab === 'announcements' ? 'text-blue-400 scale-110' : 'text-slate-400'}`} />
+          <img 
+            src="/icons/portal/tab-announcements.png" 
+            alt="Info" 
+            className={`w-6 h-6 object-contain mb-0.5 transition-all ${
+              activeTab === 'announcements' 
+                ? 'scale-115 drop-shadow-[0_2px_8px_rgba(251,191,36,0.5)]' 
+                : 'opacity-70 group-hover:opacity-100 group-hover:scale-105'
+            }`} 
+          />
           <span className="text-[9px] tracking-tight">Info</span>
         </button>
       </nav>
