@@ -123,7 +123,7 @@ export async function onRequest(context) {
     const tenant = rpcData?.tenant || {};
     const rpcStudent = rpcData?.student || {};
     const sppPayments = Array.isArray(rpcData?.spp_payments) ? rpcData.spp_payments : [];
-    const academyName = rpcStudent.academy_name || rpcStudent.academyName || matchedChild.academyName || 'Chua Sport Academy';
+    const academyName = rpcStudent.academy_name || rpcStudent.academyName || rpcStudent.school_origin || rpcStudent.school_name || matchedChild.academy_name || matchedChild.academyName || 'Nama Akademi';
 
     // QRIS Image URL or Base64 Fallback with proper MIME formatting
     let qrisUrl = tenant.qris_url || tenant.qrisUrl || null;

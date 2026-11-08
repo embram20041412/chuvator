@@ -149,8 +149,8 @@ export async function onRequest(context) {
       tenant_id: childTenantId,
       tenantId: childTenantId,
       tenant_name: rpcStudent.tenant_name || rpcTenant.name || '',
-      academy_name: rpcStudent.academy_name || matchedChild.academyName || 'Chua Sport Academy',
-      academyName: rpcStudent.academy_name || matchedChild.academyName || 'Chua Sport Academy'
+      academy_name: rpcStudent.academy_name || rpcStudent.academyName || rpcStudent.school_origin || rpcStudent.school_name || matchedChild.academy_name || matchedChild.academyName || 'Nama Akademi',
+      academyName: rpcStudent.academy_name || rpcStudent.academyName || rpcStudent.school_origin || rpcStudent.school_name || matchedChild.academy_name || matchedChild.academyName || 'Nama Akademi'
     };
 
     return new Response(

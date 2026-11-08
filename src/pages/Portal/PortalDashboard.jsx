@@ -249,6 +249,7 @@ export default function PortalDashboard() {
 
             const activeSid = String(selectedChild.studentId || selectedChild.id).trim();
             const activeTid = String(selectedChild.tenantId || '').trim();
+            const resolvedAcademy = selectedChild.academy_name || selectedChild.academyName || selectedChild.school_origin || selectedChild.school_name || selectedChild.schoolOrigin || student?.academy_name || student?.academyName || student?.school_origin || student?.school_name || 'Nama Akademi';
 
             const normalizedStudent = {
               id: activeSid,
@@ -258,10 +259,14 @@ export default function PortalDashboard() {
               className: selectedChild.className || student?.className || 'Reguler',
               coachName: selectedChild.coachName || selectedChild.coach_name || student?.coachName || student?.coach_name || null,
               sportCategory: selectedChild.sportCategory || selectedChild.sport || student?.sportCategory || 'Badminton',
-              academyName: selectedChild.academyName || student?.academyName || 'Sport Academy',
-              photoUrl: selectedChild.photoUrl || student?.photoUrl || null,
-              birthDate: selectedChild.birthDate || student?.birthDate || null,
-              schoolOrigin: selectedChild.schoolOrigin || student?.schoolOrigin || ''
+              academyName: resolvedAcademy,
+              academy_name: resolvedAcademy,
+              photoUrl: selectedChild.photoUrl || selectedChild.photo_url || student?.photoUrl || null,
+              photo_url: selectedChild.photoUrl || selectedChild.photo_url || student?.photo_url || null,
+              birthDate: selectedChild.birthDate || selectedChild.birth_date || student?.birthDate || null,
+              schoolOrigin: selectedChild.schoolOrigin || selectedChild.school_origin || selectedChild.school_name || student?.schoolOrigin || '',
+              school_origin: selectedChild.schoolOrigin || selectedChild.school_origin || selectedChild.school_name || student?.school_origin || '',
+              tenantName: selectedChild.tenantName || selectedChild.tenant_name || ''
             };
 
             setStudent(normalizedStudent);
@@ -311,6 +316,7 @@ export default function PortalDashboard() {
   const handleSelectChild = (child) => {
     const activeSid = String(child.studentId || child.id).trim();
     const activeTid = String(child.tenantId || '').trim();
+    const resolvedAcademy = child.academy_name || child.academyName || child.school_origin || child.school_name || child.schoolOrigin || 'Nama Akademi';
 
     const normalizedStudent = {
       id: activeSid,
@@ -320,10 +326,14 @@ export default function PortalDashboard() {
       className: child.className || 'Reguler',
       coachName: child.coachName || child.coach_name || null,
       sportCategory: child.sportCategory || child.sport || 'Badminton',
-      academyName: child.academyName || 'Sport Academy',
-      photoUrl: child.photoUrl || null,
-      birthDate: child.birthDate || null,
-      schoolOrigin: child.schoolOrigin || ''
+      academyName: resolvedAcademy,
+      academy_name: resolvedAcademy,
+      photoUrl: child.photoUrl || child.photo_url || null,
+      photo_url: child.photoUrl || child.photo_url || null,
+      birthDate: child.birthDate || child.birth_date || null,
+      schoolOrigin: child.schoolOrigin || child.school_origin || child.school_name || '',
+      school_origin: child.schoolOrigin || child.school_origin || child.school_name || '',
+      tenantName: child.tenantName || child.tenant_name || ''
     };
 
     // Immediately clear previous child's evaluations & portal states to prevent stale flash
@@ -620,6 +630,7 @@ export default function PortalDashboard() {
 
             setStudent(prev => {
               if (!prev) return prev;
+              const resolvedAcademy = studentProfile.academy_name || studentProfile.academyName || studentProfile.school_origin || studentProfile.school_name || prev.academy_name || prev.academyName || 'Nama Akademi';
               return {
                 ...prev,
                 studentName: studentProfile.student_name || studentProfile.studentName || prev.studentName,
@@ -628,8 +639,11 @@ export default function PortalDashboard() {
                 sportCategory: studentProfile.sport_category || studentProfile.sportCategory || prev.sportCategory,
                 photoUrl: resolvedPhotoUrl || prev.photoUrl,
                 photo_url: resolvedPhotoUrl || prev.photo_url,
-                tenantName: studentProfile.tenant_name || studentProfile.academy_name || prev.tenantName,
-                academyName: studentProfile.tenant_name || studentProfile.academy_name || prev.academyName
+                tenantName: studentProfile.tenant_name || prev.tenantName,
+                academyName: resolvedAcademy,
+                academy_name: resolvedAcademy,
+                schoolOrigin: studentProfile.school_origin || studentProfile.school_name || prev.schoolOrigin || '',
+                school_origin: studentProfile.school_origin || studentProfile.school_name || prev.school_origin || ''
               };
             });
           }
@@ -724,7 +738,7 @@ export default function PortalDashboard() {
 
   const studentName = student.student_name || student.studentName || 'Nama Siswa';
   const photoUrl = student.photo_url || student.photoUrl || scheduleData?.student?.photo_url || null;
-  const academyName = student.academy_name || student.academyName || scheduleData?.student?.academy_name || scheduleData?.student?.academyName || scheduleData?.classInfo?.academyName || 'Chua Sport Academy';
+  const academyName = student?.academy_name || student?.academyName || student?.school_origin || student?.school_name || scheduleData?.student?.academy_name || scheduleData?.student?.academyName || scheduleData?.classInfo?.academyName || 'Nama Akademi';
   const sportCategory = student.sport_category || student.sportCategory || 'Badminton';
   const className = student.class_name || student.className || scheduleData?.student?.class_name || scheduleData?.classInfo?.className || 'Reguler';
   const coachName = student.coach_name || student.coachName || scheduleData?.student?.coach_name || scheduleData?.classInfo?.coachName || null;
@@ -827,7 +841,7 @@ export default function PortalDashboard() {
                       >
                         <div className="truncate">
                           <p className="truncate">{c.studentName || c.name || 'Siswa'}</p>
-                          <p className="text-[10px] text-slate-400 truncate">{c.className || c.academyName || 'Cabang'}</p>
+                          <p className="text-[10px] text-slate-400 truncate">{c.className || c.academy_name || c.academyName || c.school_origin || c.school_name || 'Cabang'}</p>
                         </div>
                         {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />}
                       </button>

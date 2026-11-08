@@ -256,12 +256,17 @@ export async function onRequestPost(context) {
       }
     }
 
-    // Minimize children summary for the session (including photo and coach if returned by RPC)
+    // Minimize children summary for the session (including photo, academy, and coach if returned by RPC)
     const childrenSummary = linkedChildren.map(child => ({
       studentId: child.student_id || child.id,
       studentName: child.student_name || child.full_name || child.name || '',
       tenantId: child.tenant_id || '',
-      academyName: child.academy_name || child.tenant_name || '',
+      academyName: child.academy_name || child.academyName || child.school_origin || child.school_name || '',
+      academy_name: child.academy_name || child.academyName || child.school_origin || child.school_name || '',
+      schoolOrigin: child.school_origin || child.school_name || child.schoolOrigin || '',
+      school_origin: child.school_origin || child.school_name || child.schoolOrigin || '',
+      tenantName: child.tenant_name || '',
+      tenant_name: child.tenant_name || '',
       className: child.class_name || '',
       photo_url: child.photo_url || child.photoUrl || null,
       photoUrl: child.photo_url || child.photoUrl || null,
