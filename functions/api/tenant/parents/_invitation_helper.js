@@ -84,7 +84,14 @@ export function normalizeWhatsAppNumber(phone) {
 export function generateWhatsAppMessage({ parentName, tenantName, actionLink }) {
   const pName = (parentName || 'Orang Tua / Wali').trim();
   const tName = (tenantName || '').trim();
-  const link = (actionLink || '').trim();
+  let link = (actionLink || '').trim();
+
+  // Explicitly ensure /portal/claim-invitation?token= is used
+  if (link.includes('/portal/accept-invitation?token=')) {
+    link = link.replace('/portal/accept-invitation?token=', '/portal/claim-invitation?token=');
+  } else if (link.includes('/portal/claim?token=')) {
+    link = link.replace('/portal/claim?token=', '/portal/claim-invitation?token=');
+  }
 
   return `Assalamu'alaikum Bapak/Ibu ${pName},
 
@@ -150,7 +157,7 @@ export function generateClaimToken() {
  */
 export function buildIntermediaryClaimUrl(appUrl, claimToken) {
   const cleanApp = (appUrl || 'https://chuvator.pages.dev').replace(/\/$/, '');
-  return `${cleanApp}/portal/claim?token=${encodeURIComponent(claimToken)}`;
+  return `${cleanApp}/portal/claim-invitation?token=${encodeURIComponent(claimToken)}`;
 }
 
 /**

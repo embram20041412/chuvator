@@ -312,7 +312,12 @@ export async function onRequestPost(context) {
 
     const nowIso = new Date().toISOString();
     const appUrl = env.APP_URL || 'https://chuvator.pages.dev';
-    const claimUrl = `${appUrl.replace(/\/$/, '')}/portal/claim-invitation?token=${encodeURIComponent(rawInvitationToken)}`;
+    let claimUrl = `${appUrl.replace(/\/$/, '')}/portal/claim-invitation?token=${encodeURIComponent(rawInvitationToken)}`;
+
+    // Explicitly guarantee /portal/claim-invitation?token= is used
+    if (claimUrl.includes('/portal/accept-invitation?token=')) {
+      claimUrl = claimUrl.replace('/portal/accept-invitation?token=', '/portal/claim-invitation?token=');
+    }
 
     const parentName = parent.full_name || 'Bapak/Ibu';
     const message = generateWhatsAppMessage({

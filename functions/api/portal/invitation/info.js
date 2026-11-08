@@ -118,21 +118,29 @@ async function handleInfoRequest(context) {
       }
     }
 
-    const invitationData = {
-      invitationId: invitation.id,
+    // Mapping snake_case ke camelCase untuk kompatibilitas UI Frontend
+    const responseData = {
+      id: invitation.id,
       tenantId: invitation.tenant_id,
+      studentId: invitation.student_id,
       parentAccountId: invitation.parent_account_id,
-      maskedEmail: maskedEmail,
-      invitationStatus: invitation.status,
+      status: invitation.status,
       expiresAt: invitation.expires_at,
-      isValid: true
+      maskedEmail: maskedEmail,
+      isValid: true,
+      invitationId: invitation.id,
+      invitationStatus: invitation.status,
+      // Fallback snake_case untuk berjaga-jaga jika ada komponen lain yang butuh
+      tenant_id: invitation.tenant_id,
+      student_id: invitation.student_id,
+      parent_account_id: invitation.parent_account_id
     };
 
     return new Response(
       JSON.stringify({
         success: true,
-        invitation: invitationData,
-        data: invitationData
+        data: responseData,
+        invitation: responseData
       }),
       { status: 200, headers: corsHeaders }
     );

@@ -622,7 +622,13 @@ export async function onRequestPost(context) {
     }
 
     // 11. Construct WhatsApp distribution links
-    const claimUrl = `${appUrl.replace(/\/$/, '')}/portal/claim-invitation?token=${encodeURIComponent(rawInvitationToken)}`;
+    let claimUrl = `${appUrl.replace(/\/$/, '')}/portal/claim-invitation?token=${encodeURIComponent(rawInvitationToken)}`;
+
+    // Explicitly guarantee /portal/claim-invitation?token= is used
+    if (claimUrl.includes('/portal/accept-invitation?token=')) {
+      claimUrl = claimUrl.replace('/portal/accept-invitation?token=', '/portal/claim-invitation?token=');
+    }
+
     const message = generateWhatsAppMessage({
       parentName: name,
       tenantName,

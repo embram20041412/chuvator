@@ -92,7 +92,7 @@ export async function onRequestPost(context) {
       const hashedToken = await hashToken(rawToken.trim());
 
       // Query table 'parent_invitations' directly using serviceKey to bypass RLS
-      const queryUrl = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/parent_invitations?invitation_token_hash=eq.${hashedToken}&select=id,tenant_id,parent_account_id,status,expires_at,parent_accounts(email)`;
+      const queryUrl = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/parent_invitations?invitation_token_hash=eq.${hashedToken}&select=id,tenant_id,student_id,parent_account_id,status,expires_at,parent_accounts(email)`;
       const resp = await fetch(queryUrl, {
         method: 'GET',
         headers: {
@@ -145,14 +145,21 @@ export async function onRequestPost(context) {
         }
       }
 
-      const invitationData = {
-        invitationId: invitation.id,
+      const responseData = {
+        id: invitation.id,
         tenantId: invitation.tenant_id,
+        studentId: invitation.student_id,
         parentAccountId: invitation.parent_account_id,
-        maskedEmail: maskedEmail,
-        invitationStatus: invitation.status,
+        status: invitation.status,
         expiresAt: invitation.expires_at,
-        isValid: true
+        maskedEmail: maskedEmail,
+        isValid: true,
+        invitationId: invitation.id,
+        invitationStatus: invitation.status,
+        // Fallback snake_case untuk berjaga-jaga jika ada komponen lain yang butuh
+        tenant_id: invitation.tenant_id,
+        student_id: invitation.student_id,
+        parent_account_id: invitation.parent_account_id
       };
 
       // If authUid is present, execute continuation ticket creation and ticket claim
@@ -184,8 +191,8 @@ export async function onRequestPost(context) {
               tenantId: claimRes.tenant_id,
               parentAccountId: claimRes.parent_account_id,
               claimedAt: claimRes.claimed_at,
-              invitation: invitationData, // Include for consistency
-              data: invitationData
+              invitation: responseData, // Include for consistency
+              data: responseData
             }),
             { status: 200, headers: securityHeaders }
           );
@@ -206,8 +213,8 @@ export async function onRequestPost(context) {
       return new Response(
         JSON.stringify({
           success: true,
-          invitation: invitationData,
-          data: invitationData
+          invitation: responseData,
+          data: responseData
         }),
         { status: 200, headers: securityHeaders }
       );
