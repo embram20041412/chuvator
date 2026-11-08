@@ -209,7 +209,7 @@ export async function onRequestPost(context) {
         invitation_status: invitation.status
       };
 
-      const targetAuthUid = authUid || invitation.parent_accounts?.auth_uid;
+      let confirmedAuthUid = authUid || invitation.parent_accounts?.auth_uid || null;
       const targetEmail = invitation.parent_accounts?.email;
       const newPassword = body?.password || body?.newPassword;
 
@@ -220,26 +220,130 @@ export async function onRequestPost(context) {
         );
       }
 
-      // If targetAuthUid is present and activation requested (via authUid or password provided)
-      if (targetAuthUid && (authUid || newPassword)) {
+      // If activation requested (password provided, or authUid provided)
+      if (newPassword || authUid) {
         try {
-          if (newPassword) {
-            // Update password in Supabase Auth via Admin API
-            await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/users/${targetAuthUid}`, {
+          let authUserConfirmed = false;
+
+          // 1. Jika akun auth sudah ada, perbarui password dan konfirmasi email secara otomatis
+          if (confirmedAuthUid) {
+            const updatePayload = {
+              email_confirm: true
+            };
+            if (newPassword) {
+              updatePayload.password = newPassword;
+            }
+
+            const upResp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/users/${confirmedAuthUid}`, {
               method: 'PUT',
               headers: {
                 'apikey': serviceKey,
                 'Authorization': `Bearer ${serviceKey}`,
                 'Content-Type': 'application/json'
               },
-              body: JSON.stringify({ password: newPassword })
+              body: JSON.stringify(updatePayload)
+            });
+
+            if (upResp.ok) {
+              authUserConfirmed = true;
+            } else {
+              const upErr = await upResp.text().catch(() => '');
+              console.warn(`[Claim] Failed to update user ${confirmedAuthUid} (${upResp.status}):`, upErr);
+              if (upResp.status === 404) {
+                confirmedAuthUid = null; // User tidak ditemukan di auth.users, buat baru di bawah
+              }
+            }
+          }
+
+          // 2. Jika akun auth belum ada, buat menggunakan admin createUser({ email, password, email_confirm: true })
+          if (!authUserConfirmed && targetEmail) {
+            const createPayload = {
+              email: targetEmail,
+              email_confirm: true,
+              user_metadata: {
+                role: 'parent',
+                tenantId: invitation.tenant_id
+              }
+            };
+            if (newPassword) {
+              createPayload.password = newPassword;
+            }
+
+            const createResp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/users`, {
+              method: 'POST',
+              headers: {
+                'apikey': serviceKey,
+                'Authorization': `Bearer ${serviceKey}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(createPayload)
+            });
+
+            if (createResp.ok) {
+              const createData = await createResp.json();
+              confirmedAuthUid = createData?.id || createData?.user?.id;
+              authUserConfirmed = true;
+            } else if (createResp.status === 422) {
+              // Jika email sudah terdaftar di auth.users, cari user ID-nya
+              const listResp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/users`, {
+                method: 'GET',
+                headers: {
+                  'apikey': serviceKey,
+                  'Authorization': `Bearer ${serviceKey}`,
+                  'Accept': 'application/json'
+                }
+              });
+              if (listResp.ok) {
+                const listData = await listResp.json();
+                const usersList = listData?.users || (Array.isArray(listData) ? listData : []);
+                const foundUser = usersList.find(u => u.email && u.email.toLowerCase() === targetEmail.toLowerCase());
+                if (foundUser?.id) {
+                  confirmedAuthUid = foundUser.id;
+                  const updatePayload = { email_confirm: true };
+                  if (newPassword) updatePayload.password = newPassword;
+                  await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/users/${confirmedAuthUid}`, {
+                    method: 'PUT',
+                    headers: {
+                      'apikey': serviceKey,
+                      'Authorization': `Bearer ${serviceKey}`,
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(updatePayload)
+                  });
+                  authUserConfirmed = true;
+                }
+              }
+            }
+          }
+
+          // 3. Sinkronisasi auth_uid ke parent_accounts jika diperlukan
+          if (confirmedAuthUid && invitation.parent_account_id) {
+            await fetch(`${supabaseUrl.replace(/\/$/, '')}/rest/v1/parent_accounts?id=eq.${encodeURIComponent(invitation.parent_account_id)}`, {
+              method: 'PATCH',
+              headers: {
+                'apikey': serviceKey,
+                'Authorization': `Bearer ${serviceKey}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ auth_uid: confirmedAuthUid })
             });
           }
 
+          if (!confirmedAuthUid) {
+            return new Response(
+              JSON.stringify({ 
+                success: false, 
+                error: 'Gagal mengonfirmasi akun autentikasi pengguna.' 
+              }),
+              { status: 500, headers: securityHeaders }
+            );
+          }
+
+          // 4. Buat tiket kelanjutan (sekarang auth user terverifikasi sehingga lolos verifikasi DB)
           const ticketRes = await invokeCreateContinuationTicket(supabaseUrl, serviceKey, {
             rawInvitationToken: rawToken, 
             tenantId: invitation.tenant_id,
-            authUid: targetAuthUid
+            authUid: confirmedAuthUid
           });
 
           const ticketToken = ticketRes?.raw_ticket_token;
@@ -250,9 +354,10 @@ export async function onRequestPost(context) {
             );
           }
 
+          // 5. Klaim undangan dengan tiket
           const claimRes = await invokeClaimParentInvitationByTicket(supabaseUrl, serviceKey, {
             rawTicketToken: ticketToken,
-            authUid: targetAuthUid
+            authUid: confirmedAuthUid
           });
 
           return new Response(
@@ -270,11 +375,11 @@ export async function onRequestPost(context) {
           );
 
         } catch (rpcErr) {
-          console.error('[Claim Error] Ticket creation/claim RPC error:', rpcErr.message);
+          console.error('[Claim Error] Ticket creation/claim error:', rpcErr.message || rpcErr);
           return new Response(
             JSON.stringify({
               success: false,
-              error: `Proses klaim tiket gagal: ${rpcErr.message}`
+              error: `Proses aktivasi gagal: ${rpcErr.message || 'Terjadi kesalahan sistem'}`
             }),
             { status: 400, headers: securityHeaders }
           );

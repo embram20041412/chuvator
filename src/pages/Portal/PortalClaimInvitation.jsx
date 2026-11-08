@@ -104,6 +104,33 @@ export default function PortalClaimInvitation() {
       const data = await response.json().catch(() => ({}));
 
       if (response.ok && data.success) {
+        setSuccessMsg('Akun berhasil diaktifkan! Menyiapkan sesi portal...');
+        const userEmail = data.email || (invitationInfo && (invitationInfo.email || invitationInfo.parent_accounts?.email));
+        if (userEmail && password) {
+          try {
+            const loginResp = await fetch('/api/portal/v2/login', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+              },
+              credentials: 'include',
+              body: JSON.stringify({
+                email: userEmail,
+                password: password.trim()
+              })
+            });
+            const loginData = await loginResp.json().catch(() => ({}));
+            if (loginResp.ok && loginData.success) {
+              setSuccessMsg('Aktivasi sukses! Mengalihkan ke dashboard...');
+              setTimeout(() => {
+                navigate('/portal/dashboard', { replace: true });
+              }, 1200);
+              return;
+            }
+          } catch (_) {}
+        }
+
         setSuccessMsg(data.message || 'Akun wali murid berhasil diaktifkan! Mengalihkan ke login...');
         setTimeout(() => {
           navigate('/portal', { replace: true });
