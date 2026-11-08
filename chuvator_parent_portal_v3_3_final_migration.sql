@@ -41,11 +41,11 @@ BEGIN
           AND t.relname = 'parent_accounts'
           AND c.contype IN ('u', 'p')
           AND ARRAY(
-              SELECT a.attname
+              SELECT a.attname::text
               FROM unnest(c.conkey) WITH ORDINALITY AS k(attnum, ord)
               JOIN pg_catalog.pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.attnum
               ORDER BY k.ord
-          ) = ARRAY['tenant_id', 'id']
+          ) = ARRAY['tenant_id', 'id']::text[]
     ) INTO v_has_composite_key;
 
     IF NOT v_has_composite_key THEN
@@ -58,11 +58,11 @@ BEGIN
               AND t.relname = 'parent_accounts'
               AND i.indisunique = TRUE
               AND ARRAY(
-                  SELECT a.attname
+                  SELECT a.attname::text
                   FROM unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
                   JOIN pg_catalog.pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.attnum
                   ORDER BY k.ord
-              ) = ARRAY['tenant_id', 'id']
+              ) = ARRAY['tenant_id', 'id']::text[]
         ) INTO v_has_composite_key;
     END IF;
 
