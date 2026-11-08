@@ -293,7 +293,8 @@ export async function onRequest(context) {
         });
     }
 
-    // 10. Ambil data prestasi atlet dari kolom tournaments di tabel students (Fail-Closed)
+    // 10. Ambil data pertumbuhan fisik (Growth Tracker) & profil siswa dari tabel students
+    let growthRecords = [];
     let achievementsList = [];
     const studentInfo = {
       id: studentId,
@@ -301,7 +302,47 @@ export async function onRequest(context) {
       className: matchedChild.className || ''
     };
 
-    const studentQuery = `${supabaseUrl}/rest/v1/students?id=eq.${encodeURIComponent(studentId)}&tenant_id=eq.${encodeURIComponent(childTenantId)}&select=tournaments,student_name,name,class_name`;
+    // Coba ambil riwayat dari tabel growth_tracker jika ada
+    try {
+      const growthTableQuery = `${supabaseUrl}/rest/v1/growth_tracker?student_id=eq.${encodeURIComponent(studentId)}&tenant_id=eq.${encodeURIComponent(childTenantId)}&order=date.desc`;
+      const growthResp = await fetch(growthTableQuery, {
+        method: 'GET',
+        headers: {
+          'apikey': anonKey,
+          'Authorization': `Bearer ${accessToken}`,
+          'Accept': 'application/json'
+        }
+      });
+      if (growthResp.ok) {
+        const rawGrowth = await growthResp.json().catch(() => null);
+        if (Array.isArray(rawGrowth)) {
+          rawGrowth.forEach(g => {
+            const h = Number(g.height !== undefined && g.height !== null ? g.height : 0);
+            const w = Number(g.weight !== undefined && g.weight !== null ? g.weight : 0);
+            let bmi = g.bmi !== undefined && g.bmi !== null ? Number(g.bmi) : null;
+            if ((bmi === null || isNaN(bmi) || bmi <= 0) && h > 0 && w > 0) {
+              const hM = h / 100;
+              bmi = Math.round((w / (hM * hM)) * 10) / 10;
+            }
+            const status = g.status || (bmi ? (bmi < 18.5 ? 'Underweight' : bmi <= 24.9 ? 'Proporsional' : 'Overweight') : 'Belum Ada');
+            growthRecords.push({
+              id: g.id || `gt-${g.date || ''}-${h}-${w}`,
+              date: g.date || (g.recorded_at ? String(g.recorded_at).substring(0, 10) : (g.created_at ? String(g.created_at).substring(0, 10) : null)),
+              height: h > 0 ? h : null,
+              weight: w > 0 ? w : null,
+              bmi,
+              status,
+              notes: g.notes || g.note || null,
+              recordedAt: g.recorded_at || g.created_at || null
+            });
+          });
+        }
+      }
+    } catch {
+      // Non-blocking: tabel opsional jika schema menggunakan kolom growth_history di students
+    }
+
+    const studentQuery = `${supabaseUrl}/rest/v1/students?id=eq.${encodeURIComponent(studentId)}&tenant_id=eq.${encodeURIComponent(childTenantId)}&select=tournaments,student_name,name,class_name,growth_history,height,weight,birth_date`;
 
     const studentResp = await fetch(studentQuery, {
       method: 'GET',
@@ -339,7 +380,71 @@ export async function onRequest(context) {
     if (st) {
       studentInfo.studentName = st.student_name || st.name || studentInfo.studentName;
       studentInfo.className = st.class_name || studentInfo.className;
+      studentInfo.height = st.height || null;
+      studentInfo.weight = st.weight || null;
 
+      // Ambil data growth_history dari kolom JSONB tabel students
+      const rawGrowthHistory = Array.isArray(st.growth_history)
+        ? st.growth_history
+        : (typeof st.growth_history === 'string' ? (() => { try { return JSON.parse(st.growth_history); } catch { return []; } })() : []);
+
+      if (Array.isArray(rawGrowthHistory) && rawGrowthHistory.length > 0) {
+        rawGrowthHistory.forEach((g, idx) => {
+          const h = Number(g.height !== undefined && g.height !== null ? g.height : 0);
+          const w = Number(g.weight !== undefined && g.weight !== null ? g.weight : 0);
+          let bmi = g.bmi !== undefined && g.bmi !== null ? Number(g.bmi) : null;
+          if ((bmi === null || isNaN(bmi) || bmi <= 0) && h > 0 && w > 0) {
+            const hM = h / 100;
+            bmi = Math.round((w / (hM * hM)) * 10) / 10;
+          }
+          const status = g.status || (bmi ? (bmi < 18.5 ? 'Underweight' : bmi <= 24.9 ? 'Proporsional' : 'Overweight') : 'Belum Ada');
+
+          growthRecords.push({
+            id: g.id || `growth-${idx}`,
+            date: g.date || (g.recordedAt ? String(g.recordedAt).substring(0, 10) : null),
+            height: h > 0 ? h : null,
+            weight: w > 0 ? w : null,
+            bmi,
+            status,
+            notes: g.notes || g.note || null,
+            recordedAt: g.recordedAt || null
+          });
+        });
+      }
+
+      // Jika data history kosong namun ada height & weight terkini di profil siswa
+      if (growthRecords.length === 0 && (st.height || st.weight)) {
+        const h = Number(st.height || 0);
+        const w = Number(st.weight || 0);
+        let bmi = null;
+        if (h > 0 && w > 0) {
+          const hM = h / 100;
+          bmi = Math.round((w / (hM * hM)) * 10) / 10;
+        }
+        const status = bmi ? (bmi < 18.5 ? 'Underweight' : bmi <= 24.9 ? 'Proporsional' : 'Overweight') : 'Belum Ada';
+        growthRecords.push({
+          id: 'current-stat',
+          date: new Date().toISOString().substring(0, 10),
+          height: h > 0 ? h : null,
+          weight: w > 0 ? w : null,
+          bmi,
+          status,
+          notes: 'Pengukuran terkini',
+          recordedAt: new Date().toISOString()
+        });
+      }
+
+      // Deduplikasi & urutkan growthRecords berdasarkan tanggal terbaru (descending)
+      const seenDates = new Set();
+      growthRecords = growthRecords.filter(g => {
+        const key = `${g.date || ''}-${g.height}-${g.weight}`;
+        if (seenDates.has(key)) return false;
+        seenDates.add(key);
+        return true;
+      });
+      growthRecords.sort((a, b) => new Date(b.date || b.recordedAt || 0).getTime() - new Date(a.date || a.recordedAt || 0).getTime());
+
+      // Tournaments fallback
       const rawTournaments = Array.isArray(st.tournaments) ? st.tournaments : [];
       rawTournaments.forEach(t => {
         const achName = t.name || t.title || t.tournamentName;
@@ -368,8 +473,13 @@ export async function onRequest(context) {
     return new Response(
       JSON.stringify({
         success: true,
+        assessments: evaluationsList,
         evaluations: evaluationsList,
+        latestAssessment: evaluationsList.length > 0 ? evaluationsList[0] : null,
         latestEvaluation: evaluationsList.length > 0 ? evaluationsList[0] : null,
+        growth_records: growthRecords,
+        growthRecords: growthRecords,
+        latestGrowth: growthRecords.length > 0 ? growthRecords[0] : null,
         achievements: achievementsList,
         student: studentInfo
       }),

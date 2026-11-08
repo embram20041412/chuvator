@@ -23,8 +23,9 @@ import {
   CalendarDays,
   XCircle,
   Activity,
-  Trophy,
-  Medal,
+  LineChart,
+  Ruler,
+  Scale,
   Star,
   Target,
   TrendingUp,
@@ -101,6 +102,40 @@ const getEvaluationGrade = (score) => {
   if (s >= 70) return { label: 'Baik', badge: 'bg-cyan-50 text-cyan-700 border-cyan-200', text: 'text-cyan-600' };
   if (s >= 60) return { label: 'Cukup', badge: 'bg-amber-50 text-amber-700 border-amber-200', text: 'text-amber-600' };
   return { label: 'Perlu Bimbingan', badge: 'bg-rose-50 text-rose-700 border-rose-200', text: 'text-rose-600' };
+};
+
+/**
+ * Helper to determine BMI status badge and label
+ */
+const getBmiStatusBadge = (status, bmi) => {
+  const s = String(status || '').toLowerCase();
+  if (s.includes('proporsional') || s.includes('normal') || s.includes('ideal')) {
+    return {
+      bg: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+      label: 'Proporsional'
+    };
+  }
+  if (s.includes('under') || s.includes('kurang')) {
+    return {
+      bg: 'bg-amber-50 text-amber-700 border-amber-200',
+      label: 'Underweight'
+    };
+  }
+  if (s.includes('over') || s.includes('lebih') || s.includes('obesitas')) {
+    return {
+      bg: 'bg-rose-50 text-rose-700 border-rose-200',
+      label: 'Overweight'
+    };
+  }
+  if (bmi && typeof bmi === 'number') {
+    if (bmi < 18.5) return { bg: 'bg-amber-50 text-amber-700 border-amber-200', label: 'Underweight' };
+    if (bmi <= 24.9) return { bg: 'bg-emerald-50 text-emerald-700 border-emerald-200', label: 'Proporsional' };
+    return { bg: 'bg-rose-50 text-rose-700 border-rose-200', label: 'Overweight' };
+  }
+  return {
+    bg: 'bg-slate-100 text-slate-700 border-slate-200',
+    label: status || 'Normal'
+  };
 };
 
 /**
@@ -183,11 +218,11 @@ export default function PortalDashboard() {
   const [scheduleError, setScheduleError] = useState(null);
   const [activeScheduleTab, setActiveScheduleTab] = useState('jadwal'); // 'jadwal' | 'presensi'
 
-  // State Evaluasi & Prestasi
+  // State Assessment & Growth Tracker
   const [evaluationData, setEvaluationData] = useState(null);
   const [isLoadingEvaluation, setIsLoadingEvaluation] = useState(true);
   const [evaluationError, setEvaluationError] = useState(null);
-  const [activeEvalTab, setActiveEvalTab] = useState('evaluasi'); // 'evaluasi' | 'prestasi'
+  const [activeEvalTab, setActiveEvalTab] = useState('assessment'); // 'assessment' | 'growth'
 
   // State Pengumuman (Announcements GAP-01)
   const [announcementsData, setAnnouncementsData] = useState(null);
@@ -1012,24 +1047,31 @@ export default function PortalDashboard() {
                 </div>
               </div>
 
-              {/* Status Rapor & Prestasi Card */}
+              {/* Status Assessment & Growth Tracker Card */}
               <div
-                onClick={() => setActiveTab('evaluation')}
+                onClick={() => {
+                  setActiveEvalTab('assessment');
+                  setActiveTab('evaluation');
+                }}
                 className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-blue-400 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between group"
               >
                 <div className="flex items-center space-x-3 min-w-0">
-                  <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center border border-purple-100 shrink-0 group-hover:bg-purple-100 transition-colors">
-                    <Trophy className="w-5 h-5" />
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100 shrink-0 group-hover:bg-blue-100 transition-colors">
+                    <Activity className="w-5 h-5" />
                   </div>
                   <div className="min-w-0">
                     <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                      Prestasi &amp; Rapor Evaluasi
+                      Assessment &amp; Growth Tracker
                     </p>
                     <p className="font-black text-slate-800 text-sm truncate">
-                      {evaluationData?.latestEvaluation ? `Rapor Pelatih: Skor ${evaluationData.latestEvaluation.overallScore}/100` : 'Rapor Belum Dirilis'}
+                      {(evaluationData?.latestAssessment || evaluationData?.latestEvaluation)
+                        ? `Rapor Pelatih: Skor ${(evaluationData.latestAssessment || evaluationData.latestEvaluation).overallScore}/100`
+                        : 'Assessment Belum Dirilis'}
                     </p>
                     <p className="text-[11px] text-slate-500 truncate">
-                      {evaluationData?.achievements?.length ? `${evaluationData.achievements.length} Medali & Kejuaraan` : 'Perkembangan 4 pilar atlet'}
+                      {(evaluationData?.growth_records?.length || evaluationData?.growthRecords?.length)
+                        ? `${evaluationData.growth_records?.length || evaluationData.growthRecords?.length} Riwayat Pertumbuhan Fisik`
+                        : 'Perkembangan 4 pilar atlet'}
                     </p>
                   </div>
                 </div>
@@ -1498,332 +1540,426 @@ export default function PortalDashboard() {
         )}
 
         {/* ============================================================== */}
-        {/* TAB 4: PRESTASI & EVALUASI PELATIH ('evaluation') — GROUP 5 & GROUP 6 */}
+        {/* TAB 4: ASSESSMENT & GROWTH TRACKER ('evaluation') — GROUP 5 & GROUP 6 */}
         {/* ============================================================== */}
-        {activeTab === 'evaluation' && (
-          <div className="space-y-4 animate-in fade-in duration-200">
-            <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-2">
-                  <div className="w-8 h-8 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center border border-amber-100">
-                    <Trophy className="w-4 h-4" />
+        {activeTab === 'evaluation' && (() => {
+          const assessmentList = Array.isArray(evaluationData?.assessments)
+            ? evaluationData.assessments
+            : (Array.isArray(evaluationData?.evaluations) ? evaluationData.evaluations : []);
+          const latestAssessment = evaluationData?.latestAssessment || evaluationData?.latestEvaluation || assessmentList[0] || null;
+
+          const growthList = Array.isArray(evaluationData?.growth_records)
+            ? evaluationData.growth_records
+            : (Array.isArray(evaluationData?.growthRecords) ? evaluationData.growthRecords : []);
+          const latestGrowth = evaluationData?.latestGrowth || growthList[0] || null;
+
+          return (
+            <div className="space-y-4 animate-in fade-in duration-200">
+              <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center border border-blue-100">
+                      <Activity className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
+                        ASSESSMENT &amp; GROWTH TRACKER
+                      </h3>
+                      <p className="text-[11px] text-slate-400">
+                        Rapor performa 4 pilar atlet &amp; riwayat fisik (Read-Only)
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-                      Prestasi &amp; Evaluasi Pelatih
-                    </h3>
-                    <p className="text-[11px] text-slate-400">
-                      Rapor performa 4-6 pilar atlet &amp; kejuaraan
-                    </p>
-                  </div>
+
+                  {latestAssessment?.overallScore !== null && latestAssessment?.overallScore !== undefined ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-extrabold border border-blue-200">
+                      <TrendingUp className="w-3 h-3 text-blue-600" />
+                      <span>Skor {latestAssessment.overallScore}/100</span>
+                    </span>
+                  ) : latestGrowth ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-extrabold border border-emerald-200">
+                      <Ruler className="w-3 h-3 text-emerald-600" />
+                      <span>{latestGrowth.height ? `${latestGrowth.height} cm` : ''}{latestGrowth.height && latestGrowth.weight ? ' • ' : ''}{latestGrowth.weight ? `${latestGrowth.weight} kg` : ''}</span>
+                    </span>
+                  ) : null}
                 </div>
 
-                {evaluationData?.latestEvaluation ? (
-                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-extrabold border border-blue-200">
-                    <TrendingUp className="w-3 h-3 text-blue-600" />
-                    <span>Skor {evaluationData.latestEvaluation.overallScore}/100</span>
-                  </span>
-                ) : null}
-              </div>
+                {/* Sub-Tabs: Athlete Assessment vs Growth Tracker */}
+                <div className="flex rounded-xl bg-slate-100 p-1 text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => setActiveEvalTab('assessment')}
+                    className={`flex-1 py-1.5 rounded-lg text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      activeEvalTab === 'assessment'
+                        ? 'bg-white text-blue-600 shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    <Target className="w-3.5 h-3.5" />
+                    <span>Athlete Assessment ({assessmentList.length})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveEvalTab('growth')}
+                    className={`flex-1 py-1.5 rounded-lg text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                      activeEvalTab === 'growth'
+                        ? 'bg-white text-emerald-600 shadow-xs'
+                        : 'text-slate-500 hover:text-slate-800'
+                    }`}
+                  >
+                    <LineChart className="w-3.5 h-3.5" />
+                    <span>Growth Tracker ({growthList.length})</span>
+                  </button>
+                </div>
 
-              {/* Sub-Tabs: Evaluasi vs Prestasi */}
-              <div className="flex rounded-xl bg-slate-100 p-1 text-xs font-bold">
-                <button
-                  type="button"
-                  onClick={() => setActiveEvalTab('evaluasi')}
-                  className={`flex-1 py-1.5 rounded-lg text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                    activeEvalTab === 'evaluasi'
-                      ? 'bg-white text-blue-600 shadow-xs'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  <Target className="w-3.5 h-3.5" />
-                  <span>Evaluasi Pelatih ({evaluationData?.evaluations?.length || 0})</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setActiveEvalTab('prestasi')}
-                  className={`flex-1 py-1.5 rounded-lg text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
-                    activeEvalTab === 'prestasi'
-                      ? 'bg-white text-amber-600 shadow-xs'
-                      : 'text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  <Trophy className="w-3.5 h-3.5" />
-                  <span>Prestasi ({evaluationData?.achievements?.length || 0})</span>
-                </button>
-              </div>
-
-              {/* GROUP 5: PERKEMBANGAN & GROUP 6: HASIL EVALUASI */}
-              {activeEvalTab === 'evaluasi' && (
-                <div className="space-y-3">
-                  {isLoadingEvaluation ? (
-                    <div className="py-6 flex flex-col items-center justify-center text-slate-400 text-xs space-y-1.5">
-                      <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-                      <span>Memuat catatan evaluasi pelatih...</span>
-                    </div>
-                  ) : evaluationError ? (
-                    <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
-                      <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
-                      <span>{evaluationError}</span>
-                    </div>
-                  ) : evaluationData?.latestEvaluation ? (
-                    <div className="space-y-3">
-                      {/* Kartu Rapor Utama */}
-                      <div className="bg-gradient-to-br from-slate-50 to-blue-50/30 rounded-xl p-3.5 border border-slate-200 space-y-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                                Rapor Evaluasi Terkini
-                              </span>
-                              <span className="text-[10px] text-slate-400">&bull;</span>
-                              <span className="text-[11px] font-bold text-slate-700">
-                                {evaluationData.latestEvaluation.date ? formatAttendanceDate(evaluationData.latestEvaluation.date) : 'Belum tersedia'}
-                              </span>
+                {/* SUB-TAB 1: ATHLETE DEVELOPMENT ASSESSMENT */}
+                {activeEvalTab === 'assessment' && (
+                  <div className="space-y-3">
+                    {isLoadingEvaluation ? (
+                      <div className="py-6 flex flex-col items-center justify-center text-slate-400 text-xs space-y-1.5">
+                        <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                        <span>Memuat catatan evaluasi pelatih...</span>
+                      </div>
+                    ) : evaluationError ? (
+                      <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                        <span>{evaluationError}</span>
+                      </div>
+                    ) : latestAssessment ? (
+                      <div className="space-y-3">
+                        {/* Kartu Rapor Utama */}
+                        <div className="bg-gradient-to-br from-slate-50 to-blue-50/30 rounded-xl p-3.5 border border-slate-200 space-y-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                                  Assessment Terkini
+                                </span>
+                                <span className="text-[10px] text-slate-400">&bull;</span>
+                                <span className="text-[11px] font-bold text-slate-700">
+                                  {latestAssessment.date ? formatAttendanceDate(latestAssessment.date) : 'Belum tersedia'}
+                                </span>
+                              </div>
+                              <p className="text-xs font-black text-slate-800 mt-0.5">
+                                {latestAssessment.evaluator || 'Pelatih'}
+                              </p>
+                              <p className="text-[10px] text-slate-500">
+                                {latestAssessment.className || className || 'Reguler'} &bull; {latestAssessment.sport || sportCategory || 'Olahraga'}
+                              </p>
                             </div>
-                            <p className="text-xs font-black text-slate-800 mt-0.5">
-                              {evaluationData.latestEvaluation.evaluator || 'Pelatih'}
-                            </p>
-                            <p className="text-[10px] text-slate-500">
-                              {evaluationData.latestEvaluation.className || className || 'Reguler'} &bull; {evaluationData.latestEvaluation.sport || sportCategory || 'Olahraga'}
-                            </p>
+
+                            {latestAssessment.overallScore !== null && latestAssessment.overallScore !== undefined ? (
+                              (() => {
+                                const grade = getEvaluationGrade(latestAssessment.overallScore);
+                                return (
+                                  <div className="text-right shrink-0">
+                                    <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black border ${grade.badge}`}>
+                                      {grade.label}
+                                    </span>
+                                    <p className="text-xs font-mono font-black text-slate-900 mt-0.5">
+                                      {latestAssessment.overallScore} <span className="text-[10px] text-slate-400 font-normal">/ 100</span>
+                                    </p>
+                                  </div>
+                                );
+                              })()
+                            ) : (
+                              <div className="text-right shrink-0">
+                                <span className="text-[10px] text-slate-400 italic">Nilai belum tersedia</span>
+                              </div>
+                            )}
                           </div>
 
-                          {evaluationData.latestEvaluation.overallScore !== null && evaluationData.latestEvaluation.overallScore !== undefined ? (
-                            (() => {
-                              const grade = getEvaluationGrade(evaluationData.latestEvaluation.overallScore);
-                              return (
-                                <div className="text-right shrink-0">
-                                  <span className={`inline-block px-2.5 py-0.5 rounded-full text-[10px] font-black border ${grade.badge}`}>
-                                    {grade.label}
-                                  </span>
-                                  <p className="text-xs font-mono font-black text-slate-900 mt-0.5">
-                                    {evaluationData.latestEvaluation.overallScore} <span className="text-[10px] text-slate-400 font-normal">/ 100</span>
-                                  </p>
+                          {/* 4 Pilar Perkembangan Atlet (Teknik, Fisik, Mental, Taktik) */}
+                          <div className="grid grid-cols-2 gap-2 pt-1">
+                            {/* Teknik */}
+                            <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs space-y-1">
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="font-bold text-slate-600 flex items-center gap-1">
+                                  <Target className="w-3 h-3 text-blue-500" />
+                                  Teknik
+                                </span>
+                                <span className="font-mono font-bold text-slate-800">
+                                  {latestAssessment.pillarScores?.teknik !== null && latestAssessment.pillarScores?.teknik !== undefined
+                                    ? latestAssessment.pillarScores.teknik
+                                    : <span className="text-[10px] font-normal text-slate-400 italic">-</span>}
+                                </span>
+                              </div>
+                              {latestAssessment.pillarScores?.teknik !== null && latestAssessment.pillarScores?.teknik !== undefined && (
+                                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                  <div
+                                    className="bg-blue-500 h-full rounded-full transition-all duration-500"
+                                    style={{ width: `${Math.min(100, Math.max(0, latestAssessment.pillarScores.teknik))}%` }}
+                                  />
                                 </div>
-                              );
-                            })()
+                              )}
+                            </div>
+
+                            {/* Fisik */}
+                            <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs space-y-1">
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="font-bold text-slate-600 flex items-center gap-1">
+                                  <Activity className="w-3 h-3 text-emerald-500" />
+                                  Fisik
+                                </span>
+                                <span className="font-mono font-bold text-slate-800">
+                                  {latestAssessment.pillarScores?.fisik !== null && latestAssessment.pillarScores?.fisik !== undefined
+                                    ? latestAssessment.pillarScores.fisik
+                                    : <span className="text-[10px] font-normal text-slate-400 italic">-</span>}
+                                </span>
+                              </div>
+                              {latestAssessment.pillarScores?.fisik !== null && latestAssessment.pillarScores?.fisik !== undefined && (
+                                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                  <div
+                                    className="bg-emerald-500 h-full rounded-full transition-all duration-500"
+                                    style={{ width: `${Math.min(100, Math.max(0, latestAssessment.pillarScores.fisik))}%` }}
+                                  />
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Mental */}
+                            <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs space-y-1">
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="font-bold text-slate-600 flex items-center gap-1">
+                                  <Star className="w-3 h-3 text-purple-500" />
+                                  Mental
+                                </span>
+                                <span className="font-mono font-bold text-slate-800">
+                                  {latestAssessment.pillarScores?.mental !== null && latestAssessment.pillarScores?.mental !== undefined
+                                    ? latestAssessment.pillarScores.mental
+                                    : <span className="text-[10px] font-normal text-slate-400 italic">-</span>}
+                                </span>
+                              </div>
+                              {latestAssessment.pillarScores?.mental !== null && latestAssessment.pillarScores?.mental !== undefined && (
+                                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                  <div
+                                    className="bg-purple-500 h-full rounded-full transition-all duration-500"
+                                    style={{ width: `${Math.min(100, Math.max(0, latestAssessment.pillarScores.mental))}%` }}
+                                  />
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Taktik */}
+                            <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs space-y-1">
+                              <div className="flex items-center justify-between text-[11px]">
+                                <span className="font-bold text-slate-600 flex items-center gap-1">
+                                  <TrendingUp className="w-3 h-3 text-amber-500" />
+                                  Taktik
+                                </span>
+                                <span className="font-mono font-bold text-slate-800">
+                                  {latestAssessment.pillarScores?.taktik !== null && latestAssessment.pillarScores?.taktik !== undefined
+                                    ? latestAssessment.pillarScores.taktik
+                                    : <span className="text-[10px] font-normal text-slate-400 italic">-</span>}
+                                </span>
+                              </div>
+                              {latestAssessment.pillarScores?.taktik !== null && latestAssessment.pillarScores?.taktik !== undefined && (
+                                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                  <div
+                                    className="bg-amber-500 h-full rounded-full transition-all duration-500"
+                                    style={{ width: `${Math.min(100, Math.max(0, latestAssessment.pillarScores.taktik))}%` }}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Catatan Pelatih */}
+                          {latestAssessment.coachNote ? (
+                            <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3 text-xs space-y-1">
+                              <div className="flex items-center gap-1.5 text-amber-800 font-bold text-[11px]">
+                                <Quote className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                                <span>Catatan &amp; Arahan Pelatih:</span>
+                              </div>
+                              <p className="text-slate-700 italic text-[11px] leading-relaxed pl-5">
+                                &ldquo;{latestAssessment.coachNote}&rdquo;
+                              </p>
+                            </div>
                           ) : (
-                            <div className="text-right shrink-0">
-                              <span className="text-[10px] text-slate-400 italic">Nilai belum tersedia</span>
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-[11px] text-slate-400 italic">
+                              Belum ada catatan khusus dari pelatih.
                             </div>
                           )}
                         </div>
 
-                        {/* Pilar-Pilar Perkembangan Anak */}
-                        <div className="grid grid-cols-2 gap-2 pt-1">
-                          <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs space-y-1">
-                            <div className="flex items-center justify-between text-[11px]">
-                              <span className="font-bold text-slate-600 flex items-center gap-1">
-                                <Target className="w-3 h-3 text-blue-500" />
-                                Teknik
-                              </span>
-                              <span className="font-mono font-bold text-slate-800">
-                                {evaluationData.latestEvaluation.pillarScores?.teknik !== null && evaluationData.latestEvaluation.pillarScores?.teknik !== undefined
-                                  ? evaluationData.latestEvaluation.pillarScores.teknik
-                                  : <span className="text-[10px] font-normal text-slate-400 italic">-</span>}
-                              </span>
-                            </div>
-                            {evaluationData.latestEvaluation.pillarScores?.teknik !== null && evaluationData.latestEvaluation.pillarScores?.teknik !== undefined && (
-                              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                                <div
-                                  className="bg-blue-500 h-full rounded-full transition-all duration-500"
-                                  style={{ width: `${Math.min(100, Math.max(0, evaluationData.latestEvaluation.pillarScores.teknik))}%` }}
-                                />
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs space-y-1">
-                            <div className="flex items-center justify-between text-[11px]">
-                              <span className="font-bold text-slate-600 flex items-center gap-1">
-                                <Activity className="w-3 h-3 text-emerald-500" />
-                                Fisik
-                              </span>
-                              <span className="font-mono font-bold text-slate-800">
-                                {evaluationData.latestEvaluation.pillarScores?.fisik !== null && evaluationData.latestEvaluation.pillarScores?.fisik !== undefined
-                                  ? evaluationData.latestEvaluation.pillarScores.fisik
-                                  : <span className="text-[10px] font-normal text-slate-400 italic">-</span>}
-                              </span>
-                            </div>
-                            {evaluationData.latestEvaluation.pillarScores?.fisik !== null && evaluationData.latestEvaluation.pillarScores?.fisik !== undefined && (
-                              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                                <div
-                                  className="bg-emerald-500 h-full rounded-full transition-all duration-500"
-                                  style={{ width: `${Math.min(100, Math.max(0, evaluationData.latestEvaluation.pillarScores.fisik))}%` }}
-                                />
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs space-y-1">
-                            <div className="flex items-center justify-between text-[11px]">
-                              <span className="font-bold text-slate-600 flex items-center gap-1">
-                                <Star className="w-3 h-3 text-purple-500" />
-                                Mental
-                              </span>
-                              <span className="font-mono font-bold text-slate-800">
-                                {evaluationData.latestEvaluation.pillarScores?.mental !== null && evaluationData.latestEvaluation.pillarScores?.mental !== undefined
-                                  ? evaluationData.latestEvaluation.pillarScores.mental
-                                  : <span className="text-[10px] font-normal text-slate-400 italic">-</span>}
-                              </span>
-                            </div>
-                            {evaluationData.latestEvaluation.pillarScores?.mental !== null && evaluationData.latestEvaluation.pillarScores?.mental !== undefined && (
-                              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                                <div
-                                  className="bg-purple-500 h-full rounded-full transition-all duration-500"
-                                  style={{ width: `${Math.min(100, Math.max(0, evaluationData.latestEvaluation.pillarScores.mental))}%` }}
-                                />
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs space-y-1">
-                            <div className="flex items-center justify-between text-[11px]">
-                              <span className="font-bold text-slate-600 flex items-center gap-1">
-                                <TrendingUp className="w-3 h-3 text-amber-500" />
-                                Taktik
-                              </span>
-                              <span className="font-mono font-bold text-slate-800">
-                                {evaluationData.latestEvaluation.pillarScores?.taktik !== null && evaluationData.latestEvaluation.pillarScores?.taktik !== undefined
-                                  ? evaluationData.latestEvaluation.pillarScores.taktik
-                                  : <span className="text-[10px] font-normal text-slate-400 italic">-</span>}
-                              </span>
-                            </div>
-                            {evaluationData.latestEvaluation.pillarScores?.taktik !== null && evaluationData.latestEvaluation.pillarScores?.taktik !== undefined && (
-                              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                                <div
-                                  className="bg-amber-500 h-full rounded-full transition-all duration-500"
-                                  style={{ width: `${Math.min(100, Math.max(0, evaluationData.latestEvaluation.pillarScores.taktik))}%` }}
-                                />
-                              </div>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Catatan Pelatih */}
-                        {evaluationData.latestEvaluation.coachNote ? (
-                          <div className="bg-amber-50/70 border border-amber-200/80 rounded-xl p-3 text-xs space-y-1">
-                            <div className="flex items-center gap-1.5 text-amber-800 font-bold text-[11px]">
-                              <Quote className="w-3.5 h-3.5 text-amber-600 shrink-0" />
-                              <span>Catatan &amp; Arahan Pelatih:</span>
-                            </div>
-                            <p className="text-slate-700 italic text-[11px] leading-relaxed pl-5">
-                              &ldquo;{evaluationData.latestEvaluation.coachNote}&rdquo;
+                        {/* Riwayat Assessment Sebelumnya */}
+                        {assessmentList.length > 1 && (
+                          <div className="space-y-1.5 pt-1">
+                            <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+                              Riwayat Assessment Sebelumnya ({assessmentList.length - 1})
                             </p>
-                          </div>
-                        ) : (
-                          <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-[11px] text-slate-400 italic">
-                            Belum ada catatan khusus dari pelatih.
+                            <div className="divide-y divide-slate-100 text-xs max-h-48 overflow-y-auto">
+                              {assessmentList.slice(1).map((ev, idx) => (
+                                <div key={ev.id || idx} className="py-2 flex items-center justify-between">
+                                  <div className="space-y-0.5">
+                                    <p className="font-bold text-slate-800 text-[11px]">
+                                      {ev.date ? formatAttendanceDate(ev.date) : 'Tanggal tidak tersedia'} &bull; {ev.evaluator || 'Pelatih'}
+                                    </p>
+                                    <p className="text-[10px] text-slate-400 truncate max-w-[200px]">
+                                      {ev.coachNote || 'Evaluasi latihan berkala'}
+                                    </p>
+                                  </div>
+                                  <span className="font-mono font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md text-[10px]">
+                                    {ev.overallScore !== null && ev.overallScore !== undefined ? `Skor ${ev.overallScore}` : 'Nilai pending'}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
                       </div>
-
-                      {/* Riwayat Evaluasi Sebelumnya */}
-                      {evaluationData.evaluations.length > 1 && (
-                        <div className="space-y-1.5 pt-1">
-                          <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
-                            Riwayat Rapor Sebelumnya ({evaluationData.evaluations.length - 1})
-                          </p>
-                          <div className="divide-y divide-slate-100 text-xs max-h-48 overflow-y-auto">
-                            {evaluationData.evaluations.slice(1).map((ev, idx) => (
-                              <div key={ev.id || idx} className="py-2 flex items-center justify-between">
-                                <div className="space-y-0.5">
-                                  <p className="font-bold text-slate-800 text-[11px]">
-                                    {ev.date ? formatAttendanceDate(ev.date) : 'Tanggal tidak tersedia'} &bull; {ev.evaluator || 'Pelatih'}
-                                  </p>
-                                  <p className="text-[10px] text-slate-400 truncate max-w-[200px]">
-                                    {ev.coachNote || 'Evaluasi latihan berkala'}
-                                  </p>
-                                </div>
-                                <span className="font-mono font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md text-[10px]">
-                                  {ev.overallScore !== null && ev.overallScore !== undefined ? `Skor ${ev.overallScore}` : 'Nilai pending'}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
+                    ) : (
+                      <div className="py-7 px-4 text-center rounded-xl bg-slate-50 border border-slate-100 space-y-1.5">
+                        <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-500 mx-auto flex items-center justify-center">
+                          <Target className="w-4 h-4" />
                         </div>
-                      )}
-                    </div>
-                  ) : (
-                    <div className="py-7 px-4 text-center rounded-xl bg-slate-50 border border-slate-100 space-y-1.5">
-                      <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-500 mx-auto flex items-center justify-center">
-                        <Target className="w-4 h-4" />
+                        <p className="text-xs font-bold text-slate-800">
+                          Belum ada evaluasi dirilis oleh pelatih
+                        </p>
+                        <p className="text-[11px] text-slate-500 max-w-[240px] mx-auto leading-relaxed">
+                          Evaluasi pilar teknik, fisik, mental, dan taktik atlet akan ditampilkan di sini setelah pelatih merilis rapor latihan resmi.
+                        </p>
                       </div>
-                      <p className="text-xs font-bold text-slate-800">
-                        Belum ada evaluasi dirilis oleh pelatih
-                      </p>
-                      <p className="text-[11px] text-slate-500 max-w-[240px] mx-auto leading-relaxed">
-                        Evaluasi pilar teknik, fisik, mental, dan taktik atlet akan ditampilkan di sini setelah pelatih merilis rapor latihan resmi.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
+                    )}
+                  </div>
+                )}
 
-              {/* TAB PRESTASI */}
-              {activeEvalTab === 'prestasi' && (
-                <div className="space-y-2.5">
-                  {isLoadingEvaluation ? (
-                    <div className="py-6 flex flex-col items-center justify-center text-slate-400 text-xs space-y-1.5">
-                      <Loader2 className="w-5 h-5 animate-spin text-amber-600" />
-                      <span>Memuat daftar prestasi atlet...</span>
-                    </div>
-                  ) : (evaluationData?.achievements && evaluationData.achievements.length > 0) ? (
-                    <div className="space-y-2">
-                      {evaluationData.achievements.map((ach, idx) => {
-                        const style = getTournamentMedalStyle(ach.result);
-                        return (
-                          <div
-                            key={ach.id || idx}
-                            className={`p-3 rounded-xl border ${style.border} ${style.bg} transition-all flex items-start justify-between gap-3`}
-                          >
-                            <div className="flex items-start gap-2.5 min-w-0">
-                              <div className={`w-8 h-8 rounded-xl bg-white flex items-center justify-center border ${style.border} shrink-0 shadow-2xs`}>
-                                <Trophy className={`w-4 h-4 ${style.iconColor}`} />
+                {/* SUB-TAB 2: GROWTH TRACKER (100% READ-ONLY) */}
+                {activeEvalTab === 'growth' && (
+                  <div className="space-y-3">
+                    {isLoadingEvaluation ? (
+                      <div className="py-6 flex flex-col items-center justify-center text-slate-400 text-xs space-y-1.5">
+                        <Loader2 className="w-5 h-5 animate-spin text-emerald-600" />
+                        <span>Memuat data pertumbuhan fisik...</span>
+                      </div>
+                    ) : growthList.length > 0 ? (
+                      <div className="space-y-3">
+                        {/* Summary Metrics Terkini */}
+                        {latestGrowth && (
+                          <div className="grid grid-cols-3 gap-2">
+                            {/* Tinggi Badan */}
+                            <div className="bg-blue-50/60 border border-blue-200/80 rounded-xl p-3 space-y-1 text-center">
+                              <div className="flex items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-wider text-blue-700">
+                                <Ruler className="w-3.5 h-3.5 text-blue-600" />
+                                <span>Tinggi</span>
                               </div>
-                              <div className="min-w-0 space-y-0.5">
-                                <h4 className="text-xs font-bold text-slate-900 leading-snug">
-                                  {ach.name}
-                                </h4>
-                                <p className="text-[10px] text-slate-500 flex items-center gap-1.5">
-                                  <span>{ach.date}</span>
-                                  {ach.category && (
-                                    <>
-                                      <span>&bull;</span>
-                                      <span>{ach.category}</span>
-                                    </>
-                                  )}
-                                </p>
-                              </div>
+                              <p className="text-base font-black font-mono text-slate-900">
+                                {latestGrowth.height ? `${latestGrowth.height}` : '-'}
+                                <span className="text-[10px] font-normal text-slate-500 ml-1">cm</span>
+                              </p>
+                              <p className="text-[9px] text-slate-400">
+                                {latestGrowth.date ? formatAttendanceDate(latestGrowth.date) : 'Terkini'}
+                              </p>
                             </div>
 
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-extrabold border shrink-0 ${style.badge}`}>
-                              {ach.result}
+                            {/* Berat Badan */}
+                            <div className="bg-indigo-50/60 border border-indigo-200/80 rounded-xl p-3 space-y-1 text-center">
+                              <div className="flex items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-wider text-indigo-700">
+                                <Scale className="w-3.5 h-3.5 text-indigo-600" />
+                                <span>Berat</span>
+                              </div>
+                              <p className="text-base font-black font-mono text-slate-900">
+                                {latestGrowth.weight ? `${latestGrowth.weight}` : '-'}
+                                <span className="text-[10px] font-normal text-slate-500 ml-1">kg</span>
+                              </p>
+                              <p className="text-[9px] text-slate-400">
+                                {latestGrowth.date ? formatAttendanceDate(latestGrowth.date) : 'Terkini'}
+                              </p>
+                            </div>
+
+                            {/* BMI & Status */}
+                            {(() => {
+                              const bmiBadge = getBmiStatusBadge(latestGrowth.status, latestGrowth.bmi);
+                              return (
+                                <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-3 space-y-1 text-center flex flex-col justify-between">
+                                  <div className="flex items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                                    <Activity className="w-3.5 h-3.5 text-emerald-600" />
+                                    <span>BMI</span>
+                                  </div>
+                                  <p className="text-base font-black font-mono text-slate-900">
+                                    {latestGrowth.bmi !== null && latestGrowth.bmi !== undefined ? latestGrowth.bmi : '-'}
+                                  </p>
+                                  <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-extrabold border ${bmiBadge.bg}`}>
+                                    {bmiBadge.label}
+                                  </span>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        )}
+
+                        {/* Tabel Riwayat Pengukuran Fisik (Read-Only) */}
+                        <div className="border border-slate-200 rounded-xl overflow-hidden bg-white">
+                          <div className="px-3.5 py-2.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
+                            <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                              <LineChart className="w-3.5 h-3.5 text-emerald-600" />
+                              Riwayat Pengukuran Fisik ({growthList.length})
+                            </span>
+                            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+                              Read-Only
                             </span>
                           </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="py-7 px-4 text-center rounded-xl bg-slate-50 border border-slate-100 space-y-1.5">
-                      <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-500 mx-auto flex items-center justify-center">
-                        <Trophy className="w-4 h-4" />
+
+                          <div className="divide-y divide-slate-100 text-xs">
+                            {growthList.map((record, idx) => {
+                              const badge = getBmiStatusBadge(record.status, record.bmi);
+                              return (
+                                <div key={record.id || idx} className="p-3 flex items-center justify-between hover:bg-slate-50/60 transition-colors">
+                                  <div className="space-y-0.5">
+                                    <div className="flex items-center gap-2">
+                                      <span className="font-bold text-slate-800 text-[11px]">
+                                        {record.date ? formatAttendanceDate(record.date) : 'Tanggal tidak tersedia'}
+                                      </span>
+                                      {idx === 0 && (
+                                        <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-blue-100 text-blue-700">
+                                          Terbaru
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 font-mono">
+                                      Tinggi: <strong className="text-slate-700">{record.height ? `${record.height} cm` : '-'}</strong> &bull; Berat: <strong className="text-slate-700">{record.weight ? `${record.weight} kg` : '-'}</strong>
+                                    </p>
+                                  </div>
+
+                                  <div className="text-right shrink-0 space-y-0.5">
+                                    <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold border ${badge.bg}`}>
+                                      {badge.label}
+                                    </span>
+                                    {record.bmi && (
+                                      <p className="text-[10px] font-mono text-slate-400">
+                                        BMI {record.bmi}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        <div className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-center text-[10px] text-slate-400">
+                          Data pertumbuhan fisik dicatat dan diperbarui oleh tim pelatih akademi (Read-Only).
+                        </div>
                       </div>
-                      <p className="text-xs font-bold text-slate-800">
-                        Belum ada catatan prestasi
-                      </p>
-                      <p className="text-[11px] text-slate-500 max-w-[240px] mx-auto leading-relaxed">
-                        Daftar kejuaraan, medali, dan piagam yang diraih atlet akan tampil secara otomatis di sini.
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
+                    ) : (
+                      <div className="py-7 px-4 text-center rounded-xl bg-slate-50 border border-slate-100 space-y-1.5">
+                        <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-500 mx-auto flex items-center justify-center">
+                          <LineChart className="w-4 h-4" />
+                        </div>
+                        <p className="text-xs font-bold text-slate-800">
+                          Belum ada data pertumbuhan dicatat
+                        </p>
+                        <p className="text-[11px] text-slate-500 max-w-[260px] mx-auto leading-relaxed">
+                          Riwayat pengukuran fisik (tinggi badan, berat badan, dan BMI) siswa akan ditampilkan di sini setelah dicatat oleh pihak akademi.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ============================================================== */}
         {/* TAB 5: PENGUMUMAN AKADEMI ('announcements') — GROUP 8 */}
@@ -1972,7 +2108,7 @@ export default function PortalDashboard() {
               : 'text-slate-400 hover:text-slate-200 font-medium'
           }`}
         >
-          <Trophy className={`w-4 h-4 mb-0.5 transition-transform ${activeTab === 'evaluation' ? 'text-blue-400 scale-110' : 'text-slate-400'}`} />
+          <Activity className={`w-4 h-4 mb-0.5 transition-transform ${activeTab === 'evaluation' ? 'text-blue-400 scale-110' : 'text-slate-400'}`} />
           <span className="text-[9px] tracking-tight">Rapor</span>
         </button>
 
