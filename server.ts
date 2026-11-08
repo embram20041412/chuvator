@@ -38,6 +38,10 @@ import { onRequestPost as backfillKkHmac } from './functions/api/admin/backfill_
 import { onRequestGet as backfillKkStatus } from './functions/api/admin/backfill_kk_hmac/status.js';
 // @ts-ignore
 import { onRequestPost as backfillKkRollback } from './functions/api/admin/backfill_kk_hmac/rollback.js';
+// @ts-ignore
+import { onRequest as coachStudents } from './functions/api/coach/students.js';
+// @ts-ignore
+import { onRequest as adminStudents } from './functions/api/admin/students.js';
 
 dotenv.config();
 
@@ -289,6 +293,10 @@ async function handleCloudflareFunction(
     app.post('/api/admin/backfill_kk_hmac', (req, res) => handleCloudflareFunction(backfillKkHmac, req, res));
     app.get('/api/admin/backfill_kk_hmac/status', (req, res) => handleCloudflareFunction(backfillKkStatus, req, res));
     app.post('/api/admin/backfill_kk_hmac/rollback', (req, res) => handleCloudflareFunction(backfillKkRollback, req, res));
+
+    // Coach & Admin Student Antropometri / Growth Update Endpoints
+    app.all('/api/coach/students', (req, res) => handleCloudflareFunction(coachStudents, req, res));
+    app.all('/api/admin/students', (req, res) => handleCloudflareFunction(adminStudents, req, res));
   }
 
   // POST /api/create-staff : Pembuatan Staff di Supabase

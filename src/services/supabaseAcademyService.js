@@ -824,6 +824,8 @@ export const ALLOWED_STUDENT_UPDATE_COLUMNS = new Set([
   'last_spp_paid_at',
   'height',
   'weight',
+  'height_cm',
+  'weight_kg',
   'photo_url',
   'tournaments',
   'growth_history',
@@ -844,9 +846,6 @@ export async function updateStudent(studentId, updateFields) {
   }
   if (updateFields.noKk !== undefined) {
     mapped.no_kk = (updateFields.noKk || '').trim() || null;
-    // Catatan Keamanan & Integritas Trigger:
-    // Kolom kk_hmac dan kk_last4 SAMA SEKALI TIDAK dimasukkan ke payload update pengguna.
-    // Database trigger trg_invalidate_student_kk_hmac secara otomatis meng-NULL-kan HMAC saat no_kk berubah.
   }
   if (updateFields.schoolOrigin !== undefined) mapped.school_origin = (updateFields.schoolOrigin || '').trim();
   if (updateFields.academyId !== undefined) {
@@ -887,11 +886,78 @@ export async function updateStudent(studentId, updateFields) {
   if (updateFields.lastPaidMonth !== undefined) mapped.last_paid_month = updateFields.lastPaidMonth;
   if (updateFields.lastPaidDate !== undefined) mapped.last_paid_date = toDateOrNull(updateFields.lastPaidDate);
   if (updateFields.lastSppPaidAt !== undefined) mapped.last_spp_paid_at = toDateOrNull(updateFields.lastSppPaidAt);
-  if (updateFields.height !== undefined) mapped.height = updateFields.height ? Number(updateFields.height) : null;
-  if (updateFields.weight !== undefined) mapped.weight = updateFields.weight ? Number(updateFields.weight) : null;
+
+  const inputHeight = updateFields.height_cm !== undefined ? updateFields.height_cm : updateFields.height;
+  const inputWeight = updateFields.weight_kg !== undefined ? updateFields.weight_kg : updateFields.weight;
+
+  if (inputHeight !== undefined) {
+    const val = inputHeight ? Number(inputHeight) : null;
+    mapped.height = val;
+    mapped.height_cm = val;
+  }
+  if (inputWeight !== undefined) {
+    const val = inputWeight ? Number(inputWeight) : null;
+    mapped.weight = val;
+    mapped.weight_kg = val;
+  }
+
   if (updateFields.photoUrl !== undefined) mapped.photo_url = updateFields.photoUrl;
   if (updateFields.tournaments !== undefined) mapped.tournaments = updateFields.tournaments;
-  if (updateFields.growthHistory !== undefined) mapped.growth_history = updateFields.growthHistory;
+
+  // Jika input tinggi/berat disertakan dan growthHistory tidak disediakan secara eksplisit,
+  // lakukan pembacaan atomik untuk menambahkan entri baru ke growth_history
+  if ((inputHeight !== undefined || inputWeight !== undefined) && updateFields.growthHistory === undefined) {
+    const { data: currStudent } = await supabase
+      .from('students')
+      .select('growth_history, height, height_cm, weight, weight_kg')
+      .eq('id', studentId)
+      .maybeSingle();
+
+    if (currStudent) {
+      let existingHistory = [];
+      const rawHist = currStudent.growth_history;
+      if (Array.isArray(rawHist)) {
+        existingHistory = [...rawHist];
+      } else if (typeof rawHist === 'string') {
+        try {
+          const parsed = JSON.parse(rawHist);
+          if (Array.isArray(parsed)) existingHistory = parsed;
+        } catch {
+          existingHistory = [];
+        }
+      }
+
+      const hVal = inputHeight !== undefined && inputHeight ? Number(inputHeight) : Number(currStudent.height_cm || currStudent.height || 0);
+      const wVal = inputWeight !== undefined && inputWeight ? Number(inputWeight) : Number(currStudent.weight_kg || currStudent.weight || 0);
+
+      if (hVal > 0 || wVal > 0) {
+        let bmiVal = null;
+        let statusVal = 'Belum Ada';
+        if (hVal > 0 && wVal > 0) {
+          const hM = hVal / 100;
+          bmiVal = Math.round((wVal / (hM * hM)) * 10) / 10;
+          statusVal = bmiVal < 18.5 ? 'Underweight' : (bmiVal <= 24.9 ? 'Proporsional' : 'Overweight');
+        }
+
+        const newEntry = {
+          date: updateFields.date || updateFields.recordedDate || new Date().toISOString().split('T')[0],
+          height_cm: hVal,
+          weight_kg: wVal,
+          height: hVal,
+          weight: wVal,
+          bmi: bmiVal,
+          status: statusVal,
+          notes: updateFields.notes || updateFields.growthNotes || 'Pengukuran Antropometri',
+          recordedAt: new Date().toISOString()
+        };
+
+        mapped.growth_history = [...existingHistory, newEntry];
+      }
+    }
+  } else if (updateFields.growthHistory !== undefined) {
+    mapped.growth_history = updateFields.growthHistory;
+  }
+
   mapped.updated_at = new Date().toISOString();
 
   // Murni menyaring payload hanya untuk kolom yang diizinkan (whitelisted)
@@ -922,7 +988,7 @@ export async function updateStudent(studentId, updateFields) {
   return mapStudentFromSupabase(data);
 }
 
-export async function updateStudentGrowth(studentId, { height, weight, growthEntry }) {
+export async function updateStudentGrowth(studentId, { height, weight, height_cm, weight_kg, growthEntry, notes, date }) {
   if (!studentId) {
     throw new Error('Student ID wajib disertakan.');
   }
@@ -957,11 +1023,14 @@ export async function updateStudentGrowth(studentId, { height, weight, growthEnt
     }
   }
 
+  const effHeight = height_cm !== undefined ? height_cm : height;
+  const effWeight = weight_kg !== undefined ? weight_kg : weight;
+
   // 3. Tambahkan entri baru dengan tanggal, tinggi, berat, BMI, status, dan waktu pencatatan
   let updatedHistory = currentHistory;
   if (growthEntry) {
-    const entryHeight = Number(growthEntry.height !== undefined ? growthEntry.height : height);
-    const entryWeight = Number(growthEntry.weight !== undefined ? growthEntry.weight : weight);
+    const entryHeight = Number(growthEntry.height_cm !== undefined ? growthEntry.height_cm : (growthEntry.height !== undefined ? growthEntry.height : effHeight));
+    const entryWeight = Number(growthEntry.weight_kg !== undefined ? growthEntry.weight_kg : (growthEntry.weight !== undefined ? growthEntry.weight : effWeight));
     let entryBmi = growthEntry.bmi !== undefined && growthEntry.bmi !== null ? Number(growthEntry.bmi) : null;
     if ((entryBmi === null || isNaN(entryBmi) || entryBmi <= 0) && entryHeight > 0 && entryWeight > 0) {
       const hM = entryHeight / 100;
@@ -971,44 +1040,52 @@ export async function updateStudentGrowth(studentId, { height, weight, growthEnt
       entryBmi ? (entryBmi < 18.5 ? 'Underweight' : entryBmi <= 24.9 ? 'Proporsional' : 'Overweight') : 'Belum Ada'
     );
     const formattedEntry = {
-      date: growthEntry.date || new Date().toISOString().split('T')[0],
+      date: growthEntry.date || date || new Date().toISOString().split('T')[0],
+      height_cm: entryHeight,
+      weight_kg: entryWeight,
       height: entryHeight,
       weight: entryWeight,
       bmi: entryBmi,
       status: entryStatus,
+      notes: growthEntry.notes || notes || 'Pengukuran Antropometri',
       recordedAt: growthEntry.recordedAt || new Date().toISOString()
     };
     updatedHistory = [...currentHistory, formattedEntry];
-  } else if (height !== undefined && weight !== undefined && Number(height) > 0 && Number(weight) > 0) {
-    const entryHeight = Number(height);
-    const entryWeight = Number(weight);
+  } else if (effHeight !== undefined && effWeight !== undefined && Number(effHeight) > 0 && Number(effWeight) > 0) {
+    const entryHeight = Number(effHeight);
+    const entryWeight = Number(effWeight);
     const hM = entryHeight / 100;
     const entryBmi = Math.round((entryWeight / (hM * hM)) * 10) / 10;
     const entryStatus = entryBmi < 18.5 ? 'Underweight' : entryBmi <= 24.9 ? 'Proporsional' : 'Overweight';
     const formattedEntry = {
-      date: new Date().toISOString().split('T')[0],
+      date: date || new Date().toISOString().split('T')[0],
+      height_cm: entryHeight,
+      weight_kg: entryWeight,
       height: entryHeight,
       weight: entryWeight,
       bmi: entryBmi,
       status: entryStatus,
+      notes: notes || 'Pengukuran Antropometri',
       recordedAt: new Date().toISOString()
     };
     updatedHistory = [...currentHistory, formattedEntry];
   }
 
   // 4. Pastikan tinggi dan berat badan terbaru tersimpan pada kolom utama siswa
-  const finalHeight = height !== undefined && height !== null && height !== ''
-    ? Number(height)
-    : (growthEntry?.height !== undefined ? Number(growthEntry.height) : (currentStudent.height ? Number(currentStudent.height) : null));
+  const finalHeight = effHeight !== undefined && effHeight !== null && effHeight !== ''
+    ? Number(effHeight)
+    : (growthEntry?.height_cm !== undefined ? Number(growthEntry.height_cm) : (growthEntry?.height !== undefined ? Number(growthEntry.height) : (currentStudent.height_cm || currentStudent.height ? Number(currentStudent.height_cm || currentStudent.height) : null)));
 
-  const finalWeight = weight !== undefined && weight !== null && weight !== ''
-    ? Number(weight)
-    : (growthEntry?.weight !== undefined ? Number(growthEntry.weight) : (currentStudent.weight ? Number(currentStudent.weight) : null));
+  const finalWeight = effWeight !== undefined && effWeight !== null && effWeight !== ''
+    ? Number(effWeight)
+    : (growthEntry?.weight_kg !== undefined ? Number(growthEntry.weight_kg) : (growthEntry?.weight !== undefined ? Number(growthEntry.weight) : (currentStudent.weight_kg || currentStudent.weight ? Number(currentStudent.weight_kg || currentStudent.weight) : null)));
 
   // 5. Lakukan UPDATE ke database
   const updatePayload = {
     height: finalHeight,
+    height_cm: finalHeight,
     weight: finalWeight,
+    weight_kg: finalWeight,
     growth_history: updatedHistory,
     updated_at: new Date().toISOString()
   };
