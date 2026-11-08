@@ -384,7 +384,8 @@ export async function onRequest(context) {
       }
     }
 
-    const studentQuery = `${supabaseUrl}/rest/v1/students?id=eq.${encodeURIComponent(studentId)}&tenant_id=eq.${encodeURIComponent(childTenantId)}&select=tournaments,student_name,name,class_name,growth_history,height,weight,height_cm,weight_kg,birth_date`;
+    // Query data siswa (HANYA men-select kolom skalar resmi yang terdaftar di schema cache PostgREST)
+    const studentQuery = `${supabaseUrl}/rest/v1/students?id=eq.${encodeURIComponent(studentId)}&tenant_id=eq.${encodeURIComponent(childTenantId)}&select=tournaments,student_name,name,class_name,growth_history,height,weight,birth_date`;
 
     let studentResp = await fetch(studentQuery, {
       method: 'GET',
@@ -435,94 +436,95 @@ export async function onRequest(context) {
 
     const st = studentData[0];
     if (st) {
-      studentInfo.studentName = st.student_name || st.name || studentInfo.studentName;
-      studentInfo.className = st.class_name || studentInfo.className;
+      try {
+        studentInfo.studentName = st.student_name || st.name || studentInfo.studentName;
+        studentInfo.className = st.class_name || studentInfo.className;
 
-      const scalarH = Number(
-        st.height !== undefined && st.height !== null
-          ? st.height
-          : (st.height_cm !== undefined && st.height_cm !== null ? st.height_cm : 0)
-      );
-      const scalarW = Number(
-        st.weight !== undefined && st.weight !== null
-          ? st.weight
-          : (st.weight_kg !== undefined && st.weight_kg !== null ? st.weight_kg : 0)
-      );
+        const scalarH = Number(st.height !== undefined && st.height !== null && !isNaN(st.height) ? st.height : 0);
+        const scalarW = Number(st.weight !== undefined && st.weight !== null && !isNaN(st.weight) ? st.weight : 0);
 
-      studentInfo.height = scalarH > 0 ? scalarH : null;
-      studentInfo.weight = scalarW > 0 ? scalarW : null;
+        studentInfo.height = scalarH > 0 ? scalarH : null;
+        studentInfo.weight = scalarW > 0 ? scalarW : null;
 
-      // Ambil data growth_history dari kolom JSONB tabel students
-      const rawGrowthHistory = Array.isArray(st.growth_history)
-        ? st.growth_history
-        : (typeof st.growth_history === 'string' ? (() => { try { return JSON.parse(st.growth_history); } catch { return []; } })() : []);
+        // Ambil data growth_history dari kolom JSONB tabel students
+        const rawGrowthHistory = Array.isArray(st.growth_history)
+          ? st.growth_history
+          : (typeof st.growth_history === 'string' ? (() => { try { return JSON.parse(st.growth_history); } catch { return []; } })() : []);
 
-      if (Array.isArray(rawGrowthHistory) && rawGrowthHistory.length > 0) {
-        rawGrowthHistory.forEach((g, idx) => {
-          const h = Number(
-            g.height_cm !== undefined && g.height_cm !== null
-              ? g.height_cm
-              : (g.height !== undefined && g.height !== null ? g.height : 0)
-          );
-          const w = Number(
-            g.weight_kg !== undefined && g.weight_kg !== null
-              ? g.weight_kg
-              : (g.weight !== undefined && g.weight !== null ? g.weight : 0)
-          );
-          let bmi = g.bmi !== undefined && g.bmi !== null ? Number(g.bmi) : null;
-          if ((bmi === null || isNaN(bmi) || bmi <= 0) && h > 0 && w > 0) {
-            const hM = h / 100;
-            bmi = Math.round((w / (hM * hM)) * 10) / 10;
+        if (Array.isArray(rawGrowthHistory) && rawGrowthHistory.length > 0) {
+          rawGrowthHistory.forEach((g, idx) => {
+            if (!g || typeof g !== 'object') return;
+            const h = Number(
+              g.height_cm !== undefined && g.height_cm !== null && !isNaN(g.height_cm)
+                ? g.height_cm
+                : (g.height !== undefined && g.height !== null && !isNaN(g.height) ? g.height : 0)
+            );
+            const w = Number(
+              g.weight_kg !== undefined && g.weight_kg !== null && !isNaN(g.weight_kg)
+                ? g.weight_kg
+                : (g.weight !== undefined && g.weight !== null && !isNaN(g.weight) ? g.weight : 0)
+            );
+
+            let bmi = g.bmi !== undefined && g.bmi !== null && !isNaN(g.bmi) ? Number(g.bmi) : null;
+            if ((bmi === null || bmi <= 0 || !isFinite(bmi)) && h > 0 && w > 0) {
+              const hM = h / 100;
+              const calcBmi = w / (hM * hM);
+              bmi = isFinite(calcBmi) && !isNaN(calcBmi) ? Math.round(calcBmi * 10) / 10 : null;
+            }
+
+            const status = g.status || (bmi ? (bmi < 18.5 ? 'Underweight' : bmi <= 24.9 ? 'Proporsional' : 'Overweight') : 'Belum Ada');
+
+            growthRecords.push({
+              id: g.id || `growth-${idx}`,
+              date: g.date || (g.recordedAt ? String(g.recordedAt).substring(0, 10) : null),
+              height_cm: h > 0 ? h : null,
+              weight_kg: w > 0 ? w : null,
+              height: h > 0 ? h : null,
+              weight: w > 0 ? w : null,
+              bmi,
+              status,
+              notes: g.notes || g.note || null,
+              recordedAt: g.recordedAt || null
+            });
+          });
+        }
+
+        // TRIK FALLBACK OTOMATIS: Jika growth_history/growthRecords masih kosong,
+        // buatlah 1 entri sintetis berbasis data skalar height & weight terkini dari profil siswa
+        if (growthRecords.length === 0 && (scalarH > 0 || scalarW > 0)) {
+          let bmi = null;
+          if (scalarH > 0 && scalarW > 0) {
+            const hM = scalarH / 100;
+            const calcBmi = scalarW / (hM * hM);
+            bmi = isFinite(calcBmi) && !isNaN(calcBmi) ? Math.round(calcBmi * 10) / 10 : null;
           }
-          const status = g.status || (bmi ? (bmi < 18.5 ? 'Underweight' : bmi <= 24.9 ? 'Proporsional' : 'Overweight') : 'Belum Ada');
-
+          const status = bmi ? (bmi < 18.5 ? 'Underweight' : bmi <= 24.9 ? 'Proporsional' : 'Overweight') : 'Belum Ada';
           growthRecords.push({
-            id: g.id || `growth-${idx}`,
-            date: g.date || (g.recordedAt ? String(g.recordedAt).substring(0, 10) : null),
-            height_cm: h > 0 ? h : null,
-            weight_kg: w > 0 ? w : null,
-            height: h > 0 ? h : null,
-            weight: w > 0 ? w : null,
+            id: 'current-stat-fallback',
+            date: new Date().toISOString().substring(0, 10),
+            height_cm: scalarH > 0 ? scalarH : null,
+            weight_kg: scalarW > 0 ? scalarW : null,
+            height: scalarH > 0 ? scalarH : null,
+            weight: scalarW > 0 ? scalarW : null,
             bmi,
             status,
-            notes: g.notes || g.note || null,
-            recordedAt: g.recordedAt || null
+            notes: 'Pengukuran Terkini (Profil Atlet)',
+            recordedAt: new Date().toISOString()
           });
-        });
-      }
-
-      // TRIK FALLBACK OTOMATIS: Jika growth_history/growthRecords masih kosong,
-      // buatlah 1 entri sintetis berbasis data skalar height & weight terkini dari profil siswa
-      if (growthRecords.length === 0 && (scalarH > 0 || scalarW > 0)) {
-        let bmi = null;
-        if (scalarH > 0 && scalarW > 0) {
-          const hM = scalarH / 100;
-          bmi = Math.round((scalarW / (hM * hM)) * 10) / 10;
         }
-        const status = bmi ? (bmi < 18.5 ? 'Underweight' : bmi <= 24.9 ? 'Proporsional' : 'Overweight') : 'Belum Ada';
-        growthRecords.push({
-          id: 'current-stat-fallback',
-          date: new Date().toISOString().substring(0, 10),
-          height_cm: scalarH > 0 ? scalarH : null,
-          weight_kg: scalarW > 0 ? scalarW : null,
-          height: scalarH > 0 ? scalarH : null,
-          weight: scalarW > 0 ? scalarW : null,
-          bmi,
-          status,
-          notes: 'Pengukuran Terkini (Profil Atlet)',
-          recordedAt: new Date().toISOString()
-        });
-      }
 
-      // Deduplikasi & urutkan growthRecords berdasarkan tanggal terbaru (descending)
-      const seenDates = new Set();
-      growthRecords = growthRecords.filter(g => {
-        const key = `${g.date || ''}-${g.height}-${g.weight}`;
-        if (seenDates.has(key)) return false;
-        seenDates.add(key);
-        return true;
-      });
-      growthRecords.sort((a, b) => new Date(b.date || b.recordedAt || 0).getTime() - new Date(a.date || a.recordedAt || 0).getTime());
+        // Deduplikasi & urutkan growthRecords berdasarkan tanggal terbaru (descending)
+        const seenDates = new Set();
+        growthRecords = growthRecords.filter(g => {
+          const key = `${g.date || ''}-${g.height}-${g.weight}`;
+          if (seenDates.has(key)) return false;
+          seenDates.add(key);
+          return true;
+        });
+        growthRecords.sort((a, b) => new Date(b.date || b.recordedAt || 0).getTime() - new Date(a.date || a.recordedAt || 0).getTime());
+      } catch (parseErr) {
+        console.warn('[evaluations.js] Non-blocking warning during student growth_history parsing:', parseErr);
+      }
 
       // Tournaments fallback
       const rawTournaments = Array.isArray(st.tournaments) ? st.tournaments : [];
