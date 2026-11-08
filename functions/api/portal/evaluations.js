@@ -206,7 +206,7 @@ export async function onRequest(context) {
       );
     }
 
-    // 9. Pengambilan Data Evaluasi & Growth Tracker
+    // 9. Pengambilan Data Evaluasi (academy_evaluations / athlete_assessments)
     const supabaseUrl = getCleanSupabaseUrl(env) || (env.SUPABASE_URL || env.VITE_SUPABASE_URL || '').replace(/\/+$/, '');
     const anonKey = getSupabaseAnonKey(env) || env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY;
     const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY || env.VITE_SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_KEY;
@@ -223,22 +223,24 @@ export async function onRequest(context) {
       );
     }
 
+    // Tentukan headers database yang aman (Service Role Key diprioritaskan setelah verifikasi sesi orang tua)
+    const activeDbKey = serviceRoleKey || anonKey;
+    const activeAuthHeader = serviceRoleKey ? `Bearer ${serviceRoleKey}` : `Bearer ${accessToken}`;
+
     let evaluationsList = [];
     const evalQuery = `${supabaseUrl}/rest/v1/academy_evaluations?student_id=eq.${encodeURIComponent(studentId)}&tenant_id=eq.${encodeURIComponent(childTenantId)}&order=created_at.desc`;
 
-    // Coba dengan User Bearer Token terlebih dahulu (mengikuti RLS), jika diblokir/gagal dan ada serviceRoleKey yang sudah tervalidasi via session, gunakan service role
     let evalResp = await fetch(evalQuery, {
       method: 'GET',
       headers: {
-        'apikey': anonKey,
-        'Authorization': `Bearer ${accessToken}`,
+        'apikey': activeDbKey,
+        'Authorization': activeAuthHeader,
         'Accept': 'application/json'
       }
     });
 
-    if (!evalResp.ok && serviceRoleKey) {
-      const parentErrText = await evalResp.text().catch(() => '');
-      console.warn(`[evaluations.js] Parent token query to academy_evaluations failed (${evalResp.status}: ${parentErrText}). Falling back to service role key since parent session is verified.`);
+    // Fallback jika menggunakan anon token ditolak
+    if (!evalResp.ok && serviceRoleKey && activeDbKey !== serviceRoleKey) {
       evalResp = await fetch(evalQuery, {
         method: 'GET',
         headers: {
@@ -249,14 +251,32 @@ export async function onRequest(context) {
       });
     }
 
+    // Fallback jika tabel menggunakan nama 'athlete_assessments' atau 'evaluations'
     if (!evalResp.ok) {
-      const errText = await evalResp.text().catch(() => '');
-      console.error(`[evaluations.js] Database query failed for academy_evaluations (${evalResp.status}):`, errText);
+      const altTables = ['athlete_assessments', 'evaluations'];
+      for (const altTbl of altTables) {
+        const altQuery = `${supabaseUrl}/rest/v1/${altTbl}?student_id=eq.${encodeURIComponent(studentId)}&tenant_id=eq.${encodeURIComponent(childTenantId)}&order=created_at.desc`;
+        const altResp = await fetch(altQuery, {
+          method: 'GET',
+          headers: {
+            'apikey': serviceRoleKey || anonKey,
+            'Authorization': serviceRoleKey ? `Bearer ${serviceRoleKey}` : `Bearer ${accessToken}`,
+            'Accept': 'application/json'
+          }
+        });
+        if (altResp.ok) {
+          evalResp = altResp;
+          break;
+        }
+      }
+    }
+
+    if (!evalResp.ok) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: `Gagal memuat evaluasi (${evalResp.status}): ${errText || 'Database error'}`,
-          message: `Gagal memuat evaluasi (${evalResp.status}): ${errText || 'Database error'}`
+          error: 'Terjadi gangguan pada layanan evaluasi.',
+          message: 'Terjadi gangguan pada layanan evaluasi. Silakan coba beberapa saat lagi.'
         }),
         { status: 502, headers: corsHeaders }
       );
@@ -264,12 +284,11 @@ export async function onRequest(context) {
 
     const rawEvals = await evalResp.json().catch(() => null);
     if (!Array.isArray(rawEvals)) {
-      console.error('[evaluations.js] Invalid rawEvals response format:', rawEvals);
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Format data respon evaluasi dari server tidak valid.',
-          message: 'Format data respon evaluasi dari server tidak valid.'
+          error: 'Terjadi gangguan pada layanan evaluasi.',
+          message: 'Terjadi gangguan pada layanan evaluasi. Silakan coba beberapa saat lagi.'
         }),
         { status: 502, headers: corsHeaders }
       );
@@ -281,7 +300,6 @@ export async function onRequest(context) {
           const rawStatus = ev.status || ev.publication_status;
           if (rawStatus) {
             const s = String(rawStatus).toLowerCase().trim();
-            // Izinkan 'published', 'approved', 'aktif', 'active', 'selesai', atau jika tidak ada status (default ditampilkan)
             return !['draft', 'archived', 'batal', 'rejected'].includes(s);
           }
           return true;
@@ -322,44 +340,48 @@ export async function onRequest(context) {
       className: matchedChild.className || ''
     };
 
-    // Coba ambil riwayat dari tabel growth_tracker jika ada
-    try {
-      const growthTableQuery = `${supabaseUrl}/rest/v1/growth_tracker?student_id=eq.${encodeURIComponent(studentId)}&tenant_id=eq.${encodeURIComponent(childTenantId)}&order=date.desc`;
-      const growthResp = await fetch(growthTableQuery, {
-        method: 'GET',
-        headers: {
-          'apikey': anonKey,
-          'Authorization': `Bearer ${accessToken}`,
-          'Accept': 'application/json'
-        }
-      });
-      if (growthResp.ok) {
-        const rawGrowth = await growthResp.json().catch(() => null);
-        if (Array.isArray(rawGrowth)) {
-          rawGrowth.forEach(g => {
-            const h = Number(g.height !== undefined && g.height !== null ? g.height : 0);
-            const w = Number(g.weight !== undefined && g.weight !== null ? g.weight : 0);
-            let bmi = g.bmi !== undefined && g.bmi !== null ? Number(g.bmi) : null;
-            if ((bmi === null || isNaN(bmi) || bmi <= 0) && h > 0 && w > 0) {
-              const hM = h / 100;
-              bmi = Math.round((w / (hM * hM)) * 10) / 10;
-            }
-            const status = g.status || (bmi ? (bmi < 18.5 ? 'Underweight' : bmi <= 24.9 ? 'Proporsional' : 'Overweight') : 'Belum Ada');
-            growthRecords.push({
-              id: g.id || `gt-${g.date || ''}-${h}-${w}`,
-              date: g.date || (g.recorded_at ? String(g.recorded_at).substring(0, 10) : (g.created_at ? String(g.created_at).substring(0, 10) : null)),
-              height: h > 0 ? h : null,
-              weight: w > 0 ? w : null,
-              bmi,
-              status,
-              notes: g.notes || g.note || null,
-              recordedAt: g.recorded_at || g.created_at || null
+    // Coba ambil riwayat dari tabel growth_tracker atau student_measurements menggunakan Service Role Key
+    const growthTables = ['growth_tracker', 'student_measurements'];
+    for (const gTable of growthTables) {
+      try {
+        const growthTableQuery = `${supabaseUrl}/rest/v1/${gTable}?student_id=eq.${encodeURIComponent(studentId)}&tenant_id=eq.${encodeURIComponent(childTenantId)}&order=date.desc`;
+        const growthResp = await fetch(growthTableQuery, {
+          method: 'GET',
+          headers: {
+            'apikey': serviceRoleKey || anonKey,
+            'Authorization': serviceRoleKey ? `Bearer ${serviceRoleKey}` : `Bearer ${accessToken}`,
+            'Accept': 'application/json'
+          }
+        });
+        if (growthResp.ok) {
+          const rawGrowth = await growthResp.json().catch(() => null);
+          if (Array.isArray(rawGrowth) && rawGrowth.length > 0) {
+            rawGrowth.forEach(g => {
+              const h = Number(g.height !== undefined && g.height !== null ? g.height : 0);
+              const w = Number(g.weight !== undefined && g.weight !== null ? g.weight : 0);
+              let bmi = g.bmi !== undefined && g.bmi !== null ? Number(g.bmi) : null;
+              if ((bmi === null || isNaN(bmi) || bmi <= 0) && h > 0 && w > 0) {
+                const hM = h / 100;
+                bmi = Math.round((w / (hM * hM)) * 10) / 10;
+              }
+              const status = g.status || (bmi ? (bmi < 18.5 ? 'Underweight' : bmi <= 24.9 ? 'Proporsional' : 'Overweight') : 'Belum Ada');
+              growthRecords.push({
+                id: g.id || `gt-${g.date || ''}-${h}-${w}`,
+                date: g.date || (g.recorded_at ? String(g.recorded_at).substring(0, 10) : (g.created_at ? String(g.created_at).substring(0, 10) : null)),
+                height: h > 0 ? h : null,
+                weight: w > 0 ? w : null,
+                bmi,
+                status,
+                notes: g.notes || g.note || null,
+                recordedAt: g.recorded_at || g.created_at || null
+              });
             });
-          });
+            break; // Berhasil menemukan data di salah satu tabel
+          }
         }
+      } catch {
+        // Non-blocking: coba fallback ke kolom JSONB
       }
-    } catch {
-      // Non-blocking: tabel opsional jika schema menggunakan kolom growth_history di students
     }
 
     const studentQuery = `${supabaseUrl}/rest/v1/students?id=eq.${encodeURIComponent(studentId)}&tenant_id=eq.${encodeURIComponent(childTenantId)}&select=tournaments,student_name,name,class_name,growth_history,height,weight,birth_date`;

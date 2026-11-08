@@ -60,6 +60,7 @@ DECLARE
     v_schedules JSONB := '[]'::jsonb;
     v_attendance JSONB := '[]'::jsonb;
     v_evaluations JSONB := '[]'::jsonb;
+    v_growth_records JSONB := '[]'::jsonb;
     v_spp_payments JSONB := '[]'::jsonb;
 BEGIN
     -- 1. STRICT AUTHORIZATION (UUID auth.uid IS MANDATORY)
@@ -320,8 +321,68 @@ BEGIN
 
     v_attendance := COALESCE(v_attendance, '[]'::jsonb);
 
-    -- 8. EVALUATIONS CONTRACT (PRODUCT DECISION: RETURN EMPTY ARRAY UNTIL PUBLICATION LIFECYCLE IS PROVED)
-    v_evaluations := '[]'::jsonb;
+    -- 8. FETCH ATHLETE EVALUATIONS & ASSESSMENTS
+    SELECT jsonb_agg(
+        jsonb_build_object(
+            'id', ev.id,
+            'date', COALESCE(ev.date, TO_CHAR(ev.created_at, 'YYYY-MM-DD')),
+            'evaluator', COALESCE(ev.evaluator, ev.coach_name, 'Pelatih'),
+            'className', COALESCE(ev.class_name, v_class_name, v_student_class_name, 'Kelas Reguler'),
+            'sport', COALESCE(ev.sport, v_student_sport_category, 'Badminton'),
+            'playerRole', COALESCE(ev.player_role, ev.main_position, NULL),
+            'overallScore', ev.overall_score,
+            'overall_score', ev.overall_score,
+            'pillarScores', COALESCE(ev.pillar_scores, jsonb_build_object(
+                'teknik', ev.technical_score,
+                'fisik', ev.physical_score,
+                'mental', ev.mental_score,
+                'taktik', ev.tactical_score
+            )),
+            'pillar_scores', COALESCE(ev.pillar_scores, jsonb_build_object(
+                'teknik', ev.technical_score,
+                'fisik', ev.physical_score,
+                'mental', ev.mental_score,
+                'taktik', ev.tactical_score
+            )),
+            'coachNote', COALESCE(ev.coach_note, ev.notes, NULL),
+            'coach_note', COALESCE(ev.coach_note, ev.notes, NULL),
+            'status', COALESCE(ev.status, 'published'),
+            'created_at', ev.created_at
+        ) ORDER BY ev.created_at DESC, ev.id DESC
+    ) INTO v_evaluations
+    FROM (
+        SELECT id, created_at, date, evaluator, coach_name, class_name, sport, player_role, main_position, overall_score, pillar_scores, technical_score, physical_score, mental_score, tactical_score, coach_note, notes, status
+        FROM public.academy_evaluations
+        WHERE student_id = v_student_id
+          AND (tenant_id = v_student_tenant_id OR v_student_tenant_id IS NULL)
+          AND (status IS NULL OR LOWER(BTRIM(status)) NOT IN ('draft', 'archived', 'batal', 'rejected'))
+        ORDER BY created_at DESC
+    ) ev;
+
+    v_evaluations := COALESCE(v_evaluations, '[]'::jsonb);
+
+    -- 8B. FETCH GROWTH TRACKER / ANTHROPOMETRY RECORDS
+    SELECT jsonb_agg(
+        jsonb_build_object(
+            'id', gt.id,
+            'date', COALESCE(gt.date, TO_CHAR(gt.created_at, 'YYYY-MM-DD')),
+            'height', gt.height,
+            'weight', gt.weight,
+            'bmi', gt.bmi,
+            'status', COALESCE(gt.status, 'Normal'),
+            'notes', COALESCE(gt.notes, gt.note, NULL),
+            'recordedAt', COALESCE(gt.recorded_at, gt.created_at)
+        ) ORDER BY COALESCE(gt.date, TO_CHAR(gt.created_at, 'YYYY-MM-DD')) DESC, gt.id DESC
+    ) INTO v_growth_records
+    FROM (
+        SELECT id, date, height, weight, bmi, status, notes, note, recorded_at, created_at
+        FROM public.growth_tracker
+        WHERE student_id = v_student_id
+          AND (tenant_id = v_student_tenant_id OR v_student_tenant_id IS NULL)
+        ORDER BY date DESC, created_at DESC
+    ) gt;
+
+    v_growth_records := COALESCE(v_growth_records, '[]'::jsonb);
 
     -- 9. FETCH SPP PAYMENTS (VERIFIED COLUMNS ONLY: NO payment_date)
     SELECT jsonb_agg(
@@ -386,7 +447,10 @@ BEGIN
         'upcoming_sessions', v_upcoming_sessions,
         'schedules', v_schedules,
         'attendance', v_attendance,
+        'assessments', v_evaluations,
         'evaluations', v_evaluations,
+        'growth_records', v_growth_records,
+        'growthRecords', v_growth_records,
         'spp_payments', v_spp_payments
     );
 END;
