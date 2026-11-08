@@ -18,15 +18,17 @@ DECLARE
     v_tkt_table_exists BOOLEAN := FALSE;
     v_func_count INT := 0;
 BEGIN
-    -- Step 1.1: Verify extensions.pgcrypto availability
+    -- Step 1.1: Verify extensions.digest and extensions.gen_random_bytes availability
     IF NOT EXISTS (
-        SELECT 1 FROM pg_catalog.pg_extension WHERE extname = 'pgcrypto'
-    ) AND NOT EXISTS (
         SELECT 1 FROM pg_catalog.pg_proc p 
         JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid 
         WHERE n.nspname = 'extensions' AND p.proname = 'digest'
+    ) OR NOT EXISTS (
+        SELECT 1 FROM pg_catalog.pg_proc p 
+        JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid 
+        WHERE n.nspname = 'extensions' AND p.proname = 'gen_random_bytes'
     ) THEN
-        RAISE EXCEPTION 'PREFLIGHT_FAILED: Required pgcrypto extension or extensions.digest() function not found.';
+        RAISE EXCEPTION 'PREFLIGHT_FAILED: Required extensions.digest() and extensions.gen_random_bytes() functions not found.';
     END IF;
 
     -- Step 1.2: Structural preflight check for composite unique key (tenant_id, id) on parent_accounts
@@ -51,7 +53,7 @@ BEGIN
             SELECT 1
             FROM pg_catalog.pg_index i
             JOIN pg_catalog.pg_class t ON i.indrelid = t.oid
-            JOIN pg_catalog.pg_namespace n ON i.relnamespace = n.oid
+            JOIN pg_catalog.pg_namespace n ON t.relnamespace = n.oid
             WHERE n.nspname = 'public'
               AND t.relname = 'parent_accounts'
               AND i.indisunique = TRUE
@@ -107,17 +109,7 @@ BEGIN
         RAISE EXCEPTION 'PREFLIGHT_FAILED: Index collision detected. One or more V3 indexes already exist.';
     END IF;
 
-    -- Step 1.6: Fail-closed check for new constraint collision
-    IF EXISTS (
-        SELECT 1 FROM pg_catalog.pg_constraint c 
-        JOIN pg_catalog.pg_class t ON c.conrelid = t.oid 
-        JOIN pg_catalog.pg_namespace n ON t.relnamespace = n.oid
-        WHERE n.nspname = 'public' AND t.relname = 'parent_accounts' AND c.conname = 'chk_parent_accounts_status_v3'
-    ) THEN
-        RAISE EXCEPTION 'PREFLIGHT_FAILED: Constraint chk_parent_accounts_status_v3 already exists.';
-    END IF;
-
-    -- Step 1.7: Exact structural verification of existing chk_parent_accounts_status constraint definition
+    -- Step 1.6: Exact structural verification of existing chk_parent_accounts_status constraint definition
     SELECT EXISTS (
         SELECT 1
         FROM pg_catalog.pg_constraint con
@@ -135,7 +127,7 @@ BEGIN
         RAISE EXCEPTION 'PREFLIGHT_FAILED: Existing constraint chk_parent_accounts_status does not match exact expected baseline definition.';
     END IF;
 
-    RAISE NOTICE 'PREFLIGHT SUCCESSFUL: Baseline criteria, composite unique key, and collision guards verified.';
+    RAISE NOTICE 'PREFLIGHT SUCCESSFUL: Baseline criteria, extension functions, composite unique key, and collision guards verified.';
 END $$;
 
 
@@ -147,15 +139,7 @@ END $$;
 CREATE UNIQUE INDEX idx_uq_parent_accounts_tenant_lower_email
 ON public.parent_accounts (tenant_id, LOWER(email));
 
--- 2.2 Replace status check constraint on parent_accounts to allow 4 statuses
-ALTER TABLE public.parent_accounts
-DROP CONSTRAINT chk_parent_accounts_status;
-
-ALTER TABLE public.parent_accounts
-ADD CONSTRAINT chk_parent_accounts_status_v3
-CHECK (status IN ('pending', 'inactive', 'active', 'suspended'));
-
--- 2.3 Table: parent_invitations
+-- 2.2 Table: parent_invitations
 CREATE TABLE public.parent_invitations (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
@@ -183,7 +167,7 @@ CREATE UNIQUE INDEX idx_parent_invitations_single_pending
 ON public.parent_invitations (tenant_id, parent_account_id)
 WHERE status = 'pending';
 
--- 2.4 Table: parent_continuation_tickets
+-- 2.3 Table: parent_continuation_tickets
 CREATE TABLE public.parent_continuation_tickets (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     tenant_id TEXT NOT NULL,
@@ -216,7 +200,7 @@ WHERE status = 'active';
 
 
 -- ----------------------------------------------------------------------------
--- STEP 3: ROW LEVEL SECURITY (RLS) HARDENING (ENABLE & FORCE)
+-- STEP 3: ROW LEVEL SECURITY (RLS) & PRIVILEGE HARDENING
 -- ----------------------------------------------------------------------------
 ALTER TABLE public.parent_invitations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.parent_invitations FORCE ROW LEVEL SECURITY;
@@ -224,7 +208,11 @@ ALTER TABLE public.parent_invitations FORCE ROW LEVEL SECURITY;
 ALTER TABLE public.parent_continuation_tickets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.parent_continuation_tickets FORCE ROW LEVEL SECURITY;
 
--- Explicitly block direct client access from anon/authenticated REST roles
+-- Explicitly revoke direct REST table access from PUBLIC, anon, and authenticated
+REVOKE ALL ON TABLE public.parent_invitations FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON TABLE public.parent_continuation_tickets FROM PUBLIC, anon, authenticated;
+
+-- Deny all policies for PUBLIC
 DROP POLICY IF EXISTS deny_all_parent_invitations ON public.parent_invitations;
 CREATE POLICY deny_all_parent_invitations ON public.parent_invitations
 FOR ALL TO PUBLIC USING (FALSE);
@@ -331,6 +319,10 @@ BEGIN
 
     IF v_parent_status = 'suspended' THEN
         RAISE EXCEPTION 'PARENT_ACCOUNT_SUSPENDED';
+    END IF;
+
+    IF v_parent_status NOT IN ('pending', 'active') THEN
+        RAISE EXCEPTION 'PARENT_ACCOUNT_INVALID_STATUS';
     END IF;
 
     -- Lock order 2: Lock & expire previous pending invitations for this parent
@@ -553,6 +545,10 @@ BEGIN
         RAISE EXCEPTION 'PARENT_ACCOUNT_SUSPENDED';
     END IF;
 
+    IF v_parent.status NOT IN ('pending', 'active') THEN
+        RAISE EXCEPTION 'PARENT_ACCOUNT_INVALID_STATUS';
+    END IF;
+
     -- Strict Auth UID binding check
     IF v_parent.auth_uid IS DISTINCT FROM p_auth_uid THEN
         RAISE EXCEPTION 'AUTH_UID_MISMATCH_WITH_EXISTING_BINDING';
@@ -695,6 +691,10 @@ BEGIN
 
     IF v_parent.status = 'suspended' THEN
         RAISE EXCEPTION 'PARENT_ACCOUNT_SUSPENDED';
+    END IF;
+
+    IF v_parent.status NOT IN ('pending', 'active') THEN
+        RAISE EXCEPTION 'PARENT_ACCOUNT_INVALID_STATUS';
     END IF;
 
     -- Strict Auth UID binding verification
@@ -880,7 +880,7 @@ $$;
 
 
 -- ----------------------------------------------------------------------------
--- RPC 6: recover_parent_session
+-- RPC 6: recover_parent_session (ACTIVE PARENTS ONLY)
 -- ----------------------------------------------------------------------------
 CREATE FUNCTION public.recover_parent_session(
     p_auth_uid UUID,
@@ -920,6 +920,10 @@ BEGIN
 
     IF v_parent.status = 'suspended' THEN
         RAISE EXCEPTION 'PARENT_ACCOUNT_SUSPENDED';
+    END IF;
+
+    IF v_parent.status <> 'active' THEN
+        RAISE EXCEPTION 'PARENT_ACCOUNT_NOT_ACTIVE';
     END IF;
 
     SELECT pg_catalog.count(*)::INT INTO v_count
