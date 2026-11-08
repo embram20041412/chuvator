@@ -32,6 +32,7 @@ import {
   recordV2FailedLogin,
   hashString
 } from '../_auth_v2.js';
+import { invokeRecoverParentSession } from '../../tenant/parents/_invitation_helper.js';
 
 export async function onRequestOptions(context) {
   const corsHeaders = getCorsHeaders(context.request, context.env);
@@ -239,6 +240,21 @@ export async function onRequestPost(context) {
       }
     });
     const accessibleTenants = Array.from(tenantSet);
+
+    // Verify active parent session via RPC recover_parent_session for service role check
+    const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
+    if (serviceRoleKey && accessibleTenants.length > 0) {
+      for (const tId of accessibleTenants) {
+        try {
+          await invokeRecoverParentSession(supabaseUrl, serviceRoleKey, {
+            authUid: authUserId,
+            tenantId: tId
+          });
+        } catch (recoverErr) {
+          console.warn(`recover_parent_session note for tenant ${tId}:`, recoverErr.message);
+        }
+      }
+    }
 
     // Minimize children summary for the session (including photo and coach if returned by RPC)
     const childrenSummary = linkedChildren.map(child => ({

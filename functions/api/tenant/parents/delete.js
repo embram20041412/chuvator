@@ -6,6 +6,7 @@
 
 import { getCorsHeaders } from '../../portal/_auth_v2.js';
 import { validateStaffSession } from '../_auth_staff.js';
+import { invokeRevokeParentInvitation } from './_invitation_helper.js';
 
 export async function onRequestOptions(context) {
   const corsHeaders = getCorsHeaders(context.request, context.env);
@@ -22,13 +23,14 @@ export async function onRequestDelete(context) {
       return new Response(JSON.stringify({ success: false, message: authResult.message }), { status: 401, headers: corsHeaders });
     }
 
-    const { role, tenantId: staffTenantId } = authResult.user;
+    const { role, tenantId: staffTenantId, uid: staffUid } = authResult.user;
     if (!['superadmin', 'owner', 'admin'].includes(role)) {
-      return new Response(JSON.stringify({ success: false, message: 'Akses ditolak. Hanya Owner/Admin yang dapat menghapus akun wali murid.' }), { status: 403, headers: corsHeaders });
+      return new Response(JSON.stringify({ success: false, message: 'Akses ditolak. Hanya Owner/Admin yang dapat menghapus/mencabut akun wali murid.' }), { status: 403, headers: corsHeaders });
     }
 
     const url = new URL(request.url);
     const parentId = url.searchParams.get('id');
+    const action = url.searchParams.get('action');
 
     if (!parentId) {
       return new Response(JSON.stringify({ success: false, message: 'Parent ID wajib disertakan.' }), { status: 400, headers: corsHeaders });
@@ -39,6 +41,27 @@ export async function onRequestDelete(context) {
 
     if (!supabaseUrl || !serviceRoleKey) {
       return new Response(JSON.stringify({ success: false, code: 'SUPABASE_CONFIG_MISSING', message: 'Konfigurasi server tidak lengkap.' }), { status: 500, headers: corsHeaders });
+    }
+
+    // Handle invitation revocation without deleting parent account or active student links
+    if (action === 'revoke') {
+      const reason = url.searchParams.get('reason') || 'Dicabut oleh pengelola';
+      const revokeRes = await invokeRevokeParentInvitation(supabaseUrl, serviceRoleKey, {
+        tenantId: staffTenantId,
+        actorUid: staffUid,
+        invitationIdOrToken: parentId,
+        reason
+      });
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          status: 'REVOKED',
+          message: 'Undangan berhasil dicabut tanpa menghapus akun wali murid.',
+          data: revokeRes
+        }),
+        { status: 200, headers: corsHeaders }
+      );
     }
 
     // 1. Verify parent exists and belongs to tenant (Tenant Isolation)

@@ -11,6 +11,10 @@ export async function onRequestOptions(context) {
   return new Response(null, { status: 204, headers: corsHeaders });
 }
 
+export async function onRequest(context) {
+  return handleInfoRequest(context);
+}
+
 export async function onRequestGet(context) {
   return handleInfoRequest(context);
 }
