@@ -1,9 +1,9 @@
 -- ============================================================================
--- CHUVATOR PARENT PORTAL V3.3 — RPC FIX PATCH FOR TENANT OWNER RBAC
+-- CHUVATOR PARENT PORTAL V3.3 — FULL RPC SCRIPT FOR CREATE_PARENT_INVITATION
 -- File: patch_invitation_rpc_owner_fix.sql
--- Description: Overrides public.create_parent_invitation to support Tenant Owner
---              authorization fallback when actor_uid is in public.tenants.owner_uid
---              instead of public.users_staff.
+-- Description: Complete PL/pgSQL function wrapper for create_parent_invitation with
+--              Tenant Owner RBAC fallback and Primary Key Index Optimization.
+--              Ready to copy-paste directly into Supabase SQL Editor.
 -- ============================================================================
 
 CREATE OR REPLACE FUNCTION public.create_parent_invitation(
@@ -68,16 +68,17 @@ BEGIN
     -- 1. Cek di tabel users_staff terlebih dahulu
     SELECT s.role INTO v_staff_role 
     FROM public.users_staff s
-    WHERE s.uid = p_actor_uid::pg_catalog.text 
-      AND s.tenant_id = p_tenant_id 
+    WHERE s.uid = p_actor_uid::text 
+      AND s.tenant_id = p_tenant_id::text 
       AND (s.status IS NULL OR s.status = 'active');
 
     -- 2. Fallback: Cek di tabel tenants jika user adalah Owner
+    -- Optimasi Indeks: Menggunakan p_tenant_id::uuid agar index PK t.id bekerja maksimal
     IF v_staff_role IS NULL THEN
         SELECT 'owner' INTO v_staff_role 
         FROM public.tenants t
-        WHERE t.id::pg_catalog.text = p_tenant_id 
-          AND t.owner_uid = p_actor_uid::pg_catalog.text;
+        WHERE t.id = p_tenant_id::uuid 
+          AND t.owner_uid = p_actor_uid::text;
     END IF;
 
     -- 3. Tolak jika tetap tidak ditemukan

@@ -297,16 +297,17 @@ BEGIN
     -- 1. Cek di tabel users_staff terlebih dahulu
     SELECT s.role INTO v_staff_role 
     FROM public.users_staff s
-    WHERE s.uid = p_actor_uid::pg_catalog.text 
-      AND s.tenant_id = p_tenant_id 
+    WHERE s.uid = p_actor_uid::text 
+      AND s.tenant_id = p_tenant_id::text 
       AND (s.status IS NULL OR s.status = 'active');
 
     -- 2. Fallback: Cek di tabel tenants jika user adalah Owner
+    -- Optimasi Indeks: Menggunakan p_tenant_id::uuid agar index PK t.id bekerja maksimal
     IF v_staff_role IS NULL THEN
         SELECT 'owner' INTO v_staff_role 
         FROM public.tenants t
-        WHERE t.id::pg_catalog.text = p_tenant_id 
-          AND t.owner_uid = p_actor_uid::pg_catalog.text;
+        WHERE t.id = p_tenant_id::uuid 
+          AND t.owner_uid = p_actor_uid::text;
     END IF;
 
     -- 3. Tolak jika tetap tidak ditemukan
