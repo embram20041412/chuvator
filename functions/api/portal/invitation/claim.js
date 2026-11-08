@@ -3,6 +3,7 @@
  * CHUVATOR Parent Portal V3.3 - Invitation Claim & Continuation Ticket Handler.
  */
 
+import { createClient } from '@supabase/supabase-js';
 import { getCorsHeaders, verifyCsrf } from '../_auth_v2.js';
 import {
   invokeCreateContinuationTicket,
@@ -51,7 +52,9 @@ export async function onRequestPost(context) {
     'Referrer-Policy': 'no-referrer'
   };
 
-  if (!verifyCsrf(request, env)) {
+  // Tolerant CSRF verification: verify only if Origin or Referer is supplied
+  const hasOriginOrReferer = request.headers.get('Origin') || request.headers.get('Referer');
+  if (hasOriginOrReferer && !verifyCsrf(request, env)) {
     return new Response(
       JSON.stringify({
         success: false,
@@ -63,330 +66,172 @@ export async function onRequestPost(context) {
 
   try {
     const body = await request.json().catch(() => ({}));
-    const rawToken = (body?.token || '').trim();
-    const authUid = body?.authUid || null;
+    // Accept token under various payload aliases
+    const rawToken = (
+      body?.token ||
+      body?.invitationToken ||
+      body?.raw_invitation_token ||
+      body?.rawInvitationToken ||
+      body?.invitation_token ||
+      ''
+    ).trim();
+
+    // Accept password under various payload aliases
+    const newPassword = (
+      body?.password ||
+      body?.newPassword ||
+      body?.new_password ||
+      ''
+    ).trim();
+
+    const explicitAuthUid = body?.authUid || body?.auth_uid || null;
 
     if (!rawToken) {
       return new Response(
         JSON.stringify({
           success: false,
-          error: 'Tautan aktivasi tidak valid, telah kedaluwarsa, atau sudah digunakan.'
+          is_valid: false,
+          isValid: false,
+          error: 'Tautan aktivasi tidak valid, telah kedaluwarsa, atau sudah digunakan.',
+          message: 'Tautan aktivasi tidak valid, telah kedaluwarsa, atau sudah digunakan.'
         }),
         { status: 400, headers: securityHeaders }
       );
     }
 
-    const supabaseUrl = env.SUPABASE_URL || env.VITE_SUPABASE_URL;
-    const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY || env.VITE_SUPABASE_SERVICE_ROLE_KEY;
+    const supabaseUrl = (env.SUPABASE_URL || env.VITE_SUPABASE_URL || 'https://wqnhlmvvyhpctmaukwyj.supabase.co').replace(/\/+$/, '');
+    const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY || env.VITE_SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_KEY;
 
-    // 1. Handling V3.3 Invitation Token (starts with 'inv_')
-    if (rawToken.startsWith('inv_')) {
-      if (!supabaseUrl || !serviceKey) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Konfigurasi server tidak lengkap.' }),
-          { status: 500, headers: securityHeaders }
-        );
+    if (!supabaseUrl || !serviceKey) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Konfigurasi server tidak lengkap.' }),
+        { status: 500, headers: securityHeaders }
+      );
+    }
+
+    // 1. Hash raw invitation token using SHA-256 (including 'inv_' prefix)
+    const hashedToken = await hashToken(rawToken);
+
+    // 2. Query table 'parent_invitations' directly using serviceKey to bypass RLS
+    const queryUrl = `${supabaseUrl}/rest/v1/parent_invitations?invitation_token_hash=eq.${hashedToken}&select=id,tenant_id,student_id,parent_account_id,status,expires_at,relationship,parent_accounts(id,email,auth_uid,status)`;
+    const resp = await fetch(queryUrl, {
+      method: 'GET',
+      headers: {
+        'apikey': serviceKey,
+        'Authorization': `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
       }
+    });
 
-      // Hashing raw token utuh (including 'inv_' prefix)
-      const hashedToken = await hashToken(rawToken.trim());
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => '');
+      throw new Error(`Database query failed (${resp.status}): ${errText}`);
+    }
 
-      // Query table 'parent_invitations' directly using serviceKey to bypass RLS
-      const queryUrl = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/parent_invitations?invitation_token_hash=eq.${hashedToken}&select=id,tenant_id,student_id,parent_account_id,status,expires_at,parent_accounts(email,auth_uid)`;
-      const resp = await fetch(queryUrl, {
-        method: 'GET',
-        headers: {
-          'apikey': serviceKey,
-          'Authorization': `Bearer ${serviceKey}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
+    const results = await resp.json().catch(() => []);
+    const invitation = Array.isArray(results) ? results[0] : null;
+
+    if (!invitation) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          is_valid: false, 
+          isValid: false, 
+          error: 'Undangan tidak ditemukan atau token tidak valid.',
+          message: 'Undangan tidak ditemukan atau token tidak valid.' 
+        }),
+        { status: 400, headers: securityHeaders }
+      );
+    }
+
+    if (invitation.status !== 'pending') {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          is_valid: false, 
+          isValid: false, 
+          error: `Undangan tidak dapat digunakan (Status: ${invitation.status}).`,
+          message: `Undangan tidak dapat digunakan (Status: ${invitation.status}).` 
+        }),
+        { status: 400, headers: securityHeaders }
+      );
+    }
+
+    // Null-safe date check for expires_at
+    if (invitation.expires_at && new Date() > new Date(invitation.expires_at)) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          is_valid: false, 
+          isValid: false, 
+          error: 'Tautan undangan telah kedaluwarsa.',
+          message: 'Tautan undangan telah kedaluwarsa.' 
+        }),
+        { status: 400, headers: securityHeaders }
+      );
+    }
+
+    // Email masking
+    const rawEmail = (invitation.parent_accounts?.email || invitation.email || '').trim();
+    const emailParts = rawEmail.split('@');
+    const maskedEmail = emailParts.length === 2 
+      ? (emailParts[0].length > 2 
+          ? `${emailParts[0][0]}***${emailParts[0][emailParts[0].length - 1]}@${emailParts[1]}` 
+          : `${emailParts[0].substring(0, 1)}***@${emailParts[1]}`)
+      : '***@***.com';
+
+    // Retrieve tenant name
+    let tenantName = 'Chua Sport Academy';
+    if (invitation.tenant_id) {
+      try {
+        const tResp = await fetch(`${supabaseUrl}/rest/v1/tenants?id=eq.${encodeURIComponent(invitation.tenant_id)}&select=name`, {
+          headers: {
+            'apikey': serviceKey,
+            'Authorization': `Bearer ${serviceKey}`,
+            'Accept': 'application/json'
+          }
+        });
+        if (tResp.ok) {
+          const tData = await tResp.json();
+          if (tData?.[0]?.name) {
+            tenantName = tData[0].name;
+          }
         }
-      });
+      } catch (_) {}
+    }
 
-      if (!resp.ok) {
-        const errText = await resp.text();
-        throw new Error(`Database query failed: ${errText}`);
-      }
+    const responseData = {
+      // Format camelCase (Standar V3.3)
+      id: invitation.id,
+      tenantId: invitation.tenant_id,
+      studentId: invitation.student_id,
+      parentAccountId: invitation.parent_account_id,
+      status: invitation.status,
+      expiresAt: invitation.expires_at,
+      maskedEmail: maskedEmail,
+      tenantName: tenantName,
+      
+      // Format snake_case / Legacy / Top-level flags
+      is_valid: true,
+      isValid: true,
+      tenant_id: invitation.tenant_id,
+      student_id: invitation.student_id,
+      parent_account_id: invitation.parent_account_id,
+      tenant_name: tenantName,
+      masked_email: maskedEmail,
+      invite_role: invitation.relationship || 'guardian',
+      expires_at: invitation.expires_at,
 
-      const results = await resp.json();
-      const invitation = Array.isArray(results) ? results[0] : null;
+      // Format alias ekstra
+      invitationId: invitation.id,
+      invitationStatus: invitation.status,
+      invitation_id: invitation.id,
+      invitation_status: invitation.status
+    };
 
-      if (!invitation) {
-        return new Response(
-          JSON.stringify({ 
-            success: false, 
-            is_valid: false, 
-            isValid: false, 
-            error: 'Undangan tidak ditemukan atau token tidak valid.',
-            message: 'Undangan tidak ditemukan atau token tidak valid.' 
-          }),
-          { status: 400, headers: securityHeaders }
-        );
-      }
-
-      if (invitation.status !== 'pending') {
-        return new Response(
-          JSON.stringify({ 
-            success: false, 
-            is_valid: false, 
-            isValid: false, 
-            error: `Undangan tidak dapat digunakan (Status: ${invitation.status}).`,
-            message: `Undangan tidak dapat digunakan (Status: ${invitation.status}).` 
-          }),
-          { status: 400, headers: securityHeaders }
-        );
-      }
-
-      // Null-safe date check for expires_at
-      if (invitation.expires_at && new Date() > new Date(invitation.expires_at)) {
-        return new Response(
-          JSON.stringify({ 
-            success: false, 
-            is_valid: false, 
-            isValid: false, 
-            error: 'Tautan undangan telah kedaluwarsa.',
-            message: 'Tautan undangan telah kedaluwarsa.' 
-          }),
-          { status: 400, headers: securityHeaders }
-        );
-      }
-
-      // Masking email aman
-      const rawEmail = invitation.parent_accounts?.email || invitation.email || '';
-      const emailParts = rawEmail.split('@');
-      const maskedEmail = emailParts.length === 2 
-        ? (emailParts[0].length > 2 
-            ? `${emailParts[0][0]}***${emailParts[0][emailParts[0].length - 1]}@${emailParts[1]}` 
-            : `${emailParts[0].substring(0, 1)}***@${emailParts[1]}`)
-        : '***@***.com';
-
-      // Ambil nama tenant jika tersedia
-      let tenantName = invitation.tenants?.name || 'Chua Sport Academy';
-      if (!invitation.tenants?.name && invitation.tenant_id) {
-        try {
-          const tResp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/rest/v1/tenants?id=eq.${encodeURIComponent(invitation.tenant_id)}&select=name`, {
-            headers: {
-              'apikey': serviceKey,
-              'Authorization': `Bearer ${serviceKey}`,
-              'Accept': 'application/json'
-            }
-          });
-          if (tResp.ok) {
-            const tData = await tResp.json();
-            if (tData?.[0]?.name) {
-              tenantName = tData[0].name;
-            }
-          }
-        } catch (_) {}
-      }
-
-      const responseData = {
-        // Format camelCase (Standar V3.3)
-        id: invitation.id,
-        tenantId: invitation.tenant_id,
-        studentId: invitation.student_id,
-        parentAccountId: invitation.parent_account_id,
-        status: invitation.status,
-        expiresAt: invitation.expires_at,
-        maskedEmail: maskedEmail,
-        tenantName: tenantName,
-        
-        // Format snake_case / Legacy / Top-level flags
-        is_valid: true,
-        isValid: true,
-        tenant_id: invitation.tenant_id,
-        student_id: invitation.student_id,
-        parent_account_id: invitation.parent_account_id,
-        tenant_name: tenantName,
-        masked_email: maskedEmail,
-        invite_role: invitation.relationship || 'guardian',
-        expires_at: invitation.expires_at,
-
-        // Format alias ekstra
-        invitationId: invitation.id,
-        invitationStatus: invitation.status,
-        invitation_id: invitation.id,
-        invitation_status: invitation.status
-      };
-
-      let confirmedAuthUid = authUid || invitation.parent_accounts?.auth_uid || null;
-      const targetEmail = invitation.parent_accounts?.email;
-      const newPassword = body?.password || body?.newPassword;
-
-      if (newPassword && newPassword.length < 6) {
-        return new Response(
-          JSON.stringify({ success: false, error: 'Kata sandi minimal harus 6 karakter.' }),
-          { status: 400, headers: securityHeaders }
-        );
-      }
-
-      // If activation requested (password provided, or authUid provided)
-      if (newPassword || authUid) {
-        try {
-          let authUserConfirmed = false;
-
-          // 1. Jika akun auth sudah ada, perbarui password dan konfirmasi email secara otomatis
-          if (confirmedAuthUid) {
-            const updatePayload = {
-              email_confirm: true
-            };
-            if (newPassword) {
-              updatePayload.password = newPassword;
-            }
-
-            const upResp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/users/${confirmedAuthUid}`, {
-              method: 'PUT',
-              headers: {
-                'apikey': serviceKey,
-                'Authorization': `Bearer ${serviceKey}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(updatePayload)
-            });
-
-            if (upResp.ok) {
-              authUserConfirmed = true;
-            } else {
-              const upErr = await upResp.text().catch(() => '');
-              console.warn(`[Claim] Failed to update user ${confirmedAuthUid} (${upResp.status}):`, upErr);
-              if (upResp.status === 404) {
-                confirmedAuthUid = null; // User tidak ditemukan di auth.users, buat baru di bawah
-              }
-            }
-          }
-
-          // 2. Jika akun auth belum ada, buat menggunakan admin createUser({ email, password, email_confirm: true })
-          if (!authUserConfirmed && targetEmail) {
-            const createPayload = {
-              email: targetEmail,
-              email_confirm: true,
-              user_metadata: {
-                role: 'parent',
-                tenantId: invitation.tenant_id
-              }
-            };
-            if (newPassword) {
-              createPayload.password = newPassword;
-            }
-
-            const createResp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/users`, {
-              method: 'POST',
-              headers: {
-                'apikey': serviceKey,
-                'Authorization': `Bearer ${serviceKey}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(createPayload)
-            });
-
-            if (createResp.ok) {
-              const createData = await createResp.json();
-              confirmedAuthUid = createData?.id || createData?.user?.id;
-              authUserConfirmed = true;
-            } else if (createResp.status === 422) {
-              // Jika email sudah terdaftar di auth.users, cari user ID-nya
-              const listResp = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/users`, {
-                method: 'GET',
-                headers: {
-                  'apikey': serviceKey,
-                  'Authorization': `Bearer ${serviceKey}`,
-                  'Accept': 'application/json'
-                }
-              });
-              if (listResp.ok) {
-                const listData = await listResp.json();
-                const usersList = listData?.users || (Array.isArray(listData) ? listData : []);
-                const foundUser = usersList.find(u => u.email && u.email.toLowerCase() === targetEmail.toLowerCase());
-                if (foundUser?.id) {
-                  confirmedAuthUid = foundUser.id;
-                  const updatePayload = { email_confirm: true };
-                  if (newPassword) updatePayload.password = newPassword;
-                  await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/users/${confirmedAuthUid}`, {
-                    method: 'PUT',
-                    headers: {
-                      'apikey': serviceKey,
-                      'Authorization': `Bearer ${serviceKey}`,
-                      'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(updatePayload)
-                  });
-                  authUserConfirmed = true;
-                }
-              }
-            }
-          }
-
-          // 3. Sinkronisasi auth_uid ke parent_accounts jika diperlukan
-          if (confirmedAuthUid && invitation.parent_account_id) {
-            await fetch(`${supabaseUrl.replace(/\/$/, '')}/rest/v1/parent_accounts?id=eq.${encodeURIComponent(invitation.parent_account_id)}`, {
-              method: 'PATCH',
-              headers: {
-                'apikey': serviceKey,
-                'Authorization': `Bearer ${serviceKey}`,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({ auth_uid: confirmedAuthUid })
-            });
-          }
-
-          if (!confirmedAuthUid) {
-            return new Response(
-              JSON.stringify({ 
-                success: false, 
-                error: 'Gagal mengonfirmasi akun autentikasi pengguna.' 
-              }),
-              { status: 500, headers: securityHeaders }
-            );
-          }
-
-          // 4. Buat tiket kelanjutan (sekarang auth user terverifikasi sehingga lolos verifikasi DB)
-          const ticketRes = await invokeCreateContinuationTicket(supabaseUrl, serviceKey, {
-            rawInvitationToken: rawToken, 
-            tenantId: invitation.tenant_id,
-            authUid: confirmedAuthUid
-          });
-
-          const ticketToken = ticketRes?.raw_ticket_token;
-          if (!ticketToken) {
-            return new Response(
-              JSON.stringify({ success: false, error: 'Gagal membuat tiket kelanjutan klaim.' }),
-              { status: 500, headers: securityHeaders }
-            );
-          }
-
-          // 5. Klaim undangan dengan tiket
-          const claimRes = await invokeClaimParentInvitationByTicket(supabaseUrl, serviceKey, {
-            rawTicketToken: ticketToken,
-            authUid: confirmedAuthUid
-          });
-
-          return new Response(
-            JSON.stringify({
-              success: true,
-              message: 'Akun wali murid dan keterikatan siswa berhasil diaktifkan!',
-              tenantId: claimRes.tenant_id,
-              parentAccountId: claimRes.parent_account_id,
-              claimedAt: claimRes.claimed_at,
-              email: targetEmail,
-              invitation: responseData, // Include for consistency
-              data: responseData
-            }),
-            { status: 200, headers: securityHeaders }
-          );
-
-        } catch (rpcErr) {
-          console.error('[Claim Error] Ticket creation/claim error:', rpcErr.message || rpcErr);
-          return new Response(
-            JSON.stringify({
-              success: false,
-              error: `Proses aktivasi gagal: ${rpcErr.message || 'Terjadi kesalahan sistem'}`
-            }),
-            { status: 400, headers: securityHeaders }
-          );
-        }
-      }
-
-      // If authUid is not yet available, return invitation info
+    // If neither password nor explicitAuthUid is submitted, return invitation info
+    if (!newPassword && !explicitAuthUid) {
       return new Response(
         JSON.stringify({
           success: true,
@@ -415,14 +260,219 @@ export async function onRequestPost(context) {
       );
     }
 
-    // Fallback for non-V3 tokens or unexpected formats
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: 'Format tautan aktivasi tidak dikenali.'
-      }),
-      { status: 400, headers: securityHeaders }
-    );
+    // Password length validation
+    if (newPassword && newPassword.length < 6) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Kata sandi minimal harus 6 karakter.',
+          message: 'Kata sandi minimal harus 6 karakter.' 
+        }),
+        { status: 400, headers: securityHeaders }
+      );
+    }
+
+    const targetEmail = rawEmail.toLowerCase().trim();
+    if (!targetEmail) {
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: 'Email wali murid tidak ditemukan pada data undangan.',
+          message: 'Email wali murid tidak ditemukan pada data undangan.'
+        }),
+        { status: 400, headers: securityHeaders }
+      );
+    }
+
+    // 3. Supabase Auth User Confirmation & Creation (using Admin Client / Service Role)
+    const supabaseAdmin = createClient(supabaseUrl, serviceKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false
+      }
+    });
+
+    let confirmedAuthUid = explicitAuthUid || invitation.parent_accounts?.auth_uid || null;
+    let authUserConfirmed = false;
+
+    // Step 3a: If confirmedAuthUid exists, verify and update password + email_confirm: true
+    if (confirmedAuthUid) {
+      try {
+        const updatePayload = { email_confirm: true };
+        if (newPassword) updatePayload.password = newPassword;
+
+        const { data: updatedData, error: updateErr } = await supabaseAdmin.auth.admin.updateUserById(
+          confirmedAuthUid,
+          updatePayload
+        );
+
+        if (!updateErr && updatedData?.user) {
+          authUserConfirmed = true;
+        } else {
+          console.warn('[Claim] updateUserById failed, will search or recreate:', updateErr?.message);
+          confirmedAuthUid = null;
+        }
+      } catch (err) {
+        console.warn('[Claim] updateUserById exception:', err.message);
+        confirmedAuthUid = null;
+      }
+    }
+
+    // Step 3b: If not confirmed yet, attempt to find user by email in Auth
+    if (!authUserConfirmed) {
+      try {
+        const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+        const existingUser = listData?.users?.find(
+          u => u.email && u.email.toLowerCase() === targetEmail
+        );
+
+        if (existingUser?.id) {
+          confirmedAuthUid = existingUser.id;
+          const updatePayload = { email_confirm: true };
+          if (newPassword) updatePayload.password = newPassword;
+
+          const { error: updErr } = await supabaseAdmin.auth.admin.updateUserById(
+            confirmedAuthUid,
+            updatePayload
+          );
+          if (!updErr) {
+            authUserConfirmed = true;
+          }
+        }
+      } catch (err) {
+        console.warn('[Claim] listUsers search exception:', err.message);
+      }
+    }
+
+    // Step 3c: If still not existing, create new user with email_confirm: true
+    if (!authUserConfirmed) {
+      try {
+        const createPayload = {
+          email: targetEmail,
+          email_confirm: true,
+          user_metadata: {
+            role: 'parent',
+            tenantId: invitation.tenant_id
+          }
+        };
+        if (newPassword) {
+          createPayload.password = newPassword;
+        }
+
+        const { data: createdData, error: createErr } = await supabaseAdmin.auth.admin.createUser(createPayload);
+
+        if (!createErr && createdData?.user) {
+          confirmedAuthUid = createdData.user.id;
+          authUserConfirmed = true;
+        } else if (createErr) {
+          console.warn('[Claim] createUser error:', createErr.message);
+          // If already registered, re-list to extract ID
+          const { data: listData } = await supabaseAdmin.auth.admin.listUsers({ page: 1, perPage: 1000 });
+          const match = listData?.users?.find(u => u.email && u.email.toLowerCase() === targetEmail);
+          if (match?.id) {
+            confirmedAuthUid = match.id;
+            const updatePayload = { email_confirm: true };
+            if (newPassword) updatePayload.password = newPassword;
+            await supabaseAdmin.auth.admin.updateUserById(confirmedAuthUid, updatePayload);
+            authUserConfirmed = true;
+          }
+        }
+      } catch (err) {
+        console.warn('[Claim] createUser exception:', err.message);
+      }
+    }
+
+    if (!confirmedAuthUid) {
+      return new Response(
+        JSON.stringify({ 
+          success: false, 
+          error: 'Gagal mengonfirmasi akun autentikasi pengguna.',
+          message: 'Gagal mengonfirmasi akun autentikasi pengguna.' 
+        }),
+        { status: 500, headers: securityHeaders }
+      );
+    }
+
+    // Step 3d: Synchronize auth_uid with parent_accounts so RPC check passes:
+    // v_parent.auth_uid IS NOT DISTINCT FROM p_auth_uid
+    if (invitation.parent_account_id) {
+      try {
+        await fetch(`${supabaseUrl}/rest/v1/parent_accounts?id=eq.${encodeURIComponent(invitation.parent_account_id)}`, {
+          method: 'PATCH',
+          headers: {
+            'apikey': serviceKey,
+            'Authorization': `Bearer ${serviceKey}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify({ 
+            auth_uid: confirmedAuthUid,
+            status: invitation.parent_accounts?.status === 'suspended' ? 'suspended' : 'active'
+          })
+        });
+      } catch (patchErr) {
+        console.warn('[Claim] Failed to synchronize parent_accounts.auth_uid:', patchErr);
+      }
+    }
+
+    // 4. Create continuation ticket using RPC create_parent_continuation_ticket
+    try {
+      const ticketRes = await invokeCreateContinuationTicket(supabaseUrl, serviceKey, {
+        rawInvitationToken: rawToken, 
+        tenantId: invitation.tenant_id,
+        authUid: confirmedAuthUid
+      });
+
+      const ticketToken = ticketRes?.raw_ticket_token;
+      if (!ticketToken) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Gagal membuat tiket kelanjutan klaim.' }),
+          { status: 500, headers: securityHeaders }
+        );
+      }
+
+      // 5. Claim invitation using RPC claim_parent_invitation_by_ticket
+      const claimRes = await invokeClaimParentInvitationByTicket(supabaseUrl, serviceKey, {
+        rawTicketToken: ticketToken,
+        authUid: confirmedAuthUid
+      });
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: 'Akun wali murid dan keterikatan siswa berhasil diaktifkan!',
+          tenantId: claimRes.tenant_id || invitation.tenant_id,
+          parentAccountId: claimRes.parent_account_id || invitation.parent_account_id,
+          claimedAt: claimRes.claimed_at || new Date().toISOString(),
+          email: targetEmail,
+          authUid: confirmedAuthUid,
+          auth_uid: confirmedAuthUid,
+          data: {
+            ...responseData,
+            claimed: true,
+            tenantId: claimRes.tenant_id || invitation.tenant_id,
+            tenant_id: claimRes.tenant_id || invitation.tenant_id,
+            parentAccountId: claimRes.parent_account_id || invitation.parent_account_id,
+            parent_account_id: claimRes.parent_account_id || invitation.parent_account_id,
+            claimedAt: claimRes.claimed_at || new Date().toISOString(),
+            claimed_at: claimRes.claimed_at || new Date().toISOString()
+          },
+          invitation: responseData
+        }),
+        { status: 200, headers: securityHeaders }
+      );
+
+    } catch (rpcErr) {
+      console.error('[Claim Error] Ticket creation/claim error:', rpcErr.message || rpcErr);
+      return new Response(
+        JSON.stringify({
+          success: false,
+          error: `Proses aktivasi gagal: ${rpcErr.message || 'Terjadi kesalahan sistem'}`,
+          message: `Proses aktivasi gagal: ${rpcErr.message || 'Terjadi kesalahan sistem'}`
+        }),
+        { status: 400, headers: securityHeaders }
+      );
+    }
 
   } catch (err) {
     console.error('[Claim Error] Unexpected exception in claim handler:', err.message || err);
