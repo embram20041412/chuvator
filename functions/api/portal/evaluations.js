@@ -340,11 +340,11 @@ export async function onRequest(context) {
       className: matchedChild.className || ''
     };
 
-    // Coba ambil riwayat dari tabel growth_tracker atau student_measurements menggunakan Service Role Key
-    const growthTables = ['growth_tracker', 'student_measurements'];
+    // Coba ambil riwayat dari tabel growth_tracker, student_measurements, atau measurements menggunakan Service Role Key
+    const growthTables = ['growth_tracker', 'student_measurements', 'measurements'];
     for (const gTable of growthTables) {
       try {
-        const growthTableQuery = `${supabaseUrl}/rest/v1/${gTable}?student_id=eq.${encodeURIComponent(studentId)}&tenant_id=eq.${encodeURIComponent(childTenantId)}&order=date.desc`;
+        const growthTableQuery = `${supabaseUrl}/rest/v1/${gTable}?student_id=eq.${encodeURIComponent(studentId)}&order=created_at.desc`;
         const growthResp = await fetch(growthTableQuery, {
           method: 'GET',
           headers: {
@@ -380,7 +380,7 @@ export async function onRequest(context) {
           }
         }
       } catch {
-        // Non-blocking: coba fallback ke kolom JSONB
+        // Non-blocking: coba fallback ke tabel berikutnya atau kolom JSONB
       }
     }
 

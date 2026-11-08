@@ -160,7 +160,9 @@ export async function onRequest(context) {
         student: studentData,
         tenant: rpcTenant,
         evaluations: Array.isArray(rpcData?.evaluations) ? rpcData.evaluations : [],
-        attendance: Array.isArray(rpcData?.attendance) ? rpcData.attendance : []
+        attendance: Array.isArray(rpcData?.attendance) ? rpcData.attendance : [],
+        growth_records: Array.isArray(rpcData?.growth_records) ? rpcData.growth_records : (Array.isArray(rpcData?.growthRecords) ? rpcData.growthRecords : []),
+        growthRecords: Array.isArray(rpcData?.growthRecords) ? rpcData.growthRecords : (Array.isArray(rpcData?.growth_records) ? rpcData.growth_records : [])
       }),
       { status: 200, headers: corsHeaders }
     );
