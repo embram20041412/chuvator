@@ -53,9 +53,9 @@ async function handleInfoRequest(context) {
     }
 
     const supabaseUrl = env.SUPABASE_URL;
-    const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
+    const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY || env.VITE_SUPABASE_SERVICE_ROLE_KEY;
 
-    if (!supabaseUrl || !serviceRoleKey) {
+    if (!supabaseUrl || !serviceKey) {
       return new Response(
         JSON.stringify({ success: false, message: 'Konfigurasi server tidak lengkap.' }),
         { status: 500, headers: corsHeaders }
@@ -64,13 +64,14 @@ async function handleInfoRequest(context) {
 
     const hashedToken = await hashToken(rawToken.trim());
 
-    // Query table directly as requested
+    // Query table directly as requested using serviceKey to bypass RLS
     const queryUrl = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/parent_invitations?invitation_token_hash=eq.${hashedToken}&select=id,tenant_id,parent_account_id,status,expires_at,parent_accounts(email)`;
     const resp = await fetch(queryUrl, {
       method: 'GET',
       headers: {
-        'apikey': serviceRoleKey,
-        'Authorization': `Bearer ${serviceRoleKey}`,
+        'apikey': serviceKey,
+        'Authorization': `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json',
         'Accept': 'application/json'
       }
     });

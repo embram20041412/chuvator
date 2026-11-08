@@ -80,11 +80,11 @@ export async function onRequestPost(context) {
     }
 
     const supabaseUrl = env.SUPABASE_URL || env.VITE_SUPABASE_URL;
-    const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
+    const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY || env.VITE_SUPABASE_SERVICE_ROLE_KEY;
 
     // 1. Handling V3.3 Invitation Token (starts with 'inv_')
     if (rawToken.startsWith('inv_')) {
-      if (!supabaseUrl || !serviceRoleKey) {
+      if (!supabaseUrl || !serviceKey) {
         return new Response(
           JSON.stringify({ success: false, message: 'Konfigurasi server tidak lengkap.' }),
           { status: 500, headers: securityHeaders }
@@ -93,13 +93,14 @@ export async function onRequestPost(context) {
 
       const hashedToken = await hashToken(rawToken.trim());
 
-      // Query table directly as requested
+      // Query table directly as requested using serviceKey to bypass RLS
       const queryUrl = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/parent_invitations?invitation_token_hash=eq.${hashedToken}&select=id,tenant_id,parent_account_id,status,expires_at,parent_accounts(email)`;
       const resp = await fetch(queryUrl, {
         method: 'GET',
         headers: {
-          'apikey': serviceRoleKey,
-          'Authorization': `Bearer ${serviceRoleKey}`,
+          'apikey': serviceKey,
+          'Authorization': `Bearer ${serviceKey}`,
+          'Content-Type': 'application/json',
           'Accept': 'application/json'
         }
       });
@@ -161,7 +162,7 @@ export async function onRequestPost(context) {
       // If authUid is present, execute continuation ticket creation and ticket claim
       if (authUid) {
         try {
-          const ticketRes = await invokeCreateContinuationTicket(supabaseUrl, serviceRoleKey, {
+          const ticketRes = await invokeCreateContinuationTicket(supabaseUrl, serviceKey, {
             rawInvitationToken: rawToken, // Still pass raw token to RPC as it hashes internally
             tenantId: info.tenant_id,
             authUid: authUid
@@ -175,7 +176,7 @@ export async function onRequestPost(context) {
             );
           }
 
-          const claimRes = await invokeClaimParentInvitationByTicket(supabaseUrl, serviceRoleKey, {
+          const claimRes = await invokeClaimParentInvitationByTicket(supabaseUrl, serviceKey, {
             rawTicketToken: ticketToken,
             authUid: authUid
           });
