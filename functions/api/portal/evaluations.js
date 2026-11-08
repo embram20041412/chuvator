@@ -447,8 +447,16 @@ export async function onRequest(context) {
 
       if (Array.isArray(rawGrowthHistory) && rawGrowthHistory.length > 0) {
         rawGrowthHistory.forEach((g, idx) => {
-          const h = Number(g.height !== undefined && g.height !== null ? g.height : 0);
-          const w = Number(g.weight !== undefined && g.weight !== null ? g.weight : 0);
+          const h = Number(
+            g.height_cm !== undefined && g.height_cm !== null
+              ? g.height_cm
+              : (g.height !== undefined && g.height !== null ? g.height : 0)
+          );
+          const w = Number(
+            g.weight_kg !== undefined && g.weight_kg !== null
+              ? g.weight_kg
+              : (g.weight !== undefined && g.weight !== null ? g.weight : 0)
+          );
           let bmi = g.bmi !== undefined && g.bmi !== null ? Number(g.bmi) : null;
           if ((bmi === null || isNaN(bmi) || bmi <= 0) && h > 0 && w > 0) {
             const hM = h / 100;
@@ -459,6 +467,8 @@ export async function onRequest(context) {
           growthRecords.push({
             id: g.id || `growth-${idx}`,
             date: g.date || (g.recordedAt ? String(g.recordedAt).substring(0, 10) : null),
+            height_cm: h > 0 ? h : null,
+            weight_kg: w > 0 ? w : null,
             height: h > 0 ? h : null,
             weight: w > 0 ? w : null,
             bmi,
