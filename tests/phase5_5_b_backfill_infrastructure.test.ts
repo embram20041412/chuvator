@@ -209,7 +209,7 @@ test('CHUVATOR — FASE 5.5-B: Hardened Backfill Infrastructure V2.2.4 (Security
     assert.match(schemaSql, /event_type = 'BACKFILL_APPLIED'/);
   });
 
-  await t.test('17. Runtime Integration: Active Execution Lock Rejection', async () => {
+  await t.test('17. Runtime Integration: Active Execution Guard Validation', async () => {
     const req = new Request('http://localhost:3000/api/admin/backfill_kk_hmac', {
       method: 'POST',
       headers: {
@@ -234,9 +234,9 @@ test('CHUVATOR — FASE 5.5-B: Hardened Backfill Infrastructure V2.2.4 (Security
       }
     });
 
-    assert.strictEqual(res.status, 403);
+    assert.strictEqual(res.status, 400);
     const body: any = await res.json();
-    assert.ok(body.code === 'BACKFILL_EXECUTION_DISABLED_PHASE_5_5_B');
+    assert.ok(body.code === 'DRY_RUN_ONLY_MODE');
   });
 
   await t.test('18. Dry-Run Purity: Zero Database Mutation', async () => {

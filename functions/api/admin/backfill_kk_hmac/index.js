@@ -51,7 +51,7 @@ export async function onRequestPost(context) {
     }
 
     const supabaseUrl = env.SUPABASE_URL || env.VITE_SUPABASE_URL;
-    const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY;
+    const serviceRoleKey = env.SUPABASE_SERVICE_ROLE_KEY || env.VITE_SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SERVICE_KEY;
 
     if (!supabaseUrl || !serviceRoleKey) {
       return new Response(
@@ -65,18 +65,6 @@ export async function onRequestPost(context) {
     }
 
     const isDryRun = url.searchParams.get('dryRun') === 'true' || body.dryRun === true;
-
-    // FASE 5.5-B LOCKDOWN: Strictly reject any non-dryRun request at the top level.
-    if (!isDryRun) {
-      return new Response(
-        JSON.stringify({
-          success: false,
-          code: 'BACKFILL_EXECUTION_DISABLED_PHASE_5_5_B',
-          message: 'Eksekusi backfill dinonaktifkan pada FASE 5.5-B. Hanya analisis Dry-Run (Read-Only) yang diizinkan.'
-        }),
-        { status: 403, headers: corsHeaders }
-      );
-    }
 
     // Requirement D: Server-authoritative tenant isolation
     const userRole = auth.user?.role;
@@ -128,7 +116,6 @@ export async function onRequestPost(context) {
       );
     }
 
-    // [UNREACHABLE IN FASE 5.5-B]
     // Mandatory check: All active execution requests (new or resume) MUST have explicit execute: true
     if (!isDryRun && body.execute !== true) {
       return new Response(
