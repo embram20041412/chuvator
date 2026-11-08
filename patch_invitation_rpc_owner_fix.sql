@@ -115,16 +115,16 @@ BEGIN
     -- Lock order 2: Lock & expire previous pending invitations for this parent
     UPDATE public.parent_invitations
     SET status = 'expired'
-    WHERE tenant_id = p_tenant_id
-      AND parent_account_id = v_parent_id
-      AND status = 'pending';
+    WHERE parent_invitations.tenant_id = p_tenant_id
+      AND parent_invitations.parent_account_id = v_parent_id
+      AND parent_invitations.status = 'pending';
 
     -- Lock order 3: Invalidate active continuation tickets linked to expired invitations
     UPDATE public.parent_continuation_tickets
     SET status = 'invalidated'
-    WHERE tenant_id = p_tenant_id
-      AND parent_account_id = v_parent_id
-      AND status = 'active';
+    WHERE parent_continuation_tickets.tenant_id = p_tenant_id
+      AND parent_continuation_tickets.parent_account_id = v_parent_id
+      AND parent_continuation_tickets.status = 'active';
 
     -- Generate secure invitation token
     v_raw_token := 'inv_' || pg_catalog.encode(extensions.gen_random_bytes(32), 'hex');
@@ -188,4 +188,4 @@ END;
 $$;
 
 REVOKE ALL ON FUNCTION public.create_parent_invitation(TEXT, UUID, TEXT, UUID, TEXT, INT) FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.create_parent_invitation(TEXT, UUID, TEXT, UUID, TEXT, INT) TO service_role;
+GRANT EXECUTE ON FUNCTION public.create_parent_invitation(TEXT, UUID, TEXT, UUID, TEXT, INT) TO service_role, authenticated;
