@@ -23,21 +23,29 @@ export async function onRequestPost(context) {
   return handleInfoRequest(context);
 }
 
+async function hashToken(token) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(token);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
 async function handleInfoRequest(context) {
   const { request, env = {} } = context;
   const corsHeaders = getCorsHeaders(request, env);
 
   try {
-    let token = '';
+    let rawToken = '';
     if (request.method === 'GET') {
       const url = new URL(request.url);
-      token = url.searchParams.get('token') || '';
+      rawToken = url.searchParams.get('token') || '';
     } else {
       const body = await request.json().catch(() => ({}));
-      token = body.token || '';
+      rawToken = body.token || '';
     }
 
-    if (!token || !token.trim()) {
+    if (!rawToken || !rawToken.trim()) {
       return new Response(
         JSON.stringify({ success: false, message: 'Token undangan wajib disertakan.' }),
         { status: 400, headers: corsHeaders }
@@ -54,9 +62,28 @@ async function handleInfoRequest(context) {
       );
     }
 
-    const info = await invokeGetParentInvitationInfo(supabaseUrl, serviceRoleKey, token.trim());
+    const hashedToken = await hashToken(rawToken.trim());
 
-    if (!info || !info.invitation_id) {
+    // Query table directly as requested
+    const queryUrl = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/parent_invitations?invitation_token_hash=eq.${hashedToken}&select=id,tenant_id,parent_account_id,status,expires_at,parent_accounts(email)`;
+    const resp = await fetch(queryUrl, {
+      method: 'GET',
+      headers: {
+        'apikey': serviceRoleKey,
+        'Authorization': `Bearer ${serviceRoleKey}`,
+        'Accept': 'application/json'
+      }
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`Database query failed: ${errText}`);
+    }
+
+    const results = await resp.json();
+    const inv = Array.isArray(results) ? results[0] : null;
+
+    if (!inv || !inv.id) {
       return new Response(
         JSON.stringify({
           success: false,
@@ -66,18 +93,33 @@ async function handleInfoRequest(context) {
       );
     }
 
+    // Manual Email Masking in JS
+    const rawEmail = inv.parent_accounts?.email || '';
+    let maskedEmail = '';
+    if (rawEmail.includes('@')) {
+      const [name, domain] = rawEmail.split('@');
+      if (name.length > 2) {
+        maskedEmail = `${name[0]}***${name[name.length - 1]}@${domain}`;
+      } else {
+        maskedEmail = `${name[0]}***@${domain}`;
+      }
+    }
+
+    const invitationData = {
+      invitationId: inv.id,
+      tenantId: inv.tenant_id,
+      parentAccountId: inv.parent_account_id,
+      maskedEmail: maskedEmail,
+      invitationStatus: inv.status,
+      expiresAt: inv.expires_at,
+      isValid: inv.status === 'pending' && new Date(inv.expires_at) > new Date()
+    };
+
     return new Response(
       JSON.stringify({
         success: true,
-        invitation: {
-          invitationId: info.invitation_id,
-          tenantId: info.tenant_id,
-          parentAccountId: info.parent_account_id,
-          maskedEmail: info.masked_email,
-          invitationStatus: info.invitation_status,
-          expiresAt: info.expires_at,
-          isValid: info.is_valid
-        }
+        invitation: invitationData,
+        data: invitationData // Structure requested in prompt
       }),
       { status: 200, headers: corsHeaders }
     );

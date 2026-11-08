@@ -5,8 +5,6 @@
 
 import { getCorsHeaders, verifyCsrf } from '../_auth_v2.js';
 import {
-  validateSupabaseActionLink,
-  invokeGetParentInvitationInfo,
   invokeCreateContinuationTicket,
   invokeClaimParentInvitationByTicket
 } from '../../tenant/parents/_invitation_helper.js';
@@ -33,6 +31,14 @@ export async function onRequestGet(context) {
     }),
     { status: 405, headers: corsHeaders }
   );
+}
+
+async function hashToken(token) {
+  const encoder = new TextEncoder();
+  const data = encoder.encode(token);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 }
 
 export async function onRequestPost(context) {
@@ -85,25 +91,78 @@ export async function onRequestPost(context) {
         );
       }
 
-      // Query invitation info
-      const info = await invokeGetParentInvitationInfo(supabaseUrl, serviceRoleKey, rawToken);
+      const hashedToken = await hashToken(rawToken.trim());
 
-      if (!info || !info.is_valid) {
+      // Query table directly as requested
+      const queryUrl = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/parent_invitations?invitation_token_hash=eq.${hashedToken}&select=id,tenant_id,parent_account_id,status,expires_at,parent_accounts(email)`;
+      const resp = await fetch(queryUrl, {
+        method: 'GET',
+        headers: {
+          'apikey': serviceRoleKey,
+          'Authorization': `Bearer ${serviceRoleKey}`,
+          'Accept': 'application/json'
+        }
+      });
+
+      if (!resp.ok) {
+        const errText = await resp.text();
+        throw new Error(`Database query failed: ${errText}`);
+      }
+
+      const results = await resp.json();
+      const invRecord = Array.isArray(results) ? results[0] : null;
+
+      if (!invRecord || !invRecord.id) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            code: 'INVITATION_NOT_FOUND',
+            message: 'Tautan undangan tidak valid atau tidak ditemukan.'
+          }),
+          { status: 404, headers: securityHeaders }
+        );
+      }
+
+      const isExpired = new Date(invRecord.expires_at) <= new Date();
+      const isValid = invRecord.status === 'pending' && !isExpired;
+
+      if (!isValid) {
         return new Response(
           JSON.stringify({
             success: false,
             code: 'INVITATION_INVALID_OR_EXPIRED',
-            message: 'Tautan undangan tidak valid, telah kedaluwarsa, atau sudah dicabut.'
+            message: isExpired ? 'Tautan undangan telah kedaluwarsa.' : 'Tautan undangan sudah diproses atau dicabut.'
           }),
           { status: 400, headers: securityHeaders }
         );
       }
 
+      // Prepare info object for downstream logic
+      const rawEmail = invRecord.parent_accounts?.email || '';
+      let maskedEmail = '';
+      if (rawEmail.includes('@')) {
+        const [name, domain] = rawEmail.split('@');
+        if (name.length > 2) {
+          maskedEmail = `${name[0]}***${name[name.length - 1]}@${domain}`;
+        } else {
+          maskedEmail = `${name[0]}***@${domain}`;
+        }
+      }
+
+      const info = {
+        invitation_id: invRecord.id,
+        tenant_id: invRecord.tenant_id,
+        parent_account_id: invRecord.parent_account_id,
+        masked_email: maskedEmail,
+        expires_at: invRecord.expires_at,
+        is_valid: isValid
+      };
+
       // If authUid is present, execute continuation ticket creation and ticket claim
       if (authUid) {
         try {
           const ticketRes = await invokeCreateContinuationTicket(supabaseUrl, serviceRoleKey, {
-            rawInvitationToken: rawToken,
+            rawInvitationToken: rawToken, // Still pass raw token to RPC as it hashes internally
             tenantId: info.tenant_id,
             authUid: authUid
           });
@@ -146,17 +205,20 @@ export async function onRequestPost(context) {
       }
 
       // If authUid is not yet available, return invitation info
+      const responseData = {
+        invitationId: info.invitation_id,
+        tenantId: info.tenant_id,
+        parentAccountId: info.parent_account_id,
+        maskedEmail: info.masked_email,
+        expiresAt: info.expires_at,
+        isValid: info.is_valid
+      };
+
       return new Response(
         JSON.stringify({
           success: true,
-          invitation: {
-            invitationId: info.invitation_id,
-            tenantId: info.tenant_id,
-            parentAccountId: info.parent_account_id,
-            maskedEmail: info.masked_email,
-            expiresAt: info.expires_at,
-            isValid: info.is_valid
-          }
+          invitation: responseData,
+          data: responseData
         }),
         { status: 200, headers: securityHeaders }
       );
