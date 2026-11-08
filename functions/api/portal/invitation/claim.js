@@ -92,7 +92,7 @@ export async function onRequestPost(context) {
       const hashedToken = await hashToken(rawToken.trim());
 
       // Query table 'parent_invitations' directly using serviceKey to bypass RLS
-      const queryUrl = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/parent_invitations?invitation_token_hash=eq.${hashedToken}&select=id,tenant_id,student_id,parent_account_id,status,expires_at,parent_accounts(email)`;
+      const queryUrl = `${supabaseUrl.replace(/\/$/, '')}/rest/v1/parent_invitations?invitation_token_hash=eq.${hashedToken}&select=id,tenant_id,student_id,parent_account_id,status,expires_at,parent_accounts(email,auth_uid)`;
       const resp = await fetch(queryUrl, {
         method: 'GET',
         headers: {
@@ -209,13 +209,37 @@ export async function onRequestPost(context) {
         invitation_status: invitation.status
       };
 
-      // If authUid is present, execute continuation ticket creation and ticket claim
-      if (authUid) {
+      const targetAuthUid = authUid || invitation.parent_accounts?.auth_uid;
+      const targetEmail = invitation.parent_accounts?.email;
+      const newPassword = body?.password || body?.newPassword;
+
+      if (newPassword && newPassword.length < 6) {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Kata sandi minimal harus 6 karakter.' }),
+          { status: 400, headers: securityHeaders }
+        );
+      }
+
+      // If targetAuthUid is present and activation requested (via authUid or password provided)
+      if (targetAuthUid && (authUid || newPassword)) {
         try {
+          if (newPassword) {
+            // Update password in Supabase Auth via Admin API
+            await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/admin/users/${targetAuthUid}`, {
+              method: 'PUT',
+              headers: {
+                'apikey': serviceKey,
+                'Authorization': `Bearer ${serviceKey}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ password: newPassword })
+            });
+          }
+
           const ticketRes = await invokeCreateContinuationTicket(supabaseUrl, serviceKey, {
             rawInvitationToken: rawToken, 
             tenantId: invitation.tenant_id,
-            authUid: authUid
+            authUid: targetAuthUid
           });
 
           const ticketToken = ticketRes?.raw_ticket_token;
@@ -228,7 +252,7 @@ export async function onRequestPost(context) {
 
           const claimRes = await invokeClaimParentInvitationByTicket(supabaseUrl, serviceKey, {
             rawTicketToken: ticketToken,
-            authUid: authUid
+            authUid: targetAuthUid
           });
 
           return new Response(
@@ -238,6 +262,7 @@ export async function onRequestPost(context) {
               tenantId: claimRes.tenant_id,
               parentAccountId: claimRes.parent_account_id,
               claimedAt: claimRes.claimed_at,
+              email: targetEmail,
               invitation: responseData, // Include for consistency
               data: responseData
             }),

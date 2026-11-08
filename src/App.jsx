@@ -172,7 +172,7 @@ export default function App() {
               <Route path="/portal" element={<PortalLoginV2 />} />
               <Route path="/portal/claim" element={<PortalClaimInvitation />} />
               <Route path="/portal/claim-invitation" element={<PortalClaimInvitation />} />
-              <Route path="/portal/accept-invitation" element={<PortalAcceptInvitation />} />
+              <Route path="/portal/accept-invitation" element={<PortalClaimInvitation />} />
               <Route path="/portal/dashboard" element={<PortalDashboard />} />
               {/* V2 Canonical Route Redirect */}
               <Route path="/portal-v2" element={<Navigate to="/portal" replace />} />
