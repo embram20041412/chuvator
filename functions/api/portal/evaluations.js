@@ -384,7 +384,7 @@ export async function onRequest(context) {
       }
     }
 
-    const studentQuery = `${supabaseUrl}/rest/v1/students?id=eq.${encodeURIComponent(studentId)}&tenant_id=eq.${encodeURIComponent(childTenantId)}&select=tournaments,student_name,name,class_name,growth_history,height,weight,birth_date`;
+    const studentQuery = `${supabaseUrl}/rest/v1/students?id=eq.${encodeURIComponent(studentId)}&tenant_id=eq.${encodeURIComponent(childTenantId)}&select=tournaments,student_name,name,class_name,growth_history,height,weight,height_cm,weight_kg,birth_date`;
 
     let studentResp = await fetch(studentQuery, {
       method: 'GET',
@@ -437,8 +437,20 @@ export async function onRequest(context) {
     if (st) {
       studentInfo.studentName = st.student_name || st.name || studentInfo.studentName;
       studentInfo.className = st.class_name || studentInfo.className;
-      studentInfo.height = st.height || null;
-      studentInfo.weight = st.weight || null;
+
+      const scalarH = Number(
+        st.height !== undefined && st.height !== null
+          ? st.height
+          : (st.height_cm !== undefined && st.height_cm !== null ? st.height_cm : 0)
+      );
+      const scalarW = Number(
+        st.weight !== undefined && st.weight !== null
+          ? st.weight
+          : (st.weight_kg !== undefined && st.weight_kg !== null ? st.weight_kg : 0)
+      );
+
+      studentInfo.height = scalarH > 0 ? scalarH : null;
+      studentInfo.weight = scalarW > 0 ? scalarW : null;
 
       // Ambil data growth_history dari kolom JSONB tabel students
       const rawGrowthHistory = Array.isArray(st.growth_history)
@@ -479,24 +491,25 @@ export async function onRequest(context) {
         });
       }
 
-      // Jika data history kosong namun ada height & weight terkini di profil siswa
-      if (growthRecords.length === 0 && (st.height || st.weight)) {
-        const h = Number(st.height || 0);
-        const w = Number(st.weight || 0);
+      // TRIK FALLBACK OTOMATIS: Jika growth_history/growthRecords masih kosong,
+      // buatlah 1 entri sintetis berbasis data skalar height & weight terkini dari profil siswa
+      if (growthRecords.length === 0 && (scalarH > 0 || scalarW > 0)) {
         let bmi = null;
-        if (h > 0 && w > 0) {
-          const hM = h / 100;
-          bmi = Math.round((w / (hM * hM)) * 10) / 10;
+        if (scalarH > 0 && scalarW > 0) {
+          const hM = scalarH / 100;
+          bmi = Math.round((scalarW / (hM * hM)) * 10) / 10;
         }
         const status = bmi ? (bmi < 18.5 ? 'Underweight' : bmi <= 24.9 ? 'Proporsional' : 'Overweight') : 'Belum Ada';
         growthRecords.push({
-          id: 'current-stat',
+          id: 'current-stat-fallback',
           date: new Date().toISOString().substring(0, 10),
-          height: h > 0 ? h : null,
-          weight: w > 0 ? w : null,
+          height_cm: scalarH > 0 ? scalarH : null,
+          weight_kg: scalarW > 0 ? scalarW : null,
+          height: scalarH > 0 ? scalarH : null,
+          weight: scalarW > 0 ? scalarW : null,
           bmi,
           status,
-          notes: 'Pengukuran terkini',
+          notes: 'Pengukuran Terkini (Profil Atlet)',
           recordedAt: new Date().toISOString()
         });
       }
