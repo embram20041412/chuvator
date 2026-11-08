@@ -109,7 +109,7 @@ export async function onRequestPost(context) {
     const hashedToken = await hashToken(rawToken);
 
     // 2. Query table 'parent_invitations' directly using serviceKey to bypass RLS
-    const queryUrl = `${supabaseUrl}/rest/v1/parent_invitations?invitation_token_hash=eq.${hashedToken}&select=id,tenant_id,student_id,parent_account_id,status,expires_at,relationship,parent_accounts(id,email,auth_uid,status)`;
+    const queryUrl = `${supabaseUrl}/rest/v1/parent_invitations?invitation_token_hash=eq.${hashedToken}&select=id,tenant_id,student_id,parent_account_id,status,expires_at,parent_accounts(id,email,auth_uid,status)`;
     const resp = await fetch(queryUrl, {
       method: 'GET',
       headers: {
@@ -216,7 +216,7 @@ export async function onRequestPost(context) {
       parent_account_id: invitation.parent_account_id,
       tenant_name: tenantName,
       masked_email: maskedEmail,
-      invite_role: invitation.relationship || 'guardian',
+      invite_role: 'guardian',
       expires_at: invitation.expires_at,
 
       // Format alias ekstra
