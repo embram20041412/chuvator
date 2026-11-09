@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./mobile/styles/mobile.css";
 
 @theme {
   --color-chua-blue: #C89D32;

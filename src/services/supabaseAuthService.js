@@ -264,7 +264,7 @@ export async function verifyUserRoleAndTenant(user, client = supabase) {
   // 5. IF NOT IN invitations, NOT IN tenants, AND NOT IN users_staff:
   // Jika pengguna sedang berada pada rute penerimaan undangan, jangan sign-out paksa
   const isAcceptingInvite = typeof window !== 'undefined' && 
-    (window.location.pathname.includes('/accept-invitation') || window.location.pathname.includes('/invite'));
+    (window.location.pathname.includes('/accept-invitation') || window.location.pathname.includes('/invite') || window.location.pathname.includes('/mobile-design-system'));
 
   if (isAcceptingInvite) {
     return {

@@ -1,0 +1,78 @@
+/* ========================================================================= */
+/* CHUVATOR — MOBILE-FIRST DESIGN SYSTEM TOKENS                              */
+/* SCOPED EXCLUSIVELY UNDER .chua-mobile-app                                 */
+/* ========================================================================= */
+
+.chua-mobile-app {
+  /* Color Tokens */
+  --chua-m-navy: #101D38;
+  --chua-m-blue: #2455E8;
+  --chua-m-blue-hover: #1D45C4;
+  --chua-m-emerald: #16A779;
+  --chua-m-emerald-hover: #128B64;
+  --chua-m-bg: #F5F7FC;
+  --chua-m-surface: #FFFFFF;
+  --chua-m-surface-subtle: #F0F4FA;
+  --chua-m-text-primary: #17233D;
+  --chua-m-text-secondary: #68758B;
+  --chua-m-text-muted: #94A3B8;
+  --chua-m-border: #E7EBF2;
+  --chua-m-border-focus: #2455E8;
+  --chua-m-warning: #F59E0B;
+  --chua-m-danger: #DC4545;
+  --chua-m-danger-hover: #C53030;
+
+  /* Typography Scale */
+  --chua-m-font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --chua-m-font-size-xs: 11px;
+  --chua-m-font-size-sm: 13px;
+  --chua-m-font-size-base: 15px;
+  --chua-m-font-size-lg: 17px;
+  --chua-m-font-size-xl: 20px;
+  --chua-m-font-size-2xl: 24px;
+  --chua-m-font-size-3xl: 28px;
+
+  --chua-m-font-weight-normal: 400;
+  --chua-m-font-weight-medium: 500;
+  --chua-m-font-weight-semibold: 600;
+  --chua-m-font-weight-bold: 700;
+  --chua-m-font-weight-extrabold: 800;
+
+  /* Spacing Scale */
+  --chua-m-spacing-xs: 4px;
+  --chua-m-spacing-sm: 8px;
+  --chua-m-spacing-md: 12px;
+  --chua-m-spacing-lg: 16px;
+  --chua-m-spacing-xl: 20px;
+  --chua-m-spacing-2xl: 24px;
+  --chua-m-spacing-3xl: 32px;
+
+  /* Layout Dimensions */
+  --chua-m-padding-x: 20px;
+  --chua-m-header-height: 60px;
+  --chua-m-bottom-nav-height: 72px;
+  --chua-m-touch-target-min: 44px;
+  --chua-m-btn-height: 50px;
+  --chua-m-btn-height-sm: 40px;
+  --chua-m-input-height: 50px;
+
+  /* Border Radius Tokens */
+  --chua-m-radius-xs: 6px;
+  --chua-m-radius-sm: 10px;
+  --chua-m-radius-md: 14px;
+  --chua-m-radius-lg: 18px;
+  --chua-m-radius-xl: 24px;
+  --chua-m-radius-bottom-sheet: 28px;
+  --chua-m-radius-full: 9999px;
+
+  /* Shadows & Elevation */
+  --chua-m-shadow-subtle: 0 2px 8px rgba(16, 29, 56, 0.04);
+  --chua-m-shadow-card: 0 4px 16px rgba(16, 29, 56, 0.06);
+  --chua-m-shadow-float: 0 8px 24px rgba(16, 29, 56, 0.10);
+  --chua-m-shadow-modal: 0 16px 40px rgba(16, 29, 56, 0.18);
+  --chua-m-shadow-bottom-nav: 0 -4px 20px rgba(16, 29, 56, 0.06);
+
+  /* Safe Area Insets */
+  --chua-m-safe-top: env(safe-area-inset-top, 0px);
+  --chua-m-safe-bottom: env(safe-area-inset-bottom, 0px);
+}

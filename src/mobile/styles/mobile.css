@@ -1,0 +1,7 @@
+/* ========================================================================= */
+/* CHUVATOR — ISOLATED MOBILE DESIGN SYSTEM ENTRYPOINT                       */
+/* SCOPED EXCLUSIVELY UNDER .chua-mobile-app                                 */
+/* ========================================================================= */
+
+@import './tokens.css';
+@import './components.css';

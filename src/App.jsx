@@ -10,6 +10,7 @@ import ProtectedRoute from './components/ProtectedRoute';
 import PortalLayout from './layouts/PortalLayout';
 import PortalLogin from './pages/Portal/PortalLogin';
 import PortalLoginV2 from './pages/Portal/PortalLoginV2';
+import MobileDesignSystemPreview from './mobile/components/MobileDesignSystemPreview';
 
 // Lazy-loaded heavy modules for Code Splitting & Performance Optimization
 const SaasAdminPage = lazy(() => import('./pages/SaasAdminPage'));
@@ -165,11 +166,11 @@ export default function App() {
             {/* Public Staff & Coach Invitation Claiming */}
             <Route path="/accept-invitation" element={<AcceptInvitationPage />} />
             <Route path="/invite" element={<AcceptInvitationPage />} />
-
             {/* Portal Wali Murid (Isolated Mobile-First Unified Routing) */}
             <Route element={<PortalLayout />}>
               {/* Primary Entry Point: Portal V2 Login */}
               <Route path="/portal" element={<PortalLoginV2 />} />
+              <Route path="/portal/mobile-design-system" element={<MobileDesignSystemPreview />} />
               <Route path="/portal/claim" element={<PortalClaimInvitation />} />
               <Route path="/portal/claim-invitation" element={<PortalClaimInvitation />} />
               <Route path="/portal/accept-invitation" element={<PortalClaimInvitation />} />
@@ -217,6 +218,14 @@ export default function App() {
                 element={
                   <ProtectedRoute userProfile={userProfile} allowedRoles={['owner', 'superadmin', 'admin', 'pelatih', 'coach']}>
                     <DashboardPage userProfile={userProfile} />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/mobile-design-system"
+                element={
+                  <ProtectedRoute userProfile={userProfile} allowedRoles={['owner', 'superadmin', 'admin', 'pelatih', 'coach']}>
+                    <MobileDesignSystemPreview />
                   </ProtectedRoute>
                 }
               />
