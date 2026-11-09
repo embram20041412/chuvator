@@ -39,6 +39,8 @@ import {
   Trophy
 } from 'lucide-react';
 import { getStudentInitials, calculateAge } from '../../utils/helpers';
+import useMobileViewport from '../../mobile/hooks/useMobileViewport';
+import MobileParentPortal from '../../mobile/pages/portal/MobileParentPortal';
 
 /**
  * Helper to format number into IDR currency format
@@ -178,28 +180,46 @@ const getTournamentMedalStyle = (resultStr) => {
 
 export default function PortalDashboard() {
   const navigate = useNavigate();
+  const isMobile = useMobileViewport(767);
+
+  const isDemo = typeof window !== 'undefined' && (new URLSearchParams(window.location.search).get('demo') === '1' || new URLSearchParams(window.location.search).get('autostart') === '1');
+  const demoFallbackStudent = {
+    studentId: 'demo-student-1',
+    id: 'demo-student-1',
+    studentName: 'Ahmad Rizky Pratama',
+    name: 'Ahmad Rizky Pratama',
+    className: 'U-12 Prestasi Bulutangkis',
+    academyName: 'CHUVATOR BADMINTON ACADEMY',
+    academy_name: 'CHUVATOR BADMINTON ACADEMY',
+    sportCategory: 'Badminton',
+    sport: 'Badminton',
+    coachName: 'Coach Hendra Setiawan',
+    schoolOrigin: 'SD Negeri 1 Kediri',
+    tenantId: 'demo-tenant-1',
+    photoUrl: null
+  };
 
   // 1. Initial State: Stored active student
   const initialStudent = (() => {
     try {
       const stored = localStorage.getItem('activeStudent');
-      return stored ? JSON.parse(stored) : null;
+      return stored ? JSON.parse(stored) : (isDemo ? demoFallbackStudent : null);
     } catch (e) {
       console.warn('Gagal membaca data activeStudent:', e);
-      return null;
+      return isDemo ? demoFallbackStudent : null;
     }
   })();
 
   const [student, setStudent] = useState(initialStudent);
-  const [childrenList, setChildrenList] = useState([]);
+  const [childrenList, setChildrenList] = useState(() => isDemo ? [demoFallbackStudent] : []);
   const [showChildSwitcher, setShowChildSwitcher] = useState(false);
 
   // Verified Backend Session Identity & CSRF Token State
-  const [verifiedStudentId, setVerifiedStudentId] = useState(null);
-  const [verifiedTenantId, setVerifiedTenantId] = useState(null);
-  const [csrfToken, setCsrfToken] = useState(null);
-  const [isSessionVerified, setIsSessionVerified] = useState(false);
-  const [isVerifyingSession, setIsVerifyingSession] = useState(true);
+  const [verifiedStudentId, setVerifiedStudentId] = useState(() => isDemo ? 'demo-student-1' : null);
+  const [verifiedTenantId, setVerifiedTenantId] = useState(() => isDemo ? 'demo-tenant-1' : null);
+  const [csrfToken, setCsrfToken] = useState(() => isDemo ? 'demo_csrf_token_test' : null);
+  const [isSessionVerified, setIsSessionVerified] = useState(() => isDemo);
+  const [isVerifyingSession, setIsVerifyingSession] = useState(() => !isDemo);
   const [sessionError, setSessionError] = useState(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
@@ -242,6 +262,128 @@ export default function PortalDashboard() {
       setSessionError(null);
 
       try {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('demo') === '1' || params.get('autostart') === '1') {
+          const demoChildren = [
+            {
+              studentId: 'demo-student-1',
+              id: 'demo-student-1',
+              studentName: 'Ahmad Rizky Pratama',
+              name: 'Ahmad Rizky Pratama',
+              className: 'U-12 Prestasi Bulutangkis',
+              academyName: 'CHUVATOR BADMINTON ACADEMY',
+              academy_name: 'CHUVATOR BADMINTON ACADEMY',
+              sportCategory: 'Badminton',
+              sport: 'Badminton',
+              coachName: 'Coach Hendra Setiawan',
+              schoolOrigin: 'SD Negeri 1 Kediri',
+              tenantId: 'demo-tenant-1',
+              photoUrl: null
+            },
+            {
+              studentId: 'demo-student-2',
+              id: 'demo-student-2',
+              studentName: 'Aisyah Putri Pratama',
+              name: 'Aisyah Putri Pratama',
+              className: 'Junior Development Tenis',
+              academyName: 'CHUVATOR TENNIS ACADEMY',
+              academy_name: 'CHUVATOR TENNIS ACADEMY',
+              sportCategory: 'Tenis Lapangan',
+              sport: 'Tenis Lapangan',
+              coachName: 'Coach Yayuk Basuki',
+              schoolOrigin: 'SMP Negeri 2 Kediri',
+              tenantId: 'demo-tenant-1',
+              photoUrl: null
+            }
+          ];
+          setChildrenList(demoChildren);
+          setCsrfToken('demo_csrf_token_test');
+          const active = demoChildren[0];
+          setStudent(active);
+          setVerifiedStudentId(active.studentId);
+          setVerifiedTenantId(active.tenantId);
+          setIsSessionVerified(true);
+          setIsVerifyingSession(false);
+
+          setBillingData({
+            success: true,
+            billing: {
+              totalAmount: 350000,
+              isPaidThisMonth: false,
+              details: [
+                { description: 'Iuran Pembinaan Bulanan (SPP)', amount: 300000 },
+                { description: 'Fasilitas & Shuttlecock/Bola', amount: 50000 }
+              ]
+            },
+            bankAccounts: [
+              { bankName: 'BCA', accountNumber: '8210394812', accountName: 'CHUVATOR SPORT ACADEMY' },
+              { bankName: 'Mandiri', accountNumber: '1420019283741', accountName: 'CHUVATOR SPORT ACADEMY' }
+            ],
+            paymentHistory: [
+              { id: 'PAY-OCT-2026', itemName: 'SPP Bulan Oktober 2026', amount: 350000, createdAt: '2026-10-05T10:00:00Z', paymentMethod: 'BCA Transfer' }
+            ]
+          });
+          setIsLoadingBilling(false);
+
+          setScheduleData({
+            success: true,
+            classInfo: { coachName: 'Coach Hendra Setiawan' },
+            schedule: [
+              { dayName: 'Senin & Kamis', time: '16:00 - 18:00 WIB', courtName: 'Lapangan Badminton 1' },
+              { dayName: 'Sabtu', time: '08:00 - 10:00 WIB', courtName: 'Lapangan Fisik & Gym' }
+            ],
+            nextSession: {
+              dayName: 'Kamis',
+              sessionDate: '2026-11-12',
+              time: '16:00 - 18:00 WIB',
+              courtName: 'Lapangan Badminton 1',
+              coachName: 'Coach Hendra Setiawan'
+            },
+            attendances: [
+              { sessionDate: '2026-11-05', status: 'Hadir', notes: 'Footwork & smash drills' },
+              { sessionDate: '2026-11-02', status: 'Hadir', notes: 'Latihan fisik & kelincahan' },
+              { sessionDate: '2026-10-29', status: 'Hadir', notes: 'Simulasi turnamen internal' }
+            ],
+            attendanceStats: { totalSessions: 12, presentCount: 11, percentage: '92%' }
+          });
+          setIsLoadingSchedule(false);
+
+          setEvaluationData({
+            success: true,
+            evaluations: [
+              {
+                period: 'November 2026',
+                totalScore: 88,
+                score: 88,
+                techniqueScore: 88,
+                physicalScore: 85,
+                tacticalScore: 86,
+                mentalScore: 92,
+                notes: 'Perkembangan footwork sangat pesat, pertahankan fokus saat poin-poin kritis.'
+              }
+            ],
+            growth: { height: 148, weight: 40, bmi: 18.3 },
+            achievements: [
+              { tournamentName: 'Piala Walikota Kediri 2026', category: 'Tunggal Usia Dini', year: '2026', result: 'Juara 1 (Emas)' }
+            ]
+          });
+          setIsLoadingEvaluation(false);
+
+          setAnnouncementsData({
+            success: true,
+            announcements: [
+              {
+                id: 'anc-1',
+                title: 'Jadwal Libur Latihan Ujian Semester',
+                date: '2026-11-08',
+                content: 'Diberitahukan kepada seluruh wali murid bahwa sesi latihan pada tanggal 20-22 November ditiadakan sehubungan dengan ujian sekolah.'
+              }
+            ]
+          });
+          setIsLoadingAnnouncements(false);
+          return;
+        }
+
         // Try V2 session first
         let response = await fetch('/api/portal/v2/session', {
           method: 'GET',
@@ -398,7 +540,7 @@ export default function PortalDashboard() {
 
   // 3. FETCH BILLING DATA
   useEffect(() => {
-    if (!isSessionVerified || !csrfToken || !verifiedStudentId || !verifiedTenantId) return;
+    if (isDemo || !isSessionVerified || !csrfToken || !verifiedStudentId || !verifiedTenantId) return;
     let isMounted = true;
 
     const fetchBilling = async () => {
@@ -481,7 +623,7 @@ export default function PortalDashboard() {
 
   // 4. FETCH JADWAL & PRESENSI
   useEffect(() => {
-    if (!isSessionVerified || !csrfToken || !verifiedStudentId || !verifiedTenantId) return;
+    if (isDemo || !isSessionVerified || !csrfToken || !verifiedStudentId || !verifiedTenantId) return;
     let isMounted = true;
 
     const fetchSchedule = async () => {
@@ -532,7 +674,7 @@ export default function PortalDashboard() {
 
   // 5. FETCH EVALUASI & PRESTASI
   useEffect(() => {
-    if (!isSessionVerified || !csrfToken || !verifiedStudentId || !verifiedTenantId) return;
+    if (isDemo || !isSessionVerified || !csrfToken || !verifiedStudentId || !verifiedTenantId) return;
     let isMounted = true;
     const targetStudentId = verifiedStudentId;
     const targetTenantId = verifiedTenantId;
@@ -602,7 +744,7 @@ export default function PortalDashboard() {
 
   // 6. FETCH PENGUMUMAN AKADEMI (GAP-01)
   useEffect(() => {
-    if (!isSessionVerified || !csrfToken || !verifiedStudentId || !verifiedTenantId) return;
+    if (isDemo || !isSessionVerified || !csrfToken || !verifiedStudentId || !verifiedTenantId) return;
     let isMounted = true;
 
     const fetchAnnouncements = async () => {
@@ -836,6 +978,60 @@ export default function PortalDashboard() {
       setTimeout(() => setCopiedAccount(false), 2000);
     }
   };
+
+  if (isMobile) {
+    return (
+      <div className="chua-mobile-app w-full min-h-screen">
+        <MobileParentPortal
+          student={student}
+          childrenList={childrenList}
+          verifiedStudentId={verifiedStudentId}
+          verifiedTenantId={verifiedTenantId}
+          csrfToken={csrfToken}
+          isSessionVerified={isSessionVerified}
+          isVerifyingSession={isVerifyingSession}
+          sessionError={sessionError}
+          isLoggingOut={isLoggingOut}
+          handleSelectChild={handleSelectChild}
+          handleLogout={handleLogout}
+          billingData={billingData}
+          bankAccounts={bankAccounts}
+          selectedBankIndex={selectedBankIndex}
+          setSelectedBankIndex={setSelectedBankIndex}
+          currentAccount={currentAccount}
+          activeBank={activeBank}
+          activeAccountNumber={activeAccountNumber}
+          activeAccountName={activeAccountName}
+          handleCopyAccount={handleCopyAccount}
+          copiedAccount={copiedAccount}
+          isLoadingBilling={isLoadingBilling}
+          billingError={billingError}
+          showQrisModal={showQrisModal}
+          setShowQrisModal={setShowQrisModal}
+          qrisUrl={qrisUrl}
+          scheduleData={scheduleData}
+          isLoadingSchedule={isLoadingSchedule}
+          scheduleError={scheduleError}
+          activeScheduleTab={activeScheduleTab}
+          setActiveScheduleTab={setActiveScheduleTab}
+          evaluationData={evaluationData}
+          isLoadingEvaluation={isLoadingEvaluation}
+          evaluationError={evaluationError}
+          activeEvalTab={activeEvalTab}
+          setActiveEvalTab={setActiveEvalTab}
+          announcementsData={announcementsData}
+          isLoadingAnnouncements={isLoadingAnnouncements}
+          announcementsError={announcementsError}
+          formatRupiah={formatRupiah}
+          formatAttendanceDate={formatAttendanceDate}
+          formatSessionDate={formatSessionDate}
+          getEvaluationGrade={getEvaluationGrade}
+          getBmiStatusBadge={getBmiStatusBadge}
+          getTournamentMedalStyle={getTournamentMedalStyle}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex-1 flex flex-col bg-slate-50 min-h-screen text-slate-800 relative pb-24">
