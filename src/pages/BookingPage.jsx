@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import useArenaData from '../hooks/useArenaData';
 import NewBookingModal from '../components/NewBookingModal';
 import BookingPaymentModal from '../components/BookingPaymentModal';
+import useMobileViewport from '../mobile/hooks/useMobileViewport';
+import MobileBookingMain from '../mobile/pages/booking/MobileBookingMain';
 import { 
   ChevronDown, 
   ChevronUp, 
@@ -31,7 +33,12 @@ const OPERATIONAL_HOURS = [
 ];
 
 export default function BookingPage({ userProfile }) {
+  const isMobile = useMobileViewport(767);
   const { courts, bookings, isLoading } = useArenaData(userProfile);
+
+  if (isMobile) {
+    return <MobileBookingMain userProfile={userProfile} />;
+  }
 
   // Date Filter (default today)
   const [selectedDate, setSelectedDate] = useState(
