@@ -542,6 +542,7 @@ export default function PortalDashboard() {
   useEffect(() => {
     if (isDemo || !isSessionVerified || !csrfToken || !verifiedStudentId || !verifiedTenantId) return;
     let isMounted = true;
+    const targetStudentId = verifiedStudentId;
 
     const fetchBilling = async () => {
       setIsLoadingBilling(true);
@@ -556,7 +557,7 @@ export default function PortalDashboard() {
           },
           credentials: 'include',
           body: JSON.stringify({
-            studentId: verifiedStudentId,
+            studentId: targetStudentId,
             tenantId: verifiedTenantId
           })
         });
@@ -574,7 +575,7 @@ export default function PortalDashboard() {
             Array.isArray(res.billing.details)
           );
 
-          if (isMounted && isValidPayload) {
+          if (isMounted && isValidPayload && targetStudentId === verifiedStudentId) {
             setBillingData(res);
 
             const list = Array.isArray(res.bankAccounts) && res.bankAccounts.length > 0
@@ -600,18 +601,18 @@ export default function PortalDashboard() {
           }
         }
 
-        if (isMounted) {
+        if (isMounted && targetStudentId === verifiedStudentId) {
           setBillingData(null);
           setBillingError('Gagal memuat data penagihan dari server.');
         }
       } catch (err) {
         console.error('Billing fetch error:', err);
-        if (isMounted) {
+        if (isMounted && targetStudentId === verifiedStudentId) {
           setBillingData(null);
           setBillingError('Gagal terhubung ke server penagihan.');
         }
       } finally {
-        if (isMounted) setIsLoadingBilling(false);
+        if (isMounted && targetStudentId === verifiedStudentId) setIsLoadingBilling(false);
       }
     };
 
@@ -625,6 +626,7 @@ export default function PortalDashboard() {
   useEffect(() => {
     if (isDemo || !isSessionVerified || !csrfToken || !verifiedStudentId || !verifiedTenantId) return;
     let isMounted = true;
+    const targetStudentId = verifiedStudentId;
 
     const fetchSchedule = async () => {
       setIsLoadingSchedule(true);
@@ -639,30 +641,30 @@ export default function PortalDashboard() {
           },
           credentials: 'include',
           body: JSON.stringify({
-            studentId: verifiedStudentId,
+            studentId: targetStudentId,
             tenantId: verifiedTenantId
           })
         });
 
         if (response.ok) {
           const res = await response.json();
-          if (isMounted && res.success) {
+          if (isMounted && res.success && targetStudentId === verifiedStudentId) {
             setScheduleData(res);
             setIsLoadingSchedule(false);
             return;
           }
         }
 
-        if (isMounted) {
+        if (isMounted && targetStudentId === verifiedStudentId) {
           setScheduleError('Gagal memuat jadwal & presensi dari server.');
         }
       } catch (err) {
         console.error('Schedule fetch error:', err);
-        if (isMounted) {
+        if (isMounted && targetStudentId === verifiedStudentId) {
           setScheduleError('Gagal terhubung ke server jadwal latihan.');
         }
       } finally {
-        if (isMounted) setIsLoadingSchedule(false);
+        if (isMounted && targetStudentId === verifiedStudentId) setIsLoadingSchedule(false);
       }
     };
 
@@ -795,12 +797,13 @@ export default function PortalDashboard() {
 
   // 7. FETCH PROFIL SISWA (Untuk Menarik Nama Pelatih Asli)
   useEffect(() => {
-    if (!isSessionVerified || !verifiedStudentId) return;
+    if (isDemo || !isSessionVerified || !verifiedStudentId) return;
     let isMounted = true;
+    const targetStudentId = verifiedStudentId;
 
     const fetchProfile = async () => {
       try {
-        const activeStudentId = student?.id || student?.studentId || verifiedStudentId;
+        const activeStudentId = targetStudentId;
         const response = await fetch('/api/portal/profile?studentId=' + encodeURIComponent(activeStudentId), {
           method: 'GET',
           headers: {
@@ -813,7 +816,7 @@ export default function PortalDashboard() {
         if (response.ok) {
           const res = await response.json().catch(() => null);
           const studentProfile = res?.data || res?.student;
-          if (isMounted && res && res.success && studentProfile) {
+          if (isMounted && res && res.success && studentProfile && targetStudentId === verifiedStudentId) {
             const academyClass = studentProfile.academy_classes || {};
             const coach = academyClass.coaches || {};
             const resolvedCoachName = studentProfile.coach_name || studentProfile.coachName || coach.name || academyClass.coach_name || null;
