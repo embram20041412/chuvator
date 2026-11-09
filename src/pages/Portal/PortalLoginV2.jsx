@@ -9,16 +9,12 @@ import {
   Loader2,
   ShieldCheck,
   AlertCircle,
-  UserCheck,
-  LogOut,
-  Users,
-  Building2,
   CheckCircle2,
   RefreshCw
 } from 'lucide-react';
 
 /**
- * PortalLoginV2 - Parent Portal Login Page (Fase 2.1 / Fase 5.0 Main Login)
+ * PortalLoginV2 - Parent Portal Login Page (Centered Single Column Light Theme)
  *
  * Menggunakan Supabase Auth melalui Cloudflare Pages Function V2:
  * - POST /api/portal/v2/login
@@ -34,7 +30,6 @@ export default function PortalLoginV2() {
 
   // Status & error handling
   const [isLoading, setIsLoading] = useState(false);
-  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
   const [errorMsg, setErrorMsg] = useState(null);
   const [infoMsg, setInfoMsg] = useState(null);
@@ -67,7 +62,6 @@ export default function PortalLoginV2() {
           setCsrfToken(data.session.csrfToken);
         }
       } else {
-        // Sesi tidak ada atau expired
         setSessionData(null);
         setCsrfToken(null);
       }
@@ -95,7 +89,6 @@ export default function PortalLoginV2() {
     const cleanEmail = email.trim().toLowerCase();
     const cleanPassword = password;
 
-    // Validasi input di sisi klien
     if (!cleanEmail) {
       setErrorMsg('Alamat email wajib diisi.');
       return;
@@ -128,18 +121,14 @@ export default function PortalLoginV2() {
         })
       });
 
-      // Hapus password dari state memori segera setelah dikirim demi keamanan
       setPassword('');
-
       const data = await response.json().catch(() => ({}));
 
       if (response.ok && data.success) {
-        // Simpan CSRF token ke memory state
         if (data.csrfToken) {
           setCsrfToken(data.csrfToken);
         }
 
-        // Ambil data user dari login response atau konfirmasi ulang sesi
         if (data.user) {
           setSessionData({
             authUserId: data.user.authUserId,
@@ -150,14 +139,12 @@ export default function PortalLoginV2() {
             expiresAt: data.expiresAt
           });
         } else {
-          // Fallback verifikasi sesi via GET /api/portal/v2/session
           await checkActiveSession();
         }
 
         setInfoMsg('Autentikasi berhasil. Mengalihkan ke dashboard...');
         navigate('/portal/dashboard', { replace: true });
       } else {
-        // Pemetaan pesan kesalahan berdasarkan HTTP status code
         switch (response.status) {
           case 400:
             setErrorMsg(data.message || 'Permintaan tidak valid. Mohon periksa kembali input Anda.');
@@ -169,7 +156,7 @@ export default function PortalLoginV2() {
             setErrorMsg(data.message || 'Akun Anda belum terdaftar atau belum dihubungkan dengan data siswa oleh pihak pengelola.');
             break;
           case 429:
-            setErrorMsg(data.message || 'Terlalu banyak percobaan login dari jaringan Anda. Mohon tunggu beberapa saat sebelum mencoba kembali.');
+            setErrorMsg(data.message || 'Terlalu banyak percobaan login dari jaringan Anda. Mohon tunggu beberapa saat.');
             break;
           case 500:
           case 503:
@@ -182,7 +169,6 @@ export default function PortalLoginV2() {
       }
     } catch (err) {
       console.error('Portal v2 login request failed:', err);
-      // Bersihkan password pada exception
       setPassword('');
       setErrorMsg('Gagal terhubung ke server autentikasi. Pastikan koneksi internet Anda stabil.');
     } finally {
@@ -190,66 +176,13 @@ export default function PortalLoginV2() {
     }
   };
 
-  /**
-   * Menangani logout dari sesi V2
-   */
-  const handleLogout = async () => {
-    setIsLoggingOut(true);
-    setErrorMsg(null);
-    setInfoMsg(null);
-
-    try {
-      // Pastikan CSRF token berasal dari sesi V2 yang aktif
-      const activeCsrfToken = csrfToken || sessionData?.csrfToken || null;
-      const headers = {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json'
-      };
-
-      if (activeCsrfToken) {
-        headers['X-Portal-CSRF'] = activeCsrfToken;
-      }
-
-      const response = await fetch('/api/portal/v2/logout', {
-        method: 'POST',
-        headers,
-        credentials: 'include'
-      });
-
-      const data = await response.json().catch(() => ({}));
-
-      if (response.ok && data.success) {
-        // Logout sukses di server: KV telah dicabut dan cookie dikosongkan
-        setSessionData(null);
-        setCsrfToken(null);
-        setEmail('');
-        setPassword('');
-        setInfoMsg('Anda telah berhasil keluar dari akun wali.');
-      } else if (response.status === 401) {
-        // Sesi sudah tidak valid atau telah kedaluwarsa di server
-        setSessionData(null);
-        setCsrfToken(null);
-        setInfoMsg('Sesi Anda telah kedaluwarsa.');
-      } else {
-        // HTTP 403 (CSRF mismatch), HTTP 500 (Server failure), dll:
-        // Tampilkan pesan kesalahan dari server dan jangan menyembunyikan kegagalan
-        setErrorMsg(data.message || 'Gagal mengakhiri sesi portal pada server. Silakan coba kembali.');
-      }
-    } catch (err) {
-      console.error('Logout error:', err);
-      setErrorMsg('Gagal terhubung ke server untuk proses logout. Silakan periksa koneksi internet Anda.');
-    } finally {
-      setIsLoggingOut(false);
-    }
-  };
-
-  // 1. Tampilan Loading saat pemeriksaan sesi awal
+  // 1. Tampilan Loading saat pemeriksaan sesi awal (Light Theme)
   if (isCheckingSession) {
     return (
-      <div className="flex-1 flex flex-col justify-center items-center p-8 text-center bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 text-white min-h-[500px]">
-        <div className="w-12 h-12 border-3 border-emerald-500/20 border-t-emerald-400 rounded-full animate-spin mb-4" />
-        <p className="text-xs font-bold uppercase tracking-widest text-emerald-400">CHUVATOR SECURITY</p>
-        <p className="text-xs text-slate-400 mt-1">Memeriksa status sesi wali murid...</p>
+      <div className="min-h-screen bg-slate-50 flex flex-col justify-center items-center p-8 text-center text-slate-800">
+        <div className="w-12 h-12 border-3 border-emerald-200 border-t-emerald-800 rounded-full animate-spin mb-4" />
+        <p className="text-xs font-extrabold uppercase tracking-widest text-emerald-800">CHUVATOR SECURITY</p>
+        <p className="text-xs text-slate-500 mt-1">Memeriksa status sesi wali murid...</p>
       </div>
     );
   }
@@ -259,150 +192,152 @@ export default function PortalLoginV2() {
     return <Navigate to="/portal/dashboard" replace />;
   }
 
-  // 3. Tampilan Form Login V2 (Ketika belum login / sesi kosong)
+  // 3. Tampilan Light Theme Single-Column Centered Layout
   return (
-    <div className="flex-1 flex flex-col justify-between p-6 sm:p-8 bg-gradient-to-b from-slate-900 via-slate-950 to-slate-900 text-slate-100 min-h-screen">
-      {/* Top Brand & Header */}
-      <div className="pt-2 text-center">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 text-[11px] font-semibold tracking-wide mb-3">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-          <span>Parent Portal V2 • Supabase Auth</span>
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-2 sm:p-6 font-sans text-slate-800">
+      <div className="w-full max-w-[440px] bg-white rounded-3xl shadow-2xl border border-gray-100 p-5 sm:p-10 flex flex-col justify-between">
+        
+        {/* Header Brand (Centered) */}
+        <div className="flex flex-col items-center text-center space-y-3">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/80 text-[11px] font-bold tracking-wide">
+            <ShieldCheck className="w-3.5 h-3.5 text-emerald-700" />
+            <span>PORTAL WALI MURID V2</span>
+          </div>
+
+          <div className="w-14 h-14 bg-emerald-800 text-white rounded-2xl flex items-center justify-center shadow-md shadow-emerald-900/20 my-1">
+            <GraduationCap className="w-7 h-7" />
+          </div>
+
+          <div>
+            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+              Portal Wali Murid
+            </h1>
+            <p className="text-xs text-slate-500 font-medium mt-0.5">
+              Akademi Olahraga CHUVATOR
+            </p>
+          </div>
+
+          <p className="text-xs text-slate-600 leading-relaxed pt-1 max-w-xs">
+            Masuk menggunakan email dan kata sandi akun wali untuk memantau data perkembangan atlet.
+          </p>
         </div>
 
-        <div className="w-14 h-14 bg-gradient-to-br from-emerald-600 to-teal-700 text-white rounded-2xl mx-auto flex items-center justify-center shadow-lg shadow-emerald-600/20 mb-3">
-          <GraduationCap className="w-7 h-7" />
+        {/* Form Login Body */}
+        <div className="my-6">
+          {/* Notifikasi Alert Error */}
+          {errorMsg && (
+            <div className="mb-4 p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-800 text-xs flex items-start gap-2.5 animate-fadeIn">
+              <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+              <div className="flex-1 leading-relaxed font-medium text-left">
+                {errorMsg}
+              </div>
+            </div>
+          )}
+
+          {/* Notifikasi Info / Sukses */}
+          {infoMsg && (
+            <div className="mb-4 p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-start gap-2.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              <div className="flex-1 leading-relaxed font-medium text-left">
+                {infoMsg}
+              </div>
+            </div>
+          )}
+
+          <form onSubmit={handleLogin} className="space-y-4">
+            {/* Input Email */}
+            <div className="space-y-1.5 text-left">
+              <label htmlFor="portal-v2-email" className="block text-xs font-bold text-slate-700">
+                Email Wali Murid <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <Mail className="w-4 h-4" />
+                </div>
+                <input
+                  id="portal-v2-email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (errorMsg) setErrorMsg(null);
+                  }}
+                  placeholder="nama@email.com"
+                  disabled={isLoading}
+                  className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 placeholder:text-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 transition disabled:opacity-50 shadow-2xs font-medium"
+                />
+              </div>
+            </div>
+
+            {/* Input Password */}
+            <div className="space-y-1.5 text-left">
+              <label htmlFor="portal-v2-password" className="block text-xs font-bold text-slate-700">
+                Kata Sandi <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                  <Lock className="w-4 h-4" />
+                </div>
+                <input
+                  id="portal-v2-password"
+                  type={showPassword ? 'text' : 'password'}
+                  required
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (errorMsg) setErrorMsg(null);
+                  }}
+                  placeholder="Masukkan kata sandi akun"
+                  disabled={isLoading}
+                  className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-white border border-slate-300 text-slate-900 placeholder:text-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:border-emerald-600 transition disabled:opacity-50 shadow-2xs font-medium"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  tabIndex={-1}
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-700 focus:outline-none cursor-pointer"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {/* Submit Button (Hijau / Emerald Dark) */}
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full mt-2 py-3 px-4 rounded-xl bg-emerald-800 hover:bg-emerald-900 active:bg-emerald-950 text-white text-sm font-bold flex items-center justify-center gap-2 shadow-md shadow-emerald-900/20 active:scale-[0.99] transition disabled:opacity-50 cursor-pointer"
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-white" />
+                  <span>Memverifikasi Akun...</span>
+                </>
+              ) : (
+                <span>Masuk ke Portal Wali</span>
+              )}
+            </button>
+          </form>
         </div>
-
-        <h1 className="text-xl sm:text-2xl font-bold text-white tracking-tight">
-          Portal Wali Murid
-        </h1>
-        <p className="text-xs text-slate-400 mt-1.5 leading-relaxed max-w-xs mx-auto">
-          Masuk menggunakan email dan kata sandi akun wali untuk memantau data perkembangan anak.
-        </p>
-      </div>
-
-      {/* Main Login Form */}
-      <div className="my-auto py-4">
-        {/* Notifikasi Alert Error */}
-        {errorMsg && (
-          <div className="mb-4 p-3.5 rounded-xl bg-red-950/60 border border-red-500/40 text-red-200 text-xs flex items-start gap-2.5 animate-fadeIn">
-            <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-            <div className="flex-1 leading-relaxed">
-              {errorMsg}
-            </div>
-          </div>
-        )}
-
-        {/* Notifikasi Info / Sukses */}
-        {infoMsg && (
-          <div className="mb-4 p-3 rounded-xl bg-emerald-950/50 border border-emerald-500/30 text-emerald-200 text-xs flex items-start gap-2.5">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-            <div className="flex-1 leading-relaxed">
-              {infoMsg}
-            </div>
-          </div>
-        )}
-
-        <form onSubmit={handleLogin} className="space-y-4 text-left">
-          {/* Input Email */}
-          <div className="space-y-1.5">
-            <label htmlFor="portal-v2-email" className="block text-xs font-semibold text-slate-300">
-              Email Wali Murid <span className="text-red-400">*</span>
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                <Mail className="w-4 h-4" />
-              </div>
-              <input
-                id="portal-v2-email"
-                type="email"
-                required
-                autoComplete="email"
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  if (errorMsg) setErrorMsg(null);
-                }}
-                placeholder="nama@email.com"
-                disabled={isLoading}
-                className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-slate-800/90 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition disabled:opacity-50"
-              />
-            </div>
-          </div>
-
-          {/* Input Password */}
-          <div className="space-y-1.5">
-            <label htmlFor="portal-v2-password" className="block text-xs font-semibold text-slate-300">
-              Kata Sandi <span className="text-red-400">*</span>
-            </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-                <Lock className="w-4 h-4" />
-              </div>
-              <input
-                id="portal-v2-password"
-                type={showPassword ? 'text' : 'password'}
-                required
-                autoComplete="current-password"
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  if (errorMsg) setErrorMsg(null);
-                }}
-                placeholder="Masukkan kata sandi akun"
-                disabled={isLoading}
-                className="w-full pl-10 pr-10 py-2.5 rounded-xl bg-slate-800/90 border border-slate-700 text-white placeholder-slate-500 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent transition disabled:opacity-50"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                tabIndex={-1}
-                className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-slate-400 hover:text-slate-200 focus:outline-none cursor-pointer"
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
-            </div>
-          </div>
-
-          {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full mt-2 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 active:from-emerald-700 active:to-teal-700 text-white text-sm font-semibold flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/30 transition disabled:opacity-50 cursor-pointer"
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Memverifikasi Akun...</span>
-              </>
-            ) : (
-              <span>Masuk ke Portal V2</span>
-            )}
-          </button>
-        </form>
 
         {/* Security & Info Footer */}
-        <div className="mt-4 pt-4 border-t border-slate-800/80 flex items-center justify-between text-[11px] text-slate-400">
-          <span className="flex items-center gap-1">
-            <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-            Koneksi Terenkripsi AES-GCM
+        <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
+          <span className="flex items-center gap-1.5 text-emerald-800">
+            <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0" />
+            Koneksi Terenkripsi 256-bit AES
           </span>
           <button
             type="button"
             onClick={checkActiveSession}
-            className="flex items-center gap-1 hover:text-slate-200 transition text-[11px] cursor-pointer"
+            className="flex items-center gap-1 hover:text-emerald-800 transition cursor-pointer text-slate-500"
           >
             <RefreshCw className="w-3 h-3" />
             Cek Sesi
           </button>
         </div>
-      </div>
-
-      {/* Brand Footer */}
-      <div className="pt-2 pb-4 text-center">
-        <p className="text-[11px] text-slate-400">
-          CHUVATOR Sports Academy ERP System
-        </p>
       </div>
     </div>
   );
