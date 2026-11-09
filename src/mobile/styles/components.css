@@ -108,6 +108,25 @@
   margin-bottom: var(--chua-m-spacing-md);
 }
 
+.chua-mobile-card-navy {
+  background: linear-gradient(135deg, #101D38 0%, #1E3058 100%) !important;
+  color: #FFFFFF !important;
+  border-color: #1E3058 !important;
+}
+
+.chua-mobile-card-navy * {
+  color: #FFFFFF !important;
+}
+
+.chua-mobile-card-navy .text-emerald-300 {
+  color: #6EE7B7 !important;
+}
+
+.chua-mobile-card-navy .text-slate-200,
+.chua-mobile-card-navy .text-slate-300 {
+  color: #CBD5E1 !important;
+}
+
 .chua-mobile-card-clickable {
   cursor: pointer;
 }

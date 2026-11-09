@@ -39,6 +39,8 @@ import {
 } from '../components/icons/App3DIcons';
 import DateRangeFilter, { filterDataByTime } from '../components/DateRangeFilter';
 import SafeChartContainer from '../components/SafeChartContainer';
+import MobileLayoutSwitch from '../mobile/layouts/MobileLayoutSwitch';
+import MobileDashboard from '../mobile/pages/dashboard/MobileDashboard';
 import {
   BarChart,
   Bar,
@@ -169,7 +171,7 @@ const CustomPieTooltip = ({ active, payload }) => {
   return null;
 };
 
-export default function DashboardPage({ userProfile }) {
+function DesktopDashboard({ userProfile }) {
   // 1. SEMUA HOOKS & STATE HARUS DI SINI (PALING ATAS)
   const { tenantProfile, courts, bookings, transactions, isLoading } = useArenaData(userProfile);
 
@@ -1296,7 +1298,17 @@ export default function DashboardPage({ userProfile }) {
           </div>
         )}
       </div>
-
     </div>
   );
 }
+
+export default function DashboardPage({ userProfile }) {
+  return (
+    <MobileLayoutSwitch
+      desktopComponent={DesktopDashboard}
+      mobileComponent={MobileDashboard}
+      userProfile={userProfile}
+    />
+  );
+}
+
