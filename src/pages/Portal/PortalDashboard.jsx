@@ -842,7 +842,7 @@ export default function PortalDashboard() {
       {/* 1. HEADER & MULTI-CHILD SWITCHER */}
       <header className="sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-slate-100 px-4 py-3 flex items-center justify-between shadow-2xs">
         <div className="flex items-center space-x-2.5">
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center shadow-xs">
+          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-700 text-white flex items-center justify-center shadow-xs">
             <GraduationCap className="w-4 h-4" />
           </div>
           <div>
@@ -862,11 +862,11 @@ export default function PortalDashboard() {
               <button
                 type="button"
                 onClick={() => setShowChildSwitcher(!showChildSwitcher)}
-                className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-xl border border-blue-200/80 transition-colors cursor-pointer"
+                className="inline-flex items-center space-x-1.5 px-2.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold rounded-xl border border-emerald-200/80 transition-colors cursor-pointer"
               >
-                <Users className="w-3.5 h-3.5" />
+                <Users className="w-3.5 h-3.5 text-emerald-700" />
                 <span className="truncate max-w-[90px]">{studentName}</span>
-                <ChevronDown className="w-3 h-3 text-blue-500" />
+                <ChevronDown className="w-3 h-3 text-emerald-600" />
               </button>
 
               {/* Child Switcher Dropdown */}
@@ -886,14 +886,14 @@ export default function PortalDashboard() {
                         type="button"
                         onClick={() => handleSelectChild(c)}
                         className={`w-full px-3 py-2 text-left flex items-center justify-between text-xs font-medium hover:bg-slate-50 transition-colors cursor-pointer ${
-                          isSelected ? 'bg-blue-50/70 text-blue-700 font-bold' : 'text-slate-700'
+                          isSelected ? 'bg-emerald-50/70 text-emerald-800 font-bold' : 'text-slate-700'
                         }`}
                       >
                         <div className="truncate">
                           <p className="truncate">{c.studentName || c.name || 'Siswa'}</p>
                           <p className="text-[10px] text-slate-400 truncate">{c.className || c.academy_name || c.academyName || c.school_origin || c.school_name || 'Cabang'}</p>
                         </div>
-                        {isSelected && <Check className="w-3.5 h-3.5 text-blue-600 shrink-0 ml-2" />}
+                        {isSelected && <Check className="w-3.5 h-3.5 text-emerald-600 shrink-0 ml-2" />}
                       </button>
                     );
                   })}
@@ -923,16 +923,16 @@ export default function PortalDashboard() {
         {activeTab === 'home' && (
           <div className="space-y-4 animate-in fade-in duration-200">
             {/* 2. KARTU PROFIL UTAMA (GROUP 1: PROFIL ANAK & GROUP 7: KELAS/PROGRAM) */}
-            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-700 text-white p-5 shadow-lg shadow-blue-600/15">
+            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-600 to-teal-700 text-white p-5 shadow-lg shadow-emerald-700/15">
               <div className="absolute -top-10 -right-10 w-36 h-36 bg-white/10 rounded-full blur-xl pointer-events-none" />
-              <div className="absolute -bottom-10 -left-10 w-36 h-36 bg-indigo-500/20 rounded-full blur-xl pointer-events-none" />
+              <div className="absolute -bottom-10 -left-10 w-36 h-36 bg-teal-500/20 rounded-full blur-xl pointer-events-none" />
 
               <div className="flex items-center justify-between gap-2 mb-3.5 relative z-10">
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-white/20 backdrop-blur-md text-white text-[10px] font-extrabold uppercase tracking-wider border border-white/20">
                   <Sparkles className="w-3 h-3 text-amber-300" />
                   <span>{sportCategory}</span>
                 </span>
-                <span className="text-[11px] font-bold text-blue-100/90 truncate max-w-[160px]">
+                <span className="text-[11px] font-bold text-emerald-100/90 truncate max-w-[160px]">
                   {academyName}
                 </span>
               </div>
@@ -957,11 +957,11 @@ export default function PortalDashboard() {
                   <h2 className="text-base sm:text-lg font-black text-white leading-tight break-words">
                     {studentName}
                   </h2>
-                  <p className="text-[11px] text-blue-100/90 mt-0.5 font-medium">
+                  <p className="text-[11px] text-emerald-100/90 mt-0.5 font-medium">
                     {age !== '-' ? `${age} Tahun` : 'Siswa Aktif'}
                     {student.schoolOrigin ? ` • ${student.schoolOrigin}` : ''}
                   </p>
-                  <p className="text-[10px] font-mono text-blue-200 mt-1 tracking-wider opacity-90">
+                  <p className="text-[10px] font-mono text-emerald-200 mt-1 tracking-wider opacity-90">
                     ID: {student.id}
                   </p>
                 </div>
@@ -969,17 +969,17 @@ export default function PortalDashboard() {
 
               <div className="mt-4 pt-3 border-t border-white/15 grid grid-cols-2 gap-2 relative z-10 text-xs">
                 <div className="bg-white/10 backdrop-blur-xs rounded-xl p-2.5 flex items-center gap-2 border border-white/10">
-                  <BookOpen className="w-4 h-4 text-blue-200 shrink-0" />
+                  <BookOpen className="w-4 h-4 text-emerald-200 shrink-0" />
                   <div className="min-w-0">
-                    <p className="text-[9px] uppercase tracking-wider text-blue-200 font-bold">Kelas &amp; Program</p>
+                    <p className="text-[9px] uppercase tracking-wider text-emerald-200 font-bold">Kelas &amp; Program</p>
                     <p className="font-bold text-white text-[11px] truncate">{className}</p>
                   </div>
                 </div>
 
                 <div className="bg-white/10 backdrop-blur-xs rounded-xl p-2.5 flex items-center gap-2 border border-white/10">
-                  <User className="w-4 h-4 text-blue-200 shrink-0" />
+                  <User className="w-4 h-4 text-emerald-200 shrink-0" />
                   <div className="min-w-0">
-                    <p className="text-[9px] uppercase tracking-wider text-blue-200 font-bold">Pelatih Utama</p>
+                    <p className="text-[9px] uppercase tracking-wider text-emerald-200 font-bold">Pelatih Utama</p>
                     <p className="font-bold text-white text-[11px] truncate">{coachName || 'Belum Ditugaskan'}</p>
                   </div>
                 </div>
@@ -1029,15 +1029,15 @@ export default function PortalDashboard() {
                   </div>
                 </div>
                 <div className="flex items-center space-x-1 shrink-0 pl-2">
-                  <span className="text-[11px] font-bold text-blue-600 group-hover:underline">Buka</span>
-                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
+                  <span className="text-[11px] font-bold text-emerald-600 group-hover:underline">Buka</span>
+                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all" />
                 </div>
               </div>
 
               {/* Status Jadwal & Kehadiran Card */}
               <div
                 onClick={() => setActiveTab('schedule')}
-                className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-blue-300 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between group"
+                className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-emerald-300 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between group"
               >
                 <div className="flex items-center space-x-3 min-w-0">
                   <div className="w-12 h-12 rounded-2xl bg-blue-50/70 border border-blue-100 flex items-center justify-center shrink-0 p-1 group-hover:scale-105 transition-transform">
@@ -1060,8 +1060,8 @@ export default function PortalDashboard() {
                   </div>
                 </div>
                 <div className="flex items-center space-x-1 shrink-0 pl-2">
-                  <span className="text-[11px] font-bold text-blue-600 group-hover:underline">Buka</span>
-                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
+                  <span className="text-[11px] font-bold text-emerald-600 group-hover:underline">Buka</span>
+                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all" />
                 </div>
               </div>
 
@@ -1071,7 +1071,7 @@ export default function PortalDashboard() {
                   setActiveEvalTab('assessment');
                   setActiveTab('evaluation');
                 }}
-                className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-purple-300 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between group"
+                className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-emerald-300 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between group"
               >
                 <div className="flex items-center space-x-3 min-w-0">
                   <div className="w-12 h-12 rounded-2xl bg-purple-50/70 border border-purple-100 flex items-center justify-center shrink-0 p-1 group-hover:scale-105 transition-transform">
@@ -1098,15 +1098,15 @@ export default function PortalDashboard() {
                   </div>
                 </div>
                 <div className="flex items-center space-x-1 shrink-0 pl-2">
-                  <span className="text-[11px] font-bold text-blue-600 group-hover:underline">Buka</span>
-                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
+                  <span className="text-[11px] font-bold text-emerald-600 group-hover:underline">Buka</span>
+                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all" />
                 </div>
               </div>
 
               {/* Status Pengumuman Terbaru Card (GROUP 8) */}
               <div
                 onClick={() => setActiveTab('announcements')}
-                className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-amber-300 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between group"
+                className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-emerald-300 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between group"
               >
                 <div className="flex items-center space-x-3 min-w-0">
                   <div className="w-12 h-12 rounded-2xl bg-amber-50/70 border border-amber-100 flex items-center justify-center shrink-0 p-1 group-hover:scale-105 transition-transform">
@@ -1129,8 +1129,8 @@ export default function PortalDashboard() {
                   </div>
                 </div>
                 <div className="flex items-center space-x-1 shrink-0 pl-2">
-                  <span className="text-[11px] font-bold text-blue-600 group-hover:underline">Buka</span>
-                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all" />
+                  <span className="text-[11px] font-bold text-emerald-600 group-hover:underline">Buka</span>
+                  <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-emerald-600 group-hover:translate-x-0.5 transition-all" />
                 </div>
               </div>
             </div>
@@ -2111,16 +2111,16 @@ export default function PortalDashboard() {
         <p>CHUA SPORT CORE &bull; Sistem Terpadu Manajemen Akademi</p>
       </footer>
 
-      {/* FIXED BOTTOM NAVIGATION BAR (5 TABS) */}
-      <nav className="fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto z-50 bg-slate-900/95 backdrop-blur-md border-t border-slate-800 px-1.5 py-1.5 flex justify-around items-center shadow-2xl">
+      {/* FIXED BOTTOM NAVIGATION BAR (5 TABS) - LIGHT THEME */}
+      <nav className="fixed bottom-0 left-0 right-0 max-w-[480px] mx-auto z-50 bg-white border-t border-gray-200 px-1.5 py-1.5 flex justify-around items-center shadow-[0_-2px_10px_rgba(0,0,0,0.05)]">
         {/* Tab 1: Beranda */}
         <button
           type="button"
           onClick={() => setActiveTab('home')}
           className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer group ${
             activeTab === 'home'
-              ? 'text-blue-400 font-bold'
-              : 'text-slate-400 hover:text-slate-200 font-medium'
+              ? 'text-emerald-600 font-bold'
+              : 'text-slate-400 hover:text-slate-600 font-medium'
           }`}
         >
           <img 
@@ -2128,7 +2128,7 @@ export default function PortalDashboard() {
             alt="Beranda" 
             className={`w-6 h-6 object-contain mb-0.5 transition-all ${
               activeTab === 'home' 
-                ? 'scale-115 drop-shadow-[0_2px_8px_rgba(96,165,250,0.5)]' 
+                ? 'scale-115 drop-shadow-[0_2px_8px_rgba(16,185,129,0.35)]' 
                 : 'opacity-70 group-hover:opacity-100 group-hover:scale-105'
             }`} 
           />
@@ -2141,8 +2141,8 @@ export default function PortalDashboard() {
           onClick={() => setActiveTab('billing')}
           className={`relative flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer group ${
             activeTab === 'billing'
-              ? 'text-emerald-400 font-bold'
-              : 'text-slate-400 hover:text-slate-200 font-medium'
+              ? 'text-emerald-600 font-bold'
+              : 'text-slate-400 hover:text-slate-600 font-medium'
           }`}
         >
           <div className="relative">
@@ -2151,12 +2151,12 @@ export default function PortalDashboard() {
               alt="Keuangan" 
               className={`w-6 h-6 object-contain mb-0.5 transition-all ${
                 activeTab === 'billing' 
-                  ? 'scale-115 drop-shadow-[0_2px_8px_rgba(52,211,153,0.5)]' 
+                  ? 'scale-115 drop-shadow-[0_2px_8px_rgba(16,185,129,0.35)]' 
                   : 'opacity-70 group-hover:opacity-100 group-hover:scale-105'
               }`} 
             />
             {isBillingValid === true && isPaid === false && (
-              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse ring-2 ring-slate-900" />
+              <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse ring-2 ring-white" />
             )}
           </div>
           <span className="text-[9px] tracking-tight">Keuangan</span>
@@ -2168,8 +2168,8 @@ export default function PortalDashboard() {
           onClick={() => setActiveTab('schedule')}
           className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer group ${
             activeTab === 'schedule'
-              ? 'text-blue-400 font-bold'
-              : 'text-slate-400 hover:text-slate-200 font-medium'
+              ? 'text-emerald-600 font-bold'
+              : 'text-slate-400 hover:text-slate-600 font-medium'
           }`}
         >
           <img 
@@ -2177,7 +2177,7 @@ export default function PortalDashboard() {
             alt="Jadwal" 
             className={`w-6 h-6 object-contain mb-0.5 transition-all ${
               activeTab === 'schedule' 
-                ? 'scale-115 drop-shadow-[0_2px_8px_rgba(96,165,250,0.5)]' 
+                ? 'scale-115 drop-shadow-[0_2px_8px_rgba(16,185,129,0.35)]' 
                 : 'opacity-70 group-hover:opacity-100 group-hover:scale-105'
             }`} 
           />
@@ -2190,8 +2190,8 @@ export default function PortalDashboard() {
           onClick={() => setActiveTab('evaluation')}
           className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer group ${
             activeTab === 'evaluation'
-              ? 'text-purple-400 font-bold'
-              : 'text-slate-400 hover:text-slate-200 font-medium'
+              ? 'text-emerald-600 font-bold'
+              : 'text-slate-400 hover:text-slate-600 font-medium'
           }`}
         >
           <img 
@@ -2199,7 +2199,7 @@ export default function PortalDashboard() {
             alt="Rapor" 
             className={`w-6 h-6 object-contain mb-0.5 transition-all ${
               activeTab === 'evaluation' 
-                ? 'scale-115 drop-shadow-[0_2px_8px_rgba(192,132,252,0.5)]' 
+                ? 'scale-115 drop-shadow-[0_2px_8px_rgba(16,185,129,0.35)]' 
                 : 'opacity-70 group-hover:opacity-100 group-hover:scale-105'
             }`} 
           />
@@ -2212,8 +2212,8 @@ export default function PortalDashboard() {
           onClick={() => setActiveTab('announcements')}
           className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-all cursor-pointer group ${
             activeTab === 'announcements'
-              ? 'text-amber-400 font-bold'
-              : 'text-slate-400 hover:text-slate-200 font-medium'
+              ? 'text-emerald-600 font-bold'
+              : 'text-slate-400 hover:text-slate-600 font-medium'
           }`}
         >
           <img 
@@ -2221,7 +2221,7 @@ export default function PortalDashboard() {
             alt="Info" 
             className={`w-6 h-6 object-contain mb-0.5 transition-all ${
               activeTab === 'announcements' 
-                ? 'scale-115 drop-shadow-[0_2px_8px_rgba(251,191,36,0.5)]' 
+                ? 'scale-115 drop-shadow-[0_2px_8px_rgba(16,185,129,0.35)]' 
                 : 'opacity-70 group-hover:opacity-100 group-hover:scale-105'
             }`} 
           />
