@@ -73,9 +73,16 @@ export default function App() {
   const [userProfile, setUserProfile] = useState(null);
 
   useEffect(() => {
-    // Support autostart=1 for headless testing & preview
+    // Support autostart=1 for headless testing & preview (strictly restricted to dev/test environments)
+    const isDemoAllowed = typeof window !== 'undefined' && Boolean(
+      import.meta.env.DEV ||
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname.endsWith('.localhost') ||
+      window.location.hostname.includes('ais-dev-')
+    );
     const params = new URLSearchParams(window.location.search);
-    if (params.get('autostart') === '1' || params.get('demo') === '1') {
+    if (isDemoAllowed && (params.get('autostart') === '1' || params.get('demo') === '1')) {
       const demoProfile = {
         uid: 'demo-tenant-admin',
         id: 'demo-tenant-admin',

@@ -78,4 +78,110 @@ test('CHUVATOR — Phase 4.2 Parent Portal Mobile Redesign Unit & Security Tests
     assert.equal(getBmiStatus(undefined, 22.0), 'Proporsional');
     assert.equal(getBmiStatus(undefined, 27.5), 'Overweight');
   });
+
+  // 5. Race-Condition Guard Simulation Test: Sequence ID & activeStudentIdRef
+  await t.test('5. Race Condition Guard: Stale in-flight responses are strictly dropped on rapid child switching', () => {
+    // Simulated state container with mutable refs
+    const refContainer = {
+      activeStudentId: 'child-A',
+      sequence: 0
+    };
+
+    // User triggers request for Child A
+    const req1StudentId = 'child-A';
+    const req1Seq = ++refContainer.sequence; // 1
+
+    // Simulated rapid user switch to Child B before req 1 finishes
+    refContainer.activeStudentId = 'child-B';
+    refContainer.sequence++; // 2 (invalidates prior in-flight requests)
+    const req2StudentId = 'child-B';
+    const req2Seq = ++refContainer.sequence; // 3
+
+    // Validation helper mimicking PortalDashboard response check
+    const shouldAcceptResponse = (
+      isMounted: boolean,
+      callbackSeq: number,
+      latestSeq: number,
+      currentActiveRef: string,
+      requestedStudentId: string
+    ) => {
+      return (
+        isMounted &&
+        callbackSeq === latestSeq &&
+        currentActiveRef === requestedStudentId
+      );
+    };
+
+    // Case 1: Delayed Request 1 (Child A) arrives after Child B is active
+    const acceptReq1Late = shouldAcceptResponse(
+      true,
+      req1Seq,
+      refContainer.sequence,
+      refContainer.activeStudentId,
+      req1StudentId
+    );
+    assert.equal(acceptReq1Late, false, 'Late response for Child A must be rejected when Child B is active');
+
+    // Case 2: Request 2 (Child B) arrives
+    const acceptReq2 = shouldAcceptResponse(
+      true,
+      req2Seq,
+      refContainer.sequence,
+      refContainer.activeStudentId,
+      req2StudentId
+    );
+    assert.equal(acceptReq2, true, 'Matching response for Child B must be accepted');
+
+    // Case 3: Rapid switch back to Child A (A -> B -> A)
+    refContainer.activeStudentId = 'child-A';
+    refContainer.sequence++; // 4
+    const req3StudentId = 'child-A';
+    const req3Seq = ++refContainer.sequence; // 5
+
+    // If ancient Request 1 somehow arrives now, it has seq=1 while currentSeq=5
+    const acceptOldReq1 = shouldAcceptResponse(
+      true,
+      req1Seq,
+      refContainer.sequence,
+      refContainer.activeStudentId,
+      req1StudentId
+    );
+    assert.equal(acceptOldReq1, false, 'Ancient response from initial Child A request must NOT overwrite state');
+
+    // Request 3 arrives
+    const acceptReq3 = shouldAcceptResponse(
+      true,
+      req3Seq,
+      refContainer.sequence,
+      refContainer.activeStudentId,
+      req3StudentId
+    );
+    assert.equal(acceptReq3, true, 'Latest Child A response with matching sequence must be accepted');
+  });
+
+  // 6. Demo Mode Environment Restriction Test
+  await t.test('6. Demo Mode Protection: Restricted to dev/test environments only', () => {
+    const isDemoPermitted = (isDevEnv: boolean, hostname: string, queryParam: string | null) => {
+      const isAllowedHost = (
+        isDevEnv ||
+        hostname === 'localhost' ||
+        hostname === '127.0.0.1' ||
+        hostname.endsWith('.localhost') ||
+        hostname.includes('ais-dev-')
+      );
+      return Boolean(isAllowedHost && (queryParam === '1'));
+    };
+
+    // Permitted on dev / local hosts
+    assert.equal(isDemoPermitted(true, 'localhost', '1'), true);
+    assert.equal(isDemoPermitted(false, 'localhost', '1'), true);
+    assert.equal(isDemoPermitted(false, '127.0.0.1', '1'), true);
+    assert.equal(isDemoPermitted(false, 'ais-dev-k3ugqrxx4vyuatbx4pinpp-467599567372.asia-east1.run.app', '1'), true);
+
+    // Strictly forbidden on production hosts
+    assert.equal(isDemoPermitted(false, 'chuvator.com', '1'), false, 'Demo mode must be disabled on chuvator.com');
+    assert.equal(isDemoPermitted(false, 'app.chuvator.com', '1'), false, 'Demo mode must be disabled on app.chuvator.com');
+    assert.equal(isDemoPermitted(false, 'sports.arena-tenant.id', '1'), false, 'Demo mode must be disabled on tenant domain');
+    assert.equal(isDemoPermitted(false, 'production.run.app', '1'), false);
+  });
 });

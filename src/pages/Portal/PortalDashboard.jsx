@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { 
   GraduationCap, 
@@ -182,7 +182,14 @@ export default function PortalDashboard() {
   const navigate = useNavigate();
   const isMobile = useMobileViewport(767);
 
-  const isDemo = typeof window !== 'undefined' && (new URLSearchParams(window.location.search).get('demo') === '1' || new URLSearchParams(window.location.search).get('autostart') === '1');
+  const isDemoAllowed = typeof window !== 'undefined' && Boolean(
+    import.meta.env.DEV ||
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1' ||
+    window.location.hostname.endsWith('.localhost') ||
+    window.location.hostname.includes('ais-dev-')
+  );
+  const isDemo = isDemoAllowed && (new URLSearchParams(window.location.search).get('demo') === '1' || new URLSearchParams(window.location.search).get('autostart') === '1');
   const demoFallbackStudent = {
     studentId: 'demo-student-1',
     id: 'demo-student-1',
@@ -222,6 +229,19 @@ export default function PortalDashboard() {
   const [isVerifyingSession, setIsVerifyingSession] = useState(() => !isDemo);
   const [sessionError, setSessionError] = useState(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // Strict Race-Condition Guards: Mutable sequence & active ID tracking refs
+  const activeStudentIdRef = useRef(verifiedStudentId || initialStudent?.studentId || initialStudent?.id || null);
+  const billingReqSeqRef = useRef(0);
+  const scheduleReqSeqRef = useRef(0);
+  const evalReqSeqRef = useRef(0);
+  const profileReqSeqRef = useRef(0);
+  const announcementsReqSeqRef = useRef(0);
+
+  // Synchronize ref on verifiedStudentId updates
+  useEffect(() => {
+    activeStudentIdRef.current = verifiedStudentId;
+  }, [verifiedStudentId]);
 
   // State Penagihan, QRIS, & Bank
   const [billingData, setBillingData] = useState(null);
@@ -514,6 +534,14 @@ export default function PortalDashboard() {
       tenantName: child.tenantName || child.tenant_name || ''
     };
 
+    // Invalidate all prior in-flight requests immediately
+    activeStudentIdRef.current = activeSid;
+    billingReqSeqRef.current++;
+    scheduleReqSeqRef.current++;
+    evalReqSeqRef.current++;
+    profileReqSeqRef.current++;
+    announcementsReqSeqRef.current++;
+
     // Immediately clear previous child's evaluations & portal states to prevent stale flash
     setEvaluationData(null);
     setIsLoadingEvaluation(true);
@@ -538,11 +566,12 @@ export default function PortalDashboard() {
     setShowChildSwitcher(false);
   };
 
-  // 3. FETCH BILLING DATA
+  // 3. FETCH BILLING DATA (with Strict Sequence & activeStudentIdRef Guard)
   useEffect(() => {
     if (isDemo || !isSessionVerified || !csrfToken || !verifiedStudentId || !verifiedTenantId) return;
     let isMounted = true;
-    const targetStudentId = verifiedStudentId;
+    const requestedStudentId = verifiedStudentId;
+    const currentSeq = ++billingReqSeqRef.current;
 
     const fetchBilling = async () => {
       setIsLoadingBilling(true);
@@ -557,7 +586,7 @@ export default function PortalDashboard() {
           },
           credentials: 'include',
           body: JSON.stringify({
-            studentId: targetStudentId,
+            studentId: requestedStudentId,
             tenantId: verifiedTenantId
           })
         });
@@ -575,7 +604,7 @@ export default function PortalDashboard() {
             Array.isArray(res.billing.details)
           );
 
-          if (isMounted && isValidPayload && targetStudentId === verifiedStudentId) {
+          if (isMounted && currentSeq === billingReqSeqRef.current && activeStudentIdRef.current === requestedStudentId && isValidPayload) {
             setBillingData(res);
 
             const list = Array.isArray(res.bankAccounts) && res.bankAccounts.length > 0
@@ -601,18 +630,20 @@ export default function PortalDashboard() {
           }
         }
 
-        if (isMounted && targetStudentId === verifiedStudentId) {
+        if (isMounted && currentSeq === billingReqSeqRef.current && activeStudentIdRef.current === requestedStudentId) {
           setBillingData(null);
           setBillingError('Gagal memuat data penagihan dari server.');
         }
       } catch (err) {
         console.error('Billing fetch error:', err);
-        if (isMounted && targetStudentId === verifiedStudentId) {
+        if (isMounted && currentSeq === billingReqSeqRef.current && activeStudentIdRef.current === requestedStudentId) {
           setBillingData(null);
           setBillingError('Gagal terhubung ke server penagihan.');
         }
       } finally {
-        if (isMounted && targetStudentId === verifiedStudentId) setIsLoadingBilling(false);
+        if (isMounted && currentSeq === billingReqSeqRef.current && activeStudentIdRef.current === requestedStudentId) {
+          setIsLoadingBilling(false);
+        }
       }
     };
 
@@ -622,11 +653,12 @@ export default function PortalDashboard() {
     };
   }, [isSessionVerified, csrfToken, verifiedStudentId, verifiedTenantId]);
 
-  // 4. FETCH JADWAL & PRESENSI
+  // 4. FETCH JADWAL & PRESENSI (with Strict Sequence & activeStudentIdRef Guard)
   useEffect(() => {
     if (isDemo || !isSessionVerified || !csrfToken || !verifiedStudentId || !verifiedTenantId) return;
     let isMounted = true;
-    const targetStudentId = verifiedStudentId;
+    const requestedStudentId = verifiedStudentId;
+    const currentSeq = ++scheduleReqSeqRef.current;
 
     const fetchSchedule = async () => {
       setIsLoadingSchedule(true);
@@ -641,30 +673,32 @@ export default function PortalDashboard() {
           },
           credentials: 'include',
           body: JSON.stringify({
-            studentId: targetStudentId,
+            studentId: requestedStudentId,
             tenantId: verifiedTenantId
           })
         });
 
         if (response.ok) {
           const res = await response.json();
-          if (isMounted && res.success && targetStudentId === verifiedStudentId) {
+          if (isMounted && currentSeq === scheduleReqSeqRef.current && activeStudentIdRef.current === requestedStudentId && res.success) {
             setScheduleData(res);
             setIsLoadingSchedule(false);
             return;
           }
         }
 
-        if (isMounted && targetStudentId === verifiedStudentId) {
+        if (isMounted && currentSeq === scheduleReqSeqRef.current && activeStudentIdRef.current === requestedStudentId) {
           setScheduleError('Gagal memuat jadwal & presensi dari server.');
         }
       } catch (err) {
         console.error('Schedule fetch error:', err);
-        if (isMounted && targetStudentId === verifiedStudentId) {
+        if (isMounted && currentSeq === scheduleReqSeqRef.current && activeStudentIdRef.current === requestedStudentId) {
           setScheduleError('Gagal terhubung ke server jadwal latihan.');
         }
       } finally {
-        if (isMounted && targetStudentId === verifiedStudentId) setIsLoadingSchedule(false);
+        if (isMounted && currentSeq === scheduleReqSeqRef.current && activeStudentIdRef.current === requestedStudentId) {
+          setIsLoadingSchedule(false);
+        }
       }
     };
 
@@ -674,12 +708,13 @@ export default function PortalDashboard() {
     };
   }, [isSessionVerified, csrfToken, verifiedStudentId, verifiedTenantId]);
 
-  // 5. FETCH EVALUASI & PRESTASI
+  // 5. FETCH EVALUASI & PRESTASI (with Strict Sequence & activeStudentIdRef Guard)
   useEffect(() => {
     if (isDemo || !isSessionVerified || !csrfToken || !verifiedStudentId || !verifiedTenantId) return;
     let isMounted = true;
-    const targetStudentId = verifiedStudentId;
-    const targetTenantId = verifiedTenantId;
+    const requestedStudentId = verifiedStudentId;
+    const requestedTenantId = verifiedTenantId;
+    const currentSeq = ++evalReqSeqRef.current;
 
     const fetchEvaluations = async () => {
       setIsLoadingEvaluation(true);
@@ -694,21 +729,20 @@ export default function PortalDashboard() {
           },
           credentials: 'include',
           body: JSON.stringify({
-            studentId: targetStudentId,
-            tenantId: targetTenantId
+            studentId: requestedStudentId,
+            tenantId: requestedTenantId
           })
         });
 
         if (response.ok) {
           const res = await response.json();
-          console.log('Response Rapor Backend:', res);
-          // Verify response still matches active target student (prevent stale out-of-order responses)
-          if (isMounted && res.success && targetStudentId === verifiedStudentId) {
+          // Strictly verify request sequence and active student ref before updating state
+          if (isMounted && currentSeq === evalReqSeqRef.current && activeStudentIdRef.current === requestedStudentId && res.success) {
             setEvaluationData(res);
             setIsLoadingEvaluation(false);
             return;
           }
-          if (isMounted && !res.success && targetStudentId === verifiedStudentId) {
+          if (isMounted && currentSeq === evalReqSeqRef.current && activeStudentIdRef.current === requestedStudentId && !res.success) {
             setEvaluationError(res.error || res.message || 'Gagal memuat evaluasi pelatih dari server.');
             setIsLoadingEvaluation(false);
             return;
@@ -716,23 +750,23 @@ export default function PortalDashboard() {
         } else {
           const errRes = await response.json().catch(() => ({}));
           console.error('[PortalDashboard] Evaluations endpoint returned HTTP', response.status, errRes);
-          if (isMounted && targetStudentId === verifiedStudentId) {
+          if (isMounted && currentSeq === evalReqSeqRef.current && activeStudentIdRef.current === requestedStudentId) {
             setEvaluationError(errRes.error || errRes.message || `Gagal memuat evaluasi pelatih dari server (HTTP ${response.status}).`);
             setIsLoadingEvaluation(false);
             return;
           }
         }
 
-        if (isMounted && targetStudentId === verifiedStudentId) {
+        if (isMounted && currentSeq === evalReqSeqRef.current && activeStudentIdRef.current === requestedStudentId) {
           setEvaluationError('Gagal memuat evaluasi pelatih dari server.');
         }
       } catch (err) {
         console.error('[PortalDashboard] Evaluations fetch error:', err);
-        if (isMounted && targetStudentId === verifiedStudentId) {
+        if (isMounted && currentSeq === evalReqSeqRef.current && activeStudentIdRef.current === requestedStudentId) {
           setEvaluationError(err?.message || 'Gagal terhubung ke server evaluasi.');
         }
       } finally {
-        if (isMounted && targetStudentId === verifiedStudentId) {
+        if (isMounted && currentSeq === evalReqSeqRef.current && activeStudentIdRef.current === requestedStudentId) {
           setIsLoadingEvaluation(false);
         }
       }
@@ -744,10 +778,12 @@ export default function PortalDashboard() {
     };
   }, [isSessionVerified, csrfToken, verifiedStudentId, verifiedTenantId]);
 
-  // 6. FETCH PENGUMUMAN AKADEMI (GAP-01)
+  // 6. FETCH PENGUMUMAN AKADEMI (GAP-01 with Strict Sequence & activeStudentIdRef Guard)
   useEffect(() => {
     if (isDemo || !isSessionVerified || !csrfToken || !verifiedStudentId || !verifiedTenantId) return;
     let isMounted = true;
+    const requestedStudentId = verifiedStudentId;
+    const currentSeq = ++announcementsReqSeqRef.current;
 
     const fetchAnnouncements = async () => {
       setIsLoadingAnnouncements(true);
@@ -762,30 +798,32 @@ export default function PortalDashboard() {
           },
           credentials: 'include',
           body: JSON.stringify({
-            studentId: verifiedStudentId,
+            studentId: requestedStudentId,
             tenantId: verifiedTenantId
           })
         });
 
         if (response.ok) {
           const res = await response.json();
-          if (isMounted && res.success) {
+          if (isMounted && currentSeq === announcementsReqSeqRef.current && activeStudentIdRef.current === requestedStudentId && res.success) {
             setAnnouncementsData(res);
             setIsLoadingAnnouncements(false);
             return;
           }
         }
 
-        if (isMounted) {
+        if (isMounted && currentSeq === announcementsReqSeqRef.current && activeStudentIdRef.current === requestedStudentId) {
           setAnnouncementsData({ announcements: [] });
         }
       } catch (err) {
         console.error('Announcements fetch error:', err);
-        if (isMounted) {
+        if (isMounted && currentSeq === announcementsReqSeqRef.current && activeStudentIdRef.current === requestedStudentId) {
           setAnnouncementsData({ announcements: [] });
         }
       } finally {
-        if (isMounted) setIsLoadingAnnouncements(false);
+        if (isMounted && currentSeq === announcementsReqSeqRef.current && activeStudentIdRef.current === requestedStudentId) {
+          setIsLoadingAnnouncements(false);
+        }
       }
     };
 
@@ -795,16 +833,16 @@ export default function PortalDashboard() {
     };
   }, [isSessionVerified, csrfToken, verifiedStudentId, verifiedTenantId]);
 
-  // 7. FETCH PROFIL SISWA (Untuk Menarik Nama Pelatih Asli)
+  // 7. FETCH PROFIL SISWA (with Strict Sequence & activeStudentIdRef Guard)
   useEffect(() => {
     if (isDemo || !isSessionVerified || !verifiedStudentId) return;
     let isMounted = true;
-    const targetStudentId = verifiedStudentId;
+    const requestedStudentId = verifiedStudentId;
+    const currentSeq = ++profileReqSeqRef.current;
 
     const fetchProfile = async () => {
       try {
-        const activeStudentId = targetStudentId;
-        const response = await fetch('/api/portal/profile?studentId=' + encodeURIComponent(activeStudentId), {
+        const response = await fetch('/api/portal/profile?studentId=' + encodeURIComponent(requestedStudentId), {
           method: 'GET',
           headers: {
             'Accept': 'application/json',
@@ -816,7 +854,7 @@ export default function PortalDashboard() {
         if (response.ok) {
           const res = await response.json().catch(() => null);
           const studentProfile = res?.data || res?.student;
-          if (isMounted && res && res.success && studentProfile && targetStudentId === verifiedStudentId) {
+          if (isMounted && currentSeq === profileReqSeqRef.current && activeStudentIdRef.current === requestedStudentId && res && res.success && studentProfile) {
             const academyClass = studentProfile.academy_classes || {};
             const coach = academyClass.coaches || {};
             const resolvedCoachName = studentProfile.coach_name || studentProfile.coachName || coach.name || academyClass.coach_name || null;
