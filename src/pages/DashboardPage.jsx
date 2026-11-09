@@ -177,8 +177,7 @@ export default function DashboardPage({ userProfile }) {
   const [timeFilter, setTimeFilter] = useState('today'); // 'today', 'week', 'month', 'custom'
   const [customDate, setCustomDate] = useState({ start: '', end: '' });
 
-  // Chart Trend Days Toggle: 7 Hari vs 14 Hari
-  const [trendDays, setTrendDays] = useState(14); // 7 | 14
+
 
   // Quick Menu Expand State (Default: Collapsed on mobile)
   const [isQuickMenuExpanded, setIsQuickMenuExpanded] = useState(false);
@@ -385,29 +384,66 @@ export default function DashboardPage({ userProfile }) {
   }, [financialSummary]);
 
   // =====================================================================
-  // 4. DATA UNTUK TREN HARIAN 7-14 HARI (BAR / AREA CHART) (INTRUKSI 2)
+  // 4. DATA UNTUK TREN HARIAN BERDASARKAN FILTER (BAR / AREA CHART)
   // =====================================================================
   const dailyTrendData = useMemo(() => {
-    const days = trendDays;
-    const result = [];
     const now = new Date();
+    let startDate, endDate;
 
-    for (let i = days - 1; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(now.getDate() - i);
-      const year = d.getFullYear();
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const day = String(d.getDate()).padStart(2, '0');
+    if (timeFilter === 'today') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    } else if (timeFilter === 'week') {
+      const day = now.getDay();
+      const diffToMonday = day === 0 ? -6 : 1 - day;
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday);
+      endDate = new Date(startDate.getFullYear(), startDate.getMonth(), startDate.getDate() + 6);
+    } else if (timeFilter === 'month') {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    } else if (timeFilter === 'custom') {
+      if (customDate?.start && customDate?.end) {
+        const [sy, sm, sd] = customDate.start.split('-').map(Number);
+        const [ey, em, ed] = customDate.end.split('-').map(Number);
+        startDate = new Date(sy, sm - 1, sd);
+        endDate = new Date(ey, em - 1, ed);
+      } else if (customDate?.start) {
+        const [sy, sm, sd] = customDate.start.split('-').map(Number);
+        startDate = new Date(sy, sm - 1, sd);
+        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      } else if (customDate?.end) {
+        const [ey, em, ed] = customDate.end.split('-').map(Number);
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+        endDate = new Date(ey, em - 1, ed);
+      } else {
+        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+        endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      }
+    } else {
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    }
+
+    const diffTime = Math.abs(endDate - startDate);
+    const diffDays = Math.min(90, Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1);
+
+    const result = [];
+    const curr = new Date(startDate);
+
+    for (let i = 0; i < diffDays; i++) {
+      const year = curr.getFullYear();
+      const month = String(curr.getMonth() + 1).padStart(2, '0');
+      const day = String(curr.getDate()).padStart(2, '0');
       const dateKey = `${year}-${month}-${day}`;
-      const labelShort = d.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+      const labelShort = curr.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
 
-      // Agregasi transaksi pada hari tersebut
       let courtDaily = 0;
       let posDaily = 0;
       let sppDaily = 0;
       let sponsorDaily = 0;
 
       allMergedTransactions.forEach((tx) => {
+        if (tx.status === 'pending_clearing' || tx.status === 'failed') return;
         const txY = tx.dateObj.getFullYear();
         const txM = String(tx.dateObj.getMonth() + 1).padStart(2, '0');
         const txD = String(tx.dateObj.getDate()).padStart(2, '0');
@@ -445,17 +481,19 @@ export default function DashboardPage({ userProfile }) {
         'Sponsorship': sponsorDaily,
         total: courtDaily + posDaily + sppDaily + sponsorDaily
       });
+
+      curr.setDate(curr.getDate() + 1);
     }
 
     return result;
-  }, [allMergedTransactions, trendDays]);
+  }, [allMergedTransactions, timeFilter, customDate]);
 
   // =====================================================================
-  // 5. 10 TRANSAKSI TERAKHIR (RECENT TRANSACTIONS TABLE) (INTRUKSI 3)
+  // 5. 10 TRANSAKSI TERAKHIR SESUAI PERIODE FILTER
   // =====================================================================
   const recentTransactions = useMemo(() => {
-    return allMergedTransactions.slice(0, 10);
-  }, [allMergedTransactions]);
+    return (financialSummary.filteredList || []).slice(0, 10);
+  }, [financialSummary.filteredList]);
 
   // =====================================================================
   // 6. TRANSAKSI MENUNGGU KLIRING (PENDING GIRO RECONCILIATION - FASE 12 PART 4)
@@ -605,8 +643,11 @@ export default function DashboardPage({ userProfile }) {
     }
   };
 
-  // Okupansi Lapangan Terhitung
-  const totalBookingsCount = (bookings || []).length;
+  // Okupansi Lapangan Terhitung Berdasarkan Periode Filter
+  const filteredBookingsCount = useMemo(() => {
+    return filterDataByTime(bookings || [], 'bookingDate', timeFilter, customDate).length;
+  }, [bookings, timeFilter, customDate]);
+
   const occupancyPercentage = useMemo(() => {
     let daysFactor = 1;
     if (timeFilter === 'week') daysFactor = 7;
@@ -618,9 +659,9 @@ export default function DashboardPage({ userProfile }) {
     }
     const totalPossibleSlots = (totalCourtsCount || 1) * 15 * daysFactor;
     return totalPossibleSlots > 0
-      ? Math.min(100, Math.round((totalBookingsCount / totalPossibleSlots) * 100))
+      ? Math.min(100, Math.round((filteredBookingsCount / totalPossibleSlots) * 100))
       : 0;
-  }, [totalCourtsCount, totalBookingsCount, timeFilter, customDate]);
+  }, [totalCourtsCount, filteredBookingsCount, timeFilter, customDate]);
 
   // 2. EARLY RETURNS HARUS DIBUAT DI BAWAH SEMUA DEKLARASI HOOKS
   if (isLoading) {
@@ -733,27 +774,27 @@ export default function DashboardPage({ userProfile }) {
       </div>
 
       {/* =============================================================== */}
-      {/* 5 KARTU EKSEKUTIF KPI KEUANGAN (TERMASUK B2B SPONSORSHIP)       */}
+      {/* 5 KARTU EKSEKUTIF KPI KEUANGAN (TERHUBUNG KE PERIODE ANALITIK)  */}
       {/* =============================================================== */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-2.5 lg:gap-3.5">
         
-        {/* KARTU 1: GROSS REVENUE BULAN INI (WARM MUSTARD) */}
+        {/* KARTU 1: GROSS REVENUE PERIODE (WARM MUSTARD) */}
         <div className="bg-[#C89D32] text-white bg-topography-waves p-3 lg:p-3.5 rounded-xl shadow-xs hover:shadow-sm transition-all space-y-1 relative overflow-hidden col-span-2 lg:col-span-1">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-semibold text-white/85 uppercase tracking-wider leading-tight">
-              GROSS REVENUE BULAN INI
+              GROSS REVENUE ({timeFilter === 'today' ? 'HARI INI' : timeFilter === 'week' ? 'MINGGU INI' : timeFilter === 'month' ? 'BULAN INI' : 'PERIODE'})
             </span>
             <div className="w-6 h-6 lg:w-7 lg:h-7 bg-white/20 text-white rounded-lg flex items-center justify-center shrink-0 backdrop-blur-xs">
               <DollarSign className="w-3.5 h-3.5" />
             </div>
           </div>
           <p className="text-lg lg:text-xl font-bold text-white tracking-tight my-1 font-mono tabular-nums">
-            {formatRupiah(financialSummary.grossRevenueThisMonth)}
+            {formatRupiah(financialSummary.filteredTotalRevenue)}
           </p>
           <div className="flex items-center justify-between text-[10px] pt-1.5 border-t border-white/20">
             <span className="text-white/80 font-medium">Status:</span>
             <span className="font-semibold text-white bg-white/20 px-2 py-0.5 rounded-md text-[9px] whitespace-nowrap">
-              {financialSummary.totalTransactionsCount} Transaksi
+              {financialSummary.filteredCount} Transaksi
             </span>
           </div>
         </div>
@@ -769,12 +810,12 @@ export default function DashboardPage({ userProfile }) {
             </div>
           </div>
           <p className="text-base lg:text-xl font-bold text-white tracking-tight my-1 font-mono tabular-nums">
-            {formatRupiah(financialSummary.courtRevMonth)}
+            {formatRupiah(financialSummary.courtRevFiltered)}
           </p>
           <div className="flex items-center justify-between text-[10px] pt-1.5 border-t border-white/20">
             <span className="text-white/80 font-medium hidden sm:inline">Status:</span>
             <span className="font-semibold text-white bg-white/15 px-2 py-0.5 rounded-md text-[9px] whitespace-nowrap">
-              {occupancyPercentage}% ({totalBookingsCount} Sesi)
+              {occupancyPercentage}% ({filteredBookingsCount} Sesi)
             </span>
           </div>
         </div>
@@ -790,7 +831,7 @@ export default function DashboardPage({ userProfile }) {
             </div>
           </div>
           <p className="text-base lg:text-xl font-bold text-white tracking-tight my-1 font-mono tabular-nums">
-            {formatRupiah(financialSummary.posRevMonth)}
+            {formatRupiah(financialSummary.posRevFiltered)}
           </p>
           <div className="flex items-center justify-between text-[10px] pt-1.5 border-t border-white/20">
             <span className="text-white/80 font-medium hidden sm:inline">Status:</span>
@@ -811,7 +852,7 @@ export default function DashboardPage({ userProfile }) {
             </div>
           </div>
           <p className="text-base lg:text-xl font-bold text-white tracking-tight my-1 font-mono tabular-nums">
-            {formatRupiah(financialSummary.sppRevMonth)}
+            {formatRupiah(financialSummary.sppRevFiltered)}
           </p>
           <div className="flex items-center justify-between text-[10px] pt-1.5 border-t border-white/20">
             <span className="text-white/80 font-medium hidden sm:inline">Status:</span>
@@ -832,7 +873,7 @@ export default function DashboardPage({ userProfile }) {
             </div>
           </div>
           <p className="text-base lg:text-xl font-bold text-white tracking-tight my-1 font-mono tabular-nums">
-            {formatRupiah(financialSummary.sponsorRevMonth || 0)}
+            {formatRupiah(financialSummary.sponsorRevFiltered || 0)}
           </p>
           <div className="flex items-center justify-between text-[10px] pt-1.5 border-t border-white/20">
             <span className="text-white/80 font-medium hidden sm:inline">Status:</span>
@@ -990,30 +1031,8 @@ export default function DashboardPage({ userProfile }) {
                 <span>Tren Pendapatan Harian Multi-Divisi</span>
               </h2>
               <p className="text-[11px] text-slate-400 mt-0.5">
-                Fluktuasi penerimaan kas dari Sewa Lapangan, POS Retail, dan SPP Akademi
+                Fluktuasi penerimaan kas dari Sewa Lapangan, POS Retail, SPP Akademi, dan Sponsorship
               </p>
-            </div>
-
-            {/* Toggle 7 Hari vs 14 Hari */}
-            <div className="flex items-center bg-slate-100 dark:bg-white/10 p-0.5 rounded-lg shrink-0 self-start sm:self-auto text-xs">
-              <button
-                type="button"
-                onClick={() => setTrendDays(7)}
-                className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                  trendDays === 7 ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-2xs' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
-                }`}
-              >
-                7 Hari
-              </button>
-              <button
-                type="button"
-                onClick={() => setTrendDays(14)}
-                className={`px-2.5 py-1 rounded-md text-xs font-semibold transition-all cursor-pointer ${
-                  trendDays === 14 ? 'bg-white dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-2xs' : 'text-slate-500 hover:text-slate-800 dark:text-slate-400'
-                }`}
-              >
-                14 Hari
-              </button>
             </div>
           </div>
 
