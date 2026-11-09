@@ -170,7 +170,6 @@ export default function App() {
             <Route element={<PortalLayout />}>
               {/* Primary Entry Point: Portal V2 Login */}
               <Route path="/portal" element={<PortalLoginV2 />} />
-              <Route path="/portal/mobile-design-system" element={<MobileDesignSystemPreview />} />
               <Route path="/portal/claim" element={<PortalClaimInvitation />} />
               <Route path="/portal/claim-invitation" element={<PortalClaimInvitation />} />
               <Route path="/portal/accept-invitation" element={<PortalClaimInvitation />} />

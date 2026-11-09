@@ -30,6 +30,8 @@ import {
 } from './icons/App3DIcons';
 
 import useUserAccessScope from '../hooks/useUserAccessScope';
+import MobileLayoutSwitch from '../mobile/layouts/MobileLayoutSwitch';
+import MobileAppShell from '../mobile/layouts/MobileAppShell';
 
 const ALL_NAV_ITEMS = [
   { path: '/dashboard', label: 'Dashboard', name: 'Dashboard', icon: Dashboard3DIcon },
@@ -43,7 +45,7 @@ const ALL_NAV_ITEMS = [
   { path: '/pengaturan', label: 'Profil', name: 'Profil', icon: Pengaturan3DIcon },
 ];
 
-export default function Layout({ userProfile }) {
+function DesktopLayout({ userProfile }) {
   const navigate = useNavigate();
   const location = useLocation();
   const userAccess = useUserAccessScope(userProfile);
@@ -958,3 +960,14 @@ export default function Layout({ userProfile }) {
     </div>
   );
 }
+
+export default function Layout({ userProfile }) {
+  return (
+    <MobileLayoutSwitch
+      desktopComponent={DesktopLayout}
+      mobileComponent={MobileAppShell}
+      userProfile={userProfile}
+    />
+  );
+}
+
