@@ -849,7 +849,24 @@ export default function MobileAcademyHub({ userProfile }) {
                 <div key={c.id} className="p-3 rounded-xl border border-slate-200/80 bg-slate-50/50 space-y-2">
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-9 h-9 rounded-full bg-[var(--chua-m-navy)] text-white font-black flex items-center justify-center text-xs shrink-0">
+                      {c.photoUrl ? (
+                        <img
+                          src={c.photoUrl}
+                          alt={c.name}
+                          className="w-10 h-10 rounded-full object-cover shrink-0 border border-[#354944]/30 shadow-2xs"
+                          onError={(e) => {
+                            e.target.style.display = 'none';
+                            if (e.target.nextElementSibling) {
+                              e.target.nextElementSibling.style.display = 'flex';
+                            }
+                          }}
+                        />
+                      ) : null}
+                      <div
+                        className={`w-10 h-10 rounded-full bg-[var(--chua-m-navy)] text-white font-black flex items-center justify-center text-xs shrink-0 border border-white/20 shadow-2xs ${
+                          c.photoUrl ? 'hidden' : 'flex'
+                        }`}
+                      >
                         {c.name ? c.name.slice(0, 2).toUpperCase() : 'CO'}
                       </div>
                       <div className="min-w-0">

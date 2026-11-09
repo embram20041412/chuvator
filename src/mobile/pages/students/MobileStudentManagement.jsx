@@ -291,64 +291,35 @@ export default function MobileStudentManagement({ userProfile }) {
         </div>
       )}
 
-      {/* A. WORKSPACE ACADEMY & PAGE HEADER */}
-      <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-[var(--chua-m-navy)] text-white flex items-center justify-center font-black text-base shadow-xs shrink-0 border border-white/20">
-              {activeAcademy?.name ? activeAcademy.name.charAt(0).toUpperCase() : 'A'}
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  {activeAcademy?.sport || 'General Sports'}
-                </span>
-                <span className="text-[10px] font-semibold text-slate-400">
-                  {statsSummary.total} Siswa Terdaftar
-                </span>
-              </div>
-              <h1 className="text-base font-extrabold text-slate-800 truncate my-0">
-                {activeAcademy?.name || 'Akademi Olahraga'}
-              </h1>
-            </div>
+      {/* A. STUDENT MANAGEMENT ACTION & SUMMARY BAR */}
+      <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+              {activeAcademy?.sport || 'General Sports'}
+            </span>
+            <span className="text-[11px] font-extrabold text-slate-800">
+              {statsSummary.total} Siswa Terdaftar
+            </span>
           </div>
-
-          {/* Add Student Button (Owner/Admin only) */}
-          {!isCoachOnly && (
-            <button
-              type="button"
-              onClick={() => {
-                setEditingStudent(null);
-                setShowAddModal(true);
-              }}
-              className="p-2.5 rounded-xl bg-[var(--chua-m-emerald)] hover:opacity-90 text-white font-bold text-xs flex items-center gap-1 shadow-xs shrink-0 cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Siswa</span>
-            </button>
-          )}
+          <p className="text-[10px] text-slate-400 mt-0.5 truncate my-0">
+            Daftar atlet, kelompok kelas, &amp; monitoring iuran SPP
+          </p>
         </div>
 
-        {/* Multi-Academy Switcher Dropdown (if more than 1 academy exists) */}
-        {academies.length > 1 && !isCoachOnly && (
-          <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500">Pilih Workspace:</span>
-            <select
-              value={activeAcademyId}
-              onChange={(e) => {
-                const newId = e.target.value;
-                setActiveAcademyId(newId);
-                localStorage.setItem('activeAcademyId', newId);
-              }}
-              className="text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-2.5 py-1 focus:ring-2 focus:ring-emerald-500 outline-none"
-            >
-              {academies.map((ac) => (
-                <option key={ac.id} value={ac.id}>
-                  {ac.name} ({ac.sport})
-                </option>
-              ))}
-            </select>
-          </div>
+        {/* Add Student Button (Owner/Admin only) */}
+        {!isCoachOnly && (
+          <button
+            type="button"
+            onClick={() => {
+              setEditingStudent(null);
+              setShowAddModal(true);
+            }}
+            className="p-2.5 rounded-xl bg-[var(--chua-m-emerald)] hover:opacity-90 text-white font-bold text-xs flex items-center gap-1 shadow-xs shrink-0 cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ Siswa</span>
+          </button>
         )}
       </div>
 

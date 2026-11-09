@@ -35,10 +35,6 @@ export default function MobileAppShell({ userProfile }) {
 
   const isProfilActive = location.pathname.startsWith('/pengaturan');
   const currentProfileTab = new URLSearchParams(location.search).get('tab') || 'profil';
-
-  const isAkademiActive = location.pathname.startsWith('/akademi');
-  const currentAkademiTab = new URLSearchParams(location.search).get('tab') || 'dasbor';
-
   const profileSubMenuItems = [
     { id: 'profil', label: 'Profil GOR', path: '/pengaturan?tab=profil' },
     { id: 'pembayaran', label: 'Rekening & QRIS', path: '/pengaturan?tab=pembayaran' },
@@ -47,21 +43,6 @@ export default function MobileAppShell({ userProfile }) {
     { id: 'master_pricing', label: 'Master Tarif', path: '/pengaturan?tab=master_pricing' },
     { id: 'staf', label: 'Kelola Staf', path: '/pengaturan?tab=staf' },
   ];
-
-  const rawAcademySubMenuItems = [
-    { id: 'dasbor', label: 'Dasbor', path: '/akademi?tab=dasbor' },
-    { id: 'siswa', label: 'Siswa & SPP', path: '/akademi?tab=siswa' },
-    { id: 'pelatih', label: 'Pelatih', path: '/akademi?tab=pelatih' },
-    { id: 'kelas', label: 'Kelas', path: '/akademi?tab=kelas' },
-    { id: 'presensi', label: 'Presensi', path: '/akademi?tab=presensi' },
-  ];
-
-  const academySubMenuItems = rawAcademySubMenuItems.filter((sub) => {
-    if (userAccess.isCoachOnly) {
-      return sub.id === 'kelas' || sub.id === 'presensi';
-    }
-    return true;
-  });
 
   return (
     <div className="chua-mobile-app chua-mobile-page min-h-screen bg-[var(--chua-m-bg)] text-[var(--chua-m-text-primary)]">
@@ -117,30 +98,6 @@ export default function MobileAppShell({ userProfile }) {
           <div className="flex overflow-x-auto no-scrollbar gap-2 px-1">
             {profileSubMenuItems.map((sub) => {
               const isSubActive = currentProfileTab === sub.id;
-              return (
-                <Link
-                  key={sub.id}
-                  to={sub.path}
-                  className={`whitespace-nowrap px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 border ${
-                    isSubActive
-                      ? 'bg-[var(--chua-m-blue)] text-white border-[var(--chua-m-blue)] shadow-xs'
-                      : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
-                  }`}
-                >
-                  {sub.label}
-                </Link>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* 3. STICKY SUB-MENU TAB BAR (AKADEMI) */}
-      {isAkademiActive && (
-        <div className="sticky top-[var(--chua-m-header-height)] z-20 bg-white border-b border-slate-200 p-2 shadow-xs">
-          <div className="flex overflow-x-auto no-scrollbar gap-2 px-1">
-            {academySubMenuItems.map((sub) => {
-              const isSubActive = currentAkademiTab === sub.id;
               return (
                 <Link
                   key={sub.id}
