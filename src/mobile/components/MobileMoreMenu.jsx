@@ -1,21 +1,13 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  Trophy, 
-  DollarSign, 
-  Sparkles, 
-  Settings, 
-  Users, 
-  ShieldCheck,
-  Building2,
-  Receipt
-} from 'lucide-react';
 import MobileBottomSheet from './MobileBottomSheet';
 import useUserAccessScope from '../../hooks/useUserAccessScope';
+import App3DMobileIcon from './App3DMobileIcon';
 
 /**
  * MobileMoreMenu Component
  * Bottom sheet drawer for additional operational modules, RBAC-filtered.
+ * Uses custom 3D claymorphic icons for each operational module.
  * Scoped under .chua-mobile-app
  */
 export default function MobileMoreMenu({ isOpen, onClose, userProfile }) {
@@ -33,7 +25,7 @@ export default function MobileMoreMenu({ isOpen, onClose, userProfile }) {
       title: 'Event & Turnamen',
       subtitle: 'Bagan, Skor & Sponsor',
       path: '/events',
-      icon: Trophy,
+      icon3d: 'event',
       show: !userAccess.isCoachOnly,
     },
     {
@@ -41,7 +33,7 @@ export default function MobileMoreMenu({ isOpen, onClose, userProfile }) {
       title: 'Keuangan & Kas',
       subtitle: 'Laporan & Arus Kas',
       path: '/keuangan',
-      icon: DollarSign,
+      icon3d: 'keuangan',
       show: userAccess.canAccessFinance || userAccess.isOwner || userAccess.isSuperAdmin,
     },
     {
@@ -49,7 +41,7 @@ export default function MobileMoreMenu({ isOpen, onClose, userProfile }) {
       title: 'AI Insight',
       subtitle: 'Rekomendasi Bisnis GOR',
       path: '/intelligence',
-      icon: Sparkles,
+      icon3d: 'ai_insight',
       show: !userAccess.isCoachOnly,
     },
     {
@@ -57,7 +49,7 @@ export default function MobileMoreMenu({ isOpen, onClose, userProfile }) {
       title: 'Wali Murid',
       subtitle: 'Portal & Tagihan SPP',
       path: '/parents',
-      icon: Users,
+      icon3d: 'wali_murid',
       show: !userAccess.isCoachOnly,
     },
     {
@@ -65,7 +57,7 @@ export default function MobileMoreMenu({ isOpen, onClose, userProfile }) {
       title: 'Profil Identitas GOR',
       subtitle: 'Identitas, Logo & Kontak',
       path: '/pengaturan?tab=profil',
-      icon: Building2,
+      icon3d: 'profil_gor',
       show: true,
     },
     {
@@ -73,7 +65,7 @@ export default function MobileMoreMenu({ isOpen, onClose, userProfile }) {
       title: 'Tarif Lapangan & SPP',
       subtitle: 'Master Tarif & Rekening',
       path: '/pengaturan?tab=tarif',
-      icon: Receipt,
+      icon3d: 'tarif_spp',
       show: !userAccess.isCoachOnly,
     },
     {
@@ -81,7 +73,7 @@ export default function MobileMoreMenu({ isOpen, onClose, userProfile }) {
       title: 'Kelola Staf & Pelatih',
       subtitle: 'Manajemen Akses & Sesi',
       path: '/pengaturan?tab=staf',
-      icon: ShieldCheck,
+      icon3d: 'staf_pelatih',
       show: userAccess.isOwner || userAccess.isSuperAdmin,
     },
   ];
@@ -99,28 +91,26 @@ export default function MobileMoreMenu({ isOpen, onClose, userProfile }) {
       </p>
 
       <div className="grid grid-cols-2 gap-3 mb-2">
-        {visibleModules.map((item) => {
-          const Icon = item.icon;
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => handleNavigate(item.path)}
-              className="p-3.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-2xl flex flex-col items-start text-left transition-all active:scale-98 cursor-pointer"
-            >
-              <div className="w-8 h-8 rounded-xl bg-[var(--chua-m-surface-subtle)] text-[var(--chua-m-blue)] flex items-center justify-center mb-2">
-                <Icon className="w-4 h-4" />
-              </div>
-              <span className="font-bold text-xs text-slate-800 line-clamp-1">
-                {item.title}
-              </span>
-              <span className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">
-                {item.subtitle}
-              </span>
-            </button>
-          );
-        })}
+        {visibleModules.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => handleNavigate(item.path)}
+            className="p-3.5 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-2xl flex flex-col items-start text-left transition-all active:scale-98 cursor-pointer shadow-2xs"
+          >
+            <div className="w-10 h-10 rounded-xl bg-white shadow-xs border border-slate-200/60 flex items-center justify-center mb-2 shrink-0">
+              <App3DMobileIcon name={item.icon3d} className="w-7 h-7" alt={item.title} />
+            </div>
+            <span className="font-bold text-xs text-slate-800 line-clamp-1">
+              {item.title}
+            </span>
+            <span className="text-[10px] text-slate-400 mt-0.5 line-clamp-1">
+              {item.subtitle}
+            </span>
+          </button>
+        ))}
       </div>
     </MobileBottomSheet>
   );
 }
+

@@ -33,6 +33,7 @@ import LockScheduleModal from '../../../components/LockScheduleModal';
 
 // Dedicated mobile student management
 import MobileStudentManagement from '../students/MobileStudentManagement';
+import App3DMobileIcon from '../../components/App3DMobileIcon';
 
 /**
  * MobileAcademyHub Component
@@ -442,8 +443,8 @@ export default function MobileAcademyHub({ userProfile }) {
       <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs space-y-2.5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-[var(--chua-m-navy)] text-white flex items-center justify-center font-black text-sm shadow-xs shrink-0 border border-white/20">
-              {activeAcademy?.name ? activeAcademy.name.charAt(0).toUpperCase() : 'A'}
+            <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-center shrink-0 shadow-2xs">
+              <App3DMobileIcon name="akademi" className="w-8 h-8" alt={activeAcademy?.name || 'Akademi'} />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
@@ -518,13 +519,13 @@ export default function MobileAcademyHub({ userProfile }) {
           <button
             type="button"
             onClick={() => handleTabChange('dasbor')}
-            className={`flex-1 min-w-[76px] py-2 px-2 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1 transition-all cursor-pointer ${
+            className={`flex-1 min-w-[76px] py-2 px-2 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               activeTab === 'dasbor'
                 ? 'bg-[var(--chua-m-navy)] text-white shadow-xs'
                 : 'text-slate-600 hover:bg-slate-50'
             }`}
           >
-            <LayoutDashboard className="w-3.5 h-3.5 shrink-0" />
+            <App3DMobileIcon name="ai_insight" active={activeTab === 'dasbor'} className="w-4 h-4 shrink-0" />
             <span className="whitespace-nowrap">Dasbor</span>
           </button>
         )}
@@ -533,13 +534,13 @@ export default function MobileAcademyHub({ userProfile }) {
           <button
             type="button"
             onClick={() => handleTabChange('siswa')}
-            className={`flex-1 min-w-[76px] py-2 px-2 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1 transition-all cursor-pointer ${
+            className={`flex-1 min-w-[76px] py-2 px-2 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               activeTab === 'siswa'
                 ? 'bg-[var(--chua-m-navy)] text-white shadow-xs'
                 : 'text-slate-600 hover:bg-slate-50'
             }`}
           >
-            <Users className="w-3.5 h-3.5 shrink-0" />
+            <App3DMobileIcon name="siswa" active={activeTab === 'siswa'} className="w-4 h-4 shrink-0" />
             <span className="whitespace-nowrap">Siswa</span>
           </button>
         )}
@@ -547,26 +548,26 @@ export default function MobileAcademyHub({ userProfile }) {
         <button
           type="button"
           onClick={() => handleTabChange('kelas')}
-          className={`flex-1 min-w-[76px] py-2 px-2 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1 transition-all cursor-pointer ${
+          className={`flex-1 min-w-[76px] py-2 px-2 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
             activeTab === 'kelas'
               ? 'bg-[var(--chua-m-navy)] text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-50'
           }`}
         >
-          <Calendar className="w-3.5 h-3.5 shrink-0" />
+          <App3DMobileIcon name="booking" active={activeTab === 'kelas'} className="w-4 h-4 shrink-0" />
           <span className="whitespace-nowrap">Kelas</span>
         </button>
 
         <button
           type="button"
           onClick={() => handleTabChange('presensi')}
-          className={`flex-1 min-w-[76px] py-2 px-2 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1 transition-all cursor-pointer ${
+          className={`flex-1 min-w-[76px] py-2 px-2 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
             activeTab === 'presensi'
               ? 'bg-[var(--chua-m-navy)] text-white shadow-xs'
               : 'text-slate-600 hover:bg-slate-50'
           }`}
         >
-          <ClipboardCheck className="w-3.5 h-3.5 shrink-0" />
+          <App3DMobileIcon name="presensi" active={activeTab === 'presensi'} className="w-4 h-4 shrink-0" />
           <span className="whitespace-nowrap">Presensi</span>
         </button>
 
@@ -574,13 +575,13 @@ export default function MobileAcademyHub({ userProfile }) {
           <button
             type="button"
             onClick={() => handleTabChange('pelatih')}
-            className={`flex-1 min-w-[76px] py-2 px-2 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1 transition-all cursor-pointer ${
+            className={`flex-1 min-w-[76px] py-2 px-2 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               activeTab === 'pelatih'
                 ? 'bg-[var(--chua-m-navy)] text-white shadow-xs'
                 : 'text-slate-600 hover:bg-slate-50'
             }`}
           >
-            <GraduationCap className="w-3.5 h-3.5 shrink-0" />
+            <App3DMobileIcon name="staf_pelatih" active={activeTab === 'pelatih'} className="w-4 h-4 shrink-0" />
             <span className="whitespace-nowrap">Pelatih</span>
           </button>
         )}
@@ -706,35 +707,38 @@ export default function MobileAcademyHub({ userProfile }) {
               <button
                 type="button"
                 onClick={() => setAttendanceSubTab('presensi')}
-                className={`py-1.5 text-xs font-bold rounded-lg transition-all text-center ${
+                className={`py-1.5 px-1 text-xs font-bold rounded-lg transition-all text-center flex items-center justify-center gap-1 ${
                   attendanceSubTab === 'presensi'
                     ? 'bg-[var(--chua-m-navy)] text-white shadow-xs'
                     : 'text-slate-600'
                 }`}
               >
-                Presensi
+                <App3DMobileIcon name="presensi" className="w-3.5 h-3.5 shrink-0" />
+                <span>Presensi</span>
               </button>
               <button
                 type="button"
                 onClick={() => setAttendanceSubTab('evaluasi')}
-                className={`py-1.5 text-xs font-bold rounded-lg transition-all text-center ${
+                className={`py-1.5 px-1 text-xs font-bold rounded-lg transition-all text-center flex items-center justify-center gap-1 ${
                   attendanceSubTab === 'evaluasi'
                     ? 'bg-[var(--chua-m-navy)] text-white shadow-xs'
                     : 'text-slate-600'
                 }`}
               >
-                Evaluasi
+                <App3DMobileIcon name="evaluasi" className="w-3.5 h-3.5 shrink-0" />
+                <span>Evaluasi</span>
               </button>
               <button
                 type="button"
                 onClick={() => setAttendanceSubTab('antropometri')}
-                className={`py-1.5 text-xs font-bold rounded-lg transition-all text-center ${
+                className={`py-1.5 px-1 text-xs font-bold rounded-lg transition-all text-center flex items-center justify-center gap-1 ${
                   attendanceSubTab === 'antropometri'
                     ? 'bg-[var(--chua-m-navy)] text-white shadow-xs'
                     : 'text-slate-600'
                 }`}
               >
-                Growth
+                <App3DMobileIcon name="ai_insight" className="w-3.5 h-3.5 shrink-0" />
+                <span>Growth</span>
               </button>
             </div>
 

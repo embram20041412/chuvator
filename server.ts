@@ -500,6 +500,9 @@ async function handleCloudflareFunction(
     }
   });
 
+  // Static assets from public directory
+  app.use(express.static(path.join(__dirname, 'public')));
+
   // Vite Integration
   if (!isProd) {
     const vite = await createViteServer({

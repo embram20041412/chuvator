@@ -18,3 +18,4 @@ export { default as MobileToast } from './MobileToast';
 export { default as MobileBottomNav } from './MobileBottomNav';
 export { default as MobileMoreMenu } from './MobileMoreMenu';
 export { default as MobileProfileSheet } from './MobileProfileSheet';
+export { default as App3DMobileIcon, ICON_3D_MAP } from './App3DMobileIcon';

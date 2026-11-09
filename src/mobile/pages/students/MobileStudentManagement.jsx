@@ -40,6 +40,7 @@ import MobileSecondaryButton from '../../components/MobileSecondaryButton';
 import MobileEmptyState from '../../components/MobileEmptyState';
 import MobileLoadingState from '../../components/MobileLoadingState';
 import MobileBottomSheet from '../../components/MobileBottomSheet';
+import App3DMobileIcon from '../../components/App3DMobileIcon';
 
 import StudentDetailModal from '../../../components/StudentDetailModal';
 import StudentRegistrationModal from '../../../components/StudentRegistrationModal';
@@ -293,18 +294,23 @@ export default function MobileStudentManagement({ userProfile }) {
 
       {/* A. STUDENT MANAGEMENT ACTION & SUMMARY BAR */}
       <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between gap-2">
-        <div className="min-w-0">
-          <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-              {activeAcademy?.sport || 'General Sports'}
-            </span>
-            <span className="text-[11px] font-extrabold text-slate-800">
-              {statsSummary.total} Siswa Terdaftar
-            </span>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-center shrink-0 shadow-2xs">
+            <App3DMobileIcon name="siswa" className="w-8 h-8" alt="Siswa" />
           </div>
-          <p className="text-[10px] text-slate-400 mt-0.5 truncate my-0">
-            Daftar atlet, kelompok kelas, &amp; monitoring iuran SPP
-          </p>
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                {activeAcademy?.sport || 'General Sports'}
+              </span>
+              <span className="text-[11px] font-extrabold text-slate-800">
+                {statsSummary.total} Siswa Terdaftar
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-0.5 truncate my-0">
+              Daftar atlet, kelompok kelas, &amp; monitoring iuran SPP
+            </p>
+          </div>
         </div>
 
         {/* Add Student Button (Owner/Admin only) */}
@@ -325,7 +331,8 @@ export default function MobileStudentManagement({ userProfile }) {
 
       {/* B. SPP STATUS METRICS CARD */}
       <div className="grid grid-cols-3 gap-2">
-        <MobileCard className="p-3 space-y-1 text-center my-0">
+        <MobileCard className="p-2.5 space-y-1 text-center my-0 flex flex-col items-center justify-center">
+          <App3DMobileIcon name="siswa" className="w-6 h-6 mb-0.5" alt="Total" />
           <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block">
             Total Siswa
           </span>
@@ -334,7 +341,8 @@ export default function MobileStudentManagement({ userProfile }) {
           </p>
         </MobileCard>
 
-        <MobileCard className="p-3 space-y-1 text-center my-0">
+        <MobileCard className="p-2.5 space-y-1 text-center my-0 flex flex-col items-center justify-center">
+          <App3DMobileIcon name="spp" className="w-6 h-6 mb-0.5" alt="SPP Lunas" />
           <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider block">
             SPP Lunas
           </span>
@@ -343,7 +351,8 @@ export default function MobileStudentManagement({ userProfile }) {
           </p>
         </MobileCard>
 
-        <MobileCard className="p-3 space-y-1 text-center my-0">
+        <MobileCard className="p-2.5 space-y-1 text-center my-0 flex flex-col items-center justify-center">
+          <App3DMobileIcon name="tarif_spp" className="w-6 h-6 mb-0.5" alt="Tunggakan" />
           <span className="text-[9px] font-bold text-red-600 uppercase tracking-wider block">
             Menunggak
           </span>

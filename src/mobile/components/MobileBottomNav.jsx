@@ -1,17 +1,13 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { 
-  Home, 
-  Calendar, 
-  CreditCard, 
-  GraduationCap, 
-  Grid 
-} from 'lucide-react';
+import { Grid } from 'lucide-react';
 import useUserAccessScope from '../../hooks/useUserAccessScope';
+import App3DMobileIcon from './App3DMobileIcon';
 
 /**
  * MobileBottomNav Component
  * 5-Item Mobile Bottom Navigation Bar with prominent center POS button.
+ * Uses custom 3D claymorphic icons for mobile presentation.
  * Scoped under .chua-mobile-app
  */
 export default function MobileBottomNav({ userProfile, onOpenMore }) {
@@ -41,7 +37,7 @@ export default function MobileBottomNav({ userProfile, onOpenMore }) {
             }`
           }
         >
-          <GraduationCap className="w-5 h-5 mb-0.5" />
+          <App3DMobileIcon name="akademi" active={isActive || isAkademiActive} className="w-6 h-6 mb-0.5" />
           <span className="text-[11px] tracking-tight">Akademi</span>
         </NavLink>
 
@@ -50,7 +46,7 @@ export default function MobileBottomNav({ userProfile, onOpenMore }) {
           onClick={onOpenMore}
           className="flex flex-col items-center justify-center flex-1 h-full min-h-[44px] text-slate-500 font-medium hover:text-slate-800 transition-colors"
         >
-          <Grid className="w-5 h-5 mb-0.5" />
+          <Grid className="w-5 h-5 mb-0.5 text-slate-600" />
           <span className="text-[11px] tracking-tight">Lainnya</span>
         </button>
       </nav>
@@ -72,7 +68,7 @@ export default function MobileBottomNav({ userProfile, onOpenMore }) {
           isHomeActive ? 'text-[var(--chua-m-blue)] font-bold' : 'text-slate-500 hover:text-slate-800 font-medium'
         }`}
       >
-        <Home className="w-5 h-5 mb-0.5" />
+        <App3DMobileIcon name="beranda" active={isHomeActive} className="w-6 h-6 mb-0.5" />
         <span className="text-[10px] tracking-tight">Beranda</span>
       </NavLink>
 
@@ -83,7 +79,7 @@ export default function MobileBottomNav({ userProfile, onOpenMore }) {
           isBookingActive ? 'text-[var(--chua-m-blue)] font-bold' : 'text-slate-500 hover:text-slate-800 font-medium'
         }`}
       >
-        <Calendar className="w-5 h-5 mb-0.5" />
+        <App3DMobileIcon name="booking" active={isBookingActive} className="w-6 h-6 mb-0.5" />
         <span className="text-[10px] tracking-tight">Booking</span>
       </NavLink>
 
@@ -91,13 +87,13 @@ export default function MobileBottomNav({ userProfile, onOpenMore }) {
       <div className="flex-1 flex justify-center -mt-5">
         <NavLink
           to="/kasir"
-          className={`w-13 h-13 rounded-full bg-[var(--chua-m-blue)] hover:bg-[var(--chua-m-blue-hover)] text-white shadow-md border-4 border-white flex flex-col items-center justify-center transition-transform active:scale-95 ${
+          className={`w-13 h-13 rounded-full bg-gradient-to-b from-[#1a3a60] to-[var(--chua-m-navy)] hover:opacity-95 text-white shadow-lg border-4 border-white flex flex-col items-center justify-center transition-transform active:scale-95 ${
             isKasirActive ? 'ring-2 ring-[var(--chua-m-blue)] ring-offset-2' : ''
           }`}
           title="Kasir POS"
         >
-          <CreditCard className="w-5 h-5" />
-          <span className="text-[9px] font-black uppercase tracking-tighter mt-0.5">POS</span>
+          <App3DMobileIcon name="kasir" active={isKasirActive} className="w-6 h-6 drop-shadow-md" />
+          <span className="text-[9px] font-black uppercase tracking-tighter mt-0.5 text-white">POS</span>
         </NavLink>
       </div>
 
@@ -108,7 +104,7 @@ export default function MobileBottomNav({ userProfile, onOpenMore }) {
           isAkademiActive ? 'text-[var(--chua-m-blue)] font-bold' : 'text-slate-500 hover:text-slate-800 font-medium'
         }`}
       >
-        <GraduationCap className="w-5 h-5 mb-0.5" />
+        <App3DMobileIcon name="akademi" active={isAkademiActive} className="w-6 h-6 mb-0.5" />
         <span className="text-[10px] tracking-tight">Akademi</span>
       </NavLink>
 
@@ -118,7 +114,7 @@ export default function MobileBottomNav({ userProfile, onOpenMore }) {
         onClick={onOpenMore}
         className="flex flex-col items-center justify-center flex-1 h-full min-h-[44px] text-slate-500 hover:text-slate-800 font-medium transition-colors"
       >
-        <Grid className="w-5 h-5 mb-0.5" />
+        <Grid className="w-5 h-5 mb-0.5 text-slate-600" />
         <span className="text-[10px] tracking-tight">Lainnya</span>
       </button>
     </nav>
