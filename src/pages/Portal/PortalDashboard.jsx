@@ -99,7 +99,7 @@ const formatSessionDate = (dateStr) => {
 const getEvaluationGrade = (score) => {
   const s = Number(score) || 0;
   if (s >= 90) return { label: 'Istimewa', badge: 'bg-emerald-50 text-emerald-700 border-emerald-200', text: 'text-emerald-600' };
-  if (s >= 80) return { label: 'Sangat Baik', badge: 'bg-blue-50 text-blue-700 border-blue-200', text: 'text-blue-600' };
+  if (s >= 80) return { label: 'Sangat Baik', badge: 'bg-teal-50 text-teal-700 border-teal-200', text: 'text-teal-600' };
   if (s >= 70) return { label: 'Baik', badge: 'bg-cyan-50 text-cyan-700 border-cyan-200', text: 'text-cyan-600' };
   if (s >= 60) return { label: 'Cukup', badge: 'bg-amber-50 text-amber-700 border-amber-200', text: 'text-amber-600' };
   return { label: 'Perlu Bimbingan', badge: 'bg-rose-50 text-rose-700 border-rose-200', text: 'text-rose-600' };
@@ -169,10 +169,10 @@ const getTournamentMedalStyle = (resultStr) => {
     };
   }
   return {
-    bg: 'bg-blue-50/60',
-    border: 'border-blue-200',
-    badge: 'bg-blue-100 text-blue-800 border-blue-200',
-    iconColor: 'text-blue-500'
+    bg: 'bg-teal-50/60',
+    border: 'border-teal-200',
+    badge: 'bg-teal-100 text-teal-800 border-teal-200',
+    iconColor: 'text-teal-500'
   };
 };
 
@@ -772,7 +772,7 @@ export default function PortalDashboard() {
   if (isVerifyingSession) {
     return (
       <div className="flex-1 min-h-screen bg-slate-50 flex flex-col items-center justify-center p-6 text-center">
-        <Loader2 className="w-8 h-8 text-blue-600 animate-spin mb-3" />
+        <Loader2 className="w-8 h-8 text-emerald-600 animate-spin mb-3" />
         <h2 className="text-sm font-bold text-slate-800">Memverifikasi Keamanan Sesi Portal...</h2>
         <p className="text-xs text-slate-500 mt-1 max-w-xs">
           Menghubungkan ke enkripsi portal resmi CHUA SPORT CORE
@@ -1040,7 +1040,7 @@ export default function PortalDashboard() {
                 className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-emerald-300 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between group"
               >
                 <div className="flex items-center space-x-3 min-w-0">
-                  <div className="w-12 h-12 rounded-2xl bg-blue-50/70 border border-blue-100 flex items-center justify-center shrink-0 p-1 group-hover:scale-105 transition-transform">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-50/70 border border-emerald-100 flex items-center justify-center shrink-0 p-1 group-hover:scale-105 transition-transform">
                     <img 
                       src="/icons/portal/tab-schedule.png" 
                       alt="Jadwal" 
@@ -1074,7 +1074,7 @@ export default function PortalDashboard() {
                 className="bg-white p-4 rounded-2xl border border-slate-200/90 shadow-2xs hover:border-emerald-300 hover:shadow-xs transition-all cursor-pointer flex items-center justify-between group"
               >
                 <div className="flex items-center space-x-3 min-w-0">
-                  <div className="w-12 h-12 rounded-2xl bg-purple-50/70 border border-purple-100 flex items-center justify-center shrink-0 p-1 group-hover:scale-105 transition-transform">
+                  <div className="w-12 h-12 rounded-2xl bg-emerald-50/70 border border-emerald-100 flex items-center justify-center shrink-0 p-1 group-hover:scale-105 transition-transform">
                     <img 
                       src="/icons/portal/tab-evaluation.png" 
                       alt="Assessment & Rapor" 
@@ -1153,7 +1153,7 @@ export default function PortalDashboard() {
                 onClick={() => setActiveTab('schedule')}
                 className="p-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-2xl text-center flex flex-col items-center justify-center space-y-1.5 transition-all shadow-2xs cursor-pointer group active:scale-95"
               >
-                <div className="w-9 h-9 rounded-xl bg-blue-50/80 group-hover:bg-blue-100 border border-blue-100/60 flex items-center justify-center transition-colors p-1">
+                <div className="w-9 h-9 rounded-xl bg-emerald-50/80 group-hover:bg-emerald-100 border border-emerald-100/60 flex items-center justify-center transition-colors p-1">
                   <img src="/icons/portal/tab-schedule.png" alt="Jadwal" className="w-7 h-7 object-contain" />
                 </div>
                 <span className="text-[10px] font-bold text-slate-700">Jadwal</span>
@@ -1164,7 +1164,7 @@ export default function PortalDashboard() {
                 onClick={() => setActiveTab('evaluation')}
                 className="p-3 bg-white hover:bg-slate-50 border border-slate-200 rounded-2xl text-center flex flex-col items-center justify-center space-y-1.5 transition-all shadow-2xs cursor-pointer group active:scale-95"
               >
-                <div className="w-9 h-9 rounded-xl bg-purple-50/80 group-hover:bg-purple-100 border border-purple-100/60 flex items-center justify-center transition-colors p-1">
+                <div className="w-9 h-9 rounded-xl bg-emerald-50/80 group-hover:bg-emerald-100 border border-emerald-100/60 flex items-center justify-center transition-colors p-1">
                   <img src="/icons/portal/tab-evaluation.png" alt="Rapor" className="w-7 h-7 object-contain" />
                 </div>
                 <span className="text-[10px] font-bold text-slate-700">Rapor</span>
@@ -1294,7 +1294,7 @@ export default function PortalDashboard() {
                 type="button"
                 disabled={!isBillingValid || isLoadingBilling}
                 onClick={handleOpenQrisModal}
-                className="w-full py-3 px-4 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 disabled:from-slate-300 disabled:to-slate-400 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-blue-600/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
+                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md shadow-emerald-700/20 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:cursor-not-allowed"
               >
                 <QrCode className="w-4 h-4" />
                 <span>Lihat Informasi QRIS / Rekening Transfer</span>
@@ -1349,7 +1349,7 @@ export default function PortalDashboard() {
             <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3.5">
               <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-2">
-                  <div className="w-9 h-9 rounded-xl bg-blue-50/80 border border-blue-100/60 flex items-center justify-center p-1 shrink-0">
+                  <div className="w-9 h-9 rounded-xl bg-emerald-50/80 border border-emerald-100/60 flex items-center justify-center p-1 shrink-0">
                     <img src="/icons/portal/tab-schedule.png" alt="Jadwal" className="w-7 h-7 object-contain" />
                   </div>
                   <div>
@@ -1370,7 +1370,7 @@ export default function PortalDashboard() {
                   onClick={() => setActiveScheduleTab('jadwal')}
                   className={`flex-1 py-1.5 rounded-lg text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                     activeScheduleTab === 'jadwal'
-                      ? 'bg-white text-blue-600 shadow-xs'
+                      ? 'bg-white text-emerald-700 shadow-xs'
                       : 'text-slate-500 hover:text-slate-800'
                   }`}
                 >
@@ -1388,7 +1388,7 @@ export default function PortalDashboard() {
                   onClick={() => setActiveScheduleTab('presensi')}
                   className={`flex-1 py-1.5 rounded-lg text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                     activeScheduleTab === 'presensi'
-                      ? 'bg-white text-blue-600 shadow-xs'
+                      ? 'bg-white text-emerald-700 shadow-xs'
                       : 'text-slate-500 hover:text-slate-800'
                   }`}
                 >
@@ -1402,7 +1402,7 @@ export default function PortalDashboard() {
                 <div className="space-y-2.5">
                   {isLoadingSchedule ? (
                     <div className="py-6 flex flex-col items-center justify-center text-slate-400 text-xs space-y-1.5">
-                      <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                      <Loader2 className="w-5 h-5 animate-spin text-emerald-600" />
                       <span>Memuat jadwal sesi latihan...</span>
                     </div>
                   ) : (() => {
@@ -1413,7 +1413,7 @@ export default function PortalDashboard() {
                     if (effectiveSessions.length === 0) {
                       return (
                         <div className="py-7 px-4 text-center rounded-xl bg-slate-50 border border-slate-100 space-y-1.5">
-                          <div className="w-9 h-9 rounded-xl bg-blue-50 text-blue-600 mx-auto flex items-center justify-center">
+                          <div className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 mx-auto flex items-center justify-center">
                             <Calendar className="w-4 h-4" />
                           </div>
                           <p className="text-xs font-bold text-slate-800">
@@ -1431,11 +1431,11 @@ export default function PortalDashboard() {
                         {effectiveSessions.map((s, idx) => (
                           <div
                             key={s.id || idx}
-                            className="p-3 bg-slate-50 hover:bg-blue-50/40 rounded-xl border border-slate-100 transition-colors flex items-center justify-between"
+                            className="p-3 bg-slate-50 hover:bg-emerald-50/40 rounded-xl border border-slate-100 transition-colors flex items-center justify-between"
                           >
                             <div className="space-y-1">
                               <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-extrabold rounded-md uppercase">
+                                <span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-100 text-[10px] font-extrabold rounded-md uppercase">
                                   {s.date ? formatSessionDate(s.date) : (s.day ? String(s.day).toUpperCase() : 'JADWAL RUTIN')}
                                 </span>
                                 <span className="text-xs font-bold text-slate-800 flex items-center gap-1 font-mono">
@@ -1455,8 +1455,8 @@ export default function PortalDashboard() {
                           </div>
                         ))}
                         
-                        <div className="p-2.5 bg-blue-50/70 rounded-xl border border-blue-100 text-[11px] text-blue-800 flex items-start gap-2">
-                          <Activity className="w-3.5 h-3.5 text-blue-600 shrink-0 mt-0.5" />
+                        <div className="p-2.5 bg-emerald-50/70 rounded-xl border border-emerald-100 text-[11px] text-emerald-800 flex items-start gap-2">
+                          <Activity className="w-3.5 h-3.5 text-emerald-600 shrink-0 mt-0.5" />
                           <span>Pastikan atlet hadir 15 menit sebelum sesi dimulai dengan seragam resmi akademi.</span>
                         </div>
                       </div>
@@ -1470,7 +1470,7 @@ export default function PortalDashboard() {
                 <div className="space-y-3">
                   {isLoadingSchedule ? (
                     <div className="py-6 flex flex-col items-center justify-center text-slate-400 text-xs space-y-1.5">
-                      <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                      <Loader2 className="w-5 h-5 animate-spin text-emerald-600" />
                       <span>Memuat catatan presensi...</span>
                     </div>
                   ) : (
@@ -1620,7 +1620,7 @@ export default function PortalDashboard() {
               <div className="bg-white rounded-2xl p-4 sm:p-5 border border-slate-200 shadow-xs space-y-3.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
-                    <div className="w-9 h-9 rounded-xl bg-purple-50/80 border border-purple-100/60 flex items-center justify-center p-1 shrink-0">
+                    <div className="w-9 h-9 rounded-xl bg-emerald-50/80 border border-emerald-100/60 flex items-center justify-center p-1 shrink-0">
                       <img src="/icons/portal/tab-evaluation.png" alt="Rapor & Assessment" className="w-7 h-7 object-contain" />
                     </div>
                     <div>
@@ -1634,8 +1634,8 @@ export default function PortalDashboard() {
                   </div>
 
                   {latestAssessment?.overallScore !== null && latestAssessment?.overallScore !== undefined ? (
-                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-extrabold border border-blue-200">
-                      <TrendingUp className="w-3 h-3 text-blue-600" />
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-extrabold border border-emerald-200">
+                      <TrendingUp className="w-3 h-3 text-emerald-600" />
                       <span>Skor {latestAssessment.overallScore}/100</span>
                     </span>
                   ) : latestGrowth ? (
@@ -1653,7 +1653,7 @@ export default function PortalDashboard() {
                     onClick={() => setActiveEvalTab('assessment')}
                     className={`flex-1 py-1.5 rounded-lg text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                       activeEvalTab === 'assessment'
-                        ? 'bg-white text-blue-600 shadow-xs'
+                        ? 'bg-white text-emerald-700 shadow-xs'
                         : 'text-slate-500 hover:text-slate-800'
                     }`}
                   >
@@ -1665,7 +1665,7 @@ export default function PortalDashboard() {
                     onClick={() => setActiveEvalTab('growth')}
                     className={`flex-1 py-1.5 rounded-lg text-center transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                       activeEvalTab === 'growth'
-                        ? 'bg-white text-emerald-600 shadow-xs'
+                        ? 'bg-white text-emerald-700 shadow-xs'
                         : 'text-slate-500 hover:text-slate-800'
                     }`}
                   >
@@ -1679,7 +1679,7 @@ export default function PortalDashboard() {
                   <div className="space-y-3">
                     {isLoadingEvaluation ? (
                       <div className="py-6 flex flex-col items-center justify-center text-slate-400 text-xs space-y-1.5">
-                        <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                        <Loader2 className="w-5 h-5 animate-spin text-emerald-600" />
                         <span>Memuat catatan evaluasi pelatih...</span>
                       </div>
                     ) : evaluationError ? (
@@ -1690,7 +1690,7 @@ export default function PortalDashboard() {
                     ) : latestAssessment ? (
                       <div className="space-y-3">
                         {/* Kartu Rapor Utama */}
-                        <div className="bg-gradient-to-br from-slate-50 to-blue-50/30 rounded-xl p-3.5 border border-slate-200 space-y-3">
+                        <div className="bg-gradient-to-br from-slate-50 to-emerald-50/30 rounded-xl p-3.5 border border-slate-200 space-y-3">
                           <div className="flex items-start justify-between gap-2">
                             <div>
                               <div className="flex items-center gap-1.5">
@@ -1737,7 +1737,7 @@ export default function PortalDashboard() {
                             <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs space-y-1">
                               <div className="flex items-center justify-between text-[11px]">
                                 <span className="font-bold text-slate-600 flex items-center gap-1">
-                                  <Target className="w-3 h-3 text-blue-500" />
+                                  <Target className="w-3 h-3 text-emerald-600" />
                                   Teknik
                                 </span>
                                 <span className="font-mono font-bold text-slate-800">
@@ -1749,7 +1749,7 @@ export default function PortalDashboard() {
                               {latestAssessment.pillarScores?.teknik !== null && latestAssessment.pillarScores?.teknik !== undefined && (
                                 <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                                   <div
-                                    className="bg-blue-500 h-full rounded-full transition-all duration-500"
+                                    className="bg-emerald-600 h-full rounded-full transition-all duration-500"
                                     style={{ width: `${Math.min(100, Math.max(0, latestAssessment.pillarScores.teknik))}%` }}
                                   />
                                 </div>
@@ -1783,7 +1783,7 @@ export default function PortalDashboard() {
                             <div className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs space-y-1">
                               <div className="flex items-center justify-between text-[11px]">
                                 <span className="font-bold text-slate-600 flex items-center gap-1">
-                                  <Star className="w-3 h-3 text-purple-500" />
+                                  <Star className="w-3 h-3 text-amber-500" />
                                   Mental
                                 </span>
                                 <span className="font-mono font-bold text-slate-800">
@@ -1795,7 +1795,7 @@ export default function PortalDashboard() {
                               {latestAssessment.pillarScores?.mental !== null && latestAssessment.pillarScores?.mental !== undefined && (
                                 <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
                                   <div
-                                    className="bg-purple-500 h-full rounded-full transition-all duration-500"
+                                    className="bg-amber-500 h-full rounded-full transition-all duration-500"
                                     style={{ width: `${Math.min(100, Math.max(0, latestAssessment.pillarScores.mental))}%` }}
                                   />
                                 </div>
@@ -1900,9 +1900,9 @@ export default function PortalDashboard() {
                         {latestGrowth && (
                           <div className="grid grid-cols-3 gap-2">
                             {/* Tinggi Badan */}
-                            <div className="bg-blue-50/60 border border-blue-200/80 rounded-xl p-3 space-y-1 text-center">
-                              <div className="flex items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-wider text-blue-700">
-                                <Ruler className="w-3.5 h-3.5 text-blue-600" />
+                            <div className="bg-emerald-50/60 border border-emerald-200/80 rounded-xl p-3 space-y-1 text-center">
+                              <div className="flex items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-wider text-emerald-800">
+                                <Ruler className="w-3.5 h-3.5 text-emerald-600" />
                                 <span>Tinggi</span>
                               </div>
                               <p className="text-base font-black font-mono text-slate-900">
@@ -1915,9 +1915,9 @@ export default function PortalDashboard() {
                             </div>
 
                             {/* Berat Badan */}
-                            <div className="bg-indigo-50/60 border border-indigo-200/80 rounded-xl p-3 space-y-1 text-center">
-                              <div className="flex items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-wider text-indigo-700">
-                                <Scale className="w-3.5 h-3.5 text-indigo-600" />
+                            <div className="bg-teal-50/60 border border-teal-200/80 rounded-xl p-3 space-y-1 text-center">
+                              <div className="flex items-center justify-center gap-1 text-[10px] font-bold uppercase tracking-wider text-teal-800">
+                                <Scale className="w-3.5 h-3.5 text-teal-600" />
                                 <span>Berat</span>
                               </div>
                               <p className="text-base font-black font-mono text-slate-900">
@@ -1973,7 +1973,7 @@ export default function PortalDashboard() {
                                         {record.date ? formatAttendanceDate(record.date) : 'Tanggal tidak tersedia'}
                                       </span>
                                       {idx === 0 && (
-                                        <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-blue-100 text-blue-700">
+                                        <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-emerald-100 text-emerald-800">
                                           Terbaru
                                         </span>
                                       )}
@@ -2105,7 +2105,7 @@ export default function PortalDashboard() {
       {/* FOOTER INFORMASI */}
       <footer className="p-4 text-center text-slate-400 text-[10px] border-t border-slate-200 bg-white mb-2">
         <div className="flex items-center justify-center gap-1 text-slate-600 font-semibold mb-0.5">
-          <ShieldCheck className="w-3 h-3 text-blue-600" />
+          <ShieldCheck className="w-3 h-3 text-emerald-600" />
           <span>PORTAL RESMI WALI MURID</span>
         </div>
         <p>CHUA SPORT CORE &bull; Sistem Terpadu Manajemen Akademi</p>
@@ -2231,23 +2231,23 @@ export default function PortalDashboard() {
 
       {/* MODAL QRIS PEMBAYARAN */}
       {showQrisModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-xs animate-in fade-in duration-200">
-          <div className="bg-slate-900 border border-slate-800 text-white rounded-3xl max-w-sm w-full shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200">
-            <div className="px-5 py-4 border-b border-slate-800/80 flex items-center justify-between bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-700 text-white">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white border border-gray-200 text-slate-800 rounded-3xl max-w-sm w-full shadow-2xl overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200">
+            <div className="px-5 py-4 border-b border-emerald-700 flex items-center justify-between bg-gradient-to-r from-emerald-700 via-emerald-600 to-teal-700 text-white">
               <div className="flex items-center space-x-2">
                 <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center text-white">
                   <QrCode className="w-4 h-4" />
                 </div>
                 <div>
                   <h3 className="font-bold text-sm leading-tight">Informasi Pembayaran (Read-Only)</h3>
-                  <p className="text-[10px] text-blue-100">{academyName}</p>
+                  <p className="text-[10px] text-emerald-100">{academyName}</p>
                 </div>
               </div>
 
               <button
                 type="button"
                 onClick={() => setShowQrisModal(false)}
-                className="p-1.5 text-blue-100 hover:text-white hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
+                className="p-1.5 text-emerald-100 hover:text-white hover:bg-white/10 rounded-xl transition-colors cursor-pointer"
                 aria-label="Tutup Modal"
               >
                 <X className="w-5 h-5" />
@@ -2255,34 +2255,34 @@ export default function PortalDashboard() {
             </div>
 
             <div className="p-5 overflow-y-auto space-y-3.5">
-              <div className="bg-slate-800/70 p-3.5 rounded-2xl border border-slate-700/60 text-center">
-                <p className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">
+              <div className="bg-emerald-50/70 p-3.5 rounded-2xl border border-emerald-100/80 text-center">
+                <p className="text-[10px] uppercase font-bold text-emerald-800 tracking-wider">
                   Total Tagihan Riil
                 </p>
-                <p className="text-2xl font-black text-amber-300 mt-0.5 font-mono">
+                <p className="text-2xl font-black text-emerald-900 mt-0.5 font-mono">
                   {formatRupiah(totalAmount)}
                 </p>
-                <p className="text-[11px] text-slate-300 mt-1">
-                  Untuk Siswa: <strong className="text-white">{studentName}</strong>
+                <p className="text-[11px] text-slate-600 mt-1">
+                  Untuk Siswa: <strong className="text-slate-900">{studentName}</strong>
                 </p>
               </div>
 
               {billingDetails && billingDetails.length > 0 && (
-                <div className="bg-slate-800/90 p-3.5 rounded-2xl border border-slate-700/70 space-y-2 text-xs">
+                <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-2 text-xs">
                   <div className="flex items-center justify-between">
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
                       Rincian Biaya:
                     </p>
-                    <span className="text-[9px] bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded font-bold">
+                    <span className="text-[9px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded font-bold">
                       {billingDetails.length} Item
                     </span>
                   </div>
 
-                  <div className="space-y-1.5 divide-y divide-slate-700/50">
+                  <div className="space-y-1.5 divide-y divide-slate-200/60">
                     {billingDetails.map((item, idx) => (
-                      <div key={idx} className="pt-1.5 first:pt-0 flex items-center justify-between text-slate-200">
+                      <div key={idx} className="pt-1.5 first:pt-0 flex items-center justify-between text-slate-700">
                         <span className="truncate pr-2 text-[11px] font-medium">{item.name}</span>
-                        <span className="font-mono font-bold text-amber-300 shrink-0 text-xs">
+                        <span className="font-mono font-bold text-slate-900 shrink-0 text-xs">
                           {formatRupiah(item.amount)}
                         </span>
                       </div>
@@ -2291,7 +2291,7 @@ export default function PortalDashboard() {
                 </div>
               )}
 
-              <div className="bg-white p-4 rounded-2xl shadow-inner flex flex-col items-center justify-center">
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 shadow-inner flex flex-col items-center justify-center">
                 {qrisUrl ? (
                   <>
                     <img
@@ -2300,14 +2300,14 @@ export default function PortalDashboard() {
                       crossOrigin="anonymous"
                       className="w-full max-h-56 object-contain rounded-lg"
                     />
-                    <div className="mt-3 flex items-center gap-1.5 text-slate-600 text-[10px] font-bold uppercase tracking-wider">
+                    <div className="mt-3 flex items-center gap-1.5 text-emerald-700 text-[10px] font-bold uppercase tracking-wider">
                       <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                       <span>QRIS Terverifikasi Resmi</span>
                     </div>
                   </>
                 ) : (
                   <div className="py-7 px-4 text-center flex flex-col items-center justify-center text-slate-600">
-                    <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mb-2.5">
+                    <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-700 flex items-center justify-center mb-2.5">
                       <QrCode className="w-6 h-6" />
                     </div>
                     <p className="text-xs font-bold text-slate-800">
@@ -2320,12 +2320,12 @@ export default function PortalDashboard() {
                 )}
               </div>
 
-              <div className="bg-slate-800/90 p-3.5 rounded-2xl border border-slate-700/80 space-y-3 text-left text-xs">
+              <div className="bg-slate-50 p-3.5 rounded-2xl border border-slate-200 space-y-3 text-left text-xs">
                 <div className="flex items-center justify-between">
-                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                  <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
                     Alternatif Transfer Bank
                   </p>
-                  <span className="text-[10px] bg-blue-500/20 text-blue-300 px-2.5 py-0.5 rounded-full font-extrabold uppercase border border-blue-500/30">
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full font-extrabold uppercase border border-emerald-200">
                     {activeBank || 'TRANSFER BANK'}
                   </span>
                 </div>
@@ -2333,10 +2333,10 @@ export default function PortalDashboard() {
                 {effectiveBankList.length > 1 && (
                   <div className="space-y-1.5 pt-0.5">
                     <div className="flex items-center justify-between text-[10px]">
-                      <span className="text-slate-400 font-bold uppercase tracking-wider">
+                      <span className="text-slate-500 font-bold uppercase tracking-wider">
                         Pilih Rekening Bank:
                       </span>
-                      <span className="text-blue-300 font-bold">
+                      <span className="text-emerald-700 font-bold">
                         {effectiveBankList.length} Bank Tersedia
                       </span>
                     </div>
@@ -2354,15 +2354,15 @@ export default function PortalDashboard() {
                             }}
                             className={`px-2.5 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer flex flex-col items-start gap-0.5 text-left border ${
                               isSelected
-                                ? 'bg-gradient-to-r from-blue-600 to-indigo-600 text-white border-blue-400 shadow-md shadow-blue-600/30 ring-1 ring-blue-300'
-                                : 'bg-slate-900/90 hover:bg-slate-800 text-slate-300 border-slate-700/80 hover:text-white'
+                                ? 'bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/20 ring-1 ring-emerald-300'
+                                : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
                             }`}
                           >
                             <span className="text-[11px] font-black tracking-tight flex items-center gap-1">
                               <CreditCard className="w-3 h-3 shrink-0 opacity-80" />
                               {acc.bankName || `Bank ${idx + 1}`}
                             </span>
-                            <span className={`text-[9px] font-mono truncate w-full ${isSelected ? 'text-blue-100' : 'text-slate-400'}`}>
+                            <span className={`text-[9px] font-mono truncate w-full ${isSelected ? 'text-emerald-100' : 'text-slate-400'}`}>
                               {acc.accountNumber || '-'}
                             </span>
                           </button>
@@ -2373,7 +2373,7 @@ export default function PortalDashboard() {
                 )}
 
                 <div className="space-y-1.5 pt-0.5">
-                  <label htmlFor="portal-target-account-number" className="text-[10px] text-slate-400 font-medium block">
+                  <label htmlFor="portal-target-account-number" className="text-[10px] text-slate-500 font-medium block">
                     Nomor Rekening Tujuan ({activeBank}):
                   </label>
                   <div className="flex items-center gap-2">
@@ -2384,13 +2384,13 @@ export default function PortalDashboard() {
                       readOnly
                       value={activeAccountNumber || ''}
                       placeholder={activeAccountNumber ? '' : 'Nomor rekening belum diatur'}
-                      className="w-full bg-slate-950/80 border border-slate-700/80 rounded-xl px-3 py-2 text-sm font-mono font-bold text-amber-300 focus:outline-hidden select-all"
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-sm font-mono font-bold text-emerald-900 focus:outline-hidden select-all"
                     />
                     <button
                       type="button"
                       onClick={handleCopyAccount}
                       disabled={!activeAccountNumber}
-                      className="shrink-0 px-3.5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs active:scale-95"
+                      className="shrink-0 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs active:scale-95"
                       title="Salin Nomor Rekening"
                     >
                       <Copy className="w-3.5 h-3.5" />
@@ -2398,8 +2398,8 @@ export default function PortalDashboard() {
                     </button>
                   </div>
 
-                  <p className="text-[11px] text-slate-300 pt-0.5 font-medium">
-                    a.n. <strong className="text-white font-semibold">{activeAccountName || academyName}</strong>
+                  <p className="text-[11px] text-slate-600 pt-0.5 font-medium">
+                    a.n. <strong className="text-slate-900 font-semibold">{activeAccountName || academyName}</strong>
                   </p>
                 </div>
               </div>
@@ -2409,11 +2409,11 @@ export default function PortalDashboard() {
               </p>
             </div>
 
-            <div className="p-4 border-t border-slate-800/80 bg-slate-900 flex items-center justify-end">
+            <div className="p-4 border-t border-slate-200 bg-gray-50 flex items-center justify-end">
               <button
                 type="button"
                 onClick={() => setShowQrisModal(false)}
-                className="w-full py-2.5 bg-slate-800 hover:bg-slate-700 text-white text-xs font-semibold rounded-xl border border-slate-700 transition-colors cursor-pointer text-center"
+                className="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-slate-700 text-xs font-semibold rounded-xl border border-gray-200 transition-colors cursor-pointer text-center"
               >
                 Tutup
               </button>
