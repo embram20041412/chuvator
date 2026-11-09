@@ -93,23 +93,22 @@ export default function MobileStudentManagement({ userProfile }) {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Fetch Academies, Classes, and Students
+  // FETCH DATA WITH STRICT DATABASE QUERY LEVEL ISOLATION FOR COACH ROLE
   const fetchAllData = useCallback(async () => {
     if (!tenantId) return;
     setIsLoading(true);
     try {
-      const [acadList, classList, studList] = await Promise.all([
+      // 1. Fetch Academies & Classes
+      const [acadList, classList] = await Promise.all([
         supabaseAcademyService.getAcademies(tenantId),
-        supabaseAcademyService.getClasses(tenantId),
-        supabaseAcademyService.getStudents(tenantId)
+        supabaseAcademyService.getClasses(tenantId)
       ]);
 
       setAcademies(acadList || []);
       setAcademyClasses(classList || []);
-      setStudents(studList || []);
 
+      let targetId = activeAcademyId;
       if (acadList && acadList.length > 0) {
-        let targetId = activeAcademyId;
         if (isCoachOnly && coachProfile?.academy_id) {
           targetId = coachProfile.academy_id;
         } else {
@@ -120,12 +119,51 @@ export default function MobileStudentManagement({ userProfile }) {
         setActiveAcademyId(targetId);
         localStorage.setItem('activeAcademyId', targetId);
       }
+
+      // 2. QUERY LEVEL COACH ISOLATION: Filter student query by assigned class IDs if user is Coach
+      if (isCoachOnly && coachProfile) {
+        const cId = coachProfile.id;
+        const cEmail = (coachProfile.email || '').toLowerCase();
+        const cName = (coachProfile.name || '').toLowerCase();
+
+        const assignedClasses = (classList || []).filter((c) => {
+          const matchId = cId && (c.coachId === cId || c.coach_id === cId);
+          const matchEmail = cEmail && (c.coachEmail?.toLowerCase() === cEmail || c.coach_email?.toLowerCase() === cEmail);
+          const matchName = cName && c.coachName && c.coachName.toLowerCase() === cName;
+          return Boolean(matchId || matchEmail || matchName);
+        });
+
+        const assignedClassIds = assignedClasses.map((c) => c.id).filter(Boolean);
+
+        if (assignedClassIds.length === 0) {
+          setStudents([]);
+        } else {
+          // Direct Supabase query filtered by coach's assigned class_id array
+          const { data, error } = await supabase
+            .from('students')
+            .select('*')
+            .eq('tenant_id', tenantId)
+            .in('class_id', assignedClassIds)
+            .order('student_name', { ascending: true });
+
+          if (error) {
+            console.error('Error fetching coach isolated students:', error);
+            setStudents([]);
+          } else {
+            setStudents((data || []).map(mapStudentFromSupabase));
+          }
+        }
+      } else {
+        // Owner / Admin / Superadmin: Fetch all students for tenant
+        const studList = await supabaseAcademyService.getStudents(tenantId);
+        setStudents(studList || []);
+      }
     } catch (err) {
       console.error('Error fetching mobile student data:', err);
     } finally {
       setIsLoading(false);
     }
-  }, [tenantId, activeAcademyId, isCoachOnly, coachProfile?.academy_id]);
+  }, [tenantId, activeAcademyId, isCoachOnly, coachProfile]);
 
   useEffect(() => {
     fetchAllData();
@@ -142,7 +180,7 @@ export default function MobileStudentManagement({ userProfile }) {
     return students.filter((s) => s.academyId === activeAcademy.id || s.academy_id === activeAcademy.id);
   }, [activeAcademy, students]);
 
-  // Coach Class Guard Integration
+  // Active Classes
   const activeClasses = useMemo(() => {
     if (!activeAcademy) return academyClasses;
     let list = academyClasses.filter((c) => c.academyId === activeAcademy.id);
@@ -160,15 +198,9 @@ export default function MobileStudentManagement({ userProfile }) {
     return list;
   }, [activeAcademy, academyClasses, isCoachOnly, coachProfile]);
 
-  const accessibleStudents = useMemo(() => {
-    if (!isCoachOnly || !coachProfile) return workspaceStudents;
-    const allowedClassIds = new Set(activeClasses.map((c) => c.id));
-    return workspaceStudents.filter((s) => s.classId && allowedClassIds.has(s.classId));
-  }, [workspaceStudents, isCoachOnly, coachProfile, activeClasses]);
-
   // Apply Search & Filters
   const filteredStudents = useMemo(() => {
-    return accessibleStudents.filter((student) => {
+    return workspaceStudents.filter((student) => {
       // 1. Search Query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
@@ -196,27 +228,27 @@ export default function MobileStudentManagement({ userProfile }) {
 
       return true;
     });
-  }, [accessibleStudents, searchQuery, sppFilter, selectedClassFilter, sppBillingStartDay, sppDueDay]);
+  }, [workspaceStudents, searchQuery, sppFilter, selectedClassFilter, sppBillingStartDay, sppDueDay]);
 
-  // Calculate Summary Statistics
+  // Summary Statistics
   const statsSummary = useMemo(() => {
     let paidCount = 0;
     let overdueCount = 0;
-    accessibleStudents.forEach((st) => {
+    workspaceStudents.forEach((st) => {
       const info = calculateSppStatus(st, sppBillingStartDay, sppDueDay);
       if (info.isPaid) paidCount++;
       else overdueCount++;
     });
 
     return {
-      total: accessibleStudents.length,
+      total: workspaceStudents.length,
       paidCount,
       overdueCount,
-      paidPct: accessibleStudents.length > 0 ? Math.round((paidCount / accessibleStudents.length) * 100) : 0
+      paidPct: workspaceStudents.length > 0 ? Math.round((paidCount / workspaceStudents.length) * 100) : 0
     };
-  }, [accessibleStudents, sppBillingStartDay, sppDueDay]);
+  }, [workspaceStudents, sppBillingStartDay, sppDueDay]);
 
-  // WhatsApp Penagihan Direct Link Handler
+  // WhatsApp Penagihan Direct Link Handler (Dynamic Config Only, No Hardcoded Mock Data)
   const handleSendWABilling = (student) => {
     const phone = formatWhatsAppNumber(student?.parentPhone || student?.phone);
     if (!phone) {
@@ -228,7 +260,7 @@ export default function MobileStudentManagement({ userProfile }) {
     const targetAcademy = activeAcademy?.name || arenaName || 'Chua Sport Academy';
     const sName = student?.studentName || student?.name || 'Siswa';
 
-    let rekeningText = 'BCA: 123456789 a.n CHUA SPORT';
+    let rekeningText = 'Transfer ke Rekening Kasir / Admin Arena';
     if (tenantProfile?.bankAccounts && tenantProfile.bankAccounts.length > 0) {
       const primaryBank = tenantProfile.bankAccounts[0];
       if (primaryBank.bankName && primaryBank.accountNumber) {
@@ -385,7 +417,7 @@ export default function MobileStudentManagement({ userProfile }) {
                 : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
             }`}
           >
-            Semua ({accessibleStudents.length})
+            Semua ({workspaceStudents.length})
           </button>
 
           <button
@@ -514,7 +546,7 @@ export default function MobileStudentManagement({ userProfile }) {
                       </button>
 
                       {/* WhatsApp Penagihan Direct Link */}
-                      {!sppInfo.isPaid && (student.parentPhone || student.phone) && (
+                      {!sppInfo.isPaid && (student.parentPhone || student.phone) && !isCoachOnly && (
                         <button
                           type="button"
                           onClick={() => handleSendWABilling(student)}
