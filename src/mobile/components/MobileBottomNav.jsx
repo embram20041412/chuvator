@@ -103,7 +103,7 @@ export default function MobileBottomNav({ userProfile, onOpenMore }) {
 
       {/* 4. Akademi */}
       <NavLink
-        to="/akademi?tab=dasbor"
+        to="/akademi?tab=siswa"
         className={`flex flex-col items-center justify-center flex-1 h-full min-h-[44px] transition-colors ${
           isAkademiActive ? 'text-[var(--chua-m-blue)] font-bold' : 'text-slate-500 hover:text-slate-800 font-medium'
         }`}
