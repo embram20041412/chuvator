@@ -384,26 +384,26 @@ export async function onRequest(context) {
       }
     }
 
-    // Query data siswa (HANYA men-select kolom skalar resmi yang terdaftar di schema cache PostgREST)
+    // Query data siswa (WAJIB menggunakan Service Role Key / Admin Key agar kebal terhadap RLS)
     const studentQuery = `${supabaseUrl}/rest/v1/students?id=eq.${encodeURIComponent(studentId)}&tenant_id=eq.${encodeURIComponent(childTenantId)}&select=tournaments,student_name,name,class_name,growth_history,height,weight,birth_date`;
+    const adminKey = env.SUPABASE_SERVICE_ROLE_KEY || (typeof process !== 'undefined' && process.env ? process.env.SUPABASE_SERVICE_ROLE_KEY : null) || serviceRoleKey || anonKey;
 
     let studentResp = await fetch(studentQuery, {
       method: 'GET',
       headers: {
-        'apikey': anonKey,
-        'Authorization': `Bearer ${accessToken}`,
+        'apikey': adminKey,
+        'Authorization': `Bearer ${adminKey}`,
         'Accept': 'application/json'
       }
     });
 
-    if (!studentResp.ok && serviceRoleKey) {
-      const parentErrText = await studentResp.text().catch(() => '');
-      console.warn(`[evaluations.js] Parent token query to students failed (${studentResp.status}: ${parentErrText}). Falling back to service role key since parent session is verified.`);
+    if (!studentResp.ok) {
+      // Fallback dengan access token wali murid jika adminKey belum tersedia
       studentResp = await fetch(studentQuery, {
         method: 'GET',
         headers: {
-          'apikey': serviceRoleKey,
-          'Authorization': `Bearer ${serviceRoleKey}`,
+          'apikey': anonKey,
+          'Authorization': `Bearer ${accessToken}`,
           'Accept': 'application/json'
         }
       });
