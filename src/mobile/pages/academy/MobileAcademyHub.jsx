@@ -443,7 +443,7 @@ export default function MobileAcademyHub({ userProfile }) {
       <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs space-y-2.5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-center shrink-0 shadow-2xs">
+            <div className="w-10 h-10 flex items-center justify-center shrink-0">
               <App3DMobileIcon name="akademi" className="w-8 h-8" alt={activeAcademy?.name || 'Akademi'} />
             </div>
             <div className="min-w-0">

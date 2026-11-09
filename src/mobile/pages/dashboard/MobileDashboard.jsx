@@ -248,7 +248,7 @@ export default function MobileDashboard({ userProfile }) {
 
         <Link
           to="/pengaturan?tab=profil"
-          className="p-1.5 rounded-xl bg-slate-50 hover:bg-slate-100 border border-slate-200 transition-colors shrink-0 flex items-center justify-center"
+          className="p-1 hover:opacity-80 transition-opacity shrink-0 flex items-center justify-center"
           title="Pengaturan Profil GOR"
         >
           <App3DMobileIcon name="profil_gor" className="w-7 h-7" alt="Profil GOR" />
@@ -260,7 +260,7 @@ export default function MobileDashboard({ userProfile }) {
         <div className="chua-mobile-card-navy p-4 rounded-2xl shadow-md space-y-3 relative overflow-hidden">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center shrink-0 border border-white/20">
+              <div className="w-8 h-8 flex items-center justify-center shrink-0">
                 <App3DMobileIcon name="keuangan" className="w-6 h-6" alt="Keuangan" />
               </div>
               <span className="text-xs font-bold tracking-wider uppercase text-slate-200">
@@ -329,7 +329,7 @@ export default function MobileDashboard({ userProfile }) {
               to="/booking"
               className="p-3 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-2xl flex items-center gap-2.5 transition-all shadow-2xs text-left cursor-pointer active:scale-98"
             >
-              <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0">
+              <div className="w-9 h-9 flex items-center justify-center shrink-0">
                 <App3DMobileIcon name="booking" className="w-8 h-8" alt="Booking" />
               </div>
               <div className="min-w-0">
@@ -348,7 +348,7 @@ export default function MobileDashboard({ userProfile }) {
               to="/kasir"
               className="p-3 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-2xl flex items-center gap-2.5 transition-all shadow-2xs text-left cursor-pointer active:scale-98"
             >
-              <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0">
+              <div className="w-9 h-9 flex items-center justify-center shrink-0">
                 <App3DMobileIcon name="kasir" className="w-8 h-8" alt="Kasir" />
               </div>
               <div className="min-w-0">
@@ -366,7 +366,7 @@ export default function MobileDashboard({ userProfile }) {
             to="/akademi?tab=siswa"
             className="p-3 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-2xl flex items-center gap-2.5 transition-all shadow-2xs text-left cursor-pointer active:scale-98"
           >
-            <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 flex items-center justify-center shrink-0">
               <App3DMobileIcon name="siswa" className="w-8 h-8" alt="Siswa" />
             </div>
             <div className="min-w-0">
@@ -383,7 +383,7 @@ export default function MobileDashboard({ userProfile }) {
             to="/akademi?tab=presensi"
             className="p-3 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-2xl flex items-center gap-2.5 transition-all shadow-2xs text-left cursor-pointer active:scale-98"
           >
-            <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 flex items-center justify-center shrink-0">
               <App3DMobileIcon name="presensi" className="w-8 h-8" alt="Presensi" />
             </div>
             <div className="min-w-0">

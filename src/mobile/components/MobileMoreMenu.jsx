@@ -98,7 +98,7 @@ export default function MobileMoreMenu({ isOpen, onClose, userProfile }) {
             onClick={() => handleNavigate(item.path)}
             className="p-3.5 bg-slate-50 hover:bg-slate-100 border border-slate-200/80 rounded-2xl flex flex-col items-start text-left transition-all active:scale-98 cursor-pointer shadow-2xs"
           >
-            <div className="w-10 h-10 rounded-xl bg-white shadow-xs border border-slate-200/60 flex items-center justify-center mb-2 shrink-0">
+            <div className="w-10 h-10 flex items-center justify-center mb-2 shrink-0">
               <App3DMobileIcon name={item.icon3d} className="w-7 h-7" alt={item.title} />
             </div>
             <span className="font-bold text-xs text-slate-800 line-clamp-1">

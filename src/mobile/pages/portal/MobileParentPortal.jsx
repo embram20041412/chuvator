@@ -145,7 +145,7 @@ export default function MobileParentPortal({
       <MobileHeader
         leftAction={
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-slate-50 border border-slate-200/90 flex items-center justify-center shrink-0 shadow-2xs">
+            <div className="w-9 h-9 flex items-center justify-center shrink-0">
               <App3DMobileIcon name="akademi" className="w-7 h-7" alt="Akademi" />
             </div>
             <div className="min-w-0">
@@ -193,7 +193,7 @@ export default function MobileParentPortal({
             {/* A. WELCOME & GREETING */}
             <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-200/90 flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 flex items-center justify-center shrink-0">
                   <App3DMobileIcon name="wali_murid" className="w-8 h-8" alt="Wali Murid" />
                 </div>
                 <div className="min-w-0">
@@ -261,7 +261,7 @@ export default function MobileParentPortal({
                   onClick={() => setMobileTab('billing')}
                   className="p-3 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-2xl flex items-center gap-2.5 text-left cursor-pointer transition-all shadow-2xs active:scale-98"
                 >
-                  <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 flex items-center justify-center shrink-0">
                     <App3DMobileIcon name="spp" className="w-8 h-8" alt="SPP" />
                   </div>
                   <div className="min-w-0">
@@ -282,7 +282,7 @@ export default function MobileParentPortal({
                   }}
                   className="p-3 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-2xl flex items-center gap-2.5 text-left cursor-pointer transition-all shadow-2xs active:scale-98"
                 >
-                  <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 flex items-center justify-center shrink-0">
                     <App3DMobileIcon name="booking" className="w-8 h-8" alt="Jadwal" />
                   </div>
                   <div className="min-w-0">
@@ -303,7 +303,7 @@ export default function MobileParentPortal({
                   }}
                   className="p-3 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-2xl flex items-center gap-2.5 text-left cursor-pointer transition-all shadow-2xs active:scale-98"
                 >
-                  <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 flex items-center justify-center shrink-0">
                     <App3DMobileIcon name="presensi" className="w-8 h-8" alt="Presensi" />
                   </div>
                   <div className="min-w-0">
@@ -324,7 +324,7 @@ export default function MobileParentPortal({
                   }}
                   className="p-3 bg-white hover:bg-slate-50 border border-slate-200/90 rounded-2xl flex items-center gap-2.5 text-left cursor-pointer transition-all shadow-2xs active:scale-98"
                 >
-                  <div className="w-10 h-10 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-center shrink-0">
+                  <div className="w-10 h-10 flex items-center justify-center shrink-0">
                     <App3DMobileIcon name="evaluasi" className="w-8 h-8" alt="Evaluasi" />
                   </div>
                   <div className="min-w-0">
@@ -1021,7 +1021,7 @@ export default function MobileParentPortal({
             {/* Kartu Profil Wali */}
             <MobileCard className="p-4 space-y-3 my-0">
               <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-center shrink-0">
+                <div className="w-12 h-12 flex items-center justify-center shrink-0">
                   <App3DMobileIcon name="wali_murid" className="w-9 h-9" alt="Wali Murid" />
                 </div>
                 <div className="min-w-0">
