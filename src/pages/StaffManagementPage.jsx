@@ -30,8 +30,15 @@ import {
   formatInvitationExpiry
 } from '../services/staffService';
 import useAuthRole from '../hooks/useAuthRole';
+import useMobileViewport from '../mobile/hooks/useMobileViewport';
+import MobileStaffMain from '../mobile/pages/admin/MobileStaffMain';
 
-export default function StaffManagementPage({ userProfile }) {
+/**
+ * StaffDesktopMain Component
+ * Original untouched desktop staff & access management interface.
+ * All hooks are called unconditionally at the top level of this component.
+ */
+export function StaffDesktopMain({ userProfile }) {
   const { canManageStaff, canInviteAdmins, loading: roleLoading } = useAuthRole(userProfile);
   const tenantId = userProfile?.tenant?.id || userProfile?.tenantId || userProfile?.id || userProfile?.uid;
   const tenantName = userProfile?.tenant?.name || 'Cabang Aktif';
@@ -940,3 +947,20 @@ export default function StaffManagementPage({ userProfile }) {
     </div>
   );
 }
+
+/**
+ * StaffManagementPage (Viewport Wrapper)
+ * Adheres strictly to React Rules of Hooks.
+ * Calls ONLY useMobileViewport(767) unconditionally and delegates rendering
+ * to either MobileStaffMain (<= 767px) or StaffDesktopMain (>= 768px).
+ */
+export default function StaffManagementPage({ userProfile }) {
+  const isMobile = useMobileViewport(767);
+
+  if (isMobile) {
+    return <MobileStaffMain userProfile={userProfile} />;
+  }
+
+  return <StaffDesktopMain userProfile={userProfile} />;
+}
+

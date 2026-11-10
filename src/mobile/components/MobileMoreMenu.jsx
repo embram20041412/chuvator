@@ -72,7 +72,7 @@ export default function MobileMoreMenu({ isOpen, onClose, userProfile }) {
       id: 'staf',
       title: 'Kelola Staf & Pelatih',
       subtitle: 'Manajemen Akses & Sesi',
-      path: '/pengaturan?tab=staf',
+      path: '/staff',
       icon3d: 'staf_pelatih',
       show: userAccess.isOwner || userAccess.isSuperAdmin,
     },

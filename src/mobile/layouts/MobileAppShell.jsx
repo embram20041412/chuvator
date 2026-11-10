@@ -41,7 +41,7 @@ export default function MobileAppShell({ userProfile }) {
     { id: 'spp_struk', label: 'Struk SPP', path: '/pengaturan?tab=spp_struk' },
     { id: 'tarif', label: 'Tarif Lapangan', path: '/pengaturan?tab=tarif' },
     { id: 'master_pricing', label: 'Master Tarif', path: '/pengaturan?tab=master_pricing' },
-    { id: 'staf', label: 'Kelola Staf', path: '/pengaturan?tab=staf' },
+    { id: 'staf', label: 'Kelola Staf', path: '/staff' },
   ];
 
   return (
