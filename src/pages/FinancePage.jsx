@@ -19,8 +19,16 @@ import {
 } from '../components/icons/App3DIcons';
 
 import DateRangeFilter, { filterDataByTime } from '../components/DateRangeFilter';
+import useMobileViewport from '../mobile/hooks/useMobileViewport';
+import MobileFinanceMain from '../mobile/pages/admin/MobileFinanceMain';
 
 export default function FinancePage({ userProfile }) {
+  const isMobile = useMobileViewport(767);
+
+  if (isMobile) {
+    return <MobileFinanceMain userProfile={userProfile} />;
+  }
+
   const { bookings, transactions, isLoading, refetch } = useArenaData(userProfile);
 
   // Time Range Filter States
