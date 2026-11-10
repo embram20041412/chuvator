@@ -29,6 +29,20 @@ import {
 } from '../../../components/icons/App3DIcons';
 
 /**
+ * Helper check for active vs voided records (identical to FinancePage.jsx)
+ */
+export const isRecordActive = (item) => {
+  const status = String(item?.status || '').toUpperCase();
+  return status !== 'VOID' && status !== 'BATAL' && status !== 'CANCELLED' && !item?.isVoid;
+};
+
+/**
+ * Helper check for booking-linked transaction (deduplication criteria)
+ * Returns true if transaction is linked to a booking via bookingId or booking_id.
+ */
+export const isBookingLinkedTx = (t) => Boolean(t?.bookingId || t?.booking_id);
+
+/**
  * MobileFinanceMain Component
  * Mobile-First Financial Administration for CHUVATOR Sports Arena & Academy ERP.
  * Strictly scoped under .chua-mobile-app with >=44px touch targets and native mobile ergonomics.
@@ -56,15 +70,6 @@ export default function MobileFinanceMain({ userProfile }) {
   const [voidReasonInput, setVoidReasonInput] = useState('');
   const [isSubmittingVoid, setIsSubmittingVoid] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState(null);
-
-  // Helper check for active vs voided records (identical to FinancePage.jsx)
-  const isRecordActive = (item) => {
-    const status = String(item.status || '').toUpperCase();
-    return status !== 'VOID' && status !== 'BATAL' && status !== 'CANCELLED' && !item.isVoid;
-  };
-
-  // Helper check for booking-linked transaction (deduplication criteria)
-  const isBookingLinkedTx = (t) => Boolean(t?.bookingId || t?.booking_id);
 
   // Filter Data by Time Period
   const filteredBookings = useMemo(() => {
@@ -459,7 +464,7 @@ export default function MobileFinanceMain({ userProfile }) {
                 : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
             }`}
           >
-            POS ({filteredTransactions.filter((t) => t.itemCategory !== 'SPP & Pendaftaran Akademi' && t.itemCategory !== 'SPP Akademi').length})
+            POS ({filteredTransactions.filter((t) => !isBookingLinkedTx(t) && t.itemCategory !== 'SPP & Pendaftaran Akademi' && t.itemCategory !== 'SPP Akademi').length})
           </button>
           <button
             type="button"

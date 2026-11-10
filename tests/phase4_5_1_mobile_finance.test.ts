@@ -14,9 +14,16 @@ if (typeof globalThis.window === 'undefined') {
   };
 }
 
-// Import components for direct render testing
-import FinancePage, { FinanceDesktopMain } from '../src/pages/FinancePage.jsx';
-import MobileFinanceMain from '../src/mobile/pages/admin/MobileFinanceMain.jsx';
+// Import components and actual exported helpers for direct logic & render testing
+import FinancePage, { 
+  FinanceDesktopMain,
+  isBookingLinkedTx as desktopIsBookingLinkedTx,
+  isRecordActive as desktopIsRecordActive
+} from '../src/pages/FinancePage.jsx';
+import MobileFinanceMain, {
+  isBookingLinkedTx as mobileIsBookingLinkedTx,
+  isRecordActive as mobileIsRecordActive
+} from '../src/mobile/pages/admin/MobileFinanceMain.jsx';
 
 test('CHUVATOR — Phase 4.5.1 Mobile Financial Administration Logic & Security Tests', async (t) => {
 
@@ -540,5 +547,146 @@ test('CHUVATOR — Phase 4.5.1 Mobile Financial Administration Logic & Security 
     assert.equal(desktopTotal, 650000);
   });
 
+  // =========================================================================
+  // PHASE 4.5.1.2.1 — POS FILTER COUNT CONSISTENCY REGRESSION TESTS
+  // =========================================================================
+
+  // Test actual exported helper from both components
+  await t.test('21. Actual Helper: desktopIsBookingLinkedTx and mobileIsBookingLinkedTx accurately identify booking-linked transactions', () => {
+    // Both camelCase (bookingId) and snake_case (booking_id) must be recognized
+    assert.equal(desktopIsBookingLinkedTx({ bookingId: 'b-uuid-1' }), true);
+    assert.equal(desktopIsBookingLinkedTx({ booking_id: 'b-uuid-2' }), true);
+    assert.equal(desktopIsBookingLinkedTx({ bookingId: null }), false);
+    assert.equal(desktopIsBookingLinkedTx({ booking_id: undefined }), false);
+    assert.equal(desktopIsBookingLinkedTx({}), false);
+    assert.equal(desktopIsBookingLinkedTx(null), false);
+
+    assert.equal(mobileIsBookingLinkedTx({ bookingId: 'b-uuid-1' }), true);
+    assert.equal(mobileIsBookingLinkedTx({ booking_id: 'b-uuid-2' }), true);
+    assert.equal(mobileIsBookingLinkedTx({ bookingId: null }), false);
+    assert.equal(mobileIsBookingLinkedTx({ booking_id: undefined }), false);
+    assert.equal(mobileIsBookingLinkedTx({}), false);
+    assert.equal(mobileIsBookingLinkedTx(null), false);
+  });
+
+  // 1. Booking-linked transaction tidak menambah jumlah POS pada filter
+  await t.test('22. Filter Count Rule 1: Booking-linked transactions do NOT increment POS filter count', () => {
+    const rawTransactions = [
+      { id: 'tx-b1', bookingId: 'bk-101', itemCategory: 'Sewa Lapangan', amount: 150000 },
+      { id: 'tx-b2', booking_id: 'bk-102', itemCategory: 'Sewa Lapangan', amount: 200000 }
+    ];
+
+    const countFilterPos = (txs: any[]) => txs.filter(
+      (t) => !desktopIsBookingLinkedTx(t) && t.itemCategory !== 'SPP & Pendaftaran Akademi' && t.itemCategory !== 'SPP Akademi'
+    ).length;
+
+    assert.equal(countFilterPos(rawTransactions), 0, 'Transaksi terikat booking tidak boleh dihitung sebagai POS pada filter');
+  });
+
+  // 2. Retail POS tanpa bookingId tetap menambah jumlah POS pada filter
+  await t.test('23. Filter Count Rule 2: Standalone Retail POS transactions without bookingId DO increment POS filter count', () => {
+    const rawTransactions = [
+      { id: 'tx-b1', bookingId: 'bk-101', itemCategory: 'Sewa Lapangan', amount: 150000 },
+      { id: 'tx-pos-retail-1', bookingId: null, itemCategory: 'Penjualan Retail POS', amount: 25000 },
+      { id: 'tx-pos-retail-2', itemCategory: 'Minuman', amount: 10000 }
+    ];
+
+    const countFilterPos = (txs: any[]) => txs.filter(
+      (t) => !desktopIsBookingLinkedTx(t) && t.itemCategory !== 'SPP & Pendaftaran Akademi' && t.itemCategory !== 'SPP Akademi'
+    ).length;
+
+    assert.equal(countFilterPos(rawTransactions), 2, 'Dua transaksi retail tanpa bookingId harus menghasilkan POS count = 2');
+  });
+
+  // 3. Transaksi SPP tidak masuk jumlah POS pada filter
+  await t.test('24. Filter Count Rule 3: SPP transactions do NOT increment POS filter count', () => {
+    const rawTransactions = [
+      { id: 'tx-spp-1', itemCategory: 'SPP & Pendaftaran Akademi', amount: 250000 },
+      { id: 'tx-spp-2', itemCategory: 'SPP Akademi', amount: 300000 },
+      { id: 'tx-retail-1', itemCategory: 'Retail', amount: 50000 }
+    ];
+
+    const countFilterPos = (txs: any[]) => txs.filter(
+      (t) => !desktopIsBookingLinkedTx(t) && t.itemCategory !== 'SPP & Pendaftaran Akademi' && t.itemCategory !== 'SPP Akademi'
+    ).length;
+
+    assert.equal(countFilterPos(rawTransactions), 1, 'Hanya 1 transaksi retail yang boleh masuk hitungan POS, SPP harus diabaikan');
+  });
+
+  // 4. Angka POS filter desktop dan mobile konsisten 100%
+  await t.test('25. Filter Count Rule 4: Desktop and Mobile POS filter count calculations are strictly identical', () => {
+    const complexTxs = [
+      { id: 'tx-1', bookingId: 'b-1', itemCategory: 'Sewa Lapangan', amount: 100000 },
+      { id: 'tx-2', booking_id: 'b-2', itemCategory: 'Sewa Lapangan', amount: 150000 },
+      { id: 'tx-3', itemCategory: 'Retail POS', amount: 35000 },
+      { id: 'tx-4', itemCategory: 'F&B POS', amount: 20000 },
+      { id: 'tx-5', itemCategory: 'SPP & Pendaftaran Akademi', amount: 250000 },
+      { id: 'tx-6', itemCategory: 'SPP Akademi', amount: 250000 }
+    ];
+
+    const desktopPosCount = complexTxs.filter(
+      (t) => !desktopIsBookingLinkedTx(t) && t.itemCategory !== 'SPP & Pendaftaran Akademi' && t.itemCategory !== 'SPP Akademi'
+    ).length;
+
+    const mobilePosCount = complexTxs.filter(
+      (t) => !mobileIsBookingLinkedTx(t) && t.itemCategory !== 'SPP & Pendaftaran Akademi' && t.itemCategory !== 'SPP Akademi'
+    ).length;
+
+    assert.equal(desktopPosCount, mobilePosCount, 'Desktop and Mobile filter count must be identical');
+    assert.equal(desktopPosCount, 2, 'Harus ada tepat 2 transaksi POS retail mandiri');
+  });
+
+  // 5. Jumlah item ledger sesuai dengan kategori yang ditampilkan (Semua === Sewa + POS + SPP)
+  await t.test('26. Filter Count Rule 5: Ledger item count strictly matches filter button counts (Semua = Sewa + POS + SPP)', () => {
+    const mockBookings = [
+      { id: 'bk-1', price: 100000, status: 'CONFIRMED' },
+      { id: 'bk-2', price: 120000, status: 'CONFIRMED' },
+      { id: 'bk-3', price: 150000, status: 'VOID', isVoid: true }
+    ];
+    const mockTransactions = [
+      { id: 'tx-b1', bookingId: 'bk-1', amount: 100000, itemCategory: 'Sewa Lapangan' },
+      { id: 'tx-b2', booking_id: 'bk-2', amount: 120000, itemCategory: 'Sewa Lapangan' },
+      { id: 'tx-pos-1', amount: 45000, itemCategory: 'Retail POS' },
+      { id: 'tx-pos-2', amount: 30000, itemCategory: 'F&B POS' },
+      { id: 'tx-spp-1', amount: 250000, itemCategory: 'SPP & Pendaftaran Akademi' }
+    ];
+
+    // Filter button counts as rendered in Desktop and Mobile UI:
+    const sewaFilterCount = mockBookings.length;
+    const posFilterCount = mockTransactions.filter(
+      (t) => !desktopIsBookingLinkedTx(t) && t.itemCategory !== 'SPP & Pendaftaran Akademi' && t.itemCategory !== 'SPP Akademi'
+    ).length;
+    const sppFilterCount = mockTransactions.filter(
+      (t) => t.itemCategory === 'SPP & Pendaftaran Akademi' || t.itemCategory === 'SPP Akademi'
+    ).length;
+
+    // Merged ledger as constructed in Desktop and Mobile UI:
+    const standaloneTxs = mockTransactions.filter((t) => !desktopIsBookingLinkedTx(t));
+    const mergedLedger = [
+      ...mockBookings.map(b => ({ id: `booking-${b.id}`, type: 'SEWA' })),
+      ...standaloneTxs.map(t => {
+        const isSPP = t.itemCategory === 'SPP & Pendaftaran Akademi' || t.itemCategory === 'SPP Akademi';
+        return { id: `tx-${t.id}`, type: isSPP ? 'SPP' : 'POS' };
+      })
+    ];
+
+    const semuaFilterCount = mergedLedger.length;
+    const ledgerSewaItems = mergedLedger.filter(i => i.type === 'SEWA').length;
+    const ledgerPosItems = mergedLedger.filter(i => i.type === 'POS').length;
+    const ledgerSppItems = mergedLedger.filter(i => i.type === 'SPP').length;
+
+    // Verification:
+    assert.equal(sewaFilterCount, 3, 'Sewa filter button count must be 3');
+    assert.equal(posFilterCount, 2, 'POS filter button count must be 2');
+    assert.equal(sppFilterCount, 1, 'SPP filter button count must be 1');
+    assert.equal(semuaFilterCount, 6, 'Semua filter button count must be 6 (3 Sewa + 2 POS + 1 SPP)');
+
+    assert.equal(ledgerSewaItems, sewaFilterCount, 'Ledger Sewa items must match Sewa filter count');
+    assert.equal(ledgerPosItems, posFilterCount, 'Ledger POS items must match POS filter count');
+    assert.equal(ledgerSppItems, sppFilterCount, 'Ledger SPP items must match SPP filter count');
+    assert.equal(semuaFilterCount, ledgerSewaItems + ledgerPosItems + ledgerSppItems, 'Semua must equal sum of categories');
+  });
+
 });
+
 

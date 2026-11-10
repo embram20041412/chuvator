@@ -23,6 +23,20 @@ import useMobileViewport from '../mobile/hooks/useMobileViewport';
 import MobileFinanceMain from '../mobile/pages/admin/MobileFinanceMain';
 
 /**
+ * Helper check for active vs voided records
+ */
+export const isRecordActive = (item) => {
+  const status = String(item?.status || '').toUpperCase();
+  return status !== 'VOID' && status !== 'BATAL' && status !== 'CANCELLED' && !item?.isVoid;
+};
+
+/**
+ * Helper check for booking-linked transaction (deduplication criteria)
+ * Returns true if transaction is linked to a booking via bookingId or booking_id.
+ */
+export const isBookingLinkedTx = (t) => Boolean(t?.bookingId || t?.booking_id);
+
+/**
  * FinanceDesktopMain Component
  * Untouched original desktop financial administration interface.
  * All desktop hooks are called unconditionally at the top level of this component.
@@ -36,15 +50,6 @@ export function FinanceDesktopMain({ userProfile }) {
 
   // Category Filter
   const [filterCategory, setFilterCategory] = useState('ALL'); // 'ALL' | 'SEWA' | 'POS' | 'SPP'
-
-  // Helper check for active vs voided records
-  const isRecordActive = (item) => {
-    const status = String(item.status || '').toUpperCase();
-    return status !== 'VOID' && status !== 'BATAL' && status !== 'CANCELLED' && !item.isVoid;
-  };
-
-  // Helper check for booking-linked transaction (deduplication criteria)
-  const isBookingLinkedTx = (t) => Boolean(t?.bookingId || t?.booking_id);
 
   // Filter Data by Time Period
   const filteredBookings = filterDataByTime(bookings, 'bookingDate', timeFilter, customDate);
@@ -288,7 +293,7 @@ export function FinanceDesktopMain({ userProfile }) {
                   : 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-400 hover:bg-purple-100'
               }`}
             >
-              POS ({filteredTransactions.filter((t) => t.itemCategory !== 'SPP & Pendaftaran Akademi' && t.itemCategory !== 'SPP Akademi').length})
+              POS ({filteredTransactions.filter((t) => !isBookingLinkedTx(t) && t.itemCategory !== 'SPP & Pendaftaran Akademi' && t.itemCategory !== 'SPP Akademi').length})
             </button>
             <button
               onClick={() => setFilterCategory('SPP')}
