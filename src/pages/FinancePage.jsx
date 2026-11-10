@@ -43,6 +43,9 @@ export function FinanceDesktopMain({ userProfile }) {
     return status !== 'VOID' && status !== 'BATAL' && status !== 'CANCELLED' && !item.isVoid;
   };
 
+  // Helper check for booking-linked transaction (deduplication criteria)
+  const isBookingLinkedTx = (t) => Boolean(t?.bookingId || t?.booking_id);
+
   // Filter Data by Time Period
   const filteredBookings = filterDataByTime(bookings, 'bookingDate', timeFilter, customDate);
   const filteredTransactions = filterDataByTime(transactions, 'createdAt', timeFilter, customDate);
@@ -54,8 +57,9 @@ export function FinanceDesktopMain({ userProfile }) {
   // 1. Calculate KPI Metrics based on active records
   const bookingRevenue = activeBookings.reduce((sum, b) => sum + (b.price || 0), 0);
 
+  // Standalone POS transactions exclude booking-linked transactions and SPP
   const posRevenue = activeTransactions
-    .filter((t) => t.itemCategory !== 'SPP & Pendaftaran Akademi' && t.itemCategory !== 'SPP Akademi')
+    .filter((t) => !isBookingLinkedTx(t) && t.itemCategory !== 'SPP & Pendaftaran Akademi' && t.itemCategory !== 'SPP Akademi')
     .reduce((sum, t) => sum + (t.amount || 0), 0);
 
   const sppRevenue = activeTransactions
@@ -65,6 +69,9 @@ export function FinanceDesktopMain({ userProfile }) {
   const totalGrossRevenue = bookingRevenue + posRevenue + sppRevenue;
 
   // 2. Merge Filtered Bookings & Transactions into Single Integrated Ledger History (Includes VOID for audit trail)
+  // Deduplication: Booking-linked transactions are excluded from transactions mapping so they do NOT appear as duplicate Kasir POS row
+  const standaloneTransactions = filteredTransactions.filter((t) => !isBookingLinkedTx(t));
+
   const mergedLedger = [
     ...filteredBookings.map((b) => {
       const isVoid = !isRecordActive(b);
@@ -85,7 +92,7 @@ export function FinanceDesktopMain({ userProfile }) {
         voidReason: b.voidReason || null
       };
     }),
-    ...filteredTransactions.map((t) => {
+    ...standaloneTransactions.map((t) => {
       const isSPP = t.itemCategory === 'SPP & Pendaftaran Akademi' || t.itemCategory === 'SPP Akademi';
       const isVoid = !isRecordActive(t);
       return {
@@ -218,7 +225,7 @@ export function FinanceDesktopMain({ userProfile }) {
             </p>
           </div>
           <div className="border-t border-white/20 pt-1.5 text-[10px] font-semibold text-white/80 z-10 truncate mt-1">
-            {activeTransactions.filter((t) => t.itemCategory !== 'SPP & Pendaftaran Akademi' && t.itemCategory !== 'SPP Akademi').length} Penjualan Retail &amp; F&amp;B
+            {activeTransactions.filter((t) => !isBookingLinkedTx(t) && t.itemCategory !== 'SPP & Pendaftaran Akademi' && t.itemCategory !== 'SPP Akademi').length} Penjualan Retail &amp; F&amp;B
           </div>
         </div>
 

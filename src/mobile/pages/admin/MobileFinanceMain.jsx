@@ -63,6 +63,9 @@ export default function MobileFinanceMain({ userProfile }) {
     return status !== 'VOID' && status !== 'BATAL' && status !== 'CANCELLED' && !item.isVoid;
   };
 
+  // Helper check for booking-linked transaction (deduplication criteria)
+  const isBookingLinkedTx = (t) => Boolean(t?.bookingId || t?.booking_id);
+
   // Filter Data by Time Period
   const filteredBookings = useMemo(() => {
     return filterDataByTime(bookings, 'bookingDate', timeFilter, customDate);
@@ -81,9 +84,10 @@ export default function MobileFinanceMain({ userProfile }) {
     return activeBookings.reduce((sum, b) => sum + (Number(b.price) || 0), 0);
   }, [activeBookings]);
 
+  // Standalone POS transactions exclude booking-linked transactions and SPP
   const posRevenue = useMemo(() => {
     return activeTransactions
-      .filter((t) => t.itemCategory !== 'SPP & Pendaftaran Akademi' && t.itemCategory !== 'SPP Akademi')
+      .filter((t) => !isBookingLinkedTx(t) && t.itemCategory !== 'SPP & Pendaftaran Akademi' && t.itemCategory !== 'SPP Akademi')
       .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
   }, [activeTransactions]);
 
@@ -98,6 +102,7 @@ export default function MobileFinanceMain({ userProfile }) {
   }, [bookingRevenue, posRevenue, sppRevenue]);
 
   // 2. Merge Filtered Bookings & Transactions into Single Integrated Ledger History (identical to FinancePage.jsx)
+  // Deduplication: Booking-linked transactions are excluded from transactions mapping so they do NOT appear as duplicate Kasir POS row
   const mergedLedger = useMemo(() => {
     const bItems = filteredBookings.map((b) => {
       const isVoid = !isRecordActive(b);
@@ -119,7 +124,9 @@ export default function MobileFinanceMain({ userProfile }) {
       };
     });
 
-    const tItems = filteredTransactions.map((t) => {
+    const standaloneTransactions = filteredTransactions.filter((t) => !isBookingLinkedTx(t));
+
+    const tItems = standaloneTransactions.map((t) => {
       const isSPP = t.itemCategory === 'SPP & Pendaftaran Akademi' || t.itemCategory === 'SPP Akademi';
       const isVoid = !isRecordActive(t);
       return {
@@ -369,7 +376,7 @@ export default function MobileFinanceMain({ userProfile }) {
               Rp {posRevenue.toLocaleString('id-ID')}
             </p>
             <p className="text-[9px] text-slate-400 mt-0.5 truncate">
-              {activeTransactions.filter((t) => t.itemCategory !== 'SPP & Pendaftaran Akademi' && t.itemCategory !== 'SPP Akademi').length} item
+              {activeTransactions.filter((t) => !isBookingLinkedTx(t) && t.itemCategory !== 'SPP & Pendaftaran Akademi' && t.itemCategory !== 'SPP Akademi').length} item
             </p>
           </div>
         </div>

@@ -172,14 +172,16 @@ test('CHUVATOR — Phase 4.5.1 Mobile Financial Administration Logic & Security 
     return status !== 'VOID' && status !== 'BATAL' && status !== 'CANCELLED' && !item.isVoid;
   };
 
-  // 6. Total Revenue & Strict VOID Exclusion from KPI
-  await t.test('6. KPI Revenue: Correctly calculates Gross, Court, POS, and SPP revenue excluding VOID records', () => {
+  const isBookingLinkedTx = (t: any) => Boolean(t?.bookingId || t?.booking_id);
+
+  // 6. Total Revenue & Strict VOID Exclusion from KPI (with Deduplication Guard)
+  await t.test('6. KPI Revenue: Correctly calculates Gross, Court, POS, and SPP revenue excluding VOID records and booking duplicates', () => {
     const activeBookings = mockBookings.filter(isRecordActive);
     const activeTransactions = mockTransactions.filter(isRecordActive);
 
     const bookingRevenue = activeBookings.reduce((sum, b) => sum + (b.price || 0), 0);
     const posRevenue = activeTransactions
-      .filter((t) => t.itemCategory !== 'SPP & Pendaftaran Akademi' && t.itemCategory !== 'SPP Akademi')
+      .filter((t) => !isBookingLinkedTx(t) && t.itemCategory !== 'SPP & Pendaftaran Akademi' && t.itemCategory !== 'SPP Akademi')
       .reduce((sum, t) => sum + (t.amount || 0), 0);
     const sppRevenue = activeTransactions
       .filter((t) => t.itemCategory === 'SPP & Pendaftaran Akademi' || t.itemCategory === 'SPP Akademi')
@@ -199,7 +201,7 @@ test('CHUVATOR — Phase 4.5.1 Mobile Financial Administration Logic & Security 
     const activeTransactions = mockTransactions.filter(isRecordActive);
     const isSPP = (cat: string) => cat === 'SPP & Pendaftaran Akademi' || cat === 'SPP Akademi';
 
-    const posItems = activeTransactions.filter(t => !isSPP(t.itemCategory));
+    const posItems = activeTransactions.filter(t => !isBookingLinkedTx(t) && !isSPP(t.itemCategory));
     const sppItems = activeTransactions.filter(t => isSPP(t.itemCategory));
 
     assert.equal(posItems.length, 1);
@@ -208,11 +210,12 @@ test('CHUVATOR — Phase 4.5.1 Mobile Financial Administration Logic & Security 
     assert.equal(sppItems[0].id, 'tx2');
   });
 
-  // 8. Category Filter for Unified Financial Ledger
+  // 8. Category Filter for Unified Financial Ledger (Excluding booking-linked duplicate rows)
   await t.test('8. Ledger Category Filter: Filters merged ledger by ALL, SEWA, POS, and SPP correctly', () => {
+    const standaloneTransactions = mockTransactions.filter(t => !isBookingLinkedTx(t));
     const mergedLedger = [
       ...mockBookings.map(b => ({ id: `booking-${b.id}`, type: 'SEWA', amount: b.price, isVoid: !isRecordActive(b) })),
-      ...mockTransactions.map(t => {
+      ...standaloneTransactions.map(t => {
         const isSPP = t.itemCategory === 'SPP & Pendaftaran Akademi' || t.itemCategory === 'SPP Akademi';
         return { id: `tx-${t.id}`, type: isSPP ? 'SPP' : 'POS', amount: t.amount, isVoid: !isRecordActive(t) };
       })
@@ -291,4 +294,251 @@ test('CHUVATOR — Phase 4.5.1 Mobile Financial Administration Logic & Security 
     assert.equal(isMobileViewport(1440), false);
   });
 
+  // =========================================================================
+  // PHASE 4.5.1.2 — MANDATORY DEDUPLICATION TESTS (TEST CASES 1 - 8)
+  // =========================================================================
+
+  // Helper calculating revenue and ledger following the exact formula in FinanceDesktopMain & MobileFinanceMain
+  const calculateFinanceState = (bookings: any[], transactions: any[]) => {
+    const activeBookings = bookings.filter(isRecordActive);
+    const activeTransactions = transactions.filter(isRecordActive);
+
+    const bookingRevenue = activeBookings.reduce((sum, b) => sum + (Number(b.price) || 0), 0);
+    const posRevenue = activeTransactions
+      .filter((t) => !isBookingLinkedTx(t) && t.itemCategory !== 'SPP & Pendaftaran Akademi' && t.itemCategory !== 'SPP Akademi')
+      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const sppRevenue = activeTransactions
+      .filter((t) => t.itemCategory === 'SPP & Pendaftaran Akademi' || t.itemCategory === 'SPP Akademi')
+      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const totalGrossRevenue = bookingRevenue + posRevenue + sppRevenue;
+
+    const standaloneTransactions = transactions.filter((t) => !isBookingLinkedTx(t));
+    const mergedLedger = [
+      ...bookings.map((b) => ({
+        id: `booking-${b.id}`,
+        rawId: b.id,
+        type: 'SEWA',
+        categoryLabel: 'Sewa Lapangan',
+        amount: Number(b.price) || 0,
+        isVoid: !isRecordActive(b)
+      })),
+      ...standaloneTransactions.map((t) => {
+        const isSPP = t.itemCategory === 'SPP & Pendaftaran Akademi' || t.itemCategory === 'SPP Akademi';
+        return {
+          id: `tx-${t.id}`,
+          rawId: t.id,
+          type: isSPP ? 'SPP' : 'POS',
+          categoryLabel: isSPP ? 'SPP Akademi' : 'Kasir POS',
+          amount: Number(t.amount) || 0,
+          isVoid: !isRecordActive(t)
+        };
+      })
+    ];
+
+    return {
+      bookingRevenue,
+      posRevenue,
+      sppRevenue,
+      totalGrossRevenue,
+      mergedLedger,
+      posCount: activeTransactions.filter((t) => !isBookingLinkedTx(t) && t.itemCategory !== 'SPP & Pendaftaran Akademi' && t.itemCategory !== 'SPP Akademi').length,
+      sppCount: activeTransactions.filter((t) => t.itemCategory === 'SPP & Pendaftaran Akademi' || t.itemCategory === 'SPP Akademi').length
+    };
+  };
+
+  // Case 1: Satu booking Rp500.000 dan satu transaksi dengan bookingId yang sama: total pendapatan hanya Rp500.000
+  await t.test('13. Case 1: Satu booking Rp500.000 dan satu transaksi dengan bookingId yang sama menghasilkan total pendapatan hanya Rp500.000 (No Double Count)', () => {
+    const singleBooking = [
+      { id: 'b-500', price: 500000, status: 'CONFIRMED', customerName: 'Ferry Hendrawan' }
+    ];
+    const linkedTx = [
+      { 
+        id: 'tx-b500', 
+        bookingId: 'b-500', 
+        amount: 500000, 
+        itemCategory: 'Sewa Lapangan', 
+        status: 'COMPLETED' 
+      }
+    ];
+
+    const result = calculateFinanceState(singleBooking, linkedTx);
+
+    assert.equal(result.bookingRevenue, 500000, 'Pendapatan sewa harus Rp500.000');
+    assert.equal(result.posRevenue, 0, 'Pendapatan POS harus Rp0 karena transaksi linked ke booking');
+    assert.equal(result.sppRevenue, 0);
+    assert.equal(result.totalGrossRevenue, 500000, 'Total pendapatan bersih harus tepat Rp500.000');
+  });
+
+  // Case 2: Booking-linked transaction tidak muncul sebagai Kasir POS kedua
+  await t.test('14. Case 2: Booking-linked transaction tidak muncul sebagai baris Kasir POS kedua pada unified ledger', () => {
+    const bookings = [
+      { id: 'b-court1', price: 200000, status: 'CONFIRMED', customerName: 'Dedi' }
+    ];
+    const transactions = [
+      { id: 'tx-dedi', bookingId: 'b-court1', amount: 200000, itemCategory: 'Sewa Lapangan', status: 'COMPLETED' }
+    ];
+
+    const result = calculateFinanceState(bookings, transactions);
+
+    assert.equal(result.mergedLedger.length, 1, 'Hanya boleh ada 1 item di ledger (booking asli)');
+    assert.equal(result.mergedLedger[0].id, 'booking-b-court1');
+    assert.equal(result.mergedLedger[0].type, 'SEWA');
+    assert.equal(result.mergedLedger.filter(i => i.type === 'POS').length, 0, 'Tidak boleh ada item POS');
+  });
+
+  // Case 3: Transaksi POS retail tanpa bookingId tetap muncul dan dihitung
+  await t.test('15. Case 3: Transaksi POS retail tanpa bookingId tetap muncul dan dihitung normal', () => {
+    const bookings = [
+      { id: 'b-court1', price: 200000, status: 'CONFIRMED' }
+    ];
+    const transactions = [
+      { id: 'tx-dedi-linked', bookingId: 'b-court1', amount: 200000, itemCategory: 'Sewa Lapangan', status: 'COMPLETED' },
+      { id: 'tx-pos-retail', bookingId: null, amount: 35000, itemCategory: 'Penjualan Retail POS', status: 'COMPLETED' }
+    ];
+
+    const result = calculateFinanceState(bookings, transactions);
+
+    assert.equal(result.bookingRevenue, 200000);
+    assert.equal(result.posRevenue, 35000, 'Retail POS tanpa bookingId harus terhitung Rp35.000');
+    assert.equal(result.totalGrossRevenue, 235000);
+    assert.equal(result.mergedLedger.length, 2, 'Ledger harus berisi 1 Sewa + 1 Retail POS');
+    assert.equal(result.mergedLedger.filter(i => i.type === 'POS').length, 1);
+    assert.equal(result.posCount, 1);
+  });
+
+  // Case 4: Transaksi SPP tetap masuk kategori SPP
+  await t.test('16. Case 4: Transaksi SPP tetap masuk kategori SPP dan dihitung normal', () => {
+    const bookings: any[] = [];
+    const transactions = [
+      { id: 'tx-spp-1', amount: 300000, itemCategory: 'SPP & Pendaftaran Akademi', status: 'COMPLETED' },
+      { id: 'tx-spp-2', amount: 250000, itemCategory: 'SPP Akademi', status: 'COMPLETED' }
+    ];
+
+    const result = calculateFinanceState(bookings, transactions);
+
+    assert.equal(result.bookingRevenue, 0);
+    assert.equal(result.posRevenue, 0);
+    assert.equal(result.sppRevenue, 550000);
+    assert.equal(result.totalGrossRevenue, 550000);
+    assert.equal(result.sppCount, 2);
+    assert.equal(result.mergedLedger.filter(i => i.type === 'SPP').length, 2);
+  });
+
+  // Case 5: Dua booking berbeda tetap dihitung masing-masing
+  await t.test('17. Case 5: Dua booking berbeda tetap dihitung masing-masing dan deduplikasi bekerja per-bookingId', () => {
+    const bookings = [
+      { id: 'b-101', price: 150000, status: 'CONFIRMED' },
+      { id: 'b-102', price: 250000, status: 'CONFIRMED' }
+    ];
+    const transactions = [
+      { id: 'tx-101', bookingId: 'b-101', amount: 150000, itemCategory: 'Sewa Lapangan', status: 'COMPLETED' },
+      { id: 'tx-102', booking_id: 'b-102', amount: 250000, itemCategory: 'Sewa Lapangan', status: 'COMPLETED' }
+    ];
+
+    const result = calculateFinanceState(bookings, transactions);
+
+    assert.equal(result.bookingRevenue, 400000, 'Dua booking berbeda harus berjumlah Rp400.000');
+    assert.equal(result.posRevenue, 0, 'Kedua transaksi linked ke booking masing-masing, POS harus Rp0');
+    assert.equal(result.totalGrossRevenue, 400000);
+    assert.equal(result.mergedLedger.length, 2, 'Tepat 2 item sewa pada ledger');
+  });
+
+  // Case 6: Booking VOID tidak dihitung sebagai pendapatan aktif
+  await t.test('18. Case 6: Booking VOID tidak dihitung sebagai pendapatan aktif tetapi tetap tersimpan di ledger audit trail', () => {
+    const bookings = [
+      { id: 'b-active', price: 120000, status: 'CONFIRMED', isVoid: false },
+      { id: 'b-void', price: 180000, status: 'VOID', isVoid: true }
+    ];
+    const transactions = [
+      { id: 'tx-active', bookingId: 'b-active', amount: 120000, itemCategory: 'Sewa Lapangan', status: 'COMPLETED' }
+    ];
+
+    const result = calculateFinanceState(bookings, transactions);
+
+    assert.equal(result.bookingRevenue, 120000, 'Hanya booking aktif yang masuk omset');
+    assert.equal(result.posRevenue, 0);
+    assert.equal(result.totalGrossRevenue, 120000);
+    // Audit trail: ledger memuat 2 booking (1 aktif, 1 void)
+    assert.equal(result.mergedLedger.length, 2);
+    assert.equal(result.mergedLedger.filter(i => i.isVoid).length, 1);
+  });
+
+  // Case 7: Transaksi POS VOID tidak dihitung sebagai pendapatan aktif
+  await t.test('19. Case 7: Transaksi POS VOID tidak dihitung sebagai pendapatan aktif tetapi tetap tercatat di audit trail', () => {
+    const bookings: any[] = [];
+    const transactions = [
+      { id: 'tx-pos-ok', amount: 50000, itemCategory: 'Penjualan Retail POS', status: 'COMPLETED', isVoid: false },
+      { id: 'tx-pos-batal', amount: 75000, itemCategory: 'Penjualan Retail POS', status: 'BATAL', isVoid: true }
+    ];
+
+    const result = calculateFinanceState(bookings, transactions);
+
+    assert.equal(result.posRevenue, 50000, 'Hanya transaksi POS aktif yang masuk omset');
+    assert.equal(result.totalGrossRevenue, 50000);
+    assert.equal(result.posCount, 1);
+    assert.equal(result.mergedLedger.length, 2);
+    assert.equal(result.mergedLedger.filter(i => i.isVoid).length, 1);
+  });
+
+  // Case 8: Hasil perhitungan desktop dan mobile identik
+  await t.test('20. Case 8: Hasil perhitungan desktop dan mobile terbukti identik 100% pada dataset campuran kompleks', () => {
+    const mixedBookings = [
+      { id: 'bk-1', price: 100000, status: 'CONFIRMED', bookingDate: '2026-11-10' },
+      { id: 'bk-2', price: 150000, status: 'CONFIRMED', bookingDate: '2026-11-10' },
+      { id: 'bk-3', price: 200000, status: 'VOID', isVoid: true, bookingDate: '2026-11-10' }
+    ];
+    const mixedTransactions = [
+      // Booking-linked payments (must be excluded from POS)
+      { id: 'tx-b1', bookingId: 'bk-1', amount: 100000, itemCategory: 'Sewa Lapangan', status: 'COMPLETED' },
+      { id: 'tx-b2', booking_id: 'bk-2', amount: 150000, itemCategory: 'Sewa Lapangan', status: 'COMPLETED' },
+      // Standalone Retail POS
+      { id: 'tx-pos-1', amount: 40000, itemCategory: 'Penjualan Retail POS', status: 'COMPLETED' },
+      { id: 'tx-pos-2', amount: 60000, itemCategory: 'Penjualan Retail POS', status: 'COMPLETED' },
+      { id: 'tx-pos-void', amount: 25000, itemCategory: 'Penjualan Retail POS', status: 'CANCELLED', isVoid: true },
+      // SPP
+      { id: 'tx-spp-1', amount: 300000, itemCategory: 'SPP & Pendaftaran Akademi', status: 'COMPLETED' }
+    ];
+
+    // Formula Desktop
+    const desktopBookingsActive = mixedBookings.filter(isRecordActive);
+    const desktopTxActive = mixedTransactions.filter(isRecordActive);
+    const desktopBookingRev = desktopBookingsActive.reduce((sum, b) => sum + (b.price || 0), 0);
+    const desktopPosRev = desktopTxActive
+      .filter((t) => !isBookingLinkedTx(t) && t.itemCategory !== 'SPP & Pendaftaran Akademi' && t.itemCategory !== 'SPP Akademi')
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
+    const desktopSppRev = desktopTxActive
+      .filter((t) => t.itemCategory === 'SPP & Pendaftaran Akademi' || t.itemCategory === 'SPP Akademi')
+      .reduce((sum, t) => sum + (t.amount || 0), 0);
+    const desktopTotal = desktopBookingRev + desktopPosRev + desktopSppRev;
+
+    // Formula Mobile
+    const mobileBookingsActive = mixedBookings.filter(isRecordActive);
+    const mobileTxActive = mixedTransactions.filter(isRecordActive);
+    const mobileBookingRev = mobileBookingsActive.reduce((sum, b) => sum + (Number(b.price) || 0), 0);
+    const mobilePosRev = mobileTxActive
+      .filter((t) => !isBookingLinkedTx(t) && t.itemCategory !== 'SPP & Pendaftaran Akademi' && t.itemCategory !== 'SPP Akademi')
+      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const mobileSppRev = mobileTxActive
+      .filter((t) => t.itemCategory === 'SPP & Pendaftaran Akademi' || t.itemCategory === 'SPP Akademi')
+      .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const mobileTotal = mobileBookingRev + mobilePosRev + mobileSppRev;
+
+    // Assert Desktop vs Mobile Parity
+    assert.equal(desktopBookingRev, mobileBookingRev, 'Booking revenue must match between Desktop and Mobile');
+    assert.equal(desktopPosRev, mobilePosRev, 'POS revenue must match between Desktop and Mobile');
+    assert.equal(desktopSppRev, mobileSppRev, 'SPP revenue must match between Desktop and Mobile');
+    assert.equal(desktopTotal, mobileTotal, 'Total Gross Revenue must match between Desktop and Mobile');
+
+    // Expected exact values:
+    // Booking: bk-1 (100k) + bk-2 (150k) = 250k (bk-3 is void)
+    // POS: tx-pos-1 (40k) + tx-pos-2 (60k) = 100k (tx-b1 & tx-b2 linked, tx-pos-void is cancelled)
+    // SPP: tx-spp-1 (300k)
+    // Total = 250k + 100k + 300k = 650.000
+    assert.equal(desktopBookingRev, 250000);
+    assert.equal(desktopPosRev, 100000);
+    assert.equal(desktopSppRev, 300000);
+    assert.equal(desktopTotal, 650000);
+  });
+
 });
+
