@@ -389,7 +389,7 @@ export default function MobileFinanceMain({ userProfile }) {
               Rp {sppRevenue.toLocaleString('id-ID')}
             </p>
             <p className="text-[9px] text-slate-400 mt-0.5 truncate">
-              {activeTransactions.filter((t) => t.itemCategory === 'SPP & Pendaftaran Akademi' || t.itemCategory === 'SPP Akademi').length} siswa
+              {activeTransactions.filter((t) => t.itemCategory === 'SPP & Pendaftaran Akademi' || t.itemCategory === 'SPP Akademi').length} pembayaran
             </p>
           </div>
         </div>

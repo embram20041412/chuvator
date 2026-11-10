@@ -22,13 +22,12 @@ import DateRangeFilter, { filterDataByTime } from '../components/DateRangeFilter
 import useMobileViewport from '../mobile/hooks/useMobileViewport';
 import MobileFinanceMain from '../mobile/pages/admin/MobileFinanceMain';
 
-export default function FinancePage({ userProfile }) {
-  const isMobile = useMobileViewport(767);
-
-  if (isMobile) {
-    return <MobileFinanceMain userProfile={userProfile} />;
-  }
-
+/**
+ * FinanceDesktopMain Component
+ * Untouched original desktop financial administration interface.
+ * All desktop hooks are called unconditionally at the top level of this component.
+ */
+export function FinanceDesktopMain({ userProfile }) {
   const { bookings, transactions, isLoading, refetch } = useArenaData(userProfile);
 
   // Time Range Filter States
@@ -378,4 +377,20 @@ export default function FinancePage({ userProfile }) {
 
     </div>
   );
+}
+
+/**
+ * FinancePage (Viewport Wrapper)
+ * Adheres strictly to React Rules of Hooks.
+ * Calls ONLY useMobileViewport(767) unconditionally and delegates rendering
+ * to either MobileFinanceMain (<= 767px) or FinanceDesktopMain (>= 768px).
+ */
+export default function FinancePage({ userProfile }) {
+  const isMobile = useMobileViewport(767);
+
+  if (isMobile) {
+    return <MobileFinanceMain userProfile={userProfile} />;
+  }
+
+  return <FinanceDesktopMain userProfile={userProfile} />;
 }

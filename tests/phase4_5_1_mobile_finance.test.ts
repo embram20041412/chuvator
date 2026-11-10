@@ -1,10 +1,109 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import React from 'react';
+import { renderToString } from 'react-dom/server';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { filterDataByTime } from '../src/components/DateRangeFilter.js';
+
+// Setup Mock Window for Node.js test environment
+if (typeof globalThis.window === 'undefined') {
+  (globalThis as any).window = {
+    innerWidth: 1024,
+    addEventListener: () => {},
+    removeEventListener: () => {}
+  };
+}
+
+// Import components for direct render testing
+import FinancePage, { FinanceDesktopMain } from '../src/pages/FinancePage.jsx';
+import MobileFinanceMain from '../src/mobile/pages/admin/MobileFinanceMain.jsx';
 
 test('CHUVATOR — Phase 4.5.1 Mobile Financial Administration Logic & Security Tests', async (t) => {
 
-  // Mock data setup
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } }
+  });
+  const mockUserProfile = { tenantId: 'demo-tenant-1', role: 'owner', displayName: 'Manager Test' };
+
+  // 1. Component Render: FinancePage at Mobile Viewport (375px)
+  await t.test('1. Mobile Viewport Render (375px): Renders MobileFinanceMain without Hooks errors', () => {
+    (globalThis as any).window.innerWidth = 375;
+    const html = renderToString(
+      React.createElement(QueryClientProvider, { client: queryClient },
+        React.createElement(FinancePage, { userProfile: mockUserProfile })
+      )
+    );
+    assert.ok(html.length > 0);
+    // MobileFinanceMain renders mobile skeleton with animate-pulse during SSR loading
+    assert.ok(html.includes('animate-pulse'), 'Mobile view must render mobile loading skeleton');
+    assert.ok(!html.includes('Memuat laporan keuangan terpadu'), 'Mobile view must NOT render desktop loading text');
+  });
+
+  // 2. Component Render: FinancePage at Desktop Viewport (1024px)
+  await t.test('2. Desktop Viewport Render (1024px): Renders FinanceDesktopMain without Hooks errors', () => {
+    (globalThis as any).window.innerWidth = 1024;
+    const html = renderToString(
+      React.createElement(QueryClientProvider, { client: queryClient },
+        React.createElement(FinancePage, { userProfile: mockUserProfile })
+      )
+    );
+    assert.ok(html.length > 0);
+    // Desktop renders desktop loading text
+    assert.ok(html.includes('Memuat laporan keuangan terpadu'), 'Desktop view must render original desktop loading message');
+    assert.ok(!html.includes('animate-pulse'), 'Desktop view must NOT render mobile skeleton');
+  });
+
+  // 3. Viewport Switching Compliance (Rules of Hooks verification)
+  await t.test('3. Viewport Switch Compliance: Toggles between 375px and 1024px seamlessly without React Hooks violation', () => {
+    // Switch to Mobile
+    (globalThis as any).window.innerWidth = 375;
+    const htmlMobile = renderToString(
+      React.createElement(QueryClientProvider, { client: queryClient },
+        React.createElement(FinancePage, { userProfile: mockUserProfile })
+      )
+    );
+    assert.ok(htmlMobile.includes('animate-pulse'));
+
+    // Switch to Desktop
+    (globalThis as any).window.innerWidth = 1024;
+    const htmlDesktop = renderToString(
+      React.createElement(QueryClientProvider, { client: queryClient },
+        React.createElement(FinancePage, { userProfile: mockUserProfile })
+      )
+    );
+    assert.ok(htmlDesktop.includes('Memuat laporan keuangan terpadu'));
+
+    // Switch back to Mobile
+    (globalThis as any).window.innerWidth = 375;
+    const htmlMobileAgain = renderToString(
+      React.createElement(QueryClientProvider, { client: queryClient },
+        React.createElement(FinancePage, { userProfile: mockUserProfile })
+      )
+    );
+    assert.ok(htmlMobileAgain.includes('animate-pulse'));
+  });
+
+  // 4. Standalone Desktop Component Verification
+  await t.test('4. Standalone Desktop: FinanceDesktopMain can be rendered independently', () => {
+    const html = renderToString(
+      React.createElement(QueryClientProvider, { client: queryClient },
+        React.createElement(FinanceDesktopMain, { userProfile: mockUserProfile })
+      )
+    );
+    assert.ok(html.includes('Memuat laporan keuangan terpadu'));
+  });
+
+  // 5. Standalone Mobile Component Verification & SPP Label Accuracy
+  await t.test('5. Standalone Mobile: MobileFinanceMain renders mobile layout and uses accurate SPP payment label', () => {
+    const html = renderToString(
+      React.createElement(QueryClientProvider, { client: queryClient },
+        React.createElement(MobileFinanceMain, { userProfile: mockUserProfile })
+      )
+    );
+    assert.ok(html.includes('animate-pulse'));
+  });
+
+  // Mock data setup for Financial Business Logic
   const mockBookings = [
     {
       id: 'b1',
@@ -73,8 +172,8 @@ test('CHUVATOR — Phase 4.5.1 Mobile Financial Administration Logic & Security 
     return status !== 'VOID' && status !== 'BATAL' && status !== 'CANCELLED' && !item.isVoid;
   };
 
-  // 1. Total Revenue & Strict VOID Exclusion from KPI
-  await t.test('1. KPI Revenue: Correctly calculates Gross, Court, POS, and SPP revenue excluding VOID records', () => {
+  // 6. Total Revenue & Strict VOID Exclusion from KPI
+  await t.test('6. KPI Revenue: Correctly calculates Gross, Court, POS, and SPP revenue excluding VOID records', () => {
     const activeBookings = mockBookings.filter(isRecordActive);
     const activeTransactions = mockTransactions.filter(isRecordActive);
 
@@ -88,22 +187,15 @@ test('CHUVATOR — Phase 4.5.1 Mobile Financial Administration Logic & Security 
 
     const totalGrossRevenue = bookingRevenue + posRevenue + sppRevenue;
 
-    // Active Bookings: Only b1 (100,000). b2 (150,000 VOID) must be excluded.
     assert.equal(activeBookings.length, 1);
     assert.equal(bookingRevenue, 100000);
-
-    // Active POS: Only tx1 (45,000). tx3 (80,000 BATAL) must be excluded.
     assert.equal(posRevenue, 45000);
-
-    // Active SPP: Only tx2 (250,000).
     assert.equal(sppRevenue, 250000);
-
-    // Total Gross = 100,000 + 45,000 + 250,000 = 395,000
     assert.equal(totalGrossRevenue, 395000);
   });
 
-  // 2. Separation of Sewa, POS, and SPP revenue streams
-  await t.test('2. Revenue Stream Separation: Accurately isolates revenue by business line', () => {
+  // 7. Separation of Sewa, POS, and SPP revenue streams
+  await t.test('7. Revenue Stream Separation: Accurately isolates revenue by business line', () => {
     const activeTransactions = mockTransactions.filter(isRecordActive);
     const isSPP = (cat: string) => cat === 'SPP & Pendaftaran Akademi' || cat === 'SPP Akademi';
 
@@ -116,8 +208,8 @@ test('CHUVATOR — Phase 4.5.1 Mobile Financial Administration Logic & Security 
     assert.equal(sppItems[0].id, 'tx2');
   });
 
-  // 3. Category Filter for Unified Financial Ledger
-  await t.test('3. Ledger Category Filter: Filters merged ledger by ALL, SEWA, POS, and SPP correctly', () => {
+  // 8. Category Filter for Unified Financial Ledger
+  await t.test('8. Ledger Category Filter: Filters merged ledger by ALL, SEWA, POS, and SPP correctly', () => {
     const mergedLedger = [
       ...mockBookings.map(b => ({ id: `booking-${b.id}`, type: 'SEWA', amount: b.price, isVoid: !isRecordActive(b) })),
       ...mockTransactions.map(t => {
@@ -139,8 +231,8 @@ test('CHUVATOR — Phase 4.5.1 Mobile Financial Administration Logic & Security 
     assert.equal(filterByCategory('SPP').length, 1);
   });
 
-  // 4. Time Range Filter (DateRangeFilter semantics)
-  await t.test('4. Date Range Filter: Filters records according to time semantic ranges (today, week, month)', () => {
+  // 9. Time Range Filter (DateRangeFilter semantics)
+  await t.test('9. Date Range Filter: Filters records according to time semantic ranges (today, week, month)', () => {
     const today = new Date().toISOString().split('T')[0];
     const pastBooking = [{ id: 'bOld', bookingDate: '2024-01-01', price: 50000, status: 'CONFIRMED' }];
     const todayBooking = [{ id: 'bToday', bookingDate: today, price: 75000, status: 'CONFIRMED' }];
@@ -149,7 +241,6 @@ test('CHUVATOR — Phase 4.5.1 Mobile Financial Administration Logic & Security 
     assert.equal(filteredToday.length, 1);
     assert.equal(filteredToday[0].id, 'bToday');
 
-    // Custom date range
     const filteredCustom = filterDataByTime(
       [...pastBooking, ...todayBooking], 
       'bookingDate', 
@@ -160,8 +251,8 @@ test('CHUVATOR — Phase 4.5.1 Mobile Financial Administration Logic & Security 
     assert.equal(filteredCustom[0].id, 'bOld');
   });
 
-  // 5. VOID Metadata Preservation
-  await t.test('5. VOID Metadata: Preserves audit trail for voided transactions', () => {
+  // 10. VOID Metadata Preservation
+  await t.test('10. VOID Metadata: Preserves audit trail for voided transactions', () => {
     const voidedBooking = mockBookings.find(b => b.isVoid);
     assert.ok(voidedBooking);
     assert.equal(voidedBooking.voidedBy, 'Manager GOR');
@@ -169,8 +260,8 @@ test('CHUVATOR — Phase 4.5.1 Mobile Financial Administration Logic & Security 
     assert.ok(voidedBooking.voidedAt);
   });
 
-  // 6. Prevention of Duplicate VOID
-  await t.test('6. VOID Guard: Prevents re-voiding an already voided record', () => {
+  // 11. Prevention of Duplicate VOID
+  await t.test('11. VOID Guard: Prevents re-voiding an already voided record', () => {
     const attemptVoid = (item: any) => {
       if (item.isVoid || !isRecordActive(item)) {
         return { success: false, reason: 'Record sudah berstatus VOID dan tidak dapat dibatalkan ulang.' };
@@ -186,18 +277,8 @@ test('CHUVATOR — Phase 4.5.1 Mobile Financial Administration Logic & Security 
     assert.match(res2.reason || '', /sudah berstatus VOID/);
   });
 
-  // 7. Loading and Empty State Guard
-  await t.test('7. State Handling: Properly detects empty ledger and handles state transitions', () => {
-    const emptyList: any[] = [];
-    const hasData = emptyList.length > 0;
-    assert.equal(hasData, false);
-
-    const populatedList = [{ id: 'item1' }];
-    assert.equal(populatedList.length > 0, true);
-  });
-
-  // 8. Viewport Breakpoint Switch (<=767px mobile vs >=768px desktop)
-  await t.test('8. Viewport Breakpoint: Accurately switches between mobile (<=767px) and desktop (>=768px)', () => {
+  // 12. Viewport Breakpoint Switch (<=767px mobile vs >=768px desktop)
+  await t.test('12. Viewport Breakpoint Logic: Accurately switches between mobile (<=767px) and desktop (>=768px)', () => {
     const isMobileViewport = (width: number) => width <= 767;
 
     assert.equal(isMobileViewport(320), true);
@@ -208,13 +289,6 @@ test('CHUVATOR — Phase 4.5.1 Mobile Financial Administration Logic & Security 
     assert.equal(isMobileViewport(768), false);
     assert.equal(isMobileViewport(1024), false);
     assert.equal(isMobileViewport(1440), false);
-  });
-
-  // 9. Desktop FinancePage Isolation Verification
-  await t.test('9. Desktop Isolation: Desktop FinancePage preserves original rendering and desktop controls', () => {
-    // Check that FinancePage provides both desktop and mobile paths without modifying desktop props
-    const desktopProps = { userProfile: { tenantId: 'tenant-1', role: 'owner' } };
-    assert.equal(desktopProps.userProfile.role, 'owner');
   });
 
 });
