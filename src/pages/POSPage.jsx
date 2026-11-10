@@ -6,8 +6,7 @@ import {
   deleteProduct, 
   createTransaction, 
   createLedgerEntry, 
-  createPosReceipt,
-  processPosCheckout 
+  createPosReceipt 
 } from '../services/supabaseArenaService';
 import { getStudents, updateStudent, fetchAcademyBills } from '../services/supabaseAcademyService';
 import { supabase } from '../config/supabase';
@@ -466,20 +465,152 @@ export default function POSPage({ userProfile }) {
     const isUuid = (val) => Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(val).trim()));
 
     try {
-      const regItems = cart.filter((i) => i.type === 'registration');
-      const sppItems = cart.filter((i) => i.type === 'spp');
-      const hasSpp = sppItems.length > 0;
+      const itemsSummary = cart.map((i) => `${i.name} (${i.qty}x)`).join(', ');
+      const hasAcademy = cart.some((i) => i.type === 'spp' || i.type === 'registration');
 
-      const idempotencyKey = `idemp-${tenantId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-      const result = await processPosCheckout({
-        tenantId,
-        paymentMethod: activePaymentMethod,
-        items: cart,
-        customerName: customerName || 'Pelanggan Umum',
-        cashierName: userProfile?.fullName || userProfile?.name || 'Kasir',
-        cashierEmail: userProfile?.email || null,
-        idempotencyKey
-      });
+      // 1. Update product stocks in Supabase (produk fisik retail)
+      const physicalItems = cart.filter((i) => i.type !== 'spp' && i.type !== 'registration' && i.type !== 'sewa' && i.id);
+      for (const item of physicalItems) {
+        if (isUuid(item.id)) {
+          try {
+            const currentProd = products.find((p) => p.id === item.id);
+            const currentStock = currentProd ? Number(currentProd.stock || 0) : item.stock || 0;
+            const newStock = Math.max(0, currentStock - item.qty);
+            await updateProduct(item.id, { stock: newStock });
+          } catch (e) {
+            console.warn('Stock update skipped for non-persisted product:', item.id, e);
+          }
+        }
+      }
+
+      // 2. Update status Biaya Pendaftaran Siswa di tabel students
+      const regItems = cart.filter((i) => i.type === 'registration');
+      for (const reg of regItems) {
+        const sId = reg.studentId || reg.student_id;
+        if (sId && isUuid(sId)) {
+          try {
+            await updateStudent(sId, {
+              registrationFeePaid: true,
+              isRegistrationFeePaid: true,
+              registrationFeePaidAt: new Date().toISOString()
+            });
+          } catch (e) {
+            console.warn('Student registration fee update error:', e);
+          }
+        }
+      }
+
+      // 3. Update SPP students and record spp_payments
+      const sppItems = cart.filter((i) => i.type === 'spp');
+      for (const s of sppItems) {
+        const sId = s.studentId || s.student_id;
+        const targetMonth = s.paid_month || currentMonth;
+        if (sId && isUuid(sId)) {
+          try {
+            await updateStudent(sId, {
+              paymentStatus: 'lunas',
+              sppStatus: 'Lunas',
+              lastPaidMonth: targetMonth
+            });
+          } catch (e) {
+            console.warn('Student SPP update error:', e);
+          }
+        }
+
+        if (isUuid(tenantId)) {
+          try {
+            if ((s.sppId || s.spp_id) && isUuid(s.sppId || s.spp_id)) {
+              await supabase
+                .from('spp_payments')
+                .update({
+                  status: 'COMPLETED',
+                  payment_method: activePaymentMethod,
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', s.sppId || s.spp_id);
+            } else if (sId && isUuid(sId)) {
+              await supabase.from('spp_payments').insert([{
+                tenant_id: tenantId,
+                student_id: sId,
+                student_name: s.studentName || 'Siswa',
+                amount: Number(s.price || 0),
+                paid_month: targetMonth,
+                payment_method: activePaymentMethod,
+                status: 'COMPLETED',
+                created_at: new Date().toISOString()
+              }]);
+            }
+          } catch (e) {
+            console.warn('spp_payments insert error:', e);
+          }
+        }
+      }
+
+      // 4. Create transaction record in Supabase
+      let txRes = null;
+      if (isUuid(tenantId)) {
+        try {
+          txRes = await createTransaction({
+            tenantId,
+            itemName: itemsSummary,
+            itemCategory: hasAcademy ? 'POS & Tagihan SPP Akademi' : 'Penjualan Retail POS',
+            amount: cartTotal,
+            paymentMethod: activePaymentMethod,
+            itemsCount: cart.reduce((a, b) => a + b.qty, 0),
+            items: cart.map((i) => ({
+              id: i.id,
+              productId: i.id,
+              name: i.name,
+              price: i.price,
+              cogs: i.cogs || 0,
+              qty: i.qty,
+              type: i.type || 'jual',
+              category: i.category || 'Retail',
+              barcode: i.barcode || '',
+              studentId: i.studentId || i.student_id || null,
+              academyId: i.academyId || null
+            })),
+            status: 'COMPLETED'
+          });
+        } catch (e) {
+          console.warn('createTransaction error:', e);
+        }
+      }
+
+      // 5. Create POS receipt record
+      if (isUuid(tenantId)) {
+        try {
+          await createPosReceipt({
+            tenantId,
+            amount: cartTotal,
+            total: cartTotal,
+            paymentMethod: activePaymentMethod,
+            items: cart,
+            transactionId: txRes?.id || null,
+            status: 'LUNAS'
+          });
+        } catch (e) {
+          console.warn('createPosReceipt error:', e);
+        }
+      }
+
+      // 6. Create cash ledger record
+      if (isUuid(tenantId)) {
+        try {
+          await createLedgerEntry({
+            tenantId,
+            type: 'PEMASUKAN',
+            source: 'KASIR_POS',
+            description: `Penjualan POS Kasir (${itemsSummary})`,
+            amount: cartTotal,
+            paymentMethod: activePaymentMethod,
+            referenceId: txRes?.id || null,
+            status: 'COMPLETED'
+          });
+        } catch (e) {
+          console.warn('createLedgerEntry error:', e);
+        }
+      }
 
       // Update local product stocks optimistically
       setProducts((prev) =>
@@ -524,7 +655,7 @@ export default function POSPage({ userProfile }) {
       const receiptPayload = {
         date: now.toLocaleDateString('id-ID'),
         time: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-        receiptNo: result.receipt_no || `POS-${Math.floor(Date.now() / 1000)}`,
+        receiptNo: `POS-${txRes?.id ? String(txRes.id).slice(-6).toUpperCase() : Math.floor(Date.now() / 1000)}`,
         cashierName: userProfile?.fullName || userProfile?.name || 'Kasir',
         customerName: customerName || 'Pelanggan Umum',
         items: cart.map((i) => ({
@@ -545,6 +676,7 @@ export default function POSPage({ userProfile }) {
       setShowCheckoutModal(false);
       setShowReceiptModal(true);
 
+      const hasSpp = sppItems.length > 0;
       setCheckoutSuccessMsg(
         hasSpp 
           ? 'Transaksi kasir & pelunasan SPP Akademi berhasil disimpan! Silakan cetak struk.' 

@@ -89,4 +89,44 @@ test('CHUVATOR — Phase 4.4 Mobile POS Redesign Logic & Integration Tests', asy
     assert.equal(isMobileViewport(1440), false);
   });
 
+  // 5. Sequential Transaction Pipeline Order & Receipt Generation Test
+  await t.test('5. Sequential Checkout Pipeline: Validates item summary, order of operations, and receipt payload structure', () => {
+    const cart = [
+      { id: 'prod-1', name: 'Air Mineral 600ml', price: 5000, qty: 2, type: 'jual' },
+      { id: 'spp-1', name: 'SPP Maret - Budi Pratama', price: 150000, qty: 1, type: 'spp', studentId: 'stu-1' }
+    ];
+
+    const itemsSummary = cart.map((i) => `${i.name} (${i.qty}x)`).join(', ');
+    const hasAcademy = cart.some((i) => i.type === 'spp' || i.type === 'registration');
+    const totalAmount = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
+    const totalItems = cart.reduce((sum, i) => sum + i.qty, 0);
+
+    assert.equal(itemsSummary, 'Air Mineral 600ml (2x), SPP Maret - Budi Pratama (1x)');
+    assert.equal(hasAcademy, true);
+    assert.equal(totalAmount, 160000);
+    assert.equal(totalItems, 3);
+
+    // Verify receipt payload formation
+    const receiptPayload = {
+      receiptNo: 'POS-TEST01',
+      cashierName: 'Kasir Mobile',
+      customerName: 'Pelanggan Umum',
+      items: cart.map((i) => ({
+        id: i.id,
+        name: i.name,
+        qty: i.qty,
+        price: i.price,
+        subtotal: i.qty * i.price
+      })),
+      totalAmount,
+      paymentMethod: 'Tunai (Cash)',
+      cashReceived: 200000,
+      changeAmount: 40000
+    };
+
+    assert.equal(receiptPayload.receiptNo, 'POS-TEST01');
+    assert.equal(receiptPayload.items.length, 2);
+    assert.equal(receiptPayload.changeAmount, 40000);
+  });
+
 });

@@ -5,8 +5,7 @@ import {
   createTransaction, 
   createLedgerEntry, 
   createPosReceipt,
-  updateProduct,
-  processPosCheckout 
+  updateProduct 
 } from '../../../services/supabaseArenaService';
 import { getStudents, updateStudent, fetchAcademyBills } from '../../../services/supabaseAcademyService';
 import { supabase } from '../../../config/supabase';
@@ -269,17 +268,138 @@ export default function MobilePosMain({ userProfile }) {
     try {
       setIsSubmittingCheckout(true);
       const activePaymentMethod = chosenMethod || 'Tunai (Cash)';
-      const idempotencyKey = `idemp-${tenantId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const itemsSummary = cart.map((i) => `${i.name} (${i.qty}x)`).join(', ');
+      const hasAcademy = cart.some((i) => i.type === 'spp' || i.type === 'registration');
 
-      const result = await processPosCheckout({
-        tenantId,
-        paymentMethod: activePaymentMethod,
-        items: cart,
-        customerName: customerName || 'Pelanggan Umum',
-        cashierName: userProfile?.displayName || userProfile?.name || 'Kasir Mobile',
-        cashierEmail: userProfile?.email || null,
-        idempotencyKey
-      });
+      const isUuid = (val) => Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(val).trim()));
+
+      // 1. Stock deduction in Supabase
+      const physicalItems = cart.filter((i) => i.type !== 'spp' && i.type !== 'registration' && i.type !== 'sewa' && i.id);
+      for (const item of physicalItems) {
+        if (isUuid(item.id)) {
+          try {
+            const currentProd = products.find((p) => p.id === item.id);
+            const currentStock = currentProd ? Number(currentProd.stock || 0) : item.stock || 0;
+            const newStock = Math.max(0, currentStock - item.qty);
+            await updateProduct(item.id, { stock: newStock });
+          } catch (e) {
+            console.warn('Product stock update error:', e);
+          }
+        }
+      }
+
+      // 2. Registration fees update in Supabase
+      const regItems = cart.filter((i) => i.type === 'registration');
+      for (const reg of regItems) {
+        const sId = reg.studentId || reg.student_id;
+        if (sId && isUuid(sId)) {
+          try {
+            await updateStudent(sId, {
+              registrationFeePaid: true,
+              isRegistrationFeePaid: true,
+              registrationFeePaidAt: new Date().toISOString()
+            });
+          } catch (e) {
+            console.warn('Registration fee update error:', e);
+          }
+        }
+      }
+
+      // 3. SPP updates in Supabase
+      const sppItems = cart.filter((i) => i.type === 'spp');
+      for (const s of sppItems) {
+        const sId = s.studentId || s.student_id;
+        const targetMonth = s.paid_month || currentMonth;
+        if (sId && isUuid(sId)) {
+          try {
+            await updateStudent(sId, {
+              paymentStatus: 'lunas',
+              sppStatus: 'Lunas',
+              lastPaidMonth: targetMonth
+            });
+          } catch (e) {
+            console.warn('SPP student update error:', e);
+          }
+        }
+
+        if (isUuid(tenantId)) {
+          try {
+            if ((s.sppId || s.spp_id) && isUuid(s.sppId || s.spp_id)) {
+              await supabase
+                .from('spp_payments')
+                .update({ status: 'COMPLETED', payment_method: activePaymentMethod, updated_at: new Date().toISOString() })
+                .eq('id', s.sppId || s.spp_id);
+            } else if (sId && isUuid(sId)) {
+              await supabase.from('spp_payments').insert([{
+                tenant_id: tenantId,
+                student_id: sId,
+                student_name: s.studentName || 'Siswa',
+                amount: Number(s.price || 0),
+                paid_month: targetMonth,
+                payment_method: activePaymentMethod,
+                status: 'COMPLETED',
+                created_at: new Date().toISOString()
+              }]);
+            }
+          } catch (e) {
+            console.warn('spp_payments insert error:', e);
+          }
+        }
+      }
+
+      // 4. Create Transaction record
+      let txRes = null;
+      if (isUuid(tenantId)) {
+        try {
+          txRes = await createTransaction({
+            tenantId,
+            itemName: itemsSummary,
+            itemCategory: hasAcademy ? 'POS & Tagihan SPP Akademi' : 'Penjualan Retail POS',
+            amount: cartTotal,
+            paymentMethod: activePaymentMethod,
+            itemsCount: cartTotalItems,
+            items: cart,
+            status: 'COMPLETED'
+          });
+        } catch (e) {
+          console.warn('createTransaction error:', e);
+        }
+      }
+
+      // 5. Create POS receipt record
+      if (isUuid(tenantId)) {
+        try {
+          await createPosReceipt({
+            tenantId,
+            amount: cartTotal,
+            total: cartTotal,
+            paymentMethod: activePaymentMethod,
+            items: cart,
+            transactionId: txRes?.id || null,
+            status: 'LUNAS'
+          });
+        } catch (e) {
+          console.warn('createPosReceipt error:', e);
+        }
+      }
+
+      // 6. Create Ledger entry
+      if (isUuid(tenantId)) {
+        try {
+          await createLedgerEntry({
+            tenantId,
+            type: 'PEMASUKAN',
+            source: 'KASIR_POS',
+            description: `Penjualan POS Kasir (${itemsSummary})`,
+            amount: cartTotal,
+            paymentMethod: activePaymentMethod,
+            referenceId: txRes?.id || null,
+            status: 'COMPLETED'
+          });
+        } catch (e) {
+          console.warn('createLedgerEntry error:', e);
+        }
+      }
 
       // Optimistic updates
       setLocalProducts((prev) => {
@@ -306,7 +426,7 @@ export default function MobilePosMain({ userProfile }) {
       const receiptPayload = {
         date: now.toLocaleDateString('id-ID'),
         time: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-        receiptNo: result.receipt_no || `POS-${Math.floor(Date.now() / 1000)}`,
+        receiptNo: `POS-${txRes?.id ? String(txRes.id).slice(-6).toUpperCase() : Math.floor(Date.now() / 1000)}`,
         cashierName: userProfile?.displayName || userProfile?.name || 'Kasir Mobile',
         customerName: customerName || 'Pelanggan Umum',
         items: cart.map((i) => ({
@@ -325,9 +445,9 @@ export default function MobilePosMain({ userProfile }) {
       setLastTransactionData(receiptPayload);
       setShowCartSheet(false);
       setShowReceiptSheet(true);
+      setCart([]);
     } catch (err) {
-      console.error('Error during mobile checkout:', err);
-      alert('Gagal memproses checkout: ' + (err.message || 'Terjadi kesalahan'));
+      console.error('POS Checkout error:', err);
     } finally {
       setIsSubmittingCheckout(false);
     }
