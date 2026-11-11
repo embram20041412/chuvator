@@ -436,36 +436,34 @@ export default function PrinterSettingsPanel({
       : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-300 dark:border-slate-700';
 
   return (
-    <div className="pt-4 border-t border-slate-200/80 dark:border-white/10 space-y-4">
+    <div className="pt-4 border-t border-slate-200/80 dark:border-slate-800 space-y-4">
       {/* SECTION HEADER */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2.5">
         <div>
-          <h3 className="text-[11px] font-bold text-[#354944] dark:text-[#C89D32] uppercase tracking-wider flex items-center space-x-1.5">
-            <Printer className="w-3.5 h-3.5" />
-            <span>Konfigurasi Perangkat Printer Workstation &amp; Uji Cetak (Test Print)</span>
+          <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wide flex items-center gap-1.5">
+            <Printer className="w-3.5 h-3.5 text-[#2455E8]" />
+            <span>Perangkat Printer Workstation &amp; Uji Cetak</span>
           </h3>
-          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-            Pengaturan perangkat keras di bawah ini disimpan khusus pada komputer/HP ini (Workstation Lokal), sedangkan kop &amp; identitas struk selalu mengikuti tenant yang sedang aktif.
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            Pengaturan hardware disimpan pada perangkat ini (Workstation Lokal).
           </p>
         </div>
 
         {/* CONNECTION STATUS BADGE */}
         <div className="flex items-center gap-2 shrink-0">
-          <span
-            className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wider border flex items-center gap-1.5 ${statusBadgeColor}`}
-          >
+          <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">
             <span
               className={`w-2 h-2 rounded-full ${
                 connectionState.status === CONNECTION_STATUS.CONNECTED
                   ? 'bg-emerald-500'
                   : connectionState.status === CONNECTION_STATUS.CONNECTING
-                  ? 'bg-blue-500 animate-ping'
+                  ? 'bg-blue-500 animate-pulse'
                   : connectionState.status === CONNECTION_STATUS.ERROR
                   ? 'bg-rose-500'
                   : 'bg-slate-400'
               }`}
             />
-            <span>Status: {connectionState.status}</span>
+            <span>{connectionState.status}</span>
           </span>
         </div>
       </div>
@@ -490,182 +488,139 @@ export default function PrinterSettingsPanel({
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
         {/* LEFT COLUMN: PRINTER METHOD & PAPER SIZE SETTINGS (7 COLS) */}
-        <div className="lg:col-span-7 space-y-3 bg-slate-50/70 dark:bg-slate-800/50 p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
-          {/* 1. PILIH METODE CETAK */}
+        <div className="lg:col-span-7 space-y-3 bg-slate-50/60 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-200/70 dark:border-slate-800">
+          {/* 1. JALUR CETAK UTAMA */}
           <div>
-            <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1.5">
-              1. Pilih Metode / Jalur Cetak Utama Perangkat Ini
+            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
+              Jalur Cetak Perangkat Ini
             </label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 bg-slate-200/60 dark:bg-slate-900/60 rounded-xl">
               <button
                 type="button"
                 onClick={() => {
                   setPreferredAdapter(PRINT_ADAPTERS.BROWSER);
                   connectionManager.connectBrowserSystemPrint();
                 }}
-                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                className={`py-2 px-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                   preferredAdapter === PRINT_ADAPTERS.BROWSER
-                    ? 'bg-white dark:bg-slate-900 border-[#354944] dark:border-[#C89D32] ring-1 ring-[#354944] dark:ring-[#C89D32]'
-                    : 'bg-white/60 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700 hover:bg-white'
+                    ? 'bg-white dark:bg-slate-800 text-[#2455E8] dark:text-blue-400 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
-                <Globe className="w-4 h-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-                <div>
-                  <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
-                    Browser / System Print
-                  </div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
-                    Mendukung printer Thermal, Inkjet, &amp; Ink Tank yang terinstal di OS.
-                  </div>
-                </div>
+                <Globe className="w-3.5 h-3.5" />
+                <span className="truncate">Browser / OS</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setPreferredAdapter(PRINT_ADAPTERS.WEB_USB)}
-                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                className={`py-2 px-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                   preferredAdapter === PRINT_ADAPTERS.WEB_USB
-                    ? 'bg-white dark:bg-slate-900 border-[#354944] dark:border-[#C89D32] ring-1 ring-[#354944] dark:ring-[#C89D32]'
-                    : 'bg-white/60 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700 hover:bg-white'
+                    ? 'bg-white dark:bg-slate-800 text-emerald-600 dark:text-emerald-400 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
-                <Usb className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
-                <div>
-                  <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
-                    Thermal USB (WebUSB)
-                  </div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
-                    Pairing USB langsung pada Chrome/Edge Desktop &amp; Android OTG.
-                  </div>
-                </div>
+                <Usb className="w-3.5 h-3.5" />
+                <span className="truncate">WebUSB</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setPreferredAdapter(PRINT_ADAPTERS.WEB_BLUETOOTH)}
-                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                className={`py-2 px-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                   preferredAdapter === PRINT_ADAPTERS.WEB_BLUETOOTH
-                    ? 'bg-white dark:bg-slate-900 border-[#354944] dark:border-[#C89D32] ring-1 ring-[#354944] dark:ring-[#C89D32]'
-                    : 'bg-white/60 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700 hover:bg-white'
+                    ? 'bg-white dark:bg-slate-800 text-indigo-600 dark:text-indigo-400 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
-                <Bluetooth className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0 mt-0.5" />
-                <div>
-                  <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
-                    Thermal Bluetooth (BLE)
-                  </div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
-                    Khusus printer portable yang mendukung profil BLE GATT.
-                  </div>
-                </div>
+                <Bluetooth className="w-3.5 h-3.5" />
+                <span className="truncate">BLE GATT</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setPreferredAdapter(PRINT_ADAPTERS.LOCAL_BRIDGE)}
-                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex items-start gap-2.5 ${
+                className={`py-2 px-2.5 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                   preferredAdapter === PRINT_ADAPTERS.LOCAL_BRIDGE
-                    ? 'bg-white dark:bg-slate-900 border-[#354944] dark:border-[#C89D32] ring-1 ring-[#354944] dark:ring-[#C89D32]'
-                    : 'bg-white/60 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700 hover:bg-white'
+                    ? 'bg-white dark:bg-slate-800 text-amber-600 dark:text-amber-400 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
-                <Server className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
-                <div>
-                  <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
-                    Local Print Bridge (Opsional)
-                  </div>
-                  <div className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5">
-                    Jembatan lokal untuk Bluetooth Classic SPP (Phase 4).
-                  </div>
-                </div>
+                <Server className="w-3.5 h-3.5" />
+                <span className="truncate">Bridge (9123)</span>
               </button>
             </div>
           </div>
-
-          {/* PHASE 3 NOTICE FOR USB / BLUETOOTH / BRIDGE */}
-          {preferredAdapter !== PRINT_ADAPTERS.BROWSER && (
-            <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-[11px] text-amber-900 dark:text-amber-200 flex items-start gap-2">
-              <Info className="w-4 h-4 shrink-0 text-amber-600 mt-0.5" />
-              <div className="leading-snug">
-                <strong>Informasi Status Phase 3:</strong> Pemilihan dan pairing perangkat{' '}
-                <span className="uppercase font-bold">{preferredAdapter}</span> saat ini menyimpan
-                izin &amp; metadata perangkat pada workstation lokal. Koneksi atau pairing pada tahap
-                ini <strong>belum berarti transmisi langsung ESC/POS sudah tersedia</strong>{' '}
-                (dijadwalkan pada Phase 4). Seluruh pencetakan dan Test Print saat ini tetap
-                dijalankan secara aman melalui <strong>Browser / System Print</strong>.
-              </div>
-            </div>
-          )}
 
           {/* 2. UKURAN KERTAS THERMAL & DOKUMEN */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
             <div>
               <label
                 htmlFor="printer-receipt-paper-size"
-                className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1"
+                className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
               >
-                2. Kertas Struk Thermal
+                Struk Thermal
               </label>
               <select
                 id="printer-receipt-paper-size"
                 value={receiptPaperSize}
                 onChange={(e) => setReceiptPaperSize(e.target.value)}
-                className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg font-bold cursor-pointer"
+                className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg font-semibold cursor-pointer"
               >
-                <option value="58mm">Thermal 58mm (32 Kolom)</option>
-                <option value="80mm">Thermal 80mm (48 Kolom)</option>
+                <option value="58mm">Thermal 58mm (32 kol)</option>
+                <option value="80mm">Thermal 80mm (48 kol)</option>
               </select>
             </div>
 
             <div>
               <label
                 htmlFor="printer-document-paper-size"
-                className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1"
+                className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
               >
-                3. Kertas Dokumen Biasa
+                Dokumen Biasa
               </label>
               <select
                 id="printer-document-paper-size"
                 value={documentPaperSize}
                 onChange={(e) => setDocumentPaperSize(e.target.value)}
-                className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg font-bold cursor-pointer"
+                className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg font-semibold cursor-pointer"
               >
-                <option value="A4">Kertas A4 (210 × 297 mm)</option>
-                <option value="A5">Kertas A5 (148 × 210 mm)</option>
+                <option value="A4">A4 (210 × 297 mm)</option>
+                <option value="A5">A5 (148 × 210 mm)</option>
               </select>
             </div>
 
             <div>
               <label
                 htmlFor="printer-document-orientation"
-                className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1"
+                className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1"
               >
-                Orientasi Dokumen A4/A5
+                Orientasi Dokumen
               </label>
               <select
                 id="printer-document-orientation"
                 value={preferredDocumentOrientation}
                 onChange={(e) => setPreferredDocumentOrientation(e.target.value)}
-                className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg font-bold cursor-pointer"
+                className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg font-semibold cursor-pointer"
               >
-                <option value="portrait">Portrait (Tegak)</option>
-                <option value="landscape">Landscape (Mendatar)</option>
+                <option value="portrait">Portrait</option>
+                <option value="landscape">Landscape</option>
               </select>
             </div>
           </div>
 
-          {/* 3. PREFERENSI OPERASIONAL CHECKOUT */}
+          {/* 3. PREFERENSI CHECKOUT */}
           <div className="pt-1 flex flex-col sm:flex-row gap-3">
             <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer select-none">
               <input
                 type="checkbox"
                 checked={autoPrintAfterCheckout}
                 onChange={(e) => setAutoPrintAfterCheckout(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                className="w-4 h-4 rounded border-slate-300 text-[#2455E8] focus:ring-blue-500 cursor-pointer"
               />
-              <span>Otomatis buka dialog cetak setelah pembayaran selesai</span>
+              <span>Otomatis cetak setelah pembayaran</span>
             </label>
 
             <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer select-none">
@@ -673,25 +628,23 @@ export default function PrinterSettingsPanel({
                 type="checkbox"
                 checked={autoOpenPreviewAfterCheckout}
                 onChange={(e) => setAutoOpenPreviewAfterCheckout(e.target.checked)}
-                className="w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
+                className="w-4 h-4 rounded border-slate-300 text-[#2455E8] focus:ring-blue-500 cursor-pointer"
               />
-              <span>Tampilkan pratinjau struk setelah transaksi (Preferensi Akun Ini)</span>
+              <span>Pratinjau struk setelah transaksi</span>
             </label>
           </div>
 
-          {/* 4. PAIRING PERANGKAT USB / BLUETOOTH BLE & STATUS KONEKSI */}
-          <div className="pt-2 border-t border-slate-200/80 dark:border-slate-700/80 space-y-2.5">
+          {/* 4. PAIRING & HARDWARE ACTIONS */}
+          <div className="pt-2 border-t border-slate-200/70 dark:border-slate-700/80 space-y-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-[11px]">
-                <span className="font-bold text-slate-700 dark:text-slate-300">
-                  Perangkat Terpilih:{' '}
-                </span>
+              <div className="text-xs">
+                <span className="text-slate-500 font-medium">Perangkat: </span>
                 <span className="font-mono font-bold text-slate-900 dark:text-slate-100">
                   {pairedDeviceMetadata?.name || printerDisplayName || 'Browser / System Print'}
                 </span>
                 {pairedDeviceMetadata?.transport && (
-                  <span className="ml-1.5 px-1.5 py-0.5 text-[9px] font-bold uppercase bg-slate-200 dark:bg-slate-700 rounded">
-                    {pairedDeviceMetadata.transport}
+                  <span className="ml-1.5 text-[10px] font-mono text-slate-500 uppercase">
+                    ({pairedDeviceMetadata.transport})
                   </span>
                 )}
               </div>
@@ -701,10 +654,10 @@ export default function PrinterSettingsPanel({
                   <button
                     type="button"
                     onClick={handlePairUsbPrinter}
-                    className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                    className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
                   >
                     <Usb className="w-3.5 h-3.5" />
-                    <span>Cari Printer USB</span>
+                    <span>Cari USB</span>
                   </button>
                 )}
 
@@ -712,17 +665,17 @@ export default function PrinterSettingsPanel({
                   <button
                     type="button"
                     onClick={handlePairBluetoothPrinter}
-                    className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                    className="px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
                   >
                     <Bluetooth className="w-3.5 h-3.5" />
-                    <span>Cari Printer BLE</span>
+                    <span>Cari BLE</span>
                   </button>
                 )}
 
                 <button
                   type="button"
                   onClick={handleConnectBridgePrinter}
-                  className="px-2.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                  className="px-2.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
                 >
                   <Server className="w-3.5 h-3.5" />
                   <span>Sambung Bridge (9123)</span>
@@ -732,7 +685,7 @@ export default function PrinterSettingsPanel({
                   <button
                     type="button"
                     onClick={handleDisconnectPrinter}
-                    className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-[11px] font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                    className="px-2.5 py-1.5 bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800 text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
                   >
                     <Unplug className="w-3.5 h-3.5" />
                     <span>Putuskan</span>
@@ -743,15 +696,15 @@ export default function PrinterSettingsPanel({
 
             {/* Authorized Devices Summary */}
             {(permittedUsbList.length > 0 || permittedBleList.length > 0) && (
-              <div className="text-[10px] text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-700">
-                <span className="font-bold block mb-1">
-                  Perangkat yang Sudah Diizinkan Pengguna di Browser Ini:
+              <div className="text-xs text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-900 p-2 rounded-lg border border-slate-200 dark:border-slate-700">
+                <span className="font-semibold block mb-1">
+                  Perangkat Diizinkan di Browser Ini:
                 </span>
                 <div className="flex flex-wrap gap-1.5">
                   {permittedUsbList.map((item, idx) => (
                     <span
                       key={`usb-${idx}`}
-                      className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 rounded border border-emerald-200 dark:border-emerald-800 font-mono"
+                      className="px-2 py-0.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 rounded border border-emerald-200 dark:border-emerald-800 font-mono text-[10px]"
                     >
                       USB: {item.metadata.name}
                     </span>
@@ -759,7 +712,7 @@ export default function PrinterSettingsPanel({
                   {permittedBleList.map((item, idx) => (
                     <span
                       key={`ble-${idx}`}
-                      className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300 rounded border border-indigo-200 dark:border-indigo-800 font-mono"
+                      className="px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300 rounded border border-indigo-200 dark:border-indigo-800 font-mono text-[10px]"
                     >
                       BLE: {item.metadata.name}
                     </span>
@@ -769,15 +722,15 @@ export default function PrinterSettingsPanel({
             )}
           </div>
 
-          {/* SAVE CONFIGURATION & TEST PRINT ACTIONS */}
-          <div className="pt-2 border-t border-slate-200/80 dark:border-slate-700/80 flex flex-wrap items-center justify-between gap-2">
+          {/* ACTIONS & TEST PRINT */}
+          <div className="pt-2 border-t border-slate-200/70 dark:border-slate-700/80 flex flex-wrap items-center justify-between gap-2">
             <button
               type="button"
               onClick={handleSavePrinterConfiguration}
-              className="px-3.5 py-2 bg-[#354944] hover:bg-[#2B3D38] text-white border-b-2 border-[#C89D32] text-xs font-bold rounded-lg shadow-2xs transition-all cursor-pointer flex items-center gap-1.5"
+              className="px-3.5 py-2 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5"
             >
-              <Save className="w-3.5 h-3.5 text-[#F4D068]" />
-              <span>Simpan Konfigurasi Printer Lokal</span>
+              <Save className="w-3.5 h-3.5" />
+              <span>Simpan Konfigurasi Workstation</span>
             </button>
 
             <div className="flex flex-wrap items-center gap-1.5">
@@ -785,29 +738,29 @@ export default function PrinterSettingsPanel({
                 type="button"
                 disabled={isTestingPrint}
                 onClick={() => handleRunTestPrint('THERMAL')}
-                className="px-3 py-2 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-700 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5"
-                title="Uji cetak struk thermal melalui Browser/System Print"
+                className="px-3 py-2 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-700 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5"
+                title="Uji cetak struk thermal"
               >
-                <Receipt className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                <span>Test Print Thermal ({receiptPaperSize})</span>
+                <Receipt className="w-3.5 h-3.5 text-blue-600" />
+                <span>Test Thermal ({receiptPaperSize})</span>
               </button>
 
               <button
                 type="button"
                 disabled={isTestingPrint}
                 onClick={() => handleRunTestPrint('DOCUMENT')}
-                className="px-3 py-2 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-700 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1.5"
-                title="Uji cetak dokumen untuk printer Inkjet / Ink Tank"
+                className="px-3 py-2 bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-700 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5"
+                title="Uji cetak dokumen Inkjet/Ink Tank"
               >
-                <FileText className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>Test Print {documentPaperSize} (Inkjet/Ink Tank)</span>
+                <FileText className="w-3.5 h-3.5 text-emerald-600" />
+                <span>Test {documentPaperSize} (Inkjet)</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => handleOpenTestPreview('THERMAL')}
-                className="px-2.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold rounded-lg transition-all cursor-pointer flex items-center gap-1"
-                title="Buka modal pratinjau & unduh PDF uji cetak"
+                className="px-2.5 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1"
+                title="Pratinjau struk"
               >
                 <Eye className="w-3.5 h-3.5" />
                 <span>Pratinjau</span>
@@ -816,100 +769,53 @@ export default function PrinterSettingsPanel({
           </div>
         </div>
 
-        {/* RIGHT COLUMN: HONEST CAPABILITY & COMPATIBILITY DIAGNOSTICS (5 COLS) */}
-        <div className="lg:col-span-5 space-y-2.5 bg-white dark:bg-slate-950 p-3.5 rounded-xl border border-slate-200/80 dark:border-slate-800 text-[11px]">
+        {/* RIGHT COLUMN: DIAGNOSTICS (5 COLS) */}
+        <div className="lg:col-span-5 space-y-3 bg-white dark:bg-slate-950 p-4 rounded-xl border border-slate-200/80 dark:border-slate-800 text-xs">
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
-            <span className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-              <span>Deteksi Kemampuan Browser &amp; Perangkat</span>
+            <span className="font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-emerald-600" />
+              <span>Status Kemampuan Hardware</span>
             </span>
             <button
               type="button"
               onClick={refreshHardwareDiscovery}
               className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded-lg cursor-pointer"
-              title="Segarkan deteksi kemampuan"
+              title="Segarkan status"
             >
               <RefreshCw className="w-3.5 h-3.5" />
             </button>
           </div>
 
-          <div className="space-y-2">
-            {/* Secure Context */}
-            <div className="flex items-center justify-between text-[10px]">
-              <span className="text-slate-500 font-semibold">HTTPS / Secure Context:</span>
-              <span
-                className={`font-bold px-1.5 py-0.5 rounded ${
-                  capabilities.secureContext.isSecure
-                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300'
-                    : 'bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300'
-                }`}
-              >
-                {capabilities.secureContext.isSecure ? 'Aktif (Aman)' : 'Tidak Aman (Non-HTTPS)'}
+          <div className="space-y-2 text-xs">
+            <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-900">
+              <span className="text-slate-600 dark:text-slate-400">HTTPS / Secure Context</span>
+              <span className={capabilities.secureContext.isSecure ? 'font-semibold text-emerald-600' : 'font-semibold text-rose-500'}>
+                {capabilities.secureContext.isSecure ? 'Aktif' : 'Tidak Aman'}
               </span>
             </div>
 
-            {/* Browser / System Print */}
-            <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 space-y-0.5">
-              <div className="flex items-center justify-between font-bold text-slate-800 dark:text-slate-200">
-                <span>1. Browser / System Print</span>
-                <span className="text-[10px] text-emerald-600 dark:text-emerald-400">
-                  {capabilities.browserPrint.supported ? 'Didukung' : 'Tidak Tersedia'}
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-snug">
-                {capabilities.browserPrint.limitationNote}
-              </p>
+            <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-900">
+              <span className="text-slate-600 dark:text-slate-400">Browser / System Print</span>
+              <span className="font-semibold text-emerald-600">Didukung</span>
             </div>
 
-            {/* WebUSB */}
-            <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 space-y-0.5">
-              <div className="flex items-center justify-between font-bold text-slate-800 dark:text-slate-200">
-                <span>2. WebUSB API</span>
-                <span
-                  className={`text-[10px] ${
-                    capabilities.webUsb.supported
-                      ? 'text-emerald-600 dark:text-emerald-400'
-                      : 'text-amber-600 dark:text-amber-400'
-                  }`}
-                >
-                  {capabilities.webUsb.supported ? 'API Tersedia' : 'Tidak Didukung Browser Ini'}
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-snug">
-                {capabilities.webUsb.limitationNote}
-              </p>
+            <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-900">
+              <span className="text-slate-600 dark:text-slate-400">WebUSB API</span>
+              <span className={capabilities.webUsb.supported ? 'font-semibold text-emerald-600' : 'text-slate-400'}>
+                {capabilities.webUsb.supported ? 'Tersedia' : 'Tidak Didukung'}
+              </span>
             </div>
 
-            {/* Web Bluetooth (BLE GATT vs Classic SPP) */}
-            <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 space-y-0.5">
-              <div className="flex items-center justify-between font-bold text-slate-800 dark:text-slate-200">
-                <span>3. Web Bluetooth (BLE GATT)</span>
-                <span
-                  className={`text-[10px] ${
-                    capabilities.webBluetooth.supported
-                      ? 'text-emerald-600 dark:text-emerald-400'
-                      : 'text-amber-600 dark:text-amber-400'
-                  }`}
-                >
-                  {capabilities.webBluetooth.supported
-                    ? 'BLE GATT Tersedia'
-                    : 'Tidak Didukung Browser Ini'}
-                </span>
-              </div>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-snug">
-                {capabilities.webBluetooth.limitationNote}
-              </p>
+            <div className="flex items-center justify-between py-1 border-b border-slate-100 dark:border-slate-900">
+              <span className="text-slate-600 dark:text-slate-400">Web Bluetooth BLE</span>
+              <span className={capabilities.webBluetooth.supported ? 'font-semibold text-emerald-600' : 'text-slate-400'}>
+                {capabilities.webBluetooth.supported ? 'Tersedia' : 'Tidak Didukung'}
+              </span>
             </div>
 
-            {/* Local Print Bridge */}
-            <div className="p-2 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200/70 dark:border-slate-800 space-y-0.5">
-              <div className="flex items-center justify-between font-bold text-slate-800 dark:text-slate-200">
-                <span>4. Local Print Bridge (Opsional)</span>
-                <span className="text-[10px] text-slate-500">Phase 4</span>
-              </div>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-snug">
-                {capabilities.localBridge.limitationNote}
-              </p>
+            <div className="flex items-center justify-between py-1">
+              <span className="text-slate-600 dark:text-slate-400">Local Print Bridge (9123)</span>
+              <span className="font-semibold text-blue-600">Tersedia</span>
             </div>
           </div>
         </div>

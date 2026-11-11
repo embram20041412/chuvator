@@ -1080,170 +1080,192 @@ export function PengaturanDesktopMain({ userProfile, onTenantUpdated = () => {} 
 
         {/* TAB 3: TAGIHAN SPP & STRUK KASIR */}
         {activeTab === 'spp_struk' && (
-          <div className="bg-white dark:bg-slate-900 rounded-xl p-3.5 sm:p-4 shadow-2xs border border-slate-200/80 dark:border-white/10 space-y-3.5 text-left animate-fadeIn">
-            <h2 className="font-bold text-xs sm:text-sm text-slate-800 dark:text-slate-200 border-b border-slate-100 dark:border-white/10 pb-2.5 flex items-center space-x-2">
-              <Printer className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-              <span>Tab 3: Tagihan SPP Akademi &amp; Struk Kasir Thermal</span>
-            </h2>
+          <div className="bg-white dark:bg-slate-900 rounded-2xl p-4 sm:p-5 shadow-xs border border-slate-200/80 dark:border-slate-800 space-y-5 text-left animate-fadeIn">
+            {/* HEADER WITH INTEGRATED PRIMARY SAVE ACTION */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-3.5">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                  <Printer className="w-4 h-4 text-[#2455E8]" />
+                  <span>Tagihan SPP &amp; Struk Thermal</span>
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  Atur jadwal penagihan iuran akademi bulanan dan identitas struk transaksi kasir.
+                </p>
+              </div>
 
-            {/* PENGATURAN TAGIHAN SPP AKADEMI */}
-            <div className="space-y-2.5">
-              <h3 className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider flex items-center space-x-1.5">
-                <Calendar className="w-3.5 h-3.5" />
-                <span>Pengaturan Tagihan SPP Akademi</span>
-              </h3>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400">
-                Konfigurasi siklus penagihan iuran SPP bulanan siswa akademi dan tanggal jatuh tempo.
-              </p>
+              <button
+                type="submit"
+                disabled={savingTenant}
+                className="px-4 py-2 bg-[#2455E8] hover:bg-blue-700 text-white font-semibold text-xs rounded-xl shadow-xs transition-all cursor-pointer flex items-center gap-1.5 self-start sm:self-auto disabled:opacity-60 shrink-0"
+              >
+                {savingTenant ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Menyimpan...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Simpan Pengaturan</span>
+                  </>
+                )}
+              </button>
+            </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+            {/* SEKSI 1: SIKLUS TAGIHAN SPP AKADEMI */}
+            <div className="space-y-3 bg-slate-50/60 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-200/70 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-[#2455E8]" />
+                <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
+                  Siklus Penagihan SPP Akademi
+                </h3>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase mb-1">
-                    Tanggal Mulai Tagihan (Tiap Bulan)
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Tanggal Mulai Tagihan <span className="text-slate-400 font-normal">(1 - 28)</span>
                   </label>
-                  <div className="relative">
-                    <input
-  aria-label="pengaturan spp billing start day"
-  name="sppBillingStartDay"
-  id="pengaturan-spp-billing-start-day"
-                      type="number"
-                      min="1"
-                      max="28"
-                      required
-                      value={sppBillingStartDay}
-                      onChange={(e) => setSppBillingStartDay(e.target.value)}
-                      className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-blue-500 font-bold"
-                    />
-                    <span className="text-[9px] text-slate-400 absolute right-2.5 top-2">Tgl 1 - 28</span>
-                  </div>
+                  <input
+                    aria-label="pengaturan spp billing start day"
+                    name="sppBillingStartDay"
+                    id="pengaturan-spp-billing-start-day"
+                    type="number"
+                    min="1"
+                    max="28"
+                    required
+                    value={sppBillingStartDay}
+                    onChange={(e) => setSppBillingStartDay(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-bold outline-none"
+                  />
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-300 uppercase mb-1">
-                    Tanggal Jatuh Tempo (Tiap Bulan)
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Tanggal Jatuh Tempo <span className="text-slate-400 font-normal">(1 - 28)</span>
                   </label>
-                  <div className="relative">
-                    <input
-  aria-label="pengaturan spp due day"
-  name="sppDueDay"
-  id="pengaturan-spp-due-day"
-                      type="number"
-                      min="1"
-                      max="28"
-                      required
-                      value={sppDueDay}
-                      onChange={(e) => setSppDueDay(e.target.value)}
-                      className="w-full px-2.5 py-1.5 text-xs bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:bg-white dark:focus:bg-slate-800 focus:outline-none focus:border-blue-500 font-bold"
-                    />
-                    <span className="text-[9px] text-slate-400 absolute right-2.5 top-2">Tgl 1 - 28</span>
-                  </div>
+                  <input
+                    aria-label="pengaturan spp due day"
+                    name="sppDueDay"
+                    id="pengaturan-spp-due-day"
+                    type="number"
+                    min="1"
+                    max="28"
+                    required
+                    value={sppDueDay}
+                    onChange={(e) => setSppDueDay(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 font-bold outline-none"
+                  />
                 </div>
               </div>
             </div>
 
-            {/* PENGATURAN STRUK KASIR THERMAL & LIVE PREVIEW */}
-            <div className="pt-3 border-t border-slate-100 dark:border-white/10 space-y-3">
-              <h3 className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider flex items-center space-x-1.5">
-                <Printer className="w-3.5 h-3.5" />
-                <span>Pengaturan Struk Kasir Thermal &amp; Live Preview</span>
-              </h3>
+            {/* SEKSI 2: IDENTITAS STRUK KASIR & LIVE PREVIEW */}
+            <div className="space-y-3 pt-1">
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-[#2455E8]" />
+                <h3 className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wide">
+                  Identitas Struk Kasir &amp; Live Preview
+                </h3>
+              </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-start">
-                
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
                 {/* LEFT: FORM EDITOR (7 COLS) */}
-                <div className="lg:col-span-7 space-y-2.5 bg-slate-50/70 dark:bg-slate-800/50 p-3 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+                <div className="lg:col-span-7 space-y-3 bg-slate-50/60 dark:bg-slate-800/40 p-4 rounded-xl border border-slate-200/70 dark:border-slate-800">
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                       Nama Usaha / Header Struk
                     </label>
                     <input
-  aria-label="pengaturan receipt header name"
-  name="receiptHeaderName"
-  id="pengaturan-receipt-header-name"
+                      aria-label="pengaturan receipt header name"
+                      name="receiptHeaderName"
+                      id="pengaturan-receipt-header-name"
                       type="text"
                       value={receiptHeaderName}
                       onChange={(e) => setReceiptHeaderName(e.target.value)}
-                      placeholder="e.g. GOR CHUA SPORT CORE"
-                      className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:outline-none focus:border-blue-500 font-bold"
+                      placeholder="Contoh: GOR CHUA SPORT CORE"
+                      className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:outline-none focus:border-blue-500 font-bold"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                      Alamat Lengkap Usaha / Lapangan
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Alamat Usaha / GOR
                     </label>
                     <input
-  aria-label="pengaturan receipt address"
-  name="receiptAddress"
-  id="pengaturan-receipt-address"
+                      aria-label="pengaturan receipt address"
+                      name="receiptAddress"
+                      id="pengaturan-receipt-address"
                       type="text"
                       value={receiptAddress}
                       onChange={(e) => setReceiptAddress(e.target.value)}
-                      placeholder="e.g. Jl. Raya Olahraga No. 88, Jakarta"
-                      className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:outline-none focus:border-blue-500 font-medium"
+                      placeholder="Contoh: Jl. Raya Olahraga No. 88, Jakarta"
+                      className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:outline-none focus:border-blue-500"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                      Kontak / No. Telepon / WhatsApp
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Kontak Telepon / WhatsApp
                     </label>
                     <input
-  aria-label="pengaturan receipt contact"
-  name="receiptContact"
-  id="pengaturan-receipt-contact"
+                      aria-label="pengaturan receipt contact"
+                      name="receiptContact"
+                      id="pengaturan-receipt-contact"
                       type="text"
                       value={receiptContact}
                       onChange={(e) => setReceiptContact(e.target.value)}
-                      placeholder="e.g. Telp / WA: 0812-3456-7890"
-                      className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:outline-none focus:border-blue-500 font-medium font-mono"
+                      placeholder="Contoh: Telp/WA: 0812-3456-7890"
+                      className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:outline-none focus:border-blue-500 font-mono"
                     />
                   </div>
 
                   <div>
-                    <label className="block text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase mb-1">
-                      Pesan Catatan Kaki (Footer Note Struk)
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                      Pesan Catatan Kaki (Footer Struk)
                     </label>
                     <textarea
-  aria-label="pengaturan receipt footer note"
-  name="receiptFooterNote"
-  id="pengaturan-receipt-footer-note"
+                      aria-label="pengaturan receipt footer note"
+                      name="receiptFooterNote"
+                      id="pengaturan-receipt-footer-note"
                       rows={2}
                       value={receiptFooterNote}
                       onChange={(e) => setReceiptFooterNote(e.target.value)}
-                      placeholder="e.g. Terima kasih atas kunjungan Anda. Selamat berolahraga!"
-                      className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:outline-none focus:border-blue-500 font-medium"
+                      placeholder="Contoh: Terima kasih atas kunjungan Anda. Selamat berolahraga!"
+                      className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-lg focus:outline-none focus:border-blue-500"
                     />
                   </div>
                 </div>
 
-                {/* RIGHT: LIVE PREVIEW CARD (5 COLS) */}
-                <div className="lg:col-span-5 space-y-1.5">
-                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 dark:text-slate-400">
-                    <span className="flex items-center gap-1">
-                      <Printer className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" />
-                      <span>Live Preview Struk</span>
+                {/* RIGHT: AUTHENTIC THERMAL PREVIEW (5 COLS) */}
+                <div className="lg:col-span-5 space-y-2">
+                  <div className="flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                    <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <Eye className="w-3.5 h-3.5 text-blue-600" />
+                      Pratinjau Struk Kasir
                     </span>
-                    <span className="text-[9px] bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded font-mono">80mm Paper</span>
+                    <span className="text-[10px] font-mono text-slate-500">Thermal 80mm</span>
                   </div>
 
-                  <div className="bg-white dark:bg-slate-950 border border-dashed border-slate-300 dark:border-slate-700 rounded-xl p-3 shadow-2xs font-mono text-[10px] text-slate-800 dark:text-slate-300 space-y-1.5 relative overflow-hidden select-none">
-                    <div className="text-center space-y-0.5 border-b border-dashed border-slate-300 dark:border-slate-700 pb-1.5">
-                      <p className="font-extrabold text-[11px] uppercase tracking-tight text-slate-900 dark:text-slate-100 leading-tight">
+                  <div className="bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-xs font-mono text-xs text-slate-800 dark:text-slate-200 space-y-2 relative select-none">
+                    {/* Header */}
+                    <div className="text-center space-y-0.5 border-b border-dashed border-slate-300 dark:border-slate-700 pb-2">
+                      <p className="font-bold text-xs uppercase text-slate-900 dark:text-slate-100 leading-tight">
                         {receiptHeaderName || 'NAMA GOR / TENANT'}
                       </p>
-                      <p className="text-[9px] text-slate-500 dark:text-slate-400 leading-tight">
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
                         {receiptAddress || 'Alamat Belum Diatur'}
                       </p>
-                      <p className="text-[9px] text-slate-500 dark:text-slate-400 leading-tight">
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400 leading-tight">
                         {receiptContact || 'Telp: 08xx-xxxx-xxxx'}
                       </p>
                     </div>
 
-                    <div className="text-[9px] text-slate-600 dark:text-slate-400 space-y-0.5 py-0.5">
+                    {/* Metadata */}
+                    <div className="text-[10px] text-slate-600 dark:text-slate-400 space-y-0.5 py-1">
                       <div className="flex justify-between">
                         <span>No. Nota:</span>
-                        <span className="font-bold">#INV-2026-001</span>
+                        <span className="font-bold text-slate-900 dark:text-slate-100">#INV-2026-001</span>
                       </div>
                       <div className="flex justify-between">
                         <span>Tanggal:</span>
@@ -1251,14 +1273,15 @@ export function PengaturanDesktopMain({ userProfile, onTenantUpdated = () => {} 
                       </div>
                       <div className="flex justify-between">
                         <span>Kasir:</span>
-                        <span>Admin Kasir</span>
+                        <span>Kasir Utama</span>
                       </div>
                     </div>
 
-                    <div className="border-b border-dashed border-slate-300 dark:border-slate-700 my-0.5" />
+                    <div className="border-b border-dashed border-slate-300 dark:border-slate-700" />
 
-                    <div className="space-y-0.5 text-[9px] py-0.5">
-                      <div className="flex justify-between">
+                    {/* Items */}
+                    <div className="space-y-1 text-[10px] py-1">
+                      <div className="flex justify-between font-semibold">
                         <span>Sewa Lapangan 1 (2 Jam)</span>
                         <span>Rp 100.000</span>
                       </div>
@@ -1268,49 +1291,30 @@ export function PengaturanDesktopMain({ userProfile, onTenantUpdated = () => {} 
                       </div>
                     </div>
 
-                    <div className="border-b border-dashed border-slate-300 dark:border-slate-700 my-0.5" />
+                    <div className="border-b border-dashed border-slate-300 dark:border-slate-700" />
 
-                    <div className="flex justify-between text-[11px] font-black text-slate-900 dark:text-slate-100 py-0.5">
+                    {/* Total & Payment */}
+                    <div className="flex justify-between text-xs font-bold text-slate-900 dark:text-slate-100 py-1">
                       <span>TOTAL:</span>
                       <span>Rp 110.000</span>
                     </div>
-                    <div className="flex justify-between text-[9px] text-slate-500">
+                    <div className="flex justify-between text-[10px] text-slate-500">
                       <span>Metode:</span>
-                      <span className="font-bold text-slate-700 dark:text-slate-300">QRIS Statis</span>
+                      <span className="font-semibold text-slate-700 dark:text-slate-300">QRIS Statis</span>
                     </div>
 
-                    <div className="border-b border-dashed border-slate-300 dark:border-slate-700 my-0.5" />
+                    <div className="border-b border-dashed border-slate-300 dark:border-slate-700" />
 
-                    <div className="text-center text-[9px] text-slate-500 dark:text-slate-400 italic pt-0.5 leading-tight">
+                    {/* Footer Note */}
+                    <div className="text-center text-[10px] text-slate-500 dark:text-slate-400 pt-1 leading-tight">
                       {receiptFooterNote || 'Terima kasih atas kunjungan Anda!'}
                     </div>
                   </div>
                 </div>
-
               </div>
             </div>
 
-            <div className="pt-1.5 flex justify-end">
-              <button
-                type="submit"
-                disabled={savingTenant}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs rounded-lg shadow-2xs transition-all cursor-pointer flex items-center space-x-1.5 disabled:opacity-60"
-              >
-                {savingTenant ? (
-                  <>
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
-                    <span>Menyimpan...</span>
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-3.5 h-3.5" />
-                    <span>Simpan Tagihan SPP &amp; Struk</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            {/* KONFIGURASI PERANGKAT PRINTER WORKSTATION LOKAL & UJI CETAK (PHASE 3) */}
+            {/* SEKSI 3: KONFIGURASI PERANGKAT PRINTER WORKSTATION LOKAL */}
             <PrinterSettingsPanel
               userProfile={userProfile}
               tenantProfile={tenant}
