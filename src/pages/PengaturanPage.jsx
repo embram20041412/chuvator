@@ -51,7 +51,9 @@ import {
   Copy,
   Check,
   Info,
-  Send
+  Send,
+  FileText,
+  Eye
 } from 'lucide-react';
 import { Pengaturan3DIcon } from '../components/icons/App3DIcons';
 import { useTheme } from '../context/ThemeContext';
