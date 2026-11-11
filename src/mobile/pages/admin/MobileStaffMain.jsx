@@ -36,6 +36,7 @@ import MobileBottomSheet from '../../components/MobileBottomSheet';
 import MobileAvatar from '../../components/MobileAvatar';
 import MobileBadge from '../../components/MobileBadge';
 import MobileEmptyState from '../../components/MobileEmptyState';
+import MobileTenantBackfillCard from '../../components/MobileTenantBackfillCard';
 
 /**
  * Canonical Tenant ID Resolver for CHUVATOR Mobile Staff
@@ -480,26 +481,26 @@ export default function MobileStaffMain({ userProfile }) {
         </div>
       )}
 
-      {/* 3. SEGMENTED TABS (STAF AKTIF VS UNDANGAN) */}
+      {/* 3. SEGMENTED TABS (STAF AKTIF VS UNDANGAN VS AUDIT HMAC) */}
       <div className="px-3.5 pt-3.5">
-        <div className="grid grid-cols-2 bg-slate-200/70 p-1 rounded-2xl">
+        <div className={`grid ${userProfile?.role === 'owner' || userProfile?.role === 'admin' ? 'grid-cols-3' : 'grid-cols-2'} bg-slate-200/70 p-1 rounded-2xl gap-1`}>
           <button
             type="button"
             onClick={() => setActiveTab('staff_list')}
-            className={`py-2 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 min-h-[44px] ${
+            className={`py-2 text-[11px] font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 min-h-[44px] ${
               activeTab === 'staff_list'
                 ? 'bg-white text-slate-900 shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <Users className="w-3.5 h-3.5" />
-            <span>Staf Cabang ({staffList.length})</span>
+            <span>Staf ({staffList.length})</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab('invitations_list')}
-            className={`py-2 text-xs font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1.5 min-h-[44px] relative ${
+            className={`py-2 text-[11px] font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 min-h-[44px] relative ${
               activeTab === 'invitations_list'
                 ? 'bg-white text-slate-900 shadow-xs'
                 : 'text-slate-600 hover:text-slate-900'
@@ -513,11 +514,34 @@ export default function MobileStaffMain({ userProfile }) {
               </span>
             )}
           </button>
+
+          {(userProfile?.role === 'owner' || userProfile?.role === 'admin') && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('audit_hmac')}
+              className={`py-2 text-[11px] font-extrabold rounded-xl transition-all cursor-pointer flex items-center justify-center gap-1 min-h-[44px] ${
+                activeTab === 'audit_hmac'
+                  ? 'bg-[#101D38] text-white shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-amber-300" />
+              <span>Audit HMAC</span>
+            </button>
+          )}
         </div>
       </div>
 
+      {/* TAB CONTENT: AUDIT HMAC */}
+      {activeTab === 'audit_hmac' && (
+        <div className="px-3.5 pt-3 animate-fadeIn">
+          <MobileTenantBackfillCard userProfile={userProfile} />
+        </div>
+      )}
+
       {/* 4. SEARCH & FILTER CONTROLS */}
-      <div className="px-3.5 pt-3 space-y-2">
+      {activeTab !== 'audit_hmac' && (
+        <div className="px-3.5 pt-3 space-y-2">
         {/* Search input */}
         <div className="relative">
           <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -589,6 +613,7 @@ export default function MobileStaffMain({ userProfile }) {
           </div>
         )}
       </div>
+      )}
 
       {/* 5. TAB 1: STAFF DIRECTORY (CARD-BASED MOBILE PRESENTATION) */}
       {activeTab === 'staff_list' && (
