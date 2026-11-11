@@ -366,18 +366,18 @@ test('CHUVATOR — Phase 4.5.3.1.1 Mobile Court Pricing Final Correction & Sourc
     assert.ok(htmlDesktopTarif.includes('Kelola profil arena, QRIS, rekening bank'));
     assert.equal(htmlDesktopTarif.includes('chua-mobile-app'), false, 'Desktop tidak boleh menggunakan wrapper chua-mobile-app');
 
-    // 2. Mobile (375px) pada tab selain tarif (profil, pembayaran, spp_struk) merender PengaturanDesktopMain
+    // 2. Mobile (375px) pada tab yang belum memiliki mobile UI khusus (spp_struk, master_pricing) merender PengaturanDesktopMain
     (globalThis as any).window.innerWidth = 375;
-    for (const nonTarifTab of ['profil', 'pembayaran', 'spp_struk']) {
+    for (const nonMobileTab of ['spp_struk', 'master_pricing']) {
       const htmlOtherTab = renderToString(
-        React.createElement(MemoryRouter, { initialEntries: [`/pengaturan?tab=${nonTarifTab}`] },
+        React.createElement(MemoryRouter, { initialEntries: [`/pengaturan?tab=${nonMobileTab}`] },
           React.createElement(QueryClientProvider, { client: queryClient },
             React.createElement(PengaturanPage, { userProfile: mockOwnerProfile, onTenantUpdated: () => {} })
           )
         )
       );
-      assert.ok(htmlOtherTab.includes('Pengaturan'), `Tab ${nonTarifTab} harus tetap merender PengaturanDesktopMain`);
-      assert.equal(htmlOtherTab.includes('chua-mobile-app'), false, `Tab ${nonTarifTab} belum diklaim memiliki mobile UI tersendiri`);
+      assert.ok(htmlOtherTab.includes('Pengaturan'), `Tab ${nonMobileTab} harus tetap merender PengaturanDesktopMain`);
+      assert.equal(htmlOtherTab.includes('chua-mobile-app'), false, `Tab ${nonMobileTab} belum diklaim memiliki mobile UI tersendiri`);
     }
   });
 });

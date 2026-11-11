@@ -57,6 +57,8 @@ import { Pengaturan3DIcon } from '../components/icons/App3DIcons';
 import { useTheme } from '../context/ThemeContext';
 import useMobileViewport from '../mobile/hooks/useMobileViewport';
 import MobileCourtPricingMain from '../mobile/pages/admin/MobileCourtPricingMain';
+import MobileTenantProfileMain from '../mobile/pages/admin/MobileTenantProfileMain';
+import MobilePaymentSettingsMain from '../mobile/pages/admin/MobilePaymentSettingsMain';
 
 const SUPPORTED_SPORTS = [
   'Badminton', 
@@ -2170,14 +2172,34 @@ export const resolveTenantId = (profile) => {
 /**
  * PengaturanPage (Viewport & Tab Wrapper)
  * Adheres strictly to React Rules of Hooks.
- * Unconditionally calls useMobileViewport(767) at top level.
- * Delegates to MobileCourtPricingMain when isMobile and tab === 'tarif'.
- * Maintains original PengaturanDesktopMain for desktop (>=768px) and other settings tabs.
+ * Unconditionally calls useMobileViewport(767) and useSearchParams() at top level.
+ * - Mobile (<=767px) + tab=profil     -> MobileTenantProfileMain
+ * - Mobile (<=767px) + tab=pembayaran -> MobilePaymentSettingsMain
+ * - Mobile (<=767px) + tab=tarif      -> MobileCourtPricingMain
+ * - Other tabs & Desktop (>=768px)    -> PengaturanDesktopMain
  */
 export default function PengaturanPage({ userProfile, onTenantUpdated = () => {} }) {
   const isMobile = useMobileViewport(767);
   const [searchParams] = useSearchParams();
   const currentTab = searchParams.get('tab') || 'profil';
+
+  if (isMobile && currentTab === 'profil') {
+    return (
+      <MobileTenantProfileMain
+        userProfile={userProfile}
+        onTenantUpdated={onTenantUpdated}
+      />
+    );
+  }
+
+  if (isMobile && currentTab === 'pembayaran') {
+    return (
+      <MobilePaymentSettingsMain
+        userProfile={userProfile}
+        onTenantUpdated={onTenantUpdated}
+      />
+    );
+  }
 
   if (isMobile && currentTab === 'tarif') {
     return <MobileCourtPricingMain userProfile={userProfile} />;
