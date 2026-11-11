@@ -6,30 +6,84 @@
 import { validateStaffSession, normalizeKK, computeHMAC } from '../tenant/_auth_staff.js';
 import { getCleanSupabaseUrl, getSupabaseAnonKey } from '../portal/_auth_v2.js';
 
+const TENANT_UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isValidTenantUuid(value) {
+  if (typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.toLowerCase() === 'global') return false;
+  return TENANT_UUID_REGEX.test(trimmed);
+}
+
 export async function validateBackfillAdmin(context) {
   const authResult = await validateStaffSession(context);
   if (!authResult.valid) {
     return {
       authorized: false,
       status: 401,
+      code: 'UNAUTHENTICATED',
       message: authResult.message || 'Sesi staf tidak valid atau telah kedaluwarsa.'
     };
   }
 
   const user = authResult.user;
-  const allowedRoles = new Set(['superadmin', 'owner', 'admin']);
+  const role = String(user?.role || '').trim().toLowerCase();
 
-  if (!allowedRoles.has(user.role)) {
+  if (role === 'superadmin') {
     return {
       authorized: false,
       status: 403,
-      message: `Akses ditolak. Peran '${user.role}' tidak memiliki wewenang administratif untuk mengelola data siswa (Hanya Superadmin, Owner, dan Admin).`
+      code: 'FORBIDDEN_SUPERADMIN_ROLE',
+      message: 'Akses ditolak. Platform Superadmin tidak diizinkan menjalankan endpoint operasional backfill tenant.'
+    };
+  }
+
+  const allowedRoles = new Set(['owner', 'admin']);
+
+  if (!allowedRoles.has(role)) {
+    return {
+      authorized: false,
+      status: 403,
+      code: 'FORBIDDEN_ROLE',
+      message: `Akses ditolak. Peran '${user?.role}' tidak memiliki wewenang administratif untuk mengelola data siswa (Hanya Owner dan Admin tenant).`
+    };
+  }
+
+  const rawTenantId = typeof user?.tenantId === 'string' ? user.tenantId.trim() : '';
+  if (!rawTenantId) {
+    return {
+      authorized: false,
+      status: 403,
+      code: 'MISSING_TENANT_CONTEXT',
+      message: 'Akses ditolak. Pengguna tidak memiliki konteks tenant yang terverifikasi.'
+    };
+  }
+
+  if (rawTenantId.toLowerCase() === 'global') {
+    return {
+      authorized: false,
+      status: 403,
+      code: 'FORBIDDEN_GLOBAL_SCOPE',
+      message: 'Akses ditolak. Scope global dilarang pada endpoint operasional tenant.'
+    };
+  }
+
+  if (!isValidTenantUuid(rawTenantId)) {
+    return {
+      authorized: false,
+      status: 403,
+      code: 'INVALID_TENANT_ID',
+      message: 'Akses ditolak. Identitas tenant tidak memiliki format UUID yang valid.'
     };
   }
 
   return {
     authorized: true,
-    user
+    user: {
+      ...user,
+      role,
+      tenantId: rawTenantId
+    }
   };
 }
 
@@ -101,9 +155,13 @@ export async function checkCryptoEngineStatus(secret) {
  * @param {string} supabaseUrl
  * @param {string} serviceRoleKey
  * @param {string} secret
- * @param {string|null} [tenantFilter=null]
+ * @param {string} tenantFilter
  */
-export async function performDryRunAnalysis(supabaseUrl, serviceRoleKey, secret, tenantFilter = null) {
+export async function performDryRunAnalysis(supabaseUrl, serviceRoleKey, secret, tenantFilter) {
+  if (!isValidTenantUuid(tenantFilter)) {
+    throw new Error('INVALID_TENANT_ID: Dry-run memerlukan UUID tenant yang valid dan menolak scope global.');
+  }
+  const cleanTenantId = tenantFilter.trim();
   const startedAt = new Date().toISOString();
   let summary = {
     totalStudents: 0,
@@ -128,10 +186,7 @@ export async function performDryRunAnalysis(supabaseUrl, serviceRoleKey, secret,
   let hasMore = true;
 
   while (hasMore) {
-    let queryUrl = `${supabaseUrl}/rest/v1/students?select=id,tenant_id,no_kk,kk_hmac,kk_last4&order=id.asc&limit=${batchSize}`;
-    if (tenantFilter && tenantFilter !== 'global') {
-      queryUrl += `&tenant_id=eq.${encodeURIComponent(tenantFilter)}`;
-    }
+    let queryUrl = `${supabaseUrl}/rest/v1/students?select=id,tenant_id,no_kk,kk_hmac,kk_last4&tenant_id=eq.${encodeURIComponent(cleanTenantId)}&order=id.asc&limit=${batchSize}`;
     if (lastId) {
       queryUrl += `&id=gt.${encodeURIComponent(lastId)}`;
     }
