@@ -798,7 +798,9 @@ export default function MobileAcademyHub({ userProfile }) {
               selectedClass={selectedClass}
               students={activeStudents}
               tenantId={tenantId}
+              activeAcademy={activeAcademy}
               userProfile={userProfile}
+              onStudentUpdated={() => fetchAllData()}
             />
           )}
         </div>

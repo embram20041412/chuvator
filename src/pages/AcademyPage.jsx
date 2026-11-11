@@ -2198,7 +2198,9 @@ export default function AcademyPage({ userProfile }) {
                         <GrowthTrackerSection
                           selectedClass={currentClass}
                           isArchived={currentClass?.isArchived === true}
-                          students={filteredStudents.filter((s) => s.classId === currentClass.id || s.className === currentClass.className)}
+                          students={filteredStudents.filter((s) => (s.classId ? s.classId === currentClass.id : s.className === currentClass.className))}
+                          tenantId={tenantId}
+                          activeAcademy={activeAcademy}
                           onStudentUpdated={() => {
                             fetchAcademyData();
                           }}

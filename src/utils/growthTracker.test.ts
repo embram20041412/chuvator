@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateBMI, getBMIStatus } from '../components/GrowthTrackerSection';
+import {
+  calculateBMI,
+  getBMIStatus,
+  filterStudentsBySelectedClass,
+  resolveClassAthleteSelection
+} from '../components/GrowthTrackerSection';
 
 // 1. BMI Calculation Tests
 test('calculateBMI correctly computes BMI rounded to 1 decimal place', () => {
@@ -188,3 +193,139 @@ test('updateStudentGrowth simulation rethrows UPDATE error to caller rather than
   assert.ok(caughtError);
   assert.match(caughtError.message, /Row Level Security/);
 });
+
+// 6. Class-Based Athlete Filtering & Class-Switch State Reset Verification (Scenarios 1 - 4)
+const mockAllAcademyStudents = [
+  {
+    id: 'st-a1',
+    studentName: 'Rizky Pratama',
+    classId: 'class-a',
+    className: 'U-14 Elite A',
+    tenantId: 'tenant-1',
+    academyId: 'acad-1',
+    status: 'Aktif',
+    height: 168,
+    weight: 56
+  },
+  {
+    id: 'st-a2',
+    studentName: 'Bagas Adi',
+    classId: 'class-a',
+    className: 'U-14 Elite A',
+    tenantId: 'tenant-1',
+    academyId: 'acad-1',
+    status: 'Aktif',
+    height: 170,
+    weight: 60
+  },
+  {
+    id: 'st-b1',
+    studentName: 'Dimas Saputra',
+    classId: 'class-b',
+    className: 'U-16 Pro B',
+    tenantId: 'tenant-1',
+    academyId: 'acad-1',
+    status: 'Aktif',
+    height: 175,
+    weight: 66
+  },
+  {
+    id: 'st-other-tenant',
+    studentName: 'Other Tenant Athlete',
+    classId: 'class-a',
+    className: 'U-14 Elite A',
+    tenantId: 'tenant-2',
+    academyId: 'acad-1',
+    status: 'Aktif'
+  },
+  {
+    id: 'st-other-academy',
+    studentName: 'Other Academy Athlete',
+    classId: 'class-a',
+    className: 'U-14 Elite A',
+    tenantId: 'tenant-1',
+    academyId: 'acad-2',
+    status: 'Aktif'
+  },
+  {
+    id: 'st-inactive',
+    studentName: 'Inactive Athlete',
+    classId: 'class-a',
+    className: 'U-14 Elite A',
+    tenantId: 'tenant-1',
+    academyId: 'acad-1',
+    status: 'Non-Aktif'
+  }
+];
+
+test('Scenario 1 & 2: filterStudentsBySelectedClass returns only active athletes in Class A and updates to Class B on switch', () => {
+  const classA = { id: 'class-a', className: 'U-14 Elite A', tenantId: 'tenant-1', academyId: 'acad-1' };
+  const classB = { id: 'class-b', className: 'U-16 Pro B', tenantId: 'tenant-1', academyId: 'acad-1' };
+
+  const listA = filterStudentsBySelectedClass(
+    mockAllAcademyStudents,
+    classA,
+    'tenant-1',
+    { id: 'acad-1' }
+  );
+  assert.deepEqual(
+    listA.map((s) => s.id),
+    ['st-a1', 'st-a2'],
+    'Class A dropdown must only contain active members of Class A within active tenant and academy'
+  );
+
+  const listB = filterStudentsBySelectedClass(
+    mockAllAcademyStudents,
+    classB,
+    'tenant-1',
+    { id: 'acad-1' }
+  );
+  assert.deepEqual(
+    listB.map((s) => s.id),
+    ['st-b1'],
+    'Switching to Class B must immediately update the athlete list to Class B members only'
+  );
+});
+
+test('Scenario 3: resolveClassAthleteSelection resets selection when previous athlete is not in the newly selected class', () => {
+  const classBStudents = [
+    { id: 'st-b1', studentName: 'Dimas Saputra', classId: 'class-b', height: 175, weight: 66 }
+  ];
+
+  // Previously selected 'st-a2' from Class A -> switch to Class B
+  const resolved = resolveClassAthleteSelection(classBStudents, 'st-a2');
+  assert.equal(resolved.wasReset, true);
+  assert.equal(resolved.selectedStudentId, 'st-b1');
+  assert.equal(resolved.selectedStudent?.id, 'st-b1');
+
+  // If already selecting a member of Class B -> keeps selection without reset
+  const kept = resolveClassAthleteSelection(classBStudents, 'st-b1');
+  assert.equal(kept.wasReset, false);
+  assert.equal(kept.selectedStudentId, 'st-b1');
+});
+
+test('Scenario 4: empty class or unselected class returns empty athlete list and clears selected athlete', () => {
+  const emptyClassC = { id: 'class-c', className: 'U-12 Pemula C', tenantId: 'tenant-1', academyId: 'acad-1' };
+
+  const listUnselected = filterStudentsBySelectedClass(
+    mockAllAcademyStudents,
+    null,
+    'tenant-1',
+    { id: 'acad-1' }
+  );
+  assert.deepEqual(listUnselected, []);
+
+  const listEmptyClass = filterStudentsBySelectedClass(
+    mockAllAcademyStudents,
+    emptyClassC,
+    'tenant-1',
+    { id: 'acad-1' }
+  );
+  assert.deepEqual(listEmptyClass, []);
+
+  const resolvedEmpty = resolveClassAthleteSelection(listEmptyClass, 'st-a1');
+  assert.equal(resolvedEmpty.wasReset, true);
+  assert.equal(resolvedEmpty.selectedStudentId, '');
+  assert.equal(resolvedEmpty.selectedStudent, null);
+});
+
