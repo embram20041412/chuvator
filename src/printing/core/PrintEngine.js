@@ -26,6 +26,9 @@ import {
   WebUSBPrintAdapter
 } from '../adapters/WebUSBPrintAdapter.js';
 import {
+  BluetoothBLEPrintAdapter
+} from '../adapters/BluetoothBLEPrintAdapter.js';
+import {
   generatePDFDocument,
   downloadPDFDocument
 } from '../pdf/PDFGenerator.js';
@@ -43,6 +46,12 @@ export class PrintEngine {
       PRINT_ADAPTERS.WEB_USB,
       options.webUsbAdapter || new WebUSBPrintAdapter(options.webUsbOptions || {})
     );
+    // Register Phase 4.2 Direct Bluetooth BLE Print Adapter
+    const bleAdapter = options.bluetoothBleAdapter || new BluetoothBLEPrintAdapter(options.bluetoothBleOptions || {});
+    this.registerAdapter(PRINT_ADAPTERS.WEB_BLUETOOTH, bleAdapter);
+    if (PRINT_ADAPTERS.BLUETOOTH_BLE) {
+      this.registerAdapter(PRINT_ADAPTERS.BLUETOOTH_BLE, bleAdapter);
+    }
   }
 
   /**

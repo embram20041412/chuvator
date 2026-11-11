@@ -26,6 +26,9 @@ import {
 import {
   findPrinterUsbInterfaceAndEndpoint
 } from '../adapters/WebUSBPrintAdapter.js';
+import {
+  findWritableGattCharacteristic
+} from '../adapters/BluetoothBLEPrintAdapter.js';
 
 export { CONNECTION_STATUS };
 
@@ -342,25 +345,68 @@ export class PrinterConnectionManager {
         btDevice.addEventListener('gattserverdisconnected', this._boundBleDisconnect);
       }
 
-      this.activeDeviceHandle = btDevice || null;
+      let gattServer = btDevice.gatt || null;
+      if (gattServer && typeof gattServer.connect === 'function' && !gattServer.connected) {
+        gattServer = await gattServer.connect();
+      }
+
+      let targetGatt = null;
+      if (gattServer && gattServer.connected) {
+        targetGatt = await findWritableGattCharacteristic(gattServer);
+      }
+
+      if (!targetGatt || !targetGatt.characteristic) {
+        if (gattServer && gattServer.connected && typeof gattServer.disconnect === 'function') {
+          try {
+            gattServer.disconnect();
+          } catch {}
+        }
+        return this._setState({
+          status: CONNECTION_STATUS.ERROR,
+          adapter: 'webbluetooth',
+          deviceMetadata: metadata,
+          printerDisplayName: metadata.name,
+          directEscPosTransmissionReady: false,
+          statusMessage: `Perangkat BLE "${metadata.name}" tersambung tetapi tidak memiliki Service atau Characteristic penulisan yang valid.`,
+          errorMessage: 'Characteristic penulisan BLE tidak ditemukan.'
+        });
+      }
+
+      this.activeDeviceHandle = btDevice;
+      this.activeGattServer = gattServer;
+      this.activeGattService = targetGatt.service;
+      this.activeGattCharacteristic = targetGatt.characteristic;
+      this.activeGattWriteMethod = targetGatt.writeMethod;
+      this.isGattConnected = true;
 
       return this._setState({
         status: CONNECTION_STATUS.CONNECTED,
         adapter: 'webbluetooth',
         deviceMetadata: metadata,
         printerDisplayName: metadata.name,
-        directEscPosTransmissionReady: false,
-        statusMessage: `Perangkat BLE "${metadata.name}" berhasil dipasangkan. (Catatan: Transmisi langsung ESC/POS BLE diaktifkan pada Phase 4; Test Print saat ini menggunakan Browser/System Print).`,
+        directEscPosTransmissionReady: true,
+        statusMessage: `Perangkat BLE "${metadata.name}" berhasil terhubung dan GATT Characteristic teridentifikasi untuk pencetakan ESC/POS langsung.`,
         errorMessage: null
       });
     } catch (err) {
+      if (btDevice?.gatt?.connected && typeof btDevice.gatt.disconnect === 'function') {
+        try {
+          btDevice.gatt.disconnect();
+        } catch {}
+      }
+      this.activeDeviceHandle = null;
+      this.activeGattServer = null;
+      this.activeGattService = null;
+      this.activeGattCharacteristic = null;
+      this.isGattConnected = false;
+
       return this._setState({
         status: CONNECTION_STATUS.ERROR,
         adapter: 'webbluetooth',
         deviceMetadata: metadata,
         printerDisplayName: metadata.name,
         directEscPosTransmissionReady: false,
-        statusMessage: `Gagal menyambungkan ke perangkat BLE "${metadata.name}".`,
+        statusMessage: `Gagal menyambungkan ke perangkat BLE "${metadata.name}": ${err?.message || String(err)}`,
         errorMessage: err?.message || String(err)
       });
     }
@@ -400,7 +446,11 @@ export class PrinterConnectionManager {
     } finally {
       this.activeDeviceHandle = null;
       this.activeEndpointInfo = null;
+      this.activeGattServer = null;
+      this.activeGattService = null;
+      this.activeGattCharacteristic = null;
       this.isInterfaceClaimed = false;
+      this.isGattConnected = false;
       this._boundBleDisconnect = null;
     }
 
@@ -418,7 +468,11 @@ export class PrinterConnectionManager {
   handleUnexpectedDisconnect(reason = 'Koneksi perangkat printer terputus.') {
     this.activeDeviceHandle = null;
     this.activeEndpointInfo = null;
+    this.activeGattServer = null;
+    this.activeGattService = null;
+    this.activeGattCharacteristic = null;
     this.isInterfaceClaimed = false;
+    this.isGattConnected = false;
     this._boundBleDisconnect = null;
     return this._setState({
       status: CONNECTION_STATUS.DISCONNECTED,

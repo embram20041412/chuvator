@@ -357,22 +357,21 @@ export default function PrinterSettingsPanel({
     setFeedbackNotice(null);
 
     try {
-      const { rawPayload, options } = createTestPrintPayload(mode);
-      const targetAdapter = preferredAdapter === PRINT_ADAPTERS.WEB_USB ? PRINT_ADAPTERS.WEB_USB : PRINT_ADAPTERS.BROWSER;
+      const targetAdapter =
+        preferredAdapter === PRINT_ADAPTERS.WEB_USB
+          ? PRINT_ADAPTERS.WEB_USB
+          : preferredAdapter === PRINT_ADAPTERS.WEB_BLUETOOTH
+          ? PRINT_ADAPTERS.WEB_BLUETOOTH
+          : PRINT_ADAPTERS.BROWSER;
 
       const res = await printEngine.printDocument(rawPayload, {
         ...options,
         adapter: targetAdapter
       });
 
-      const noteText =
-        preferredAdapter === PRINT_ADAPTERS.WEB_BLUETOOTH
-          ? ' (Catatan: Transmisi langsung BLE diaktifkan pada Phase 4.2; Test Print dijalankan melalui Browser/System Print).'
-          : '';
-
       setFeedbackNotice({
         type: res.ok ? 'success' : 'error',
-        text: `${res.message}${noteText}`
+        text: res.message
       });
     } catch (err) {
       setFeedbackNotice({

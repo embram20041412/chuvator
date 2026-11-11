@@ -95,9 +95,9 @@ export const PRINT_ADAPTERS = Object.freeze({
   BROWSER: 'browser',
   PDF: 'pdf',
   ESC_POS: 'escpos',
-  // Reserved for Phase 4 Hardware & Bridge Adapters
   WEB_USB: 'webusb',
   WEB_BLUETOOTH: 'webbluetooth',
+  BLUETOOTH_BLE: 'webbluetooth',
   LOCAL_BRIDGE: 'bridge'
 });
 
