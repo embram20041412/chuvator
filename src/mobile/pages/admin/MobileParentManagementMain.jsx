@@ -256,14 +256,218 @@ export function getParentInvitationStatusMeta(parent) {
         badgeClass: 'bg-amber-50 text-amber-800 border-amber-200',
         description: 'Tautan siap dibagikan manual ke WhatsApp wali'
       };
-    default:
-      return {
-        code: 'NOT_CREATED',
-        label: 'Belum Dibuat',
-        badgeClass: 'bg-slate-100 text-slate-600 border-slate-200',
-        description: 'Undangan belum dibuat'
-      };
+      default:
+        return {
+          code: 'NOT_CREATED',
+          label: 'Belum Dibuat',
+          badgeClass: 'bg-slate-100 text-slate-600 border-slate-200',
+          description: 'Undangan belum dibuat'
+        };
+    }
   }
+
+export const UNAVAILABLE_STUDENT_NAME_LABEL = 'Nama siswa belum tersedia';
+
+/**
+ * Safely extract a student's full name from a student object or link record.
+ * - Reads only valid name fields: name, student_name, studentName, full_name, fullName.
+ * - NEVER uses id or student_id as a name fallback.
+ * - NEVER fabricates dummy student names.
+ * - Rejects strings that are raw UUIDs or equal to the record's own ID.
+ * @param {any} studentRecord
+ * @param {any} [explicitId]
+ */
+export function resolveStudentNameFromRecord(studentRecord, explicitId = null) {
+  if (!studentRecord || typeof studentRecord !== 'object' || Array.isArray(studentRecord)) {
+    return null;
+  }
+
+  const recordId =
+    explicitId ||
+    studentRecord.id ||
+    studentRecord.student_id ||
+    studentRecord.studentId ||
+    null;
+  const normalizedId = recordId ? String(recordId).trim().toLowerCase() : null;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+  const candidates = [
+    studentRecord.name,
+    studentRecord.student_name,
+    studentRecord.studentName,
+    studentRecord.full_name,
+    studentRecord.fullName
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string') {
+      const trimmed = candidate.trim();
+      if (!trimmed) continue;
+      if (uuidRegex.test(trimmed)) continue;
+      if (normalizedId && trimmed.toLowerCase() === normalizedId) continue;
+      return trimmed;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Normalize and resolve linked students from a parent account record.
+ * Supports:
+ * - link.student as an object: { student: { id, name / student_name } }
+ * - link.student as an array: { student: [{ id, name / student_name }, ...] }
+ * - link.students as an object or array
+ * - link with flattened student_name / studentName
+ * - link.student === null / undefined or missing/blank name -> "Nama siswa belum tersedia"
+ * - parent.links === null or parent.linksError === true -> relationLoadFailed: true
+ * @param {any} parent
+ */
+export function resolveParentLinkedStudents(parent) {
+  if (!parent || typeof parent !== 'object') {
+    return {
+      count: 0,
+      items: [],
+      hasAnyValidName: false,
+      allNamesAvailable: false,
+      relationLoadFailed: true
+    };
+  }
+
+  const rawLinks = parent.links !== undefined ? parent.links : parent.parent_student_links;
+
+  if (parent.linksError === true || rawLinks === null) {
+    return {
+      count: 0,
+      items: [],
+      hasAnyValidName: false,
+      allNamesAvailable: false,
+      relationLoadFailed: true
+    };
+  }
+
+  if (!Array.isArray(rawLinks)) {
+    return {
+      count: 0,
+      items: [],
+      hasAnyValidName: false,
+      allNamesAvailable: true,
+      relationLoadFailed: false
+    };
+  }
+
+  const items = [];
+
+  rawLinks.forEach((link, linkIndex) => {
+    if (!link || typeof link !== 'object') {
+      items.push({
+        key: `link-missing-${linkIndex}`,
+        studentId: null,
+        name: null,
+        displayName: UNAVAILABLE_STUDENT_NAME_LABEL,
+        hasValidName: false,
+        kkLast4: null
+      });
+      return;
+    }
+
+    const rawStudentRel = link.student !== undefined ? link.student : link.students;
+
+    if (Array.isArray(rawStudentRel)) {
+      if (rawStudentRel.length === 0) {
+        items.push({
+          key: `link-empty-arr-${linkIndex}`,
+          studentId: link.student_id || link.studentId || null,
+          name: null,
+          displayName: UNAVAILABLE_STUDENT_NAME_LABEL,
+          hasValidName: false,
+          kkLast4: null
+        });
+      } else {
+        rawStudentRel.forEach((studentItem, subIdx) => {
+          const studentId =
+            (studentItem && typeof studentItem === 'object'
+              ? studentItem.id || studentItem.student_id || studentItem.studentId
+              : null) ||
+            link.student_id ||
+            link.studentId ||
+            null;
+          const resolvedName = resolveStudentNameFromRecord(studentItem, studentId);
+          const kkLast4 =
+            studentItem && typeof studentItem === 'object'
+              ? studentItem.kk_last4 || studentItem.kkLast4 || null
+              : null;
+
+          items.push({
+            key: studentId ? `${studentId}-${linkIndex}-${subIdx}` : `link-${linkIndex}-${subIdx}`,
+            studentId,
+            name: resolvedName,
+            displayName: resolvedName || UNAVAILABLE_STUDENT_NAME_LABEL,
+            hasValidName: Boolean(resolvedName),
+            kkLast4
+          });
+        });
+      }
+      return;
+    }
+
+    if (rawStudentRel && typeof rawStudentRel === 'object') {
+      const studentId =
+        rawStudentRel.id ||
+        rawStudentRel.student_id ||
+        rawStudentRel.studentId ||
+        link.student_id ||
+        link.studentId ||
+        null;
+      const resolvedName = resolveStudentNameFromRecord(rawStudentRel, studentId);
+      const kkLast4 =
+        rawStudentRel.kk_last4 ||
+        rawStudentRel.kkLast4 ||
+        link.kk_last4 ||
+        link.kkLast4 ||
+        null;
+
+      items.push({
+        key: studentId ? `${studentId}-${linkIndex}` : `link-${linkIndex}`,
+        studentId,
+        name: resolvedName,
+        displayName: resolvedName || UNAVAILABLE_STUDENT_NAME_LABEL,
+        hasValidName: Boolean(resolvedName),
+        kkLast4
+      });
+      return;
+    }
+
+    // Fallback: check if link itself has flattened student_name / studentName (never link.id or link.student_id)
+    const studentId = link.student_id || link.studentId || null;
+    const flattenedName = resolveStudentNameFromRecord(
+      {
+        student_name: link.student_name,
+        studentName: link.studentName
+      },
+      studentId
+    );
+
+    items.push({
+      key: studentId ? `${studentId}-${linkIndex}` : `link-null-${linkIndex}`,
+      studentId,
+      name: flattenedName,
+      displayName: flattenedName || UNAVAILABLE_STUDENT_NAME_LABEL,
+      hasValidName: Boolean(flattenedName),
+      kkLast4: link.kk_last4 || link.kkLast4 || null
+    });
+  });
+
+  const hasAnyValidName = items.some((item) => item.hasValidName);
+  const allNamesAvailable = items.length > 0 ? items.every((item) => item.hasValidName) : true;
+
+  return {
+    count: items.length,
+    items,
+    hasAnyValidName,
+    allNamesAvailable,
+    relationLoadFailed: false
+  };
 }
 
 /**
@@ -532,7 +736,7 @@ export default function MobileParentManagementMain({
       const meta = getParentInvitationStatusMeta(p);
       if (meta.code === 'ACTIVATED') activated += 1;
       if (meta.code === 'READY_TO_SEND' || meta.code === 'SENT_MANUALLY') readyOrSent += 1;
-      if (Array.isArray(p.links)) totalLinkedStudents += p.links.length;
+      totalLinkedStudents += resolveParentLinkedStudents(p).count;
     });
 
     return {
@@ -1022,7 +1226,7 @@ export default function MobileParentManagementMain({
               const isActivated = statusMeta.code === 'ACTIVATED';
               const displayName = parent.name || parent.full_name || 'Wali Murid';
               const shortId = parent.id ? String(parent.id).slice(0, 8) : '--------';
-              const studentLinks = Array.isArray(parent.links) ? parent.links : [];
+              const linkedStudentsMeta = resolveParentLinkedStudents(parent);
               const isBusy = actionLoadingId === parent.id;
 
               return (
@@ -1063,18 +1267,53 @@ export default function MobileParentManagementMain({
                   </div>
 
                   {/* Linked Students Section */}
-                  <div className="space-y-1.5">
+                  <div
+                    className="space-y-2"
+                    data-testid={`mobile-parent-linked-students-${parent.id}`}
+                  >
                     <div className="flex items-center justify-between text-[11px] font-bold text-[#68758B] uppercase tracking-wider">
-                      <span>Siswa Terhubung ({studentLinks.length})</span>
+                      <span>
+                        {linkedStudentsMeta.relationLoadFailed
+                          ? 'Siswa Terhubung'
+                          : `Siswa Terhubung (${linkedStudentsMeta.count})`}
+                      </span>
                     </div>
-                    {studentLinks.length > 0 ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        {studentLinks.map((link, idx) => (
+
+                    {linkedStudentsMeta.relationLoadFailed ? (
+                      <div
+                        data-testid={`mobile-parent-links-error-${parent.id}`}
+                        className="px-3 py-2 bg-rose-50 text-rose-800 border border-rose-200 rounded-xl text-xs font-semibold flex items-center gap-2"
+                      >
+                        <AlertCircle className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                        <span>Data relasi siswa gagal dimuat</span>
+                      </div>
+                    ) : linkedStudentsMeta.count > 0 ? (
+                      <div
+                        className="flex flex-wrap gap-1.5"
+                        role="list"
+                        aria-label={`Daftar siswa terhubung untuk ${displayName}`}
+                      >
+                        {linkedStudentsMeta.items.map((studentItem) => (
                           <span
-                            key={link.student?.id || idx}
-                            className="px-2.5 py-1 bg-emerald-50 text-emerald-900 border border-emerald-200 rounded-xl text-xs font-bold"
+                            key={studentItem.key}
+                            role="listitem"
+                            data-testid={
+                              studentItem.hasValidName
+                                ? 'mobile-parent-student-chip-named'
+                                : 'mobile-parent-student-chip-unavailable'
+                            }
+                            className={`px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 border ${
+                              studentItem.hasValidName
+                                ? 'bg-emerald-50 text-emerald-950 border-emerald-200'
+                                : 'bg-amber-50 text-amber-900 border-amber-200 italic'
+                            }`}
                           >
-                            {link.student?.name || 'Siswa Terhubung'}
+                            <User
+                              className={`w-3.5 h-3.5 shrink-0 ${
+                                studentItem.hasValidName ? 'text-[#16A779]' : 'text-amber-600'
+                              }`}
+                            />
+                            <span className="break-words">{studentItem.displayName}</span>
                           </span>
                         ))}
                       </div>
@@ -1701,9 +1940,12 @@ export default function MobileParentManagementMain({
               <div className="text-[#68758B]">
                 Siswa Terhubung:{' '}
                 <strong className="text-[#17233D]">
-                  {Array.isArray(parentToDelete.links) && parentToDelete.links.length > 0
-                    ? parentToDelete.links.map((l) => l.student?.name).filter(Boolean).join(', ')
-                    : 'Tidak ada'}
+                  {(() => {
+                    const linked = resolveParentLinkedStudents(parentToDelete);
+                    if (linked.relationLoadFailed) return 'Data relasi siswa gagal dimuat';
+                    if (linked.count === 0) return 'Tidak ada';
+                    return linked.items.map((item) => item.displayName).join(', ');
+                  })()}
                 </strong>
               </div>
             </div>

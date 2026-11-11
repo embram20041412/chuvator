@@ -31,7 +31,10 @@ import MobileParentManagementMain, {
   executeCreateParentWithLock,
   executeGenerateWhatsAppInvitation,
   executeDeleteParentWithConfirmation,
-  copyTextToClipboard
+  copyTextToClipboard,
+  UNAVAILABLE_STUDENT_NAME_LABEL,
+  resolveStudentNameFromRecord,
+  resolveParentLinkedStudents
 } from '../src/mobile/pages/admin/MobileParentManagementMain.jsx';
 
 test('CHUVATOR — Phase 4.5.5 Mobile Parent Administration Test Suite', async (t) => {
@@ -804,4 +807,210 @@ test('CHUVATOR — Phase 4.5.5 Mobile Parent Administration Test Suite', async (
     assert.equal(parentPageSource.includes('userProfile?.uid'), false, 'Fallback userProfile?.uid wajib dihapus dari resolusi tenant di ParentManagementPage.jsx');
     assert.equal(typeof ParentDesktopMain, 'function');
   });
+
+  /* ========================================================================= */
+  /* TEST 19: Phase 4.5.5.2 — Parent–Student Relationship Display Correction   */
+  /* ========================================================================= */
+  await t.test('TEST 19 [UNIT + SSR]: Phase 4.5.5.2 — Tampilan relasi wali-siswa pada kartu mobile akurat untuk seluruh bentuk response tanpa nama dummy atau ID siswa', () => {
+    // 1. Satu wali dengan satu siswa
+    const singleStudentParent = {
+      id: 'parent-rel-1',
+      tenant_id: 'tenant-gor-101',
+      name: 'Siti Aminah',
+      email: 'siti@mail.com',
+      phone: '6285711223344',
+      status: 'active',
+      invitationStatus: 'ACTIVATED',
+      links: [
+        { student: { id: 'std-101', name: 'Fajar Nugroho', kk_last4: '8899' } }
+      ]
+    };
+    const singleMeta = resolveParentLinkedStudents(singleStudentParent);
+    assert.equal(singleMeta.count, 1);
+    assert.equal(singleMeta.items[0].displayName, 'Fajar Nugroho');
+    assert.equal(singleMeta.items[0].hasValidName, true);
+
+    // 2. Satu wali dengan beberapa siswa
+    const multiStudentParent = {
+      id: 'parent-rel-2',
+      tenant_id: 'tenant-gor-101',
+      name: 'Budi Santoso',
+      email: 'budi@mail.com',
+      phone: '6281234567890',
+      status: 'active',
+      invitationStatus: 'ACTIVATED',
+      links: [
+        { student: { id: 'std-201', name: 'Rizky Pratama', kk_last4: '4321' } },
+        { student: { id: 'std-202', student_name: 'Nadia Pratama', kk_last4: '4321' } },
+        { student: { id: 'std-203', studentName: 'Bagas Pratama', kk_last4: '4321' } }
+      ]
+    };
+    const multiMeta = resolveParentLinkedStudents(multiStudentParent);
+    assert.equal(multiMeta.count, 3);
+    assert.deepEqual(
+      multiMeta.items.map((i) => i.displayName),
+      ['Rizky Pratama', 'Nadia Pratama', 'Bagas Pratama']
+    );
+
+    // 3. Relasi student berbentuk object (name, student_name, studentName, full_name)
+    assert.equal(resolveStudentNameFromRecord({ id: 's-1', name: 'Dimas Anggara' }), 'Dimas Anggara');
+    assert.equal(resolveStudentNameFromRecord({ id: 's-2', name: null, student_name: 'Ayu Lestari' }), 'Ayu Lestari');
+    assert.equal(resolveStudentNameFromRecord({ id: 's-3', studentName: 'Raka Saputra' }), 'Raka Saputra');
+    assert.equal(resolveStudentNameFromRecord({ id: 's-4', full_name: 'Kirana Putri' }), 'Kirana Putri');
+
+    // 4. Relasi student berbentuk array jika didukung response PostgREST
+    const arrayStudentParent = {
+      id: 'parent-rel-array',
+      tenant_id: 'tenant-gor-101',
+      name: 'Hendra Wijaya',
+      email: 'hendra@mail.com',
+      phone: '6281999888777',
+      status: 'pending',
+      invitationStatus: 'READY_TO_SEND',
+      links: [
+        {
+          parent_account_id: 'parent-rel-array',
+          student: [
+            { id: 'std-301', name: 'Galih Wijaya', kk_last4: '1122' },
+            { id: 'std-302', student_name: 'Ratna Wijaya', kk_last4: '1122' }
+          ]
+        }
+      ]
+    };
+    const arrayMeta = resolveParentLinkedStudents(arrayStudentParent);
+    assert.equal(arrayMeta.count, 2);
+    assert.deepEqual(
+      arrayMeta.items.map((i) => i.displayName),
+      ['Galih Wijaya', 'Ratna Wijaya']
+    );
+
+    // 5. Relasi student null
+    const nullStudentParent = {
+      id: 'parent-rel-null',
+      tenant_id: 'tenant-gor-101',
+      name: 'Wali Relasi Null',
+      email: 'nullrel@mail.com',
+      phone: '6281222333444',
+      status: 'pending',
+      invitationStatus: 'READY_TO_SEND',
+      links: [
+        { parent_account_id: 'parent-rel-null', student_id: '550e8400-e29b-41d4-a716-446655440000', student: null }
+      ]
+    };
+    const nullMeta = resolveParentLinkedStudents(nullStudentParent);
+    assert.equal(nullMeta.count, 1);
+    assert.equal(nullMeta.items[0].hasValidName, false);
+    assert.equal(nullMeta.items[0].displayName, UNAVAILABLE_STUDENT_NAME_LABEL);
+    assert.equal(nullMeta.items[0].displayName, 'Nama siswa belum tersedia');
+
+    // 6. Nama siswa kosong / whitespace / hanya ID (tidak boleh menampilkan ID sebagai nama atau nama palsu)
+    const emptyNameParent = {
+      id: 'parent-rel-empty-name',
+      tenant_id: 'tenant-gor-101',
+      name: 'Wali Nama Siswa Kosong',
+      email: 'emptyname@mail.com',
+      phone: '6281555666777',
+      status: 'pending',
+      invitationStatus: 'READY_TO_SEND',
+      links: [
+        { student: { id: '550e8400-e29b-41d4-a716-446655440001', name: '' } },
+        { student: { id: 'std-custom-id-99', name: '   ' } },
+        { student: { id: '550e8400-e29b-41d4-a716-446655440002', name: '550e8400-e29b-41d4-a716-446655440002' } }
+      ]
+    };
+    const emptyNameMeta = resolveParentLinkedStudents(emptyNameParent);
+    assert.equal(emptyNameMeta.count, 3);
+    assert.ok(emptyNameMeta.items.every((i) => i.hasValidName === false));
+    assert.ok(emptyNameMeta.items.every((i) => i.displayName === 'Nama siswa belum tersedia'));
+
+    // 7. Jumlah siswa sesuai dengan jumlah relasi & 8. Tenant berbeda ditolak saat render SSR
+    const mixedTestParents = [
+      singleStudentParent,
+      multiStudentParent,
+      arrayStudentParent,
+      nullStudentParent,
+      emptyNameParent,
+      {
+        id: 'parent-other-tenant-777',
+        tenant_id: 'tenant-other-999',
+        name: 'Wali Cabang Lain',
+        email: 'other@cabanglain.id',
+        phone: '6281888999000',
+        status: 'active',
+        invitationStatus: 'ACTIVATED',
+        links: [
+          { student: { id: 'std-foreign-1', name: 'Siswa Cabang Lain' } }
+        ]
+      }
+    ];
+
+    (globalThis as any).window.innerWidth = 390;
+    const htmlRendered = renderToString(
+      React.createElement(MemoryRouter, { initialEntries: ['/parents'] },
+        React.createElement(MobileParentManagementMain, {
+          userProfile: mockOwnerProfile,
+          initialParents: mixedTestParents
+        })
+      )
+    );
+
+    // Nama lengkap siswa tampil jelas
+    assert.ok(htmlRendered.includes('Fajar Nugroho'));
+    assert.ok(htmlRendered.includes('Rizky Pratama'));
+    assert.ok(htmlRendered.includes('Nadia Pratama'));
+    assert.ok(htmlRendered.includes('Bagas Pratama'));
+    assert.ok(htmlRendered.includes('Galih Wijaya'));
+    assert.ok(htmlRendered.includes('Ratna Wijaya'));
+
+    // Keterangan jujur saat nama tidak tersedia
+    assert.ok(htmlRendered.includes('Nama siswa belum tersedia'));
+
+    // Jumlah siswa sesuai dengan jumlah relasi (1, 3, 2, 1, 3 -> total 10 di KPI)
+    assert.ok(htmlRendered.includes('Siswa Terhubung (1)'));
+    assert.ok(htmlRendered.includes('Siswa Terhubung (3)'));
+    assert.ok(htmlRendered.includes('Siswa Terhubung (2)'));
+
+    // Tidak menampilkan ID siswa sebagai nama
+    assert.equal(htmlRendered.includes('550e8400-e29b-41d4-a716-446655440000'), false);
+    assert.equal(htmlRendered.includes('550e8400-e29b-41d4-a716-446655440001'), false);
+    assert.equal(htmlRendered.includes('550e8400-e29b-41d4-a716-446655440002'), false);
+    assert.equal(htmlRendered.includes('std-custom-id-99'), false);
+
+    // 8. Tenant berbeda tidak boleh ditampilkan
+    assert.equal(htmlRendered.includes('Wali Cabang Lain'), false);
+    assert.equal(htmlRendered.includes('Siswa Cabang Lain'), false);
+
+    // Jika data relasi gagal dimuat (links: null / linksError: true), tampilkan pesan jujur dan jangan klaim daftar nama tampil
+    const failedRelParent = {
+      id: 'parent-rel-failed',
+      tenant_id: 'tenant-gor-101',
+      name: 'Wali Gagal Relasi',
+      email: 'failedrel@mail.com',
+      phone: '6281777888999',
+      status: 'active',
+      invitationStatus: 'ACTIVATED',
+      links: null
+    };
+    const htmlFailedRel = renderToString(
+      React.createElement(MemoryRouter, { initialEntries: ['/parents'] },
+        React.createElement(MobileParentManagementMain, {
+          userProfile: mockOwnerProfile,
+          initialParents: [failedRelParent]
+        })
+      )
+    );
+    assert.ok(htmlFailedRel.includes('Data relasi siswa gagal dimuat'));
+    assert.equal(htmlFailedRel.includes('mobile-parent-student-chip-named'), false);
+
+    // 9. Tampilan desktop tetap tidak berubah
+    (globalThis as any).window.innerWidth = 1280;
+    const htmlDesktopUnchanged = renderToString(
+      React.createElement(MemoryRouter, { initialEntries: ['/parents'] },
+        React.createElement(ParentManagementPage, { userProfile: mockOwnerProfile })
+      )
+    );
+    assert.ok(htmlDesktopUnchanged.includes('Manajemen Wali Murid'));
+    assert.equal(htmlDesktopUnchanged.includes('mobile-parent-management-main'), false);
+  });
 });
+
