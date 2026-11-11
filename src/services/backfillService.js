@@ -139,6 +139,8 @@ export async function executeKkHmacBackfill(options = {}) {
     error.code = resJson.code || 'EXECUTION_API_ERROR';
     error.data = resJson.data || null;
     error.batchStatus = resJson.status || null;
+    error.runId = resJson.runId || resJson.data?.runId || options.runId || null;
+    error.leaseToken = resJson.leaseToken || resJson.data?.leaseToken || options.leaseToken || null;
     throw error;
   }
 

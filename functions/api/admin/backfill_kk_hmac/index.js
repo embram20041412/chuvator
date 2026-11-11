@@ -306,7 +306,7 @@ export async function onRequestPost(context) {
         );
       }
 
-      // Validasi Fencing Lease Token
+      // Validasi Fencing Lease Token & Expiry Timestamp
       if (!leaseToken) {
         return new Response(
           JSON.stringify({
@@ -318,27 +318,34 @@ export async function onRequestPost(context) {
         );
       }
 
-      if (leaseToken !== String(existingRun.lease_token || '').trim()) {
+      // Validasi Eksplisit Expiry Timestamp (Fail-Closed jika null, kosong, atau invalid Date)
+      const rawExpiresAt = existingRun.lease_expires_at;
+      const expiresAtMs = rawExpiresAt ? new Date(rawExpiresAt).getTime() : NaN;
+
+      if (!rawExpiresAt || isNaN(expiresAtMs)) {
         return new Response(
           JSON.stringify({
             success: false,
-            code: 'FENCING_TOKEN_STALE',
-            message: 'Lease token yang disertakan telah usang. Worker lain telah mengambil alih run ini.'
+            code: 'LEASE_EXPIRY_INVALID',
+            message: 'Waktu kedaluwarsa lease pada database tidak valid, kosong, atau bernilai null.'
           }),
           { status: 409, headers: corsHeaders }
         );
       }
 
-      const isLeaseExpired = existingRun.lease_expires_at && new Date(existingRun.lease_expires_at).getTime() <= Date.now();
+      // Waktu server konsisten (Asumsi clock skew tolerance: NTP server disinkronkan)
+      const nowMs = Date.now();
+      const nowIso = new Date(nowMs).toISOString();
+      const isLeaseExpired = expiresAtMs <= nowMs;
 
       if (isLeaseExpired) {
         // ATOMIC COMPARE-AND-SWAP (CAS) LEASE RECOVERY
-        // Single atomic PATCH filtering exact run_id, tenant_id, status IN ('RUNNING','ACQUIRED'), and old lease_token
+        // Single atomic PATCH filtering exact run_id, tenant_id, status IN ('RUNNING','ACQUIRED'),
+        // exact old lease_token, AND exact old lease_expires_at timestamp (plus lease_expires_at <= nowIso)
         const newLeaseToken = crypto.randomUUID();
-        const nowIso = new Date().toISOString();
-        const newLeaseExpiresAt = new Date(Date.now() + 120_000).toISOString();
+        const newLeaseExpiresAt = new Date(nowMs + 120_000).toISOString();
 
-        const patchCasUrl = `${supabaseUrl}/rest/v1/backfill_kk_runs?run_id=eq.${encodeURIComponent(existingRun.run_id)}&tenant_id=eq.${encodeURIComponent(authoritativeTenantId)}&status=in.("RUNNING","ACQUIRED")&lease_token=eq.${encodeURIComponent(existingRun.lease_token)}`;
+        const patchCasUrl = `${supabaseUrl}/rest/v1/backfill_kk_runs?run_id=eq.${encodeURIComponent(existingRun.run_id)}&tenant_id=eq.${encodeURIComponent(authoritativeTenantId)}&status=in.("RUNNING","ACQUIRED")&lease_token=eq.${encodeURIComponent(existingRun.lease_token)}&lease_expires_at=eq.${encodeURIComponent(existingRun.lease_expires_at)}&lease_expires_at=lte.${encodeURIComponent(nowIso)}`;
 
         const patchResp = await fetch(patchCasUrl, {
           method: 'PATCH',
@@ -370,12 +377,12 @@ export async function onRequestPost(context) {
 
         const patchedRows = await patchResp.json().catch(() => []);
         if (!Array.isArray(patchedRows) || patchedRows.length !== 1) {
-          // CAS matched 0 rows -> another worker modified or acquired lock!
+          // CAS matched 0 rows -> another worker modified lease, rotated token, or updated expiry!
           return new Response(
             JSON.stringify({
               success: false,
               code: 'FENCING_TOKEN_STALE',
-              message: 'Pemulihan lease gagal karena lock telah diubah atau diambil alih oleh worker lain.'
+              message: 'Pemulihan lease gagal karena lock atau timestamp expiry telah diubah oleh worker lain.'
             }),
             { status: 409, headers: corsHeaders }
           );
@@ -384,9 +391,21 @@ export async function onRequestPost(context) {
         const recoveredRun = patchedRows[0];
         runId = recoveredRun.run_id;
         leaseToken = recoveredRun.lease_token;
-        dbCursor = recoveredRun.last_cursor || null;
+        dbCursor = existingRun.last_cursor || null; // cursor dibaca dari database secara immutabel
         leaseRecovered = true;
       } else {
+        // Lease belum expired: Validasi Fencing Lease Token
+        if (leaseToken !== String(existingRun.lease_token || '').trim()) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              code: 'FENCING_TOKEN_STALE',
+              message: 'Lease token yang disertakan telah usang. Worker lain telah mengambil alih run ini.'
+            }),
+            { status: 409, headers: corsHeaders }
+          );
+        }
+
         runId = existingRun.run_id;
         leaseToken = existingRun.lease_token;
         dbCursor = existingRun.last_cursor || null;
