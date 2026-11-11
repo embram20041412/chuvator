@@ -1,5 +1,4 @@
 import React, { useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import { 
   BarChart2, 
   Dumbbell, 
@@ -9,16 +8,10 @@ import {
   MessageSquare, 
   Activity, 
   Target, 
-  Star, 
-  Edit3, 
   ChevronDown, 
   ChevronUp, 
-  CheckCircle2, 
-  AlertCircle,
-  Sparkles,
-  Info
+  Sparkles
 } from 'lucide-react';
-import { ResponsiveContainer, PieChart, Pie, Sector } from 'recharts';
 
 // ============================================================================
 // OPTA-INSPIRED SPORTS TECH CATEGORY THEME CONFIGURATION
@@ -159,7 +152,7 @@ function describeSectorPath(cx, cy, rIn, rOut, startAngle, endAngle) {
 }
 
 // ============================================================================
-// MAIN COMPONENT: ScoutingPolarAreaPanel
+// MAIN COMPONENT: ScoutingPolarAreaPanel (CHART ONLY)
 // ============================================================================
 /**
  * @param {{
@@ -179,7 +172,6 @@ export default function ScoutingPolarAreaPanel({
   overallGrade = { grade: 'B', badge: 'bg-emerald-100 text-emerald-800' },
   activeCategoryKey = null,
   onSelectCategory,
-  onEditCategory,
   isArchived = false,
   sportName = 'Sepakbola / Futsal'
 }) {
@@ -253,14 +245,14 @@ export default function ScoutingPolarAreaPanel({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-extrabold text-sm sm:text-base text-slate-900 tracking-tight">
-                Scouting Radar &amp; Category Breakdown
+                Scouting Polar-Area Chart
               </h3>
               <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#101D38]/5 text-[#101D38] border border-[#101D38]/15">
-                Opta Polar-Area
+                Opta Nightingale Rose
               </span>
             </div>
             <p className="text-[11px] text-slate-500 font-medium">
-              Analisis 7 pilar performa atlet dengan Nightingale Rose Chart terintegrasi
+              Visualisasi 7 pilar performa atlet &bull; Skala 0 &mdash; 100
             </p>
           </div>
         </div>
@@ -288,416 +280,292 @@ export default function ScoutingPolarAreaPanel({
             {showMobileChart ? (
               <>
                 <ChevronUp className="w-3.5 h-3.5 text-slate-500" />
-                <span className="text-[11px]">Sembunyikan Chart</span>
+                <span className="text-[11px]">Sembunyikan</span>
               </>
             ) : (
               <>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
-                <span className="text-[11px]">Tampilkan Chart</span>
+                <span className="text-[11px]">Buka Chart</span>
               </>
             )}
           </button>
         </div>
       </div>
 
-      {/* 2. MAIN WORKSPACE: 2 COLUMNS (DESKTOP) / VERTICAL STACK (MOBILE) */}
-      <div className="p-4 sm:p-5 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
-        
-        {/* KOLOM KIRI: OPTA POLAR-AREA CHART (55% ON DESKTOP) */}
-        {showMobileChart && (
-          <div className="lg:col-span-6 flex flex-col items-center justify-center w-full">
-            <div className="relative w-full max-w-[380px] sm:max-w-[420px] aspect-square flex items-center justify-center mx-auto">
-              
-              {/* SVG POLAR AREA VISUALIZATION */}
-              <svg 
-                viewBox={`0 0 ${svgSize} ${svgSize}`} 
-                className="w-full h-full select-none overflow-visible"
-              >
-                <defs>
-                  {/* Subtle drop shadows for interactive highlight */}
-                  <filter id="opta-glow" x="-20%" y="-20%" width="140%" height="140%">
-                    <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.25" />
-                  </filter>
-                  <filter id="center-shadow" x="-30%" y="-30%" width="160%" height="160%">
-                    <feDropShadow dx="0" dy="3" stdDeviation="4" floodOpacity="0.12" />
-                  </filter>
-                </defs>
+      {/* 2. MAIN WORKSPACE: FOCUSED POLAR-AREA VISUALIZATION ONLY */}
+      {showMobileChart && (
+        <div className="p-4 sm:p-6 lg:p-7 flex flex-col items-center justify-center w-full">
+          <div className="relative w-full max-w-[380px] sm:max-w-[440px] aspect-square flex items-center justify-center mx-auto">
+            
+            {/* SVG POLAR AREA VISUALIZATION */}
+            <svg 
+              viewBox={`0 0 ${svgSize} ${svgSize}`} 
+              className="w-full h-full select-none overflow-visible"
+            >
+              <defs>
+                {/* Subtle drop shadows for interactive highlight */}
+                <filter id="opta-glow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.25" />
+                </filter>
+                <filter id="center-shadow" x="-30%" y="-30%" width="160%" height="160%">
+                  <feDropShadow dx="0" dy="3" stdDeviation="4" floodOpacity="0.12" />
+                </filter>
+              </defs>
 
-                {/* A. CONCENTRIC SCALE RINGS (25, 50, 75, 100) */}
-                <g className="concentric-rings">
-                  {scaleLevels.map((lvl) => {
-                    const r = innerRadius + (lvl / 100) * usableRadius;
-                    return (
-                      <g key={`ring-${lvl}`}>
-                        <circle
-                          cx={cx}
-                          cy={cy}
-                          r={r}
-                          fill="none"
-                          stroke="#E2E8F0"
-                          strokeWidth={lvl === 100 ? '1.5' : '1'}
-                          strokeDasharray={lvl === 100 ? 'none' : '3 3'}
-                          opacity={lvl === 100 ? 0.9 : 0.65}
-                        />
-                        {/* Scale Marker Text along Top Radial Axis */}
-                        <text
-                          x={cx + 4}
-                          y={cy - r + 9}
-                          fontSize="8.5"
-                          fontWeight="700"
-                          fill="#94A3B8"
-                          className="font-mono"
-                        >
-                          {lvl}
-                        </text>
-                      </g>
-                    );
-                  })}
-                </g>
-
-                {/* B. RADIAL SECTOR DIVIDERS */}
-                <g className="radial-dividers">
-                  {sliceData.map((slice, idx) => {
-                    const dividerAngle = slice.startAngle;
-                    const pStart = polarToCartesian(cx, cy, innerRadius, dividerAngle);
-                    const pEnd = polarToCartesian(cx, cy, maxOuterRadius + 4, dividerAngle);
-                    return (
-                      <line
-                        key={`divider-${idx}`}
-                        x1={pStart.x}
-                        y1={pStart.y}
-                        x2={pEnd.x}
-                        y2={pEnd.y}
-                        stroke="#CBD5E1"
-                        strokeWidth="1"
-                        strokeDasharray="2 2"
-                        opacity="0.7"
+              {/* A. CONCENTRIC SCALE RINGS (25, 50, 75, 100) */}
+              <g className="concentric-rings">
+                {scaleLevels.map((lvl) => {
+                  const r = innerRadius + (lvl / 100) * usableRadius;
+                  return (
+                    <g key={`ring-${lvl}`}>
+                      <circle
+                        cx={cx}
+                        cy={cy}
+                        r={r}
+                        fill="none"
+                        stroke="#E2E8F0"
+                        strokeWidth={lvl === 100 ? '1.5' : '1'}
+                        strokeDasharray={lvl === 100 ? 'none' : '3 3'}
+                        opacity={lvl === 100 ? 0.9 : 0.65}
                       />
-                    );
-                  })}
-                </g>
-
-                {/* C. OPTA ROSE WEDGES (POLAR AREA SECTORS) */}
-                <g className="rose-wedges">
-                  {sliceData.map((slice) => {
-                    const isHovered = slice.isHovered;
-                    const slicePath = describeSectorPath(
-                      cx, 
-                      cy, 
-                      innerRadius, 
-                      isHovered ? slice.outerRadius + 3 : slice.outerRadius, 
-                      slice.startAngle, 
-                      slice.endAngle
-                    );
-
-                    return (
-                      <path
-                        key={`sector-${slice.key}`}
-                        d={slicePath}
-                        fill={slice.theme.color}
-                        fillOpacity={isHovered ? 0.95 : 0.78}
-                        stroke="#FFFFFF"
-                        strokeWidth="2.5"
-                        strokeLinejoin="round"
-                        className="cursor-pointer transition-all duration-200"
-                        style={{
-                          filter: isHovered ? 'url(#opta-glow)' : 'none',
-                          transformOrigin: `${cx}px ${cy}px`
-                        }}
-                        onMouseEnter={() => setHoveredKey(slice.key)}
-                        onMouseLeave={() => setHoveredKey(null)}
-                        onClick={() => {
-                          if (onSelectCategory) onSelectCategory(slice.key);
-                          if (onEditCategory) onEditCategory(slice.key);
-                        }}
-                      >
-                        <title>{`${slice.label}: ${slice.score} / 100`}</title>
-                      </path>
-                    );
-                  })}
-                </g>
-
-                {/* D. PERIPHERAL CATEGORY LABELS & SCORE PILLS */}
-                <g className="category-labels">
-                  {sliceData.map((slice) => {
-                    const isHovered = slice.isHovered;
-                    const pos = slice.labelPos;
-                    const isRightSide = pos.x > cx + 15;
-                    const isLeftSide = pos.x < cx - 15;
-                    const textAnchor = isRightSide ? 'start' : isLeftSide ? 'end' : 'middle';
-
-                    return (
-                      <g
-                        key={`label-${slice.key}`}
-                        className="cursor-pointer transition-opacity duration-200"
-                        opacity={isHovered ? 1 : 0.85}
-                        onMouseEnter={() => setHoveredKey(slice.key)}
-                        onMouseLeave={() => setHoveredKey(null)}
-                        onClick={() => {
-                          if (onSelectCategory) onSelectCategory(slice.key);
-                          if (onEditCategory) onEditCategory(slice.key);
-                        }}
-                      >
-                        {/* Label Text */}
-                        <text
-                          x={pos.x}
-                          y={pos.y - 3}
-                          textAnchor={textAnchor}
-                          fontSize="9.5"
-                          fontWeight={isHovered ? '800' : '700'}
-                          fill={isHovered ? slice.theme.color : '#1E293B'}
-                          className="tracking-tight select-none"
-                        >
-                          {slice.shortLabel || slice.label}
-                        </text>
-
-                        {/* Numeric Score Tag */}
-                        <text
-                          x={pos.x}
-                          y={pos.y + 9}
-                          textAnchor={textAnchor}
-                          fontSize="9"
-                          fontWeight="800"
-                          fill={slice.theme.color}
-                          className="font-mono select-none"
-                        >
-                          {slice.score}
-                        </text>
-                      </g>
-                    );
-                  })}
-                </g>
-
-                {/* E. CENTER HUB (OVERALL SCORE & HOVER PREVIEW) */}
-                <g 
-                  className="center-hub cursor-pointer"
-                  onClick={() => {
-                    if (currentFocalKey && onEditCategory) onEditCategory(currentFocalKey);
-                  }}
-                >
-                  {/* Outer ring of center circle */}
-                  <circle
-                    cx={cx}
-                    cy={cy}
-                    r={innerRadius - 2}
-                    fill="#FFFFFF"
-                    stroke={currentFocalCategory ? focalTheme.color : '#E2E8F0'}
-                    strokeWidth="3"
-                    filter="url(#center-shadow)"
-                    className="transition-colors duration-300"
-                  />
-
-                  {/* Inner subtle decorative ring */}
-                  <circle
-                    cx={cx}
-                    cy={cy}
-                    r={innerRadius - 6}
-                    fill={currentFocalCategory ? `${focalTheme.color}08` : '#F8FAFC'}
-                  />
-
-                  {currentFocalCategory ? (
-                    // PREVIEW ON HOVER / SELECTION
-                    <g className="animate-in fade-in duration-150">
+                      {/* Scale Marker Text along Top Radial Axis */}
                       <text
-                        x={cx}
-                        y={cy - 12}
-                        textAnchor="middle"
-                        fontSize="8"
-                        fontWeight="800"
-                        fill="#64748B"
-                        className="uppercase tracking-wider select-none"
-                      >
-                        {focalTheme.shortLabel}
-                      </text>
-                      <text
-                        x={cx}
-                        y={cy + 7}
-                        textAnchor="middle"
-                        fontSize="17"
-                        fontWeight="900"
-                        fill={focalTheme.color}
-                        className="font-mono select-none"
-                      >
-                        {currentFocalCategory.score || 0}
-                      </text>
-                      <text
-                        x={cx}
-                        y={cy + 19}
-                        textAnchor="middle"
-                        fontSize="7.5"
+                        x={cx + 4}
+                        y={cy - r + 9}
+                        fontSize="8.5"
                         fontWeight="700"
                         fill="#94A3B8"
-                        className="select-none"
+                        className="font-mono"
                       >
-                        Klik utk nilai ✎
+                        {lvl}
                       </text>
                     </g>
-                  ) : (
-                    // IDLE OVERALL SCORE DISPLAY
-                    <g>
+                  );
+                })}
+              </g>
+
+              {/* B. RADIAL SECTOR DIVIDERS */}
+              <g className="radial-dividers">
+                {sliceData.map((slice, idx) => {
+                  const dividerAngle = slice.startAngle;
+                  const pStart = polarToCartesian(cx, cy, innerRadius, dividerAngle);
+                  const pEnd = polarToCartesian(cx, cy, maxOuterRadius + 4, dividerAngle);
+                  return (
+                    <line
+                      key={`divider-${idx}`}
+                      x1={pStart.x}
+                      y1={pStart.y}
+                      x2={pEnd.x}
+                      y2={pEnd.y}
+                      stroke="#CBD5E1"
+                      strokeWidth="1"
+                      strokeDasharray="2 2"
+                      opacity="0.7"
+                    />
+                  );
+                })}
+              </g>
+
+              {/* C. OPTA ROSE WEDGES (POLAR AREA SECTORS) */}
+              <g className="rose-wedges">
+                {sliceData.map((slice) => {
+                  const isHovered = slice.isHovered;
+                  const slicePath = describeSectorPath(
+                    cx, 
+                    cy, 
+                    innerRadius, 
+                    isHovered ? slice.outerRadius + 3 : slice.outerRadius, 
+                    slice.startAngle, 
+                    slice.endAngle
+                  );
+
+                  return (
+                    <path
+                      key={`sector-${slice.key}`}
+                      d={slicePath}
+                      fill={slice.theme.color}
+                      fillOpacity={isHovered ? 0.95 : 0.78}
+                      stroke="#FFFFFF"
+                      strokeWidth="2.5"
+                      strokeLinejoin="round"
+                      className="cursor-pointer transition-all duration-200"
+                      style={{
+                        filter: isHovered ? 'url(#opta-glow)' : 'none',
+                        transformOrigin: `${cx}px ${cy}px`
+                      }}
+                      onMouseEnter={() => setHoveredKey(slice.key)}
+                      onMouseLeave={() => setHoveredKey(null)}
+                      onClick={() => {
+                        if (onSelectCategory) onSelectCategory(slice.key);
+                      }}
+                    >
+                      <title>{`${slice.label}: ${slice.score} / 100`}</title>
+                    </path>
+                  );
+                })}
+              </g>
+
+              {/* D. PERIPHERAL CATEGORY LABELS & SCORE PILLS */}
+              <g className="category-labels">
+                {sliceData.map((slice) => {
+                  const isHovered = slice.isHovered;
+                  const pos = slice.labelPos;
+                  const isRightSide = pos.x > cx + 15;
+                  const isLeftSide = pos.x < cx - 15;
+                  const textAnchor = isRightSide ? 'start' : isLeftSide ? 'end' : 'middle';
+
+                  return (
+                    <g
+                      key={`label-${slice.key}`}
+                      className="cursor-pointer transition-opacity duration-200"
+                      opacity={isHovered ? 1 : 0.85}
+                      onMouseEnter={() => setHoveredKey(slice.key)}
+                      onMouseLeave={() => setHoveredKey(null)}
+                      onClick={() => {
+                        if (onSelectCategory) onSelectCategory(slice.key);
+                      }}
+                    >
+                      {/* Label Text */}
                       <text
-                        x={cx}
-                        y={cy - 12}
-                        textAnchor="middle"
-                        fontSize="7.5"
-                        fontWeight="800"
-                        fill="#64748B"
-                        className="uppercase tracking-wider select-none"
+                        x={pos.x}
+                        y={pos.y - 3}
+                        textAnchor={textAnchor}
+                        fontSize="9.5"
+                        fontWeight={isHovered ? '800' : '700'}
+                        fill={isHovered ? slice.theme.color : '#1E293B'}
+                        className="tracking-tight select-none"
                       >
-                        OVERALL
+                        {slice.shortLabel || slice.label}
                       </text>
+
+                      {/* Numeric Score Tag */}
                       <text
-                        x={cx}
-                        y={cy + 7}
-                        textAnchor="middle"
-                        fontSize="19"
-                        fontWeight="900"
-                        fill="#0F172A"
+                        x={pos.x}
+                        y={pos.y + 9}
+                        textAnchor={textAnchor}
+                        fontSize="9"
+                        fontWeight="800"
+                        fill={slice.theme.color}
                         className="font-mono select-none"
                       >
-                        {overallScore}
-                      </text>
-                      <text
-                        x={cx}
-                        y={cy + 19}
-                        textAnchor="middle"
-                        fontSize="8"
-                        fontWeight="800"
-                        fill="#059669"
-                        className="select-none"
-                      >
-                        {overallGrade.grade.split(' ')[0]}
+                        {slice.score}
                       </text>
                     </g>
-                  )}
-                </g>
-              </svg>
+                  );
+                })}
+              </g>
 
-            </div>
+              {/* E. CENTER HUB (OVERALL SCORE & HOVER PREVIEW) */}
+              <g 
+                className="center-hub select-none"
+              >
+                {/* Outer ring of center circle */}
+                <circle
+                  cx={cx}
+                  cy={cy}
+                  r={innerRadius - 2}
+                  fill="#FFFFFF"
+                  stroke={currentFocalCategory ? focalTheme.color : '#E2E8F0'}
+                  strokeWidth="3"
+                  filter="url(#center-shadow)"
+                  className="transition-colors duration-300"
+                />
 
-            {/* Quick Chart Hint */}
-            <div className="flex items-center gap-1.5 mt-2 text-[11px] text-slate-500 font-medium">
-              <Sparkles className="w-3.5 h-3.5 text-[#C89D32]" />
-              <span>Arahkan kursor atau ketuk irisan untuk melihat detail pilar</span>
-            </div>
+                {/* Inner subtle decorative ring */}
+                <circle
+                  cx={cx}
+                  cy={cy}
+                  r={innerRadius - 6}
+                  fill={currentFocalCategory ? `${focalTheme.color}08` : '#F8FAFC'}
+                />
+
+                {currentFocalCategory ? (
+                  // PREVIEW ON HOVER / SELECTION
+                  <g className="animate-in fade-in duration-150">
+                    <text
+                      x={cx}
+                      y={cy - 12}
+                      textAnchor="middle"
+                      fontSize="8"
+                      fontWeight="800"
+                      fill="#64748B"
+                      className="uppercase tracking-wider select-none"
+                    >
+                      {focalTheme.shortLabel}
+                    </text>
+                    <text
+                      x={cx}
+                      y={cy + 8}
+                      textAnchor="middle"
+                      fontSize="18"
+                      fontWeight="900"
+                      fill={focalTheme.color}
+                      className="font-mono select-none"
+                    >
+                      {currentFocalCategory.score || 0}
+                    </text>
+                    <text
+                      x={cx}
+                      y={cy + 20}
+                      textAnchor="middle"
+                      fontSize="8"
+                      fontWeight="800"
+                      fill="#64748B"
+                      className="select-none"
+                    >
+                      / 100
+                    </text>
+                  </g>
+                ) : (
+                  // IDLE OVERALL SCORE DISPLAY
+                  <g>
+                    <text
+                      x={cx}
+                      y={cy - 12}
+                      textAnchor="middle"
+                      fontSize="7.5"
+                      fontWeight="800"
+                      fill="#64748B"
+                      className="uppercase tracking-wider select-none"
+                    >
+                      OVERALL
+                    </text>
+                    <text
+                      x={cx}
+                      y={cy + 7}
+                      textAnchor="middle"
+                      fontSize="19"
+                      fontWeight="900"
+                      fill="#0F172A"
+                      className="font-mono select-none"
+                    >
+                      {overallScore}
+                    </text>
+                    <text
+                      x={cx}
+                      y={cy + 19}
+                      textAnchor="middle"
+                      fontSize="8"
+                      fontWeight="800"
+                      fill="#059669"
+                      className="select-none"
+                    >
+                      {overallGrade.grade.split(' ')[0]}
+                    </text>
+                  </g>
+                )}
+              </g>
+            </svg>
+
           </div>
-        )}
 
-        {/* KOLOM KANAN: 7 CATEGORY BREAKDOWN LIST (45% ON DESKTOP) */}
-        <div className={`${showMobileChart ? 'lg:col-span-6' : 'lg:col-span-12'} flex flex-col justify-between space-y-2.5 w-full`}>
-          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-            <span className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-              <span>Ringkasan Skor 7 Kategori</span>
-              <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
-                {categoryList.length} Pilar
-              </span>
-            </span>
-            <span className="text-[11px] text-slate-500 font-medium">
-              Skor Skala 0 &mdash; 100
-            </span>
-          </div>
-
-          {/* LIST OF 7 CATEGORIES */}
-          <div className="space-y-2">
-            {categoryList.map((cat, idx) => {
-              const theme = getCategoryTheme(cat.key);
-              const IconComp = theme.icon || Target;
-              const isHovered = (hoveredKey === cat.key) || (activeCategoryKey === cat.key);
-              const score = Math.max(0, Math.min(100, Number(cat.score) || 0));
-              const indicatorCount = cat.count || (cat.indicators ? cat.indicators.length : 0);
-              const isFilled = score > 0;
-
-              return (
-                <div
-                  key={cat.key}
-                  onMouseEnter={() => setHoveredKey(cat.key)}
-                  onMouseLeave={() => setHoveredKey(null)}
-                  onClick={() => {
-                    if (onSelectCategory) onSelectCategory(cat.key);
-                  }}
-                  className={`group relative p-2.5 sm:p-3 rounded-2xl border transition-all cursor-pointer flex flex-col gap-2 ${
-                    isHovered
-                      ? `bg-slate-50 ${theme.activeBorder} shadow-2xs`
-                      : 'bg-white hover:bg-slate-50/70 border-slate-200/90'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    {/* Left: Color Icon & Category Title */}
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div 
-                        className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0 text-white font-bold shadow-2xs transition-transform group-hover:scale-105"
-                        style={{ backgroundColor: theme.color }}
-                      >
-                        <IconComp className="w-4 h-4" />
-                      </div>
-
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-extrabold text-xs sm:text-sm text-slate-900 truncate">
-                            {idx + 1}. {cat.label}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
-                          <span>{indicatorCount} Indikator</span>
-                          <span>&bull;</span>
-                          {isFilled ? (
-                            <span className="text-emerald-700 font-bold flex items-center gap-0.5">
-                              <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600 inline" />
-                              <span>Terisi</span>
-                            </span>
-                          ) : (
-                            <span className="text-slate-400 font-medium">Belum Diisi</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Right: Score Tabular & Quick Action Button */}
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="text-right">
-                        <span className="font-mono text-sm sm:text-base font-black text-slate-900 tabular-nums">
-                          {score}
-                        </span>
-                        <span className="text-[10px] text-slate-400 font-bold block sm:inline sm:ml-0.5">
-                          / 100
-                        </span>
-                      </div>
-
-                      {!isArchived && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (onEditCategory) onEditCategory(cat.key);
-                          }}
-                          className="min-h-[44px] min-w-[44px] px-2.5 py-1.5 rounded-xl text-xs font-bold bg-slate-100 hover:bg-[#101D38] hover:text-white text-slate-700 transition-all flex items-center justify-center gap-1 cursor-pointer border border-slate-200 shadow-2xs group-hover:border-slate-300"
-                          title={`Nilai kategori ${cat.label}`}
-                          aria-label={`Nilai kategori ${cat.label}`}
-                        >
-                          <Edit3 className="w-3.5 h-3.5 text-slate-500 group-hover:text-amber-400" />
-                          <span className="hidden sm:inline">Nilai</span>
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Horizontal Progress Bar */}
-                  <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-300"
-                      style={{
-                        width: `${score}%`,
-                        backgroundColor: theme.color
-                      }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
+          {/* Quick Chart Hint */}
+          <div className="flex items-center gap-1.5 mt-3 text-[11px] text-slate-500 font-medium">
+            <Sparkles className="w-3.5 h-3.5 text-[#C89D32]" />
+            <span>Arahkan kursor atau ketuk irisan pilar untuk meninjau skor &bull; Evaluasi indikator pada lembar di bawah</span>
           </div>
         </div>
-
-      </div>
+      )}
     </div>
   );
 }

@@ -25,7 +25,7 @@ test('Opta Category Theme Mapping: accurately maps all 7 sports performance pill
   assert.strictEqual(OPTA_CATEGORY_CONFIG.posisi.color, '#6366F1');    // Indigo
 });
 
-test('ScoutingPolarAreaPanel: renders Opta Polar-Area Nightingale Rose Chart and 7 category breakdown', () => {
+test('ScoutingPolarAreaPanel: renders focused Opta Polar-Area Chart without duplicate category list', () => {
   const mockCategories = [
     { key: 'fisik', label: '1. Kondisi Fisik', shortLabel: 'Fisik', count: 6, score: 85, indicators: ['Sprint', 'Stamina'] },
     { key: 'teknik', label: '2. Kemampuan Teknik', shortLabel: 'Teknik', count: 6, score: 78, indicators: ['Passing', 'Control'] },
@@ -47,10 +47,10 @@ test('ScoutingPolarAreaPanel: renders Opta Polar-Area Nightingale Rose Chart and
   );
 
   // Assert container and Opta Polar-Area header
-  assert.ok(markup.includes('Scouting Radar &amp; Category Breakdown') || markup.includes('Scouting Radar & Category Breakdown'));
-  assert.ok(markup.includes('Opta Polar-Area'));
+  assert.ok(markup.includes('Scouting Polar-Area Chart'));
+  assert.ok(markup.includes('Opta Nightingale Rose'));
 
-  // Assert Overall score badge
+  // Assert Overall score badge in header and center hub
   assert.ok(markup.includes('80 / 100'));
   assert.ok(markup.includes('A Sangat Baik'));
 
@@ -60,27 +60,19 @@ test('ScoutingPolarAreaPanel: renders Opta Polar-Area Nightingale Rose Chart and
   assert.ok(markup.includes('75'));
   assert.ok(markup.includes('100'));
 
-  // Assert all 7 categories are rendered in the breakdown list
-  assert.ok(markup.includes('Kondisi Fisik'));
-  assert.ok(markup.includes('Kemampuan Teknik'));
-  assert.ok(markup.includes('Pemahaman Taktik'));
-  assert.ok(markup.includes('Mentalitas'));
-  assert.ok(markup.includes('Komunikasi Lapangan'));
-  assert.ok(markup.includes('Perkembangan Atlet'));
-  assert.ok(markup.includes('Khusus Posisi'));
-
-  // Assert individual scores are displayed in tabular numbers
-  assert.ok(markup.includes('85'));
-  assert.ok(markup.includes('78'));
-  assert.ok(markup.includes('72'));
-  assert.ok(markup.includes('90'));
-  assert.ok(markup.includes('68'));
-  assert.ok(markup.includes('80'));
-  assert.ok(markup.includes('88'));
-
-  // Assert SVG rose wedges are drawn
+  // Assert SVG rose wedges and center hub are rendered
   assert.ok(markup.includes('rose-wedges'));
   assert.ok(markup.includes('center-hub'));
+
+  // Assert peripheral labels and scores are present on the chart
+  assert.ok(markup.includes('Fisik'));
+  assert.ok(markup.includes('85'));
+  assert.ok(markup.includes('Teknik'));
+  assert.ok(markup.includes('78'));
+
+  // IMPORTANT: Verify that the duplicate category breakdown list and "Nilai" buttons are ELIMINATED
+  assert.strictEqual(markup.includes('Ringkasan Skor 7 Kategori'), false, 'Duplicate category list should be removed');
+  assert.strictEqual(markup.includes('Nilai'), false, 'Duplicate Nilai buttons should be removed from chart panel');
 });
 
 test('AssessmentIndicatorsAccordion: renders collapsible category sections with stepper and presets', () => {

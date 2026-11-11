@@ -1021,7 +1021,7 @@ function FutsalAssessmentView({
                   </div>
                 </div>
 
-                {/* B. OPTA POLAR-AREA CHART & CATEGORY BREAKDOWN (FOCAL POINT) */}
+                {/* B. OPTA POLAR-AREA CHART (VISUALISASI 7 PILAR) */}
                 <ScoutingPolarAreaPanel
                   categoryList={futsalCategoryList}
                   overallScore={axisScores.overall}
@@ -1029,10 +1029,6 @@ function FutsalAssessmentView({
                   activeCategoryKey={activeModalCategoryKey}
                   onSelectCategory={(key) => {
                     setActiveModalCategoryKey(key);
-                  }}
-                  onEditCategory={(key) => {
-                    setActiveModalCategoryKey(key);
-                    setIsModalOpen(true);
                   }}
                   isArchived={isArchived}
                   sportName="Futsal"
@@ -3384,7 +3380,7 @@ function FootballAssessmentView({
             </div>
           </div>
 
-          {/* B. OPTA POLAR-AREA CHART & CATEGORY BREAKDOWN (FOCAL POINT) */}
+          {/* B. OPTA POLAR-AREA CHART (VISUALISASI 7 PILAR) */}
           <ScoutingPolarAreaPanel
             categoryList={footballCategoryList}
             overallScore={axisScores.overall}
@@ -3392,10 +3388,6 @@ function FootballAssessmentView({
             activeCategoryKey={activeModalCategoryKey}
             onSelectCategory={(key) => {
               setActiveModalCategoryKey(key);
-            }}
-            onEditCategory={(key) => {
-              setActiveModalCategoryKey(key);
-              setIsModalOpen(true);
             }}
             isArchived={isArchived}
             sportName={detectedSport || "Sepakbola"}
