@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { Link } from 'react-router-dom';
 import { 
   Dumbbell, 
   Save, 
@@ -9,7 +10,8 @@ import {
   Inbox, 
   RotateCcw, 
   Search,
-  RefreshCw
+  RefreshCw,
+  ArrowLeft
 } from 'lucide-react';
 import useArenaData from '../../../hooks/useArenaData';
 import { updateCourtsBatch } from '../../../services/supabaseArenaService';
@@ -47,18 +49,21 @@ export function parseNumberFromDots(val) {
 
 /**
  * Strict Multi-Tenant Court Filter
- * Ensures only courts belonging to the active tenant are displayed or modified.
- * Rejects any court with a mismatched tenantId / tenant_id.
+ * Accepts ONLY courts that explicitly carry a tenantId or tenant_id matching activeTenantId.
+ * Rejects any court missing a tenant ID and rejects any court belonging to another tenant.
  */
 export function filterCourtsByTenant(courtsList, activeTenantId) {
   if (!activeTenantId || !Array.isArray(courtsList)) return [];
+  const normalizedActiveTenantId = String(activeTenantId).trim();
+  if (!normalizedActiveTenantId) return [];
+
   return courtsList.filter((c) => {
-    if (!c) return false;
-    const courtTenantId = c.tenantId || c.tenant_id;
-    if (courtTenantId) {
-      return String(courtTenantId) === String(activeTenantId);
-    }
-    return true;
+    if (!c || typeof c !== 'object') return false;
+    const rawCourtTenantId = c.tenantId ?? c.tenant_id;
+    if (rawCourtTenantId === null || rawCourtTenantId === undefined) return false;
+    const courtTenantId = String(rawCourtTenantId).trim();
+    if (!courtTenantId) return false;
+    return courtTenantId === normalizedActiveTenantId;
   });
 }
 
@@ -91,13 +96,17 @@ export function validatePriceInput(formattedValue) {
 }
 
 /**
- * Build batch update payload containing ONLY modified courts belonging to activeTenantId
+ * Build minimal batch update payload containing ONLY { id, price } for modified courts
+ * that strictly belong to activeTenantId (filtered via filterCourtsByTenant).
+ * Does NOT include name, sport, isActive, or any other unedited attribute.
  */
 export function buildChangedCourtsPayload(courtsList, courtPricesMap, activeTenantId) {
   const validTenantCourts = filterCourtsByTenant(courtsList, activeTenantId);
   const changed = validTenantCourts.filter((c) => {
+    if (!c.id) return false;
     const currentInputFormatted = courtPricesMap?.[c.id];
     if (currentInputFormatted === undefined) return false;
+    if (!validatePriceInput(currentInputFormatted).valid) return false;
     const currentVal = parseNumberFromDots(currentInputFormatted);
     const originalVal = Number(c.price || 0);
     return currentVal !== originalVal;
@@ -105,20 +114,17 @@ export function buildChangedCourtsPayload(courtsList, courtPricesMap, activeTena
 
   return changed.map((c) => ({
     id: c.id,
-    name: c.name,
-    sport: c.sport,
-    price: parseNumberFromDots(courtPricesMap[c.id] ?? c.price),
-    isActive: c.isActive !== false
+    price: parseNumberFromDots(courtPricesMap[c.id])
   }));
 }
 
 /**
  * MobileCourtPricingMain Component
- * Dedicated Mobile-First Presentation Layer for Facility Courts & Pricing Management.
+ * Dedicated Mobile-First Presentation Layer for Facility Courts & Pricing Management (tab=tarif).
  * Strictly scoped under .chua-mobile-app with >=44px touch targets and native mobile ergonomics.
- * @param {{ userProfile?: any, loadError?: any }} props
+ * @param {{ userProfile?: any }} props
  */
-export default function MobileCourtPricingMain({ userProfile, loadError = null }) {
+export default function MobileCourtPricingMain({ userProfile }) {
   const tenantId = resolveTenantId(userProfile);
   const tenantName = userProfile?.tenant?.name || 'Cabang Aktif';
 
@@ -129,7 +135,9 @@ export default function MobileCourtPricingMain({ userProfile, loadError = null }
     return userProfile;
   }, [userProfile, tenantId]);
 
-  const { courts: rawCourts, isLoading, refetch } = useArenaData(safeArenaProfile);
+  // Note: useArenaData returns { tenantProfile, courts, bookings, transactions, isLoading, isFetching, refetch }.
+  // It does NOT expose loadError because getCourts() catches Supabase errors and returns [].
+  const { courts: rawCourts, isLoading, isFetching, refetch } = useArenaData(safeArenaProfile);
 
   // Tenant-isolated Courts: strictly bound to active tenant to prevent cross-tenant contamination
   const courts = useMemo(() => {
@@ -349,6 +357,13 @@ export default function MobileCourtPricingMain({ userProfile, loadError = null }
           <p className="text-xs text-[#68758B] leading-relaxed">
             Akun Anda tidak memiliki asosiasi cabang/tenant yang valid. Hubungi administrator sistem.
           </p>
+          <Link
+            to="/pengaturan?tab=profil"
+            className="min-h-[44px] px-4 py-2 bg-[#101D38] text-white text-xs font-bold rounded-xl inline-flex items-center justify-center gap-2 no-underline"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            <span>Kembali ke Pengaturan</span>
+          </Link>
         </div>
       </div>
     );
@@ -356,6 +371,30 @@ export default function MobileCourtPricingMain({ userProfile, loadError = null }
 
   return (
     <div className="chua-mobile-app min-h-screen bg-[#F5F7FC] text-[#17233D] pb-40">
+      {/* 0. NAVIGATION BACK TO SETTINGS MENU */}
+      <div className="mb-2.5 flex items-center justify-between gap-2 px-1">
+        <Link
+          to="/pengaturan?tab=profil"
+          className="min-h-[36px] inline-flex items-center gap-1.5 text-xs font-bold text-[#2455E8] hover:text-[#1d44c7] no-underline"
+          aria-label="Kembali ke Menu Pengaturan Profil GOR"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span>Pengaturan GOR</span>
+        </Link>
+        {refetch && (
+          <button
+            type="button"
+            onClick={() => refetch()}
+            disabled={isLoading || isFetching}
+            className="min-h-[36px] px-2.5 py-1 rounded-lg bg-white border border-[#E7EBF2] text-[11px] font-bold text-[#68758B] hover:text-[#17233D] inline-flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+            aria-label="Muat ulang data lapangan"
+          >
+            <RefreshCw className={`w-3 h-3 ${isFetching ? 'animate-spin text-[#2455E8]' : ''}`} />
+            <span>Segarkan</span>
+          </button>
+        )}
+      </div>
+
       {/* 1. TOP HEADER & HERO BANNER (DASHBOARD RINGKAS FASILITAS) */}
       <div className="bg-[#101D38] text-white p-4 rounded-[18px] shadow-md relative overflow-hidden">
         <div className="relative z-10 space-y-3.5">
@@ -485,7 +524,7 @@ export default function MobileCourtPricingMain({ userProfile, loadError = null }
         )}
 
         {/* 4. BULK APPLY SECTION PER CABANG OLAHRAGA */}
-        {!loadError && courts.length > 0 && (
+        {courts.length > 0 && (
           <div className="bg-white border border-[#E7EBF2] rounded-[18px] p-4 shadow-xs space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2.5">
@@ -551,7 +590,7 @@ export default function MobileCourtPricingMain({ userProfile, loadError = null }
         )}
 
         {/* 5. SEARCH & SPORT FILTER TABS */}
-        {!loadError && courts.length > 0 && (
+        {courts.length > 0 && (
           <div className="space-y-2.5">
             <div className="relative">
               <Search className="w-4 h-4 text-[#68758B] absolute left-3.5 top-4" />
@@ -607,37 +646,28 @@ export default function MobileCourtPricingMain({ userProfile, loadError = null }
             </span>
           </div>
 
-          {loadError ? (
-            <div className="bg-white border border-rose-200 rounded-[18px] p-6 text-center shadow-xs space-y-3">
-              <div className="w-12 h-12 bg-rose-50 text-rose-600 rounded-full flex items-center justify-center mx-auto">
-                <AlertCircle className="w-6 h-6" />
-              </div>
-              <h4 className="text-sm font-bold text-[#17233D] my-0">Gagal Memuat Data Lapangan</h4>
-              <p className="text-xs text-[#68758B] max-w-xs mx-auto leading-relaxed">
-                {typeof loadError === 'string' ? loadError : (loadError?.message || 'Terjadi gangguan jaringan saat mengambil daftar fasilitas lapangan.')}
-              </p>
-              {refetch && (
-                <button
-                  type="button"
-                  onClick={() => refetch()}
-                  className="min-h-[44px] px-4 py-2 bg-[#2455E8] text-white text-xs font-bold rounded-xl inline-flex items-center gap-2 cursor-pointer"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Coba Muat Ulang</span>
-                </button>
-              )}
-            </div>
-          ) : isLoading ? (
+          {isLoading ? (
             <div className="bg-white border border-[#E7EBF2] rounded-[18px] p-6 text-center shadow-xs">
               <MobileLoadingState message="Memuat daftar lapangan fasilitas..." />
             </div>
           ) : courts.length === 0 ? (
-            <div className="bg-white border border-[#E7EBF2] rounded-[18px] p-6 text-center shadow-xs">
+            <div className="bg-white border border-[#E7EBF2] rounded-[18px] p-6 text-center shadow-xs space-y-3">
               <MobileEmptyState
-                title="Belum Ada Lapangan"
-                description="Belum ada fasilitas lapangan yang terdaftar pada cabang ini. Lengkapi fasilitas melalui form onboarding atau administrator."
+                title="Tidak Ada Data Lapangan Tersedia"
+                description="Belum ada fasilitas lapangan terdaftar pada cabang ini, atau data tidak dapat dimuat dari server saat ini (layanan data mengembalikan daftar kosong saat kueri terkendala)."
                 icon={<Inbox className="w-8 h-8 text-slate-400" />}
               />
+              {refetch && (
+                <button
+                  type="button"
+                  onClick={() => refetch()}
+                  disabled={isFetching}
+                  className="min-h-[44px] px-4 py-2 bg-[#101D38] hover:bg-slate-800 text-white text-xs font-bold rounded-xl inline-flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isFetching ? 'animate-spin' : ''}`} />
+                  <span>Muat Ulang Data</span>
+                </button>
+              )}
             </div>
           ) : filteredCourts.length === 0 ? (
             <div className="bg-white border border-[#E7EBF2] rounded-[18px] p-6 text-center shadow-xs">
