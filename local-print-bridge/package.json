@@ -1,0 +1,21 @@
+{
+  "name": "chuvator-local-print-bridge",
+  "version": "1.0.0",
+  "description": "CHUVATOR — Central Print Engine Local Companion Service for Bluetooth Classic SPP, USB OS Driver, Network TCP/IP, and OS Print Spoolers.",
+  "type": "module",
+  "main": "src/server/bridgeServer.js",
+  "scripts": {
+    "start": "node src/server/bridgeServer.js",
+    "test": "node --test tests/bridge_server.test.js"
+  },
+  "keywords": [
+    "chuvator",
+    "escpos",
+    "print-bridge",
+    "bluetooth-spp",
+    "thermal-printer",
+    "receipt-printing"
+  ],
+  "author": "Chuvator Engineering",
+  "license": "MIT"
+}

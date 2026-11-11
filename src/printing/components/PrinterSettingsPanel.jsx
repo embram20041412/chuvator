@@ -245,6 +245,28 @@ export default function PrinterSettingsPanel({
     }
   };
 
+  // Handle explicit Local Print Bridge connection
+  const handleConnectBridgePrinter = async () => {
+    setFeedbackNotice(null);
+    const nextState = await connectionManager.pairAndConnectLocalBridge({
+      bridgeUrl: 'http://127.0.0.1:9123',
+      printerDisplayName: 'Local Print Bridge (Bluetooth Classic SPP / USB OS)'
+    });
+    await refreshHardwareDiscovery();
+    if (nextState.status === CONNECTION_STATUS.CONNECTED) {
+      setPreferredAdapter(PRINT_ADAPTERS.LOCAL_BRIDGE);
+      setFeedbackNotice({
+        type: 'info',
+        text: nextState.statusMessage
+      });
+    } else if (nextState.errorMessage) {
+      setFeedbackNotice({
+        type: 'error',
+        text: nextState.errorMessage
+      });
+    }
+  };
+
   // Disconnect currently paired/connected device
   const handleDisconnectPrinter = async () => {
     const nextState = await connectionManager.disconnect();
@@ -362,7 +384,11 @@ export default function PrinterSettingsPanel({
           ? PRINT_ADAPTERS.WEB_USB
           : preferredAdapter === PRINT_ADAPTERS.WEB_BLUETOOTH
           ? PRINT_ADAPTERS.WEB_BLUETOOTH
+          : preferredAdapter === PRINT_ADAPTERS.LOCAL_BRIDGE
+          ? PRINT_ADAPTERS.LOCAL_BRIDGE
           : PRINT_ADAPTERS.BROWSER;
+
+      const { rawPayload, options } = createTestPrintPayload(mode);
 
       const res = await printEngine.printDocument(rawPayload, {
         ...options,
@@ -692,6 +718,15 @@ export default function PrinterSettingsPanel({
                     <span>Cari Printer BLE</span>
                   </button>
                 )}
+
+                <button
+                  type="button"
+                  onClick={handleConnectBridgePrinter}
+                  className="px-2.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold rounded-lg transition-colors cursor-pointer flex items-center gap-1"
+                >
+                  <Server className="w-3.5 h-3.5" />
+                  <span>Sambung Bridge (9123)</span>
+                </button>
 
                 {(connectionState.status === CONNECTION_STATUS.CONNECTED || pairedDeviceMetadata) && (
                   <button

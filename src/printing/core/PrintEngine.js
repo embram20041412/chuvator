@@ -29,6 +29,9 @@ import {
   BluetoothBLEPrintAdapter
 } from '../adapters/BluetoothBLEPrintAdapter.js';
 import {
+  LocalPrintBridgeAdapter
+} from '../adapters/LocalPrintBridgeAdapter.js';
+import {
   generatePDFDocument,
   downloadPDFDocument
 } from '../pdf/PDFGenerator.js';
@@ -52,6 +55,9 @@ export class PrintEngine {
     if (PRINT_ADAPTERS.BLUETOOTH_BLE) {
       this.registerAdapter(PRINT_ADAPTERS.BLUETOOTH_BLE, bleAdapter);
     }
+    // Register Phase 4.3 Local Print Bridge Adapter
+    const bridgeAdapter = options.localBridgeAdapter || new LocalPrintBridgeAdapter(options.localBridgeOptions || {});
+    this.registerAdapter(PRINT_ADAPTERS.LOCAL_BRIDGE, bridgeAdapter);
   }
 
   /**
@@ -65,6 +71,9 @@ export class PrintEngine {
     return this;
   }
 
+  /**
+   * @param {string} [adapterName]
+   */
   getAdapter(adapterName = PRINT_ADAPTERS.BROWSER) {
     return this.adapters.get(String(adapterName).toLowerCase()) || null;
   }

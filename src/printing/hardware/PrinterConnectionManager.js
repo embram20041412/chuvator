@@ -20,6 +20,7 @@ import {
 import {
   mapUsbDeviceToMetadata,
   mapBluetoothDeviceToMetadata,
+  mapBridgeDeviceToMetadata,
   requestUsbPrinterByUserGesture,
   requestBluetoothPrinterByUserGesture
 } from './PrinterDiscovery.js';
@@ -29,6 +30,9 @@ import {
 import {
   findWritableGattCharacteristic
 } from '../adapters/BluetoothBLEPrintAdapter.js';
+import {
+  LocalPrintBridgeAdapter
+} from '../adapters/LocalPrintBridgeAdapter.js';
 
 export { CONNECTION_STATUS };
 
@@ -410,6 +414,75 @@ export class PrinterConnectionManager {
         errorMessage: err?.message || String(err)
       });
     }
+  }
+
+  /**
+   * Pairs and connects to Local Print Bridge service (Phase 4.3)
+   */
+  async pairAndConnectLocalBridge(options = {}) {
+    const bridgeUrl = options.bridgeUrl || 'http://127.0.0.1:9123';
+    this._setState({
+      status: CONNECTION_STATUS.CONNECTING,
+      adapter: 'bridge',
+      statusMessage: `Menghubungkan ke Local Print Bridge di ${bridgeUrl}...`,
+      errorMessage: null
+    });
+
+    try {
+      const bridgeAdapter = options.bridgeAdapter || new LocalPrintBridgeAdapter({ bridgeUrl, ...options });
+      const health = await bridgeAdapter.checkHealth();
+
+      if (!health.online) {
+        return this._setState({
+          status: CONNECTION_STATUS.ERROR,
+          adapter: 'bridge',
+          directEscPosTransmissionReady: false,
+          statusMessage: health.message,
+          errorMessage: health.message
+        });
+      }
+
+      const pairRes = await bridgeAdapter.pair(options.token);
+      const meta = mapBridgeDeviceToMetadata(options.device || {
+        id: 'bridge-local-daemon',
+        name: options.printerDisplayName || 'Local Print Bridge (Bluetooth Classic SPP / USB OS)',
+        type: options.printerType || 'bluetooth_spp'
+      });
+
+      return this._setState({
+        status: CONNECTION_STATUS.CONNECTED,
+        adapter: 'bridge',
+        deviceMetadata: meta,
+        printerDisplayName: meta.name,
+        directEscPosTransmissionReady: true,
+        statusMessage: `Local Print Bridge terhubung di ${bridgeUrl}. Transmisi pencetakan langsung aktif.`,
+        errorMessage: null
+      });
+    } catch (err) {
+      return this._setState({
+        status: CONNECTION_STATUS.ERROR,
+        adapter: 'bridge',
+        directEscPosTransmissionReady: false,
+        statusMessage: `Gagal terhubung ke Local Print Bridge: ${err?.message || String(err)}`,
+        errorMessage: err?.message || String(err)
+      });
+    }
+  }
+
+  /**
+   * Connects to a selected bridge printer device
+   */
+  connectPermittedBridgeDevice(bridgeDevice, providedMeta = null) {
+    const metadata = providedMeta || mapBridgeDeviceToMetadata(bridgeDevice);
+    return this._setState({
+      status: CONNECTION_STATUS.CONNECTED,
+      adapter: 'bridge',
+      deviceMetadata: metadata,
+      printerDisplayName: metadata?.name || 'Local Print Bridge Printer',
+      directEscPosTransmissionReady: true,
+      statusMessage: `Printer Local Print Bridge "${metadata?.name}" berhasil dipilih.`,
+      errorMessage: null
+    });
   }
 
   /**

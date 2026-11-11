@@ -146,15 +146,32 @@ export function detectPrintingCapabilities(
     },
     localBridge: {
       adapter: 'bridge',
-      apiAvailable: false,
-      supported: false,
+      apiAvailable: true,
+      supported: true,
       optional: true,
       readyInPhase: 4,
-      summary: 'Opsional — Belum Dikonfigurasi (Phase 4)',
+      summary: 'Tersedia di Phase 4.3 (http://127.0.0.1:9123)',
       limitationNote:
-        'Aplikasi pendamping lokal hanya diperlukan jika kasir menggunakan printer Bluetooth Classic SPP tanpa driver sistem atau membutuhkan silent print lokal.'
+        'Aplikasi pendamping Local Print Bridge menghubungkan printer Bluetooth Classic SPP, OS USB Driver, TCP/IP Network 9100, dan OS Spooler (Inkjet/Ink Tank A4/A5).'
     }
   };
+}
+
+/**
+ * Maps a raw Local Print Bridge device object into safe workstation metadata
+ */
+export function mapBridgeDeviceToMetadata(bridgeDevice) {
+  if (!bridgeDevice) return null;
+  return sanitizePairedDeviceMetadata({
+    id: bridgeDevice.id || `bridge-${Date.now()}`,
+    name: bridgeDevice.name || 'Local Print Bridge Printer',
+    manufacturerName: bridgeDevice.type || 'Local Bridge',
+    transport: 'bridge',
+    vendorId: null,
+    productId: null,
+    pairedAt: new Date().toISOString(),
+    connectionDetails: bridgeDevice.connectionDetails || {}
+  });
 }
 
 /**
@@ -353,6 +370,7 @@ export default {
   detectPrintingCapabilities,
   mapUsbDeviceToMetadata,
   mapBluetoothDeviceToMetadata,
+  mapBridgeDeviceToMetadata,
   getPermittedUsbDevices,
   getPermittedBluetoothDevices,
   requestUsbPrinterByUserGesture,
