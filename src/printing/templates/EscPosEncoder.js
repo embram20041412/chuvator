@@ -2,6 +2,12 @@
  * CHUVATOR — Central Receipt & Printing System
  * Phase 2: EscPosEncoder
  *
+ * Catatan Teknis Standar:
+ * ESC/POS® adalah set perintah proprietary yang dikembangkan oleh Seiko Epson Corporation
+ * (bukan standar ISO/IEC). Dukungan perintah ESC/POS, code page (tabel karakter),
+ * dan pemotong kertas otomatis (auto-cutter) bergantung pada kompatibilitas firmware
+ * dan spesifikasi fisik masing-masing vendor printer.
+ *
  * Pure JS ESC/POS formatter and byte-stream encoder for 58mm (32-col) and 80mm (48-col)
  * thermal printers. Supports configurable hardware capability profiles so printers
  * with limited ESC/POS dialects can safely fall back to software padding / LF feeds

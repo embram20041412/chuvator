@@ -1,15 +1,21 @@
 /**
  * CHUVATOR — Central Receipt & Printing System
- * Phase 4.1: WebUSB Direct ESC/POS Print Adapter
+ * Phase 4.1: WebUSB Direct ESC/POS Print Adapter (Phase 4.1 Final Correction Patch)
  *
- * Communicates directly with compliant USB thermal printers via standard WebUSB API:
- * - Checks Secure Context (HTTPS / localhost) and browser WebUSB API availability.
- * - Dynamically scans USB interfaces and OUT endpoints (USB Class 7 Printer or vendor-specific).
- * - Opens device, selects configuration, and claims compatible interface.
- * - Streams encoded ESC/POS byte buffers in managed chunks to avoid USB buffer overflows.
- * - Enforces timeout protection, unexpected disconnect detection, and proper interface release.
- * - Reports honest execution status: SUCCESS indicates all bytes were accepted by the browser USB stack,
- *   never claiming physical paper print completion without hardware confirmation.
+ * Catatan Teknis Standar:
+ * ESC/POS® adalah set perintah proprietary yang dikembangkan oleh Seiko Epson Corporation
+ * (bukan standar ISO/IEC). Dukungan perintah ESC/POS, code page (tabel karakter),
+ * dan pemotong kertas otomatis (auto-cutter) bergantung pada kompatibilitas firmware
+ * dan spesifikasi fisik masing-masing vendor printer.
+ *
+ * Adapter ini mengomunikasikan data biner ESC/POS secara langsung ke printer thermal USB:
+ * - Memeriksa Secure Context (HTTPS / localhost) dan ketersediaan WebUSB API.
+ * - Mengidentifikasi USB Interface Class 7 (Printer Class) atau interface vendor-specific
+ *   yang terverifikasi sebagai printer thermal kompatibel.
+ * - Menerapkan antrean eksekusi serial (Mutex) untuk mencegah dua transfer USB berjalan bersamaan.
+ * - Mengalirkan buffer byte ESC/POS terenkode dalam chunk terkontrol (default 512 byte).
+ * - Menangani timeout transfer secara aman tanpa melepaskan interface secara mendadak saat transfer in-flight.
+ * - Mensinkronisasikan lifecycle status koneksi dengan PrinterConnectionManager.
  */
 
 import {
@@ -49,17 +55,50 @@ export async function withTimeout(promise, ms = 10000, timeoutMessage = 'Timeout
 }
 
 /**
+ * Checks whether a device is a confirmed printer vendor or product by name/vendor ID
+ */
+export function isKnownPrinterVendorOrName(device) {
+  if (!device) return false;
+
+  const vendorId = Number(device.vendorId);
+  const KNOWN_PRINTER_VENDORS = new Set([
+    0x04b8, // EPSON
+    0x0519, // Star Micronics
+    0x154f, // BIXOLON
+    0x0dd4, // Custom Engineering
+    0x0483, // STMicroelectronics / Xprinter OEM
+    0x1cbe, // Rongta
+    0x0fe6, // ZJiang
+    0x1fc9, // NXP / Thermal Controller
+    0x04e8, // Samsung / BIXOLON
+    0x04e6  // SCM / POS
+  ]);
+
+  if (KNOWN_PRINTER_VENDORS.has(vendorId)) {
+    return true;
+  }
+
+  const nameStr = `${device.productName || ''} ${device.manufacturerName || ''}`.toLowerCase();
+  const PRINTER_KEYWORDS = [
+    'printer', 'pos', 'thermal', 'receipt', 'epson', 'xprinter',
+    'star', 'bixolon', 'citizen', 'sewoo', 'zjiang', 'rongta',
+    'gprinter', 'hoin', 'milestone', 'custom', 'tsc', 'godex',
+    'tm-t', 'rp-', 'xp-'
+  ];
+
+  return PRINTER_KEYWORDS.some((kw) => nameStr.includes(kw));
+}
+
+/**
  * Dynamically inspects USB device configurations, interfaces, and endpoints.
- * Never hardcodes vendor or product IDs.
- *
- * Strategy:
- * 1. Prefer USB Interface Class 7 (Printer Class) with an OUT bulk/interrupt endpoint.
- * 2. Fallback to any interface containing an OUT bulk/interrupt endpoint (common on OEM thermal POS printers).
+ * Prioritizes USB Class 7 (Printer Class).
+ * For vendor-specific interfaces (Class 255), requires explicit printer confirmation.
  *
  * @param {any} device WebUSB USBDevice object
- * @returns {{ configurationValue: number, interfaceNumber: number, alternateSetting: number, endpointNumber: number, endpointType: string, packetSize: number, interfaceClass: number, isPrinterClass: boolean } | null}
+ * @param {any} [options]
+ * @returns {{ configurationValue: number, interfaceNumber: number, alternateSetting: number, endpointNumber: number, endpointType: string, packetSize: number, interfaceClass: number, isPrinterClass: boolean, isVendorSpecific: boolean } | null}
  */
-export function findPrinterUsbInterfaceAndEndpoint(device) {
+export function findPrinterUsbInterfaceAndEndpoint(device, options = {}) {
   if (!device) return null;
 
   const currentConfig = device.configuration || (device.configurations && device.configurations[0]) || null;
@@ -69,7 +108,7 @@ export function findPrinterUsbInterfaceAndEndpoint(device) {
 
   const configurationValue = currentConfig.configurationValue ?? 1;
 
-  // Pass 1: Look for USB Class 7 (Printer) interface
+  // Pass 1: Look for USB Class 7 (Printer Class) interface
   for (const iface of currentConfig.interfaces) {
     const alternates = Array.isArray(iface.alternates)
       ? iface.alternates
@@ -91,36 +130,45 @@ export function findPrinterUsbInterfaceAndEndpoint(device) {
             endpointType: outEndpoint.type,
             packetSize: outEndpoint.packetSize || 64,
             interfaceClass: alt.interfaceClass,
-            isPrinterClass: true
+            isPrinterClass: true,
+            isVendorSpecific: false
           };
         }
       }
     }
   }
 
-  // Pass 2: Fallback to any interface with an OUT bulk or interrupt endpoint
-  for (const iface of currentConfig.interfaces) {
-    const alternates = Array.isArray(iface.alternates)
-      ? iface.alternates
-      : iface.alternate
-      ? [iface.alternate]
-      : [];
+  // Pass 2: Vendor-Specific Interface (Class 255 / 0xFF) with explicit printer confirmation
+  const allowOverride = Boolean(options?.allowVendorSpecificOverride);
+  const isPrinterConfirmed = isKnownPrinterVendorOrName(device) || allowOverride;
 
-    for (const alt of alternates) {
-      const outEndpoint = (alt.endpoints || []).find(
-        (ep) => ep.direction === 'out' && (ep.type === 'bulk' || ep.type === 'interrupt')
-      );
-      if (outEndpoint) {
-        return {
-          configurationValue,
-          interfaceNumber: iface.interfaceNumber,
-          alternateSetting: alt.alternateSetting ?? 0,
-          endpointNumber: outEndpoint.endpointNumber,
-          endpointType: outEndpoint.type,
-          packetSize: outEndpoint.packetSize || 64,
-          interfaceClass: alt.interfaceClass,
-          isPrinterClass: alt.interfaceClass === 7
-        };
+  if (isPrinterConfirmed) {
+    for (const iface of currentConfig.interfaces) {
+      const alternates = Array.isArray(iface.alternates)
+        ? iface.alternates
+        : iface.alternate
+        ? [iface.alternate]
+        : [];
+
+      for (const alt of alternates) {
+        if (alt.interfaceClass === 255 || alt.interfaceClass === 0xff) {
+          const outEndpoint = (alt.endpoints || []).find(
+            (ep) => ep.direction === 'out' && (ep.type === 'bulk' || ep.type === 'interrupt')
+          );
+          if (outEndpoint) {
+            return {
+              configurationValue,
+              interfaceNumber: iface.interfaceNumber,
+              alternateSetting: alt.alternateSetting ?? 0,
+              endpointNumber: outEndpoint.endpointNumber,
+              endpointType: outEndpoint.type,
+              packetSize: outEndpoint.packetSize || 64,
+              interfaceClass: alt.interfaceClass,
+              isPrinterClass: false,
+              isVendorSpecific: true
+            };
+          }
+        }
       }
     }
   }
@@ -136,6 +184,9 @@ export class WebUSBPrintAdapter {
     this.connectionManager = options.connectionManager || null;
     this.envWindow = options.envWindow || (typeof window !== 'undefined' ? window : null);
     this.envNavigator = options.envNavigator || (typeof navigator !== 'undefined' ? navigator : null);
+
+    // Promise chain mutex to guarantee serial execution of USB transfers
+    this._printMutex = Promise.resolve();
   }
 
   /**
@@ -153,11 +204,6 @@ export class WebUSBPrintAdapter {
 
   /**
    * Resolves the target USBDevice to use for printing
-   * Checks in order:
-   * 1. Explicitly provided options.device
-   * 2. Active handle in connectionManager
-   * 3. Already permitted devices via navigator.usb.getDevices()
-   * 4. If options.interactive === true, requests device via user gesture
    */
   async resolveTargetDevice(options = {}) {
     if (options.device) {
@@ -196,13 +242,21 @@ export class WebUSBPrintAdapter {
   }
 
   /**
-   * Executes direct ESC/POS printing to a USB thermal printer.
-   *
-   * @param {any} rawOrNormalizedDoc
-   * @param {any} options
-   * @returns {Promise<{ ok: boolean, status: string, adapter: string, physicalPrintConfirmed: boolean, bytesWritten?: number, error?: string, message: string }>}
+   * Serialized print entry point using internal mutex lock
    */
   async print(rawOrNormalizedDoc, options = {}) {
+    const nextInQueue = this._printMutex.then(
+      () => this._doPrint(rawOrNormalizedDoc, options),
+      () => this._doPrint(rawOrNormalizedDoc, options)
+    );
+    this._printMutex = nextInQueue.catch(() => {});
+    return nextInQueue;
+  }
+
+  /**
+   * Internal print implementation
+   */
+  async _doPrint(rawOrNormalizedDoc, options = {}) {
     const secureContext = checkSecureContext(this.envWindow);
     if (!secureContext.isSecure) {
       return {
@@ -291,9 +345,18 @@ export class WebUSBPrintAdapter {
       };
     }
 
+    // Determine connection reuse vs new connection
+    const isManagedConnection = Boolean(
+      this.connectionManager &&
+      this.connectionManager.activeDeviceHandle === device &&
+      device.opened &&
+      this.connectionManager.isInterfaceClaimed
+    );
+
     let openedByUs = false;
     let claimedByUs = false;
     let endpointInfo = null;
+    let timedOutDuringTransfer = false;
 
     try {
       // 4. Open Device
@@ -311,20 +374,18 @@ export class WebUSBPrintAdapter {
         openedByUs = true;
       }
 
-      // 5. Select Configuration if needed
-      endpointInfo = findPrinterUsbInterfaceAndEndpoint(device);
-      if (!endpointInfo) {
-        if (Array.isArray(device.configurations) && device.configurations.length > 0) {
-          const firstConfig = device.configurations[0];
-          if (typeof device.selectConfiguration === 'function') {
-            await withTimeout(
-              device.selectConfiguration(firstConfig.configurationValue ?? 1),
-              this.timeoutMs,
-              'Timeout saat memilih konfigurasi USB.'
-            );
-          }
-          endpointInfo = findPrinterUsbInterfaceAndEndpoint(device);
+      // 5. Inspect Endpoint & Validate Printer Compatibility
+      endpointInfo = findPrinterUsbInterfaceAndEndpoint(device, options);
+      if (!endpointInfo && Array.isArray(device.configurations) && device.configurations.length > 0) {
+        const firstConfig = device.configurations[0];
+        if (typeof device.selectConfiguration === 'function') {
+          await withTimeout(
+            device.selectConfiguration(firstConfig.configurationValue ?? 1),
+            this.timeoutMs,
+            'Timeout saat memilih konfigurasi USB.'
+          );
         }
+        endpointInfo = findPrinterUsbInterfaceAndEndpoint(device, options);
       }
 
       if (!endpointInfo) {
@@ -333,14 +394,14 @@ export class WebUSBPrintAdapter {
           status: PRINT_EXECUTION_STATUS.UNSUPPORTED_DEVICE,
           adapter: this.name,
           physicalPrintConfirmed: false,
-          message: 'Perangkat USB tidak memiliki interface printer atau endpoint OUT yang kompatibel untuk data ESC/POS.'
+          message: 'Interface USB tidak teridentifikasi sebagai USB Printer Class (Class 7) atau printer ESC/POS terverifikasi.'
         };
       }
 
       // 6. Claim Interface
       const isAlreadyClaimed = Boolean(
         options.alreadyClaimed ||
-        (this.connectionManager?.activeDeviceHandle === device && this.connectionManager?.isInterfaceClaimed)
+        isManagedConnection
       );
 
       if (!isAlreadyClaimed) {
@@ -370,11 +431,19 @@ export class WebUSBPrintAdapter {
         const chunk = bytes.subarray(offset, Math.min(offset + chunkSize, totalBytes));
 
         const transferPromise = device.transferOut(endpointInfo.endpointNumber, chunk);
-        const transferResult = await withTimeout(
-          transferPromise,
-          this.timeoutMs,
-          'Waktu transfer data ke endpoint printer USB habis (Timeout).'
-        );
+        let transferResult;
+        try {
+          transferResult = await withTimeout(
+            transferPromise,
+            this.timeoutMs,
+            'Waktu transfer data ke endpoint printer USB habis (Timeout).'
+          );
+        } catch (transferErr) {
+          if (transferErr?.isTimeout) {
+            timedOutDuringTransfer = true;
+          }
+          throw transferErr;
+        }
 
         if (transferResult && transferResult.status && transferResult.status !== 'ok') {
           return {
@@ -413,8 +482,13 @@ export class WebUSBPrintAdapter {
       const errName = String(err?.name || '');
       const errMsg = String(err?.message || err || '');
 
-      // Check for timeout
-      if (err?.isTimeout || errMsg.toLowerCase().includes('timeout')) {
+      // Handle Timeout
+      if (err?.isTimeout || timedOutDuringTransfer || errMsg.toLowerCase().includes('timeout')) {
+        if (this.connectionManager) {
+          this.connectionManager.handleUnexpectedDisconnect(
+            'Waktu komunikasi data printer USB habis (Timeout). Koneksi ditandai errored untuk pemulihan.'
+          );
+        }
         return {
           ok: false,
           status: PRINT_EXECUTION_STATUS.TIMEOUT,
@@ -425,7 +499,7 @@ export class WebUSBPrintAdapter {
         };
       }
 
-      // Check for device disconnection during transfer
+      // Handle Disconnection
       const isDisconnected =
         errName === 'NetworkError' ||
         errName === 'DeviceDisconnectedError' ||
@@ -449,7 +523,7 @@ export class WebUSBPrintAdapter {
         };
       }
 
-      // Check for OS permission or security restrictions
+      // Handle Permission / Security Errors
       if (errName === 'SecurityError' || errName === 'NotAllowedError') {
         return {
           ok: false,
@@ -470,24 +544,30 @@ export class WebUSBPrintAdapter {
         message: `Gagal mengirim data ke printer USB: ${errMsg}`
       };
     } finally {
-      // 8. Proper Interface & Connection Cleanup
-      if (claimedByUs && !options.keepClaimed) {
-        try {
-          if (typeof device.releaseInterface === 'function' && endpointInfo) {
-            await device.releaseInterface(endpointInfo.interfaceNumber);
-          }
-        } catch {
-          // Ignore release error during finally
-        }
-      }
+      // Perform cleanup ONLY if no active transfer timed out (to prevent releasing in-flight interfaces)
+      // and only if the connection is not persistently managed by ConnectionManager
+      if (!timedOutDuringTransfer) {
+        const keepClaimed = Boolean(options.keepClaimed || isManagedConnection);
+        const keepOpen = Boolean(options.keepOpen || isManagedConnection);
 
-      if (openedByUs && !options.keepOpen) {
-        try {
-          if (device.opened && typeof device.close === 'function') {
-            await device.close();
+        if (claimedByUs && !keepClaimed) {
+          try {
+            if (typeof device.releaseInterface === 'function' && endpointInfo) {
+              await device.releaseInterface(endpointInfo.interfaceNumber);
+            }
+          } catch {
+            // Ignore release error during finally
           }
-        } catch {
-          // Ignore close error during finally
+        }
+
+        if (openedByUs && !keepOpen) {
+          try {
+            if (device.opened && typeof device.close === 'function') {
+              await device.close();
+            }
+          } catch {
+            // Ignore close error during finally
+          }
         }
       }
     }

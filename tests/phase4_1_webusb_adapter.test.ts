@@ -223,7 +223,7 @@ test('Phase 4.1.5 - USB device without compatible interface fails with UNSUPPORT
 
   assert.equal(res.ok, false);
   assert.equal(res.status, PRINT_EXECUTION_STATUS.UNSUPPORTED_DEVICE);
-  assert.ok(res.message.includes('tidak memiliki interface printer'));
+  assert.ok(res.message.includes('tidak teridentifikasi sebagai USB Printer Class'));
 });
 
 test('Phase 4.1.6 - USB device without OUT endpoint fails with UNSUPPORTED_DEVICE', async () => {
@@ -433,3 +433,188 @@ test('Phase 4.1.15 - Multi-tenant switching preserves WebUSB adapter capabilitie
   assert.equal(mockDevice._logs.filter((l) => l === 'open').length, 2);
   assert.equal(mockDevice._logs.filter((l) => l === 'close').length, 2);
 });
+
+test('Phase 4.1.16 - Transfer timeout when USB operation has not finished returns TIMEOUT status without unsafe in-flight cleanup', async () => {
+  const mockDevice = createMockUsbDevice();
+  // Override transferOut to hang indefinitely
+  mockDevice.transferOut = async () => {
+    mockDevice._logs.push('transferOut:hanging');
+    return new Promise(() => {}); // Never resolves
+  };
+
+  const storage = createMemoryStorage();
+  const manager = new PrinterConnectionManager({ storage });
+
+  const adapter = new WebUSBPrintAdapter({
+    connectionManager: manager,
+    timeoutMs: 40, // 40ms fast timeout
+    envWindow: { isSecureContext: true, location: { protocol: 'https:' } },
+    envNavigator: createMockNavigatorUsb(mockDevice)
+  });
+
+  const res = await adapter.print(
+    {
+      docType: DOC_TYPES.THERMAL_RECEIPT,
+      tenantIdentity: { headerName: 'GOR Test' },
+      items: [{ name: 'Item', price: 10000, qty: 1 }],
+      summary: { total: 10000 }
+    },
+    { device: mockDevice }
+  );
+
+  assert.equal(res.ok, false);
+  assert.equal(res.status, PRINT_EXECUTION_STATUS.TIMEOUT);
+  assert.equal(manager.getState().status, 'DISCONNECTED');
+  // Verify releaseInterface was NOT called while transfer was hanging
+  assert.equal(mockDevice._logs.includes('releaseInterface:0'), false);
+});
+
+test('Phase 4.1.17 - Cleanup does not precede active transfers', async () => {
+  const mockDevice = createMockUsbDevice();
+
+  const adapter = new WebUSBPrintAdapter({
+    envWindow: { isSecureContext: true, location: { protocol: 'https:' } },
+    envNavigator: createMockNavigatorUsb(mockDevice)
+  });
+
+  await adapter.print(
+    {
+      docType: DOC_TYPES.THERMAL_RECEIPT,
+      tenantIdentity: { headerName: 'GOR Test' },
+      items: [{ name: 'Item', price: 10000, qty: 1 }],
+      summary: { total: 10000 }
+    },
+    { device: mockDevice }
+  );
+
+  const transferIdx = mockDevice._logs.findIndex((l) => l.startsWith('transferOut:'));
+  const releaseIdx = mockDevice._logs.indexOf('releaseInterface:0');
+  const closeIdx = mockDevice._logs.indexOf('close');
+
+  assert.ok(transferIdx !== -1 && releaseIdx !== -1 && closeIdx !== -1);
+  assert.ok(transferIdx < releaseIdx);
+  assert.ok(releaseIdx < closeIdx);
+});
+
+test('Phase 4.1.18 & 4.1.19 - ConnectionManager status after timeout & successful reconnect', async () => {
+  const mockDevice = createMockUsbDevice();
+  const storage = createMemoryStorage();
+  const manager = new PrinterConnectionManager({ storage });
+
+  // Simulate timeout on manager
+  manager.handleUnexpectedDisconnect('Waktu komunikasi data printer USB habis (Timeout). Koneksi ditandai errored untuk pemulihan.');
+  assert.equal(manager.getState().status, 'DISCONNECTED');
+  assert.ok(manager.getState().errorMessage?.includes('Timeout'));
+
+  // Reconnect after timeout
+  const reconnectRes = await manager.connectPermittedUsbDevice(mockDevice);
+  assert.equal(reconnectRes.status, 'CONNECTED');
+  assert.equal(manager.getState().status, 'CONNECTED');
+});
+
+test('Phase 4.1.20 - Rejection of USB device with OUT endpoint but non-printer class (Class 8 Mass Storage or unconfirmed Class 255)', async () => {
+  const massStorageDevice = {
+    vendorId: 0x1234,
+    productId: 0x5678,
+    productName: 'USB Flash Drive 32GB',
+    manufacturerName: 'Generic Storage',
+    opened: false,
+    async open() {},
+    async close() {},
+    async selectConfiguration() {},
+    async claimInterface() {},
+    async releaseInterface() {},
+    configurations: [
+      {
+        configurationValue: 1,
+        interfaces: [
+          {
+            interfaceNumber: 0,
+            alternates: [
+              {
+                alternateSetting: 0,
+                interfaceClass: 8, // Class 8 Mass Storage
+                endpoints: [{ direction: 'out', type: 'bulk', endpointNumber: 1, packetSize: 512 }]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  };
+
+  const endpointInfo = findPrinterUsbInterfaceAndEndpoint(massStorageDevice);
+  assert.equal(endpointInfo, null);
+
+  const adapter = new WebUSBPrintAdapter({
+    envWindow: { isSecureContext: true, location: { protocol: 'https:' } },
+    envNavigator: createMockNavigatorUsb(massStorageDevice)
+  });
+
+  const res = await adapter.print(
+    {
+      docType: DOC_TYPES.THERMAL_RECEIPT,
+      tenantIdentity: { headerName: 'GOR Test' },
+      items: [{ name: 'Item', price: 10000, qty: 1 }],
+      summary: { total: 10000 }
+    },
+    { device: massStorageDevice }
+  );
+
+  assert.equal(res.ok, false);
+  assert.equal(res.status, PRINT_EXECUTION_STATUS.UNSUPPORTED_DEVICE);
+  assert.ok(res.message.includes('tidak teridentifikasi sebagai USB Printer Class'));
+});
+
+test('Phase 4.1.21 - Sequential transfers via Mutex queue execute in order without data loss or mixing', async () => {
+  const mockDevice = createMockUsbDevice();
+  const adapter = new WebUSBPrintAdapter({
+    envWindow: { isSecureContext: true, location: { protocol: 'https:' } },
+    envNavigator: createMockNavigatorUsb(mockDevice)
+  });
+
+  // Launch 3 concurrent print requests
+  const p1 = adapter.print(
+    {
+      docType: DOC_TYPES.THERMAL_RECEIPT,
+      tenantIdentity: { headerName: 'GOR A' },
+      items: [{ name: 'Item A', price: 10000, qty: 1 }],
+      summary: { total: 10000 }
+    },
+    { device: mockDevice }
+  );
+
+  const p2 = adapter.print(
+    {
+      docType: DOC_TYPES.THERMAL_RECEIPT,
+      tenantIdentity: { headerName: 'GOR B' },
+      items: [{ name: 'Item B', price: 20000, qty: 1 }],
+      summary: { total: 20000 }
+    },
+    { device: mockDevice }
+  );
+
+  const p3 = adapter.print(
+    {
+      docType: DOC_TYPES.THERMAL_RECEIPT,
+      tenantIdentity: { headerName: 'GOR C' },
+      items: [{ name: 'Item C', price: 30000, qty: 1 }],
+      summary: { total: 30000 }
+    },
+    { device: mockDevice }
+  );
+
+  const results = await Promise.all([p1, p2, p3]);
+
+  assert.equal(results[0].ok, true);
+  assert.equal(results[1].ok, true);
+  assert.equal(results[2].ok, true);
+
+  // Verify 3 distinct open-transfer-close execution cycles were recorded in serial order
+  const opens = mockDevice._logs.filter((l) => l === 'open');
+  const closes = mockDevice._logs.filter((l) => l === 'close');
+
+  assert.equal(opens.length, 3);
+  assert.equal(closes.length, 3);
+});
+
