@@ -19,8 +19,7 @@ import {
   ExternalLink,
   Check,
   ShieldAlert,
-  Clock,
-  Send
+  Clock
 } from 'lucide-react';
 import { parentService } from '../../../services/parentService';
 import MobileLoadingState from '../../components/MobileLoadingState';
@@ -49,9 +48,11 @@ export function resolveTenantId(profile) {
 }
 
 /**
- * Defense-in-depth UI filter for parent records by active tenant ID.
- * Note: UI filtering does NOT replace server-side authorization; it prevents
- * accidental cross-tenant rendering if a record carries a mismatched tenant_id.
+ * Strict Fail-Closed Tenant Isolation Filter for parent records.
+ * - Requires a valid non-empty activeTenantId (otherwise returns []).
+ * - Requires each parent record to have a valid non-empty tenant_id or tenantId.
+ * - Rejects records with null, undefined, empty string, or whitespace-only tenant ID.
+ * - Rejects records whose tenant ID differs from activeTenantId.
  */
 export function filterParentsByTenant(parents, activeTenantId) {
   if (!activeTenantId || !Array.isArray(parents)) return [];
@@ -60,11 +61,14 @@ export function filterParentsByTenant(parents, activeTenantId) {
 
   return parents.filter((parent) => {
     if (!parent || typeof parent !== 'object') return false;
-    const recordTenantId = parent.tenant_id ?? parent.tenantId ?? null;
-    if (recordTenantId !== null && recordTenantId !== undefined && String(recordTenantId).trim() !== '') {
-      return String(recordTenantId).trim() === normalizedTenant;
-    }
-    return true;
+    const rawTenantId =
+      parent.tenant_id !== undefined && parent.tenant_id !== null && String(parent.tenant_id).trim() !== ''
+        ? parent.tenant_id
+        : parent.tenantId;
+    if (rawTenantId === null || rawTenantId === undefined) return false;
+    const normalizedRecordTenant = String(rawTenantId).trim();
+    if (!normalizedRecordTenant) return false;
+    return normalizedRecordTenant === normalizedTenant;
   });
 }
 
@@ -378,27 +382,6 @@ export async function executeGenerateWhatsAppInvitation({ tenantId, parentId, se
 }
 
 /**
- * Workflow helper: Confirm manual WhatsApp delivery (sets status to SENT_MANUALLY)
- */
-export async function executeConfirmManualSent({ tenantId, parentId, isConfirmedByOperator = true, service = parentService }) {
-  if (!tenantId) {
-    throw new Error('Konteks tenant tidak tersedia.');
-  }
-  if (!parentId) {
-    throw new Error('ID akun wali murid wajib disertakan.');
-  }
-  if (!isConfirmedByOperator) {
-    return { confirmed: false, status: 'READY_TO_SEND' };
-  }
-  const res = await service.confirmManualSent(parentId);
-  return {
-    confirmed: true,
-    status: 'SENT_MANUALLY',
-    response: res
-  };
-}
-
-/**
  * Workflow helper: Delete parent account ONLY after explicit operator confirmation
  */
 export async function executeDeleteParentWithConfirmation({
@@ -490,7 +473,6 @@ export default function MobileParentManagementMain({
   const [isGeneratingWhatsApp, setIsGeneratingWhatsApp] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [copiedMessage, setCopiedMessage] = useState(false);
-  const [isConfirmingSent, setIsConfirmingSent] = useState(false);
 
   // Delete Confirmation Modal States (replaces window.confirm on mobile)
   const [parentToDelete, setParentToDelete] = useState(initialDeleteTarget);
@@ -697,40 +679,6 @@ export default function MobileParentManagementMain({
     } finally {
       setIsGeneratingWhatsApp(false);
       setActionLoadingId(null);
-    }
-  };
-
-  // Confirm Manual Sent (ONLY after operator manually sends via WhatsApp)
-  const handleConfirmSent = async (parentId) => {
-    if (!tenantId || !parentId || isConfirmingSent) return;
-    setIsConfirmingSent(true);
-    try {
-      await activeService.confirmManualSent(parentId);
-      setActionMessage({
-        type: 'success',
-        text: 'Undangan berhasil ditandai telah dikirim manual via WhatsApp.'
-      });
-      if (activeWhatsAppModal && activeWhatsAppModal.parentId === parentId) {
-        setActiveWhatsAppModal((prev) => (prev ? { ...prev, status: 'SENT_MANUALLY' } : null));
-      }
-      if (successResult?.data?.parentId === parentId) {
-        setSuccessResult((prev) =>
-          prev
-            ? {
-                ...prev,
-                data: { ...prev.data, status: 'SENT_MANUALLY' }
-              }
-            : null
-        );
-      }
-      await fetchParents();
-    } catch (err) {
-      setActionMessage({
-        type: 'error',
-        text: err?.message || 'Gagal menandai pengiriman undangan.'
-      });
-    } finally {
-      setIsConfirmingSent(false);
     }
   };
 
@@ -1232,7 +1180,7 @@ export default function MobileParentManagementMain({
                     <div className="space-y-1 leading-relaxed">
                       <p className="font-extrabold my-0">Penting: Undangan Belum Terkirim Otomatis</p>
                       <p className="my-0">
-                        Sistem hanya menghasilkan tautan aktivasi. Silakan klik <strong>Buka WhatsApp</strong> atau salin tautan untuk mengirimkannya ke wali murid, lalu tekan <strong>Tandai Sudah Dikirim</strong> setelah pesan benar-benar dikirim.
+                        Sistem hanya menghasilkan tautan aktivasi. Pengiriman undangan dilakukan secara manual oleh operator melalui WhatsApp menggunakan tombol <strong>Buka WhatsApp</strong> atau dengan menyalin tautan aktivasi di bawah ini.
                       </p>
                     </div>
                   </div>
@@ -1261,7 +1209,7 @@ export default function MobileParentManagementMain({
                         className="min-h-[48px] px-4 py-3 bg-[#16A779] hover:bg-[#139068] text-white text-xs font-extrabold rounded-xl flex items-center justify-center gap-2 no-underline shadow-xs"
                       >
                         <ExternalLink className="w-4 h-4" />
-                        <span>1. Buka WhatsApp &amp; Kirim Pesan</span>
+                        <span>Buka WhatsApp &amp; Kirim Pesan</span>
                       </a>
                     )}
 
@@ -1282,26 +1230,6 @@ export default function MobileParentManagementMain({
                         </>
                       )}
                     </button>
-
-                    {successResult.data?.parentId && (
-                      <button
-                        type="button"
-                        onClick={() => handleConfirmSent(successResult.data.parentId)}
-                        disabled={isConfirmingSent || successResult.data?.status === 'SENT_MANUALLY'}
-                        className="min-h-[48px] px-4 py-2.5 bg-[#2455E8] hover:bg-[#1d44c7] disabled:bg-slate-200 disabled:text-slate-500 text-white text-xs font-extrabold rounded-xl flex items-center justify-center gap-2 cursor-pointer"
-                      >
-                        {isConfirmingSent ? (
-                          <RefreshCw className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <CheckCircle2 className="w-4 h-4" />
-                        )}
-                        <span>
-                          {successResult.data?.status === 'SENT_MANUALLY'
-                            ? 'Sudah Ditandai Terkirim (SENT_MANUALLY)'
-                            : '2. Tandai Sudah Dikirim via WhatsApp'}
-                        </span>
-                      </button>
-                    )}
                   </div>
 
                   <button
@@ -1656,8 +1584,7 @@ export default function MobileParentManagementMain({
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-[14px] flex items-start gap-2 text-xs text-amber-950">
                 <Clock className="w-4 h-4 text-amber-700 shrink-0 mt-0.5" />
                 <span className="leading-relaxed">
-                  Pembuatan tautan dan penyalinan pesan <strong>bukan</strong> pengiriman otomatis. Tekan{' '}
-                  <strong>Tandai Sudah Dikirim</strong> hanya setelah Anda benar-benar mengirim pesan di WhatsApp.
+                  Pembuatan tautan dan penyalinan pesan <strong>bukan</strong> pengiriman otomatis. Pengiriman undangan dilakukan secara manual oleh operator melalui WhatsApp.
                 </span>
               </div>
 
@@ -1717,9 +1644,9 @@ export default function MobileParentManagementMain({
                 </button>
               </div>
 
-              {/* Primary WhatsApp Launch & Confirm Manual Sent */}
-              <div className="pt-2 border-t border-[#E7EBF2] space-y-2">
-                {activeWhatsAppModal.whatsappUrl && (
+              {/* Primary WhatsApp Launch */}
+              {activeWhatsAppModal.whatsappUrl && (
+                <div className="pt-2 border-t border-[#E7EBF2]">
                   <a
                     href={activeWhatsAppModal.whatsappUrl}
                     target="_blank"
@@ -1729,26 +1656,8 @@ export default function MobileParentManagementMain({
                     <ExternalLink className="w-4 h-4" />
                     <span>Buka WhatsApp</span>
                   </a>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => handleConfirmSent(activeWhatsAppModal.parentId)}
-                  disabled={isConfirmingSent || activeWhatsAppModal.status === 'SENT_MANUALLY'}
-                  className="w-full min-h-[48px] px-4 py-3 bg-[#2455E8] hover:bg-[#1d44c7] disabled:bg-slate-200 disabled:text-slate-500 text-white font-extrabold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  {isConfirmingSent ? (
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Send className="w-4 h-4" />
-                  )}
-                  <span>
-                    {activeWhatsAppModal.status === 'SENT_MANUALLY'
-                      ? 'Sudah Ditandai Terkirim'
-                      : 'Tandai Sudah Dikirim'}
-                  </span>
-                </button>
-              </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

@@ -30,7 +30,6 @@ import MobileParentManagementMain, {
   executeSearchStudentsByKK,
   executeCreateParentWithLock,
   executeGenerateWhatsAppInvitation,
-  executeConfirmManualSent,
   executeDeleteParentWithConfirmation,
   copyTextToClipboard
 } from '../src/mobile/pages/admin/MobileParentManagementMain.jsx';
@@ -160,33 +159,97 @@ test('CHUVATOR — Phase 4.5.5 Mobile Parent Administration Test Suite', async (
   });
 
   /* ========================================================================= */
-  /* TEST 3: Tenant ID hanya menggunakan sumber yang diizinkan                 */
+  /* TEST 3: Tenant Isolation — Fail Closed (Phase 4.5.5.1)                    */
   /* ========================================================================= */
-  await t.test('TEST 3 [UNIT]: Tenant ID hanya menggunakan userProfile.tenant.id, userProfile.tenantId, atau userProfile.tenant.tenant_id', () => {
+  await t.test('TEST 3 [UNIT]: Tenant Isolation Fail-Closed — hanya menerima record dengan tenant_id/tenantId valid yang cocok dengan activeTenantId', () => {
     assert.equal(resolveTenantId({ tenant: { id: 'tenant-a-1' } }), 'tenant-a-1');
     assert.equal(resolveTenantId({ tenantId: 'tenant-b-2' }), 'tenant-b-2');
     assert.equal(resolveTenantId({ tenant: { tenant_id: 'tenant-c-3' } }), 'tenant-c-3');
 
-    // Pastikan userProfile.id dan userProfile.uid DITOLAK
+    // Pastikan userProfile.id dan userProfile.uid DITOLAK sebagai fallback tenant
     assert.equal(resolveTenantId({ id: 'user-uid-1', uid: 'user-uid-1' }), null);
     assert.equal(resolveTenantId({ id: 'user-uid-1', uid: 'user-uid-1', tenant: {} }), null);
     assert.equal(resolveTenantId(null), null);
     assert.equal(resolveTenantId(undefined), null);
     assert.equal(resolveTenantId({ tenantId: '   ' }), null);
 
-    // Filter multi-tenant menolak data wali dari tenant berbeda
-    const mixedTenantParents = [
+    // 1. Active tenant valid & parent memiliki tenant_id atau tenantId yang sama -> DITERIMA
+    const validRecords = [
+      { id: 'p-valid-snake', tenant_id: 'tenant-gor-101', name: 'Wali Snake Case' },
+      { id: 'p-valid-camel', tenantId: 'tenant-gor-101', name: 'Wali Camel Case' }
+    ];
+    const accepted = filterParentsByTenant(validRecords, 'tenant-gor-101');
+    assert.equal(accepted.length, 2);
+    assert.deepEqual(accepted.map((p) => p.id), ['p-valid-snake', 'p-valid-camel']);
+
+    // 2. Parent memiliki tenant berbeda -> DITOLAK
+    // 3. Parent tanpa tenant_id/tenantId (null / undefined / missing property) -> DITOLAK
+    // 4. Parent dengan tenant_id/tenantId kosong atau whitespace -> DITOLAK
+    const candidateRecords = [
       ...sampleParents,
+      {
+        id: 'parent-camel-match',
+        tenantId: 'tenant-gor-101',
+        name: 'Wali Camel Valid'
+      },
       {
         id: 'parent-foreign-999',
         tenant_id: 'tenant-rival-999',
-        name: 'Wali Tenant Lain',
-        email: 'asing@rival.com'
+        name: 'Wali Tenant Lain'
+      },
+      {
+        id: 'parent-foreign-camel-998',
+        tenantId: 'tenant-rival-998',
+        name: 'Wali Tenant Lain Camel'
+      },
+      {
+        id: 'parent-missing-prop',
+        name: 'Wali Tanpa Properti Tenant'
+      },
+      {
+        id: 'parent-null-tenant',
+        tenant_id: null,
+        name: 'Wali Tenant Null'
+      },
+      {
+        id: 'parent-undefined-tenant',
+        tenant_id: undefined,
+        tenantId: undefined,
+        name: 'Wali Tenant Undefined'
+      },
+      {
+        id: 'parent-empty-tenant',
+        tenant_id: '',
+        name: 'Wali Tenant String Kosong'
+      },
+      {
+        id: 'parent-whitespace-snake',
+        tenant_id: '    ',
+        name: 'Wali Tenant Whitespace Snake'
+      },
+      {
+        id: 'parent-whitespace-camel',
+        tenantId: '   \t  ',
+        name: 'Wali Tenant Whitespace Camel'
       }
     ];
-    const isolated = filterParentsByTenant(mixedTenantParents, 'tenant-gor-101');
-    assert.equal(isolated.length, 4);
+
+    const isolated = filterParentsByTenant(candidateRecords, 'tenant-gor-101');
+    assert.equal(isolated.length, 5, 'Hanya 4 sampleParents + 1 parent-camel-match yang boleh lolos filter fail-closed');
     assert.equal(isolated.some((p) => p.id === 'parent-foreign-999'), false);
+    assert.equal(isolated.some((p) => p.id === 'parent-foreign-camel-998'), false);
+    assert.equal(isolated.some((p) => p.id === 'parent-missing-prop'), false);
+    assert.equal(isolated.some((p) => p.id === 'parent-null-tenant'), false);
+    assert.equal(isolated.some((p) => p.id === 'parent-undefined-tenant'), false);
+    assert.equal(isolated.some((p) => p.id === 'parent-empty-tenant'), false);
+    assert.equal(isolated.some((p) => p.id === 'parent-whitespace-snake'), false);
+    assert.equal(isolated.some((p) => p.id === 'parent-whitespace-camel'), false);
+
+    // 5. Active tenant kosong / tidak tersedia -> hasil harus berupa array kosong
+    assert.deepEqual(filterParentsByTenant(candidateRecords, null), []);
+    assert.deepEqual(filterParentsByTenant(candidateRecords, undefined), []);
+    assert.deepEqual(filterParentsByTenant(candidateRecords, ''), []);
+    assert.deepEqual(filterParentsByTenant(candidateRecords, '    '), []);
   });
 
   /* ========================================================================= */
@@ -250,10 +313,6 @@ test('CHUVATOR — Phase 4.5.5 Mobile Parent Administration Test Suite', async (
     );
     await assert.rejects(
       () => executeGenerateWhatsAppInvitation({ tenantId: null, parentId: 'p-1', service: spyService as any }),
-      /Konteks tenant tidak tersedia/
-    );
-    await assert.rejects(
-      () => executeConfirmManualSent({ tenantId: null, parentId: 'p-1', service: spyService as any }),
       /Konteks tenant tidak tersedia/
     );
     await assert.rejects(
@@ -404,9 +463,9 @@ test('CHUVATOR — Phase 4.5.5 Mobile Parent Administration Test Suite', async (
   });
 
   /* ========================================================================= */
-  /* TEST 11: Generate invitation                                              */
+  /* TEST 11: Generate invitation & Buka WhatsApp                              */
   /* ========================================================================= */
-  await t.test('TEST 11 [UNIT + SSR]: Generate WhatsApp invitation memanggil service dan mempertahankan status READY_TO_SEND', async () => {
+  await t.test('TEST 11 [UNIT + SSR]: Generate WhatsApp invitation memanggil service dan menampilkan Salin Link, Salin Pesan, serta Buka WhatsApp tanpa tombol Tandai Sudah Dikirim', async () => {
     let requestedParentId = '';
     const mockService = {
       generateWhatsAppInvitation: async (parentId: string) => {
@@ -452,8 +511,11 @@ test('CHUVATOR — Phase 4.5.5 Mobile Parent Administration Test Suite', async (
     assert.ok(htmlModal.includes('mobile-parent-whatsapp-modal'));
     assert.ok(htmlModal.includes('Siti Aminah'));
     assert.ok(htmlModal.includes('KEDIRI SPORT ARENA'));
+    assert.ok(htmlModal.includes('Salin Link'));
+    assert.ok(htmlModal.includes('Salin Pesan'));
     assert.ok(htmlModal.includes('Buka WhatsApp'));
-    assert.ok(htmlModal.includes('Tandai Sudah Dikirim'));
+    assert.ok(htmlModal.includes('Pengiriman undangan dilakukan secara manual oleh operator melalui WhatsApp'));
+    assert.equal(htmlModal.includes('Tandai Sudah Dikirim'), false, 'Tombol manual confirmation yang tidak didukung backend tidak boleh dirender');
   });
 
   /* ========================================================================= */
@@ -485,38 +547,51 @@ test('CHUVATOR — Phase 4.5.5 Mobile Parent Administration Test Suite', async (
   });
 
   /* ========================================================================= */
-  /* TEST 13: Konfirmasi pengiriman manual                                     */
+  /* TEST 13: Penghapusan aksi manual confirmation yang tidak didukung backend */
   /* ========================================================================= */
-  await t.test('TEST 13 [UNIT]: Konfirmasi pengiriman manual (confirmManualSent) hanya dieksekusi saat operator mengonfirmasi', async () => {
-    let confirmCalls = 0;
-    const mockService = {
-      confirmManualSent: async (parentId: string) => {
-        confirmCalls += 1;
-        return { success: true, parentId, status: 'SENT_MANUALLY' };
-      }
-    };
+  await t.test('TEST 13 [SOURCE + SSR]: Tombol Tandai Sudah Dikirim dan pemanggilan confirmManualSent() telah dihapus dari MobileParentManagementMain', () => {
+    const mobileSource = fs.readFileSync(
+      path.resolve(process.cwd(), 'src/mobile/pages/admin/MobileParentManagementMain.jsx'),
+      'utf8'
+    );
 
-    // Jika operator belum mengonfirmasi pengiriman
-    const notConfirmed = await executeConfirmManualSent({
-      tenantId: 'tenant-gor-101',
-      parentId: 'parent-uuid-002',
-      isConfirmedByOperator: false,
-      service: mockService as any
-    });
-    assert.equal(notConfirmed.confirmed, false);
-    assert.equal(notConfirmed.status, 'READY_TO_SEND');
-    assert.equal(confirmCalls, 0);
+    // 1. Komponen tidak memanggil confirmManualSent()
+    assert.equal(
+      mobileSource.includes('confirmManualSent'),
+      false,
+      'MobileParentManagementMain.jsx tidak boleh memanggil atau mereferensikan confirmManualSent()'
+    );
 
-    // Setelah operator mengonfirmasi pengiriman manual
-    const confirmed = await executeConfirmManualSent({
-      tenantId: 'tenant-gor-101',
-      parentId: 'parent-uuid-002',
-      isConfirmedByOperator: true,
-      service: mockService as any
-    });
-    assert.equal(confirmed.confirmed, true);
-    assert.equal(confirmed.status, 'SENT_MANUALLY');
-    assert.equal(confirmCalls, 1);
+    // 2. Tombol "Tandai Sudah Dikirim" tidak lagi tersedia di kode maupun hasil render
+    assert.equal(
+      mobileSource.includes('Tandai Sudah Dikirim'),
+      false,
+      'Tombol Tandai Sudah Dikirim tidak boleh ada di MobileParentManagementMain.jsx'
+    );
+
+    const htmlPostCreation = renderToString(
+      React.createElement(MemoryRouter, { initialEntries: ['/parents'] },
+        React.createElement(MobileParentManagementMain, {
+          userProfile: mockOwnerProfile,
+          initialParents: sampleParents,
+          initialSuccessResult: {
+            success: true,
+            data: {
+              parentId: 'parent-new-777',
+              email: 'wali.baru@domain.com',
+              phone: '6281299887766',
+              status: 'READY_TO_SEND',
+              claimUrl: 'https://chuvator.pages.dev/portal/claim-invitation?token=newtoken',
+              whatsappUrl: 'https://wa.me/6281299887766?text=Halo'
+            }
+          }
+        })
+      )
+    );
+
+    assert.equal(htmlPostCreation.includes('Tandai Sudah Dikirim'), false);
+    assert.ok(htmlPostCreation.includes('Buka WhatsApp'));
+    assert.ok(htmlPostCreation.includes('Salin Tautan Aktivasi'));
   });
 
   /* ========================================================================= */
