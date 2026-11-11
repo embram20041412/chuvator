@@ -3,10 +3,14 @@ import {
   ArrowLeft, 
   Check, 
   X, 
-  SlidersHorizontal, 
-  Sparkles, 
-  Save, 
-  CheckCircle2 
+  CheckCircle2,
+  Target,
+  Sliders,
+  RotateCcw,
+  ChevronDown,
+  ChevronUp,
+  Info,
+  Radio
 } from 'lucide-react';
 import AssessmentIndicatorsAccordion from './AssessmentIndicatorsAccordion';
 
@@ -21,10 +25,27 @@ export function getScoreGrade(score) {
  * @param {{
  *   studentName?: string,
  *   sportLabel?: string,
+ *   sportType?: 'football' | 'futsal',
+ *   activeTier?: number,
  *   categoryList?: any[],
  *   initialScores?: Record<string, number>,
  *   activeCategoryKey?: string | null,
- *   onSave: (updatedScores: Record<string, number>) => void,
+ *   selectedPosition?: string,
+ *   secondaryPosition?: string,
+ *   selectedSpecialization?: string,
+ *   selectedStyleCode?: string,
+ *   availablePositions?: any[],
+ *   secondaryPositions?: any[],
+ *   playingStyles?: any[],
+ *   getPositionConfigFn?: (code: string) => any,
+ *   getStyleConfigFn?: (code: string) => any,
+ *   resolvePositionIndicatorsFn?: (posCode: string, tier: number) => { shortLabel?: string, label?: string, indicators?: string[] },
+ *   onSave: (updatedScores: Record<string, number>, updatedConfig?: {
+ *     selectedPosition: string,
+ *     secondaryPosition: string,
+ *     selectedSpecialization: string,
+ *     selectedStyleCode: string
+ *   }) => void,
  *   onCancel: () => void,
  *   isArchived?: boolean,
  *   tierLabel?: string
@@ -33,17 +54,49 @@ export function getScoreGrade(score) {
 export default function AthleteAssessmentEditView({
   studentName = 'Atlet',
   sportLabel = '',
+  sportType = 'football',
+  activeTier = 3,
   categoryList = [],
   initialScores = {},
   activeCategoryKey = null,
+  selectedPosition = 'ST',
+  secondaryPosition = 'NONE',
+  selectedSpecialization = 'Poacher',
+  selectedStyleCode = 'STY07',
+  availablePositions = [],
+  secondaryPositions = [],
+  playingStyles = [],
+  getPositionConfigFn,
+  getStyleConfigFn,
+  resolvePositionIndicatorsFn,
   onSave,
   onCancel,
   isArchived = false,
   tierLabel = ''
 }) {
-  // Local draft state for indicator values
+  // Draft state for indicator scores
   const [draftScores, setDraftScores] = useState(() => ({ ...initialScores }));
+  // Draft state for position & tactical role configuration
+  const [draftPosition, setDraftPosition] = useState(selectedPosition);
+  const [draftSecondaryPosition, setDraftSecondaryPosition] = useState(secondaryPosition);
+  const [draftSpecialization, setDraftSpecialization] = useState(selectedSpecialization);
+  const [draftStyleCode, setDraftStyleCode] = useState(selectedStyleCode);
   const [hasChanges, setHasChanges] = useState(false);
+
+  // Collapsible toggle for Position & Tactical Role section (open by default unless user entered via specific category shortcut)
+  const [showConfigSection, setShowConfigSection] = useState(() => !activeCategoryKey);
+
+  // Handle primary position change in draft
+  const handleDraftPositionChange = (newPosCode) => {
+    setDraftPosition(newPosCode);
+    if (sportType === 'football' && activeTier >= 3 && getPositionConfigFn) {
+      const cfg = getPositionConfigFn(newPosCode);
+      if (cfg?.specializations?.length > 0) {
+        setDraftSpecialization(cfg.specializations[0]);
+      }
+    }
+    setHasChanges(true);
+  };
 
   // Update a single indicator value
   const handleDraftScoreChange = (indicatorName, value) => {
@@ -65,9 +118,28 @@ export default function AthleteAssessmentEditView({
     setHasChanges(true);
   };
 
+  // Resolve dynamic category list (updating category 7 'posisi' if draftPosition changed)
+  const effectiveCategoryList = useMemo(() => {
+    if (!resolvePositionIndicatorsFn) return categoryList;
+    const posConfig = resolvePositionIndicatorsFn(draftPosition, activeTier);
+    if (!posConfig || !Array.isArray(posConfig.indicators)) return categoryList;
+
+    return categoryList.map((cat) => {
+      if (cat.key === 'posisi') {
+        return {
+          ...cat,
+          label: `7. Khusus Posisi (${posConfig.shortLabel || draftPosition})`,
+          count: posConfig.indicators.length,
+          indicators: posConfig.indicators
+        };
+      }
+      return cat;
+    });
+  }, [categoryList, draftPosition, activeTier, resolvePositionIndicatorsFn]);
+
   // Set preset score for all indicators in a specific category
   const handleDraftCategoryPreset = (catKey, presetScore) => {
-    const catObj = categoryList.find((c) => c.key === catKey);
+    const catObj = effectiveCategoryList.find((c) => c.key === catKey);
     if (!catObj || !catObj.indicators) return;
 
     setDraftScores((prev) => {
@@ -80,12 +152,26 @@ export default function AthleteAssessmentEditView({
     setHasChanges(true);
   };
 
+  // Set global preset score across all 7 categories
+  const handleDraftGlobalPreset = (presetScore) => {
+    setDraftScores((prev) => {
+      const updated = { ...prev };
+      effectiveCategoryList.forEach((cat) => {
+        (cat.indicators || []).forEach((ind) => {
+          updated[ind] = presetScore;
+        });
+      });
+      return updated;
+    });
+    setHasChanges(true);
+  };
+
   // Calculate live average and grade from draftScores across the 7 categories
   const { draftCategoryList, draftOverallScore, draftGrade, totalIndicators, evaluatedCount } = useMemo(() => {
     let allIndicatorsCount = 0;
     let ratedCount = 0;
 
-    const updatedCategories = categoryList.map((cat) => {
+    const updatedCategories = effectiveCategoryList.map((cat) => {
       const inds = cat.indicators || [];
       allIndicatorsCount += inds.length;
 
@@ -114,35 +200,45 @@ export default function AthleteAssessmentEditView({
       totalIndicators: allIndicatorsCount,
       evaluatedCount: ratedCount
     };
-  }, [categoryList, draftScores]);
+  }, [effectiveCategoryList, draftScores]);
 
   const handleSaveClick = (e) => {
     if (e) e.preventDefault();
     if (onSave) {
-      onSave(draftScores);
+      onSave(draftScores, {
+        selectedPosition: draftPosition,
+        secondaryPosition: draftSecondaryPosition,
+        selectedSpecialization: draftSpecialization,
+        selectedStyleCode: draftStyleCode
+      });
     }
   };
 
+  const currentStyleObj = getStyleConfigFn ? getStyleConfigFn(draftStyleCode) : null;
+  const currentPositionSpecs = (sportType === 'football' && getPositionConfigFn)
+    ? (getPositionConfigFn(draftPosition)?.specializations || [])
+    : [];
+
   return (
-    <div className="space-y-4 animate-in fade-in duration-150">
-      {/* 1. TOP NAVIGATION & SUMMARY BAR */}
-      <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
-        <div className="flex items-center gap-3">
+    <div className="space-y-3.5 animate-in fade-in duration-150">
+      {/* 1. HEADER ATLET DAN NAVIGASI KEMBALI */}
+      <div className="bg-white rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 border border-slate-200/90 shadow-xs flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <button
             type="button"
             onClick={onCancel}
-            className="w-10 h-10 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold transition-colors cursor-pointer shadow-2xs border border-slate-200 shrink-0"
+            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 flex items-center justify-center font-bold transition-colors cursor-pointer border border-slate-200 shrink-0"
             title="Kembali ke halaman utama asesmen"
             aria-label="Kembali"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
 
-          <div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <h2 className="font-black text-base sm:text-lg text-slate-900 tracking-tight">
-                Edit Penilaian Indikator
-              </h2>
+          <div className="min-w-0">
+            <h2 className="font-black text-sm sm:text-base text-slate-900 tracking-tight truncate">
+              Edit Penilaian Indikator
+            </h2>
+            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
               <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-[#101D38] text-[#C89D32] border border-[#C89D32]/40">
                 {studentName}
               </span>
@@ -152,48 +248,263 @@ export default function AthleteAssessmentEditView({
                 </span>
               )}
             </div>
-            <p className="text-xs text-slate-500 font-medium mt-0.5">
-              Sesuaikan slider atau stepper indikator 7 kategori performa atlet
-            </p>
           </div>
         </div>
 
-        {/* Live Draft Score & Actions in Header */}
-        <div className="flex items-center gap-2.5 self-end sm:self-center flex-wrap">
-          <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-50 rounded-xl border border-slate-200">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-              Preview Rata-Rata:
-            </span>
-            <span className="font-mono text-sm sm:text-base font-black text-slate-900 tabular-nums">
-              {draftOverallScore} / 100
-            </span>
-            <span className={`px-2 py-0.5 text-[10px] font-black rounded-md ${draftGrade.badge}`}>
-              {draftGrade.grade}
-            </span>
-          </div>
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-50 rounded-xl border border-slate-200 shrink-0">
+          <span className="font-mono text-xs sm:text-sm font-black text-slate-900 tabular-nums">
+            {draftOverallScore}/100
+          </span>
+          <span className={`px-2 py-0.5 text-[10px] font-black rounded-md ${draftGrade.badge}`}>
+            {draftGrade.grade.split(' ')[0]}
+          </span>
+        </div>
+      </div>
 
+      {/* 2. KONFIGURASI POSISI DAN PERAN TAKTIS */}
+      {availablePositions.length > 0 && (
+        <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-xs overflow-hidden">
           <button
             type="button"
-            onClick={onCancel}
-            className="px-3 py-2 text-xs font-bold text-slate-700 bg-white hover:bg-slate-100 rounded-xl border border-slate-200 shadow-2xs transition-colors cursor-pointer flex items-center gap-1"
+            onClick={() => setShowConfigSection(!showConfigSection)}
+            className="w-full p-3.5 sm:px-5 sm:py-3.5 flex items-center justify-between gap-2 text-left hover:bg-slate-50/80 transition-colors cursor-pointer min-h-[48px]"
           >
-            <X className="w-3.5 h-3.5 text-slate-500" />
-            <span>Batal</span>
+            <div className="flex items-center gap-2 min-w-0">
+              <Target className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span className="text-xs sm:text-sm font-extrabold text-slate-900 truncate">
+                Konfigurasi Posisi &amp; Peran Taktis
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                {draftPosition}
+              </span>
+              {activeTier >= 3 && draftStyleCode && (
+                <span className="hidden sm:inline-flex text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200">
+                  {draftStyleCode}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1 text-xs font-bold text-slate-500 shrink-0">
+              <span className="text-[11px]">{showConfigSection ? 'Tutup' : 'Ubah'}</span>
+              {showConfigSection ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </div>
           </button>
 
+          {showConfigSection && (
+            <div className="px-3.5 pb-4 sm:px-5 sm:pb-5 pt-2 border-t border-slate-100 space-y-3">
+              {sportType === 'futsal' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label htmlFor="edit-futsal-position" className="block text-[11px] font-extrabold text-slate-700 uppercase tracking-wider mb-1">
+                      1. Posisi Pemain Futsal
+                    </label>
+                    <select
+                      id="edit-futsal-position"
+                      aria-label="Posisi Pemain Futsal"
+                      disabled={isArchived}
+                      value={draftPosition}
+                      onChange={(e) => handleDraftPositionChange(e.target.value)}
+                      className="w-full min-h-[44px] px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-bold text-slate-800 cursor-pointer disabled:opacity-60"
+                    >
+                      {availablePositions.map((p) => (
+                        <option key={p.code} value={p.code}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {activeTier >= 3 ? (
+                    <div>
+                      <label htmlFor="edit-futsal-style" className="block text-[11px] font-extrabold text-slate-700 uppercase tracking-wider mb-1">
+                        2. Profil Gaya Bermain Taktis (STY)
+                      </label>
+                      <select
+                        id="edit-futsal-style"
+                        aria-label="Profil Gaya Bermain STY"
+                        disabled={isArchived}
+                        value={draftStyleCode}
+                        onChange={(e) => {
+                          setDraftStyleCode(e.target.value);
+                          setHasChanges(true);
+                        }}
+                        className="w-full min-h-[44px] px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-bold text-slate-800 cursor-pointer disabled:opacity-60"
+                      >
+                        {playingStyles.map((st) => (
+                          <option key={st.code} value={st.code}>
+                            {st.code} &mdash; {st.name} ({st.desc})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 p-2.5 bg-emerald-50/70 border border-emerald-200/60 rounded-xl text-xs text-emerald-900 font-medium">
+                      <Info className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>Tier 1 &amp; 2 fokus pada penguasaan sole control dan rotasi dasar.</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {/* Posisi Utama */}
+                  <div>
+                    <label htmlFor="edit-football-position" className="block text-[11px] font-extrabold text-slate-700 uppercase tracking-wider mb-1">
+                      1. Posisi Utama
+                    </label>
+                    <select
+                      id="edit-football-position"
+                      aria-label="Posisi Utama"
+                      disabled={isArchived}
+                      value={draftPosition}
+                      onChange={(e) => handleDraftPositionChange(e.target.value)}
+                      className="w-full min-h-[44px] px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-800 cursor-pointer disabled:opacity-60"
+                    >
+                      {availablePositions.map((p) => (
+                        <option key={p.code} value={p.code}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Posisi Alternatif jika Tier >= 3 */}
+                  {activeTier >= 3 && secondaryPositions.length > 0 && (
+                    <div>
+                      <label htmlFor="edit-football-secondary-position" className="block text-[11px] font-extrabold text-slate-700 uppercase tracking-wider mb-1">
+                        2. Posisi Alternatif
+                      </label>
+                      <select
+                        id="edit-football-secondary-position"
+                        aria-label="Posisi Alternatif"
+                        disabled={isArchived}
+                        value={draftSecondaryPosition}
+                        onChange={(e) => {
+                          setDraftSecondaryPosition(e.target.value);
+                          setHasChanges(true);
+                        }}
+                        className="w-full min-h-[44px] px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-800 cursor-pointer disabled:opacity-60"
+                      >
+                        {secondaryPositions.map((sp) => (
+                          <option key={sp.code} value={sp.code}>
+                            {sp.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Spesialisasi Peran jika Tier >= 3 */}
+                  {activeTier >= 3 && currentPositionSpecs.length > 0 && (
+                    <div>
+                      <label htmlFor="edit-football-specialization" className="block text-[11px] font-extrabold text-slate-700 uppercase tracking-wider mb-1">
+                        3. Spesialisasi Peran
+                      </label>
+                      <select
+                        id="edit-football-specialization"
+                        aria-label="Spesialisasi Peran"
+                        disabled={isArchived}
+                        value={draftSpecialization}
+                        onChange={(e) => {
+                          setDraftSpecialization(e.target.value);
+                          setHasChanges(true);
+                        }}
+                        className="w-full min-h-[44px] px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-800 cursor-pointer disabled:opacity-60"
+                      >
+                        {currentPositionSpecs.map((spec) => (
+                          <option key={spec} value={spec}>
+                            {spec}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  {/* Gaya Bermain STY jika Tier >= 3 */}
+                  {activeTier >= 3 && playingStyles.length > 0 && (
+                    <div className="md:col-span-2 lg:col-span-3">
+                      <label htmlFor="edit-football-style" className="block text-[11px] font-extrabold text-slate-700 uppercase tracking-wider mb-1">
+                        4. Profil Gaya Bermain Taktis (STY)
+                      </label>
+                      <select
+                        id="edit-football-style"
+                        aria-label="Profil Gaya Bermain STY"
+                        disabled={isArchived}
+                        value={draftStyleCode}
+                        onChange={(e) => {
+                          setDraftStyleCode(e.target.value);
+                          setHasChanges(true);
+                        }}
+                        className="w-full min-h-[44px] px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-800 cursor-pointer disabled:opacity-60"
+                      >
+                        {playingStyles.map((st) => (
+                          <option key={st.code} value={st.code}>
+                            {st.code} &mdash; {st.name} ({st.desc})
+                          </option>
+                        ))}
+                      </select>
+
+                      {currentStyleObj && (
+                        <div className="mt-2 p-2 bg-emerald-50/70 border border-emerald-100 rounded-xl text-[11px] flex items-center gap-2">
+                          <Radio className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span className="text-emerald-900 font-medium truncate">
+                            <strong>{currentStyleObj.code} ({currentStyleObj.name}):</strong> {currentStyleObj.desc}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 3. PRESET PENILAIAN CEPAT */}
+      <div className="bg-white rounded-2xl sm:rounded-3xl p-3.5 sm:px-5 sm:py-3.5 border border-slate-200/90 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+        <span className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+          <Sliders className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>Preset Penilaian Cepat</span>
+        </span>
+
+        <div className="grid grid-cols-4 gap-1.5 w-full sm:w-auto">
           <button
             type="button"
             disabled={isArchived}
-            onClick={handleSaveClick}
-            className="px-4 py-2 text-xs font-extrabold text-white bg-[#101D38] hover:bg-[#1d2d52] rounded-xl border border-[#C89D32]/50 shadow-xs transition-all cursor-pointer flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+            onClick={() => handleDraftGlobalPreset(0)}
+            className="min-h-[44px] px-3 py-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-200 transition-all cursor-pointer disabled:opacity-50"
+            title="Reset semua indikator ke 0"
           >
-            <Check className="w-4 h-4 text-[#C89D32]" />
-            <span>Simpan Perubahan</span>
+            <RotateCcw className="w-3.5 h-3.5 shrink-0" />
+            <span>Reset</span>
+          </button>
+          <button
+            type="button"
+            disabled={isArchived}
+            onClick={() => handleDraftGlobalPreset(50)}
+            className="min-h-[44px] px-3 py-2 text-xs font-bold rounded-xl flex items-center justify-center bg-slate-100 hover:bg-slate-700 hover:text-white text-slate-800 border border-slate-200 transition-all cursor-pointer disabled:opacity-50"
+          >
+            Standard
+          </button>
+          <button
+            type="button"
+            disabled={isArchived}
+            onClick={() => handleDraftGlobalPreset(75)}
+            className="min-h-[44px] px-3 py-2 text-xs font-bold rounded-xl flex items-center justify-center bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-800 border border-blue-200 transition-all cursor-pointer disabled:opacity-50"
+          >
+            Good
+          </button>
+          <button
+            type="button"
+            disabled={isArchived}
+            onClick={() => handleDraftGlobalPreset(90)}
+            className="min-h-[44px] px-3 py-2 text-xs font-bold rounded-xl flex items-center justify-center bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-800 border border-emerald-200 transition-all cursor-pointer disabled:opacity-50"
+          >
+            Elite
           </button>
         </div>
       </div>
 
-      {/* 2. LEMBAR PENILAIAN INDIKATOR (7 KATEGORI ACCORDION) */}
+      {/* 4. LEMBAR PENILAIAN INDIKATOR (7 KATEGORI ACCORDION) */}
       <AssessmentIndicatorsAccordion
         categoryList={draftCategoryList}
         scores={draftScores}
@@ -205,40 +516,53 @@ export default function AthleteAssessmentEditView({
         tierLabel={tierLabel}
       />
 
-      {/* 3. STICKY BOTTOM ACTION BAR */}
-      <div className="sticky bottom-3 z-30 bg-white/95 backdrop-blur-md p-3 sm:p-4 rounded-2xl border border-slate-200/90 shadow-lg flex flex-col sm:flex-row items-center justify-between gap-3">
+      {/* 5. RINGKASAN ESTIMASI SKOR */}
+      <div className="bg-white rounded-2xl p-3.5 sm:px-5 border border-slate-200/90 shadow-xs flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
           <span>
-            {evaluatedCount} dari {totalIndicators} indikator dinilai &bull; Estimasi Skor:{' '}
-            <strong className="font-mono text-slate-900">{draftOverallScore}/100</strong>
+            {evaluatedCount} / {totalIndicators} indikator dinilai
           </span>
           {hasChanges && (
-            <span className="text-[10px] px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-md">
-              Ada perubahan belum disimpan
+            <span className="text-[10px] px-2 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded-md font-bold">
+              Draft belum disimpan
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="flex-1 sm:flex-none px-4 py-2 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl border border-slate-200 transition-colors cursor-pointer text-center"
-          >
-            Batal
-          </button>
-
-          <button
-            type="button"
-            disabled={isArchived}
-            onClick={handleSaveClick}
-            className="flex-1 sm:flex-none px-5 py-2 text-xs font-black text-white bg-[#101D38] hover:bg-[#1d2d52] rounded-xl border border-[#C89D32]/50 shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Check className="w-4 h-4 text-[#C89D32]" />
-            <span>Simpan Perubahan Nilai</span>
-          </button>
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-bold text-slate-500">
+            Preview Rata-Rata:
+          </span>
+          <span className="font-mono text-sm font-black text-slate-900 tabular-nums">
+            {draftOverallScore} / 100
+          </span>
+          <span className={`px-2 py-0.5 text-[10px] font-black rounded-md ${draftGrade.badge}`}>
+            {draftGrade.grade}
+          </span>
         </div>
+      </div>
+
+      {/* 6. STICKY ACTION BAR: BATAL DAN SIMPAN */}
+      <div className="sticky bottom-2 z-20 bg-white/95 backdrop-blur-md p-3 rounded-2xl border border-slate-200/90 shadow-lg flex items-center justify-end gap-2.5">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="flex-1 sm:flex-none min-h-[44px] px-4 py-2.5 text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl border border-slate-200 transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+        >
+          <X className="w-4 h-4 text-slate-500" />
+          <span>Batal</span>
+        </button>
+
+        <button
+          type="button"
+          disabled={isArchived}
+          onClick={handleSaveClick}
+          className="flex-1 sm:flex-none min-h-[44px] px-5 py-2.5 text-xs font-black text-white bg-[#101D38] hover:bg-[#1d2d52] rounded-xl border border-[#C89D32]/50 shadow-md transition-all cursor-pointer flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <Check className="w-4 h-4 text-[#C89D32]" />
+          <span>Simpan Perubahan Nilai</span>
+        </button>
       </div>
     </div>
   );

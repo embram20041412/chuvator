@@ -975,260 +975,151 @@ function FutsalAssessmentView({
               </div>
             </div>
 
-            {/* 2. ATHLETE PERFORMANCE OVERVIEW & FOCAL POINT BAR */}
+            {/* 2. ATHLETE PERFORMANCE OVERVIEW & WORKSPACE */}
             {selectedStudent && (
-              <form onSubmit={handleSaveEvaluation} className="space-y-4">
-                
-                {/* A. PERFORMANCE OVERVIEW HEADER CARD */}
-                <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 rounded-3xl p-4 sm:p-5 text-white shadow-xs border border-slate-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3.5">
-                    <div className="w-12 h-12 rounded-2xl bg-[#354944] border-2 border-[#C89D32] flex items-center justify-center font-bold text-white shadow-sm shrink-0">
-                      <Flame className="w-6 h-6 text-[#C89D32]" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-base sm:text-lg font-black tracking-tight text-white">
-                          {selectedStudent.studentName}
-                        </span>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/10 text-slate-200 border border-white/15">
-                          {futsalTierConfig.shortLabel} &bull; {studentAge} Thn
-                        </span>
-                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#354944] text-[#C89D32] border border-[#C89D32]/40">
-                          {currentPosIndicatorsConfig.shortLabel || 'Futsal'}
-                        </span>
-                      </div>
-                      <p className="text-xs text-slate-300 font-medium mt-0.5">
-                        {selectedClass?.className || selectedClass?.name || 'Kelas Futsal'} &bull; Evaluasi: {formatDateIndonesian(evaluationDate)}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3 self-end sm:self-center">
-                    <div className="text-right">
-                      <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">
-                        Skor Performa
-                      </span>
-                      <div className="flex items-baseline gap-1">
-                        <span className="font-mono text-2xl sm:text-3xl font-black text-[#C89D32]">
-                          {axisScores.overall}
-                        </span>
-                        <span className="text-xs font-bold text-slate-400">/ 100</span>
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-center">
-                      <span className={`px-3 py-1 text-xs font-black rounded-xl border shadow-2xs ${overallGrade.badge}`}>
-                        {overallGrade.grade}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* B. OPTA POLAR-AREA CHART (VISUALISASI 7 PILAR) */}
-                <ScoutingPolarAreaPanel
-                  categoryList={futsalCategoryList}
-                  overallScore={axisScores.overall}
-                  overallGrade={overallGrade}
-                  activeCategoryKey={activeModalCategoryKey}
-                  onSelectCategory={(key) => {
-                    setActiveModalCategoryKey(key);
-                  }}
-                  onOpenEdit={(key) => {
-                    if (key) setActiveModalCategoryKey(key);
-                    setIsEditingIndicators(true);
-                  }}
-                  isArchived={isArchived}
-                  sportName="Futsal"
-                />
-
+              <form onSubmit={handleSaveEvaluation} className="space-y-3.5">
                 {isEditingIndicators ? (
-                  /* DEDICATED EDIT PENILAIAN INDIKATOR VIEW */
+                  /* DEDICATED EDIT PENILAIAN INDIKATOR VIEW (CONFIG + PRESETS + 7 CATEGORIES) */
                   <AthleteAssessmentEditView
                     studentName={selectedStudent.studentName}
-                    sportLabel={`Futsal ${futsalTierConfig.label}`}
+                    sportLabel={`Futsal • ${futsalTierConfig.shortLabel}`}
+                    sportType="futsal"
+                    activeTier={activeFutsalTier}
                     categoryList={futsalCategoryList}
                     initialScores={scores}
                     activeCategoryKey={activeModalCategoryKey}
-                    onSave={(updatedScores) => {
+                    selectedPosition={selectedPosition}
+                    selectedStyleCode={selectedStyleCode}
+                    availablePositions={availablePositions}
+                    playingStyles={FUTSAL_PLAYING_STYLES}
+                    getStyleConfigFn={getFutsalStyleConfig}
+                    resolvePositionIndicatorsFn={getFutsalPositionIndicatorsForTier}
+                    onSave={(updatedScores, updatedConfig) => {
                       setScores(updatedScores);
+                      if (updatedConfig) {
+                        if (updatedConfig.selectedPosition) setSelectedPosition(updatedConfig.selectedPosition);
+                        if (updatedConfig.selectedStyleCode) setSelectedStyleCode(updatedConfig.selectedStyleCode);
+                      }
                       setIsEditingIndicators(false);
                     }}
                     onCancel={() => {
                       setIsEditingIndicators(false);
                     }}
                     isArchived={isArchived}
-                    tierLabel={`Futsal ${futsalTierConfig.label} (${futsalTierConfig.shortLabel})`}
+                    tierLabel={`Futsal ${futsalTierConfig.label}`}
                   />
                 ) : (
                   <>
-                    {/* C. ASSESSMENT CONFIGURATION (POSISI, GAYA BERMAIN STY, & GLOBAL PRESETS) */}
-                    <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-4">
-                      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                        <span className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                          <Target className="w-4 h-4 text-orange-600" />
-                          <span>Konfigurasi Posisi, Gaya Bermain, &amp; Preset Cepat</span>
-                        </span>
-                        <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">
-                          {futsalTierConfig.label}
-                        </span>
-                      </div>
-
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* Posisi Pemain */}
-                        <div>
-                          <label htmlFor="futsal-selected-position" className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5">
-                            1. Posisi Pemain Futsal
-                          </label>
-                          <select
-                            id="futsal-selected-position"
-                            aria-label="Posisi Pemain Futsal"
-                            disabled={isArchived}
-                            value={selectedPosition}
-                            onChange={(e) => setSelectedPosition(e.target.value)}
-                            className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-bold text-slate-800 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow-2xs"
-                          >
-                            {availablePositions.map((p) => (
-                              <option key={p.code} value={p.code}>
-                                {p.label}
-                              </option>
-                            ))}
-                          </select>
+                    {/* A. COMPACT ATHLETE HEADER & OVERALL SCORE */}
+                    <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 text-white shadow-xs border border-slate-700/60 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-[#354944] border border-[#C89D32] flex items-center justify-center font-bold text-white shrink-0">
+                          <Flame className="w-5 h-5 text-[#C89D32]" />
                         </div>
-
-                        {/* Profil STY jika Tier >= 3 */}
-                        {activeFutsalTier >= 3 ? (
-                          <div>
-                            <label htmlFor="futsal-selected-style-code" className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5">
-                              2. Profil Gaya Bermain Taktis (STY)
-                            </label>
-                            <select
-                              id="futsal-selected-style-code"
-                              aria-label="Profil Gaya Bermain STY"
-                              disabled={isArchived}
-                              value={selectedStyleCode}
-                              onChange={(e) => setSelectedStyleCode(e.target.value)}
-                              className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-bold text-slate-800 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow-2xs"
-                            >
-                              {FUTSAL_PLAYING_STYLES.map((st) => (
-                                <option key={st.code} value={st.code}>
-                                  {st.code} &mdash; {st.name} ({st.desc})
-                                </option>
-                              ))}
-                            </select>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-sm sm:text-base font-black tracking-tight text-white truncate">
+                              {selectedStudent.studentName}
+                            </span>
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#354944] text-[#C89D32] border border-[#C89D32]/40">
+                              {currentPosIndicatorsConfig.shortLabel || selectedPosition}
+                            </span>
                           </div>
-                        ) : (
-                          <div className="flex items-center gap-2 p-3 bg-emerald-50/70 border border-emerald-200/60 rounded-xl text-xs text-emerald-900 font-medium">
-                            <Info className="w-4 h-4 text-emerald-600 shrink-0" />
-                            <span>Fokus pembinaan Tier 1 &amp; 2 adalah penguasaan sole control dan rotasi dasar lapangan sempit.</span>
-                          </div>
-                        )}
+                          <p className="text-[11px] text-slate-300 font-medium truncate">
+                            {futsalTierConfig.shortLabel} ({studentAge} Thn) &bull; {formatDateIndonesian(evaluationDate)}
+                          </p>
+                        </div>
                       </div>
 
-                      {/* Preset Nilai Cepat Global */}
-                      <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                        <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                          <Sliders className="w-3.5 h-3.5 text-orange-600" />
-                          <span>Preset Nilai Cepat Seluruh Indikator:</span>
-                        </span>
-
-                        <div className="grid grid-cols-4 gap-1.5 w-full sm:w-auto">
-                          <button
-                            type="button"
-                            disabled={isArchived}
-                            onClick={() => handleSetAllGlobalValue(0)}
-                            className="py-1.5 px-3 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
-                            title="Reset semua indikator ke 0"
-                          >
-                            <RotateCcw className="w-3 h-3 shrink-0" />
-                            <span>Reset</span>
-                          </button>
-                          <button
-                            type="button"
-                            disabled={isArchived}
-                            onClick={() => handleSetAllGlobalValue(50)}
-                            className="py-1.5 px-3 text-[11px] font-bold rounded-xl flex items-center justify-center bg-slate-100 hover:bg-slate-700 hover:text-white text-slate-800 border border-slate-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            Standard
-                          </button>
-                          <button
-                            type="button"
-                            disabled={isArchived}
-                            onClick={() => handleSetAllGlobalValue(75)}
-                            className="py-1.5 px-3 text-[11px] font-bold rounded-xl flex items-center justify-center bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-800 border border-blue-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            Good
-                          </button>
-                          <button
-                            type="button"
-                            disabled={isArchived}
-                            onClick={() => handleSetAllGlobalValue(90)}
-                            className="py-1.5 px-3 text-[11px] font-bold rounded-xl flex items-center justify-center bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-800 border border-emerald-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            Elite
-                          </button>
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        <div className="text-right">
+                          <div className="flex items-baseline gap-0.5 justify-end">
+                            <span className="font-mono text-xl sm:text-2xl font-black text-[#C89D32]">
+                              {axisScores.overall}
+                            </span>
+                            <span className="text-[10px] font-bold text-slate-400">/100</span>
+                          </div>
+                          <span className={`inline-block px-2 py-0.5 text-[10px] font-black rounded-md border ${overallGrade.badge}`}>
+                            {overallGrade.grade}
+                          </span>
                         </div>
                       </div>
                     </div>
 
-                    {/* 4. CATATAN & SIMPAN */}
-                    <div className="p-5 sm:p-6 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
-                    <label className="block text-xs font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                      <MessageSquare className="w-4 h-4 text-[#354944]" />
-                      <span>Catatan Evaluasi Pelatih ({futsalTierConfig.shortLabel})</span>
-                    </label>
-                    {!isArchived && (
-                      <button
-                        type="button"
-                        onClick={handleGenerateDraft}
-                        className="px-3.5 py-1.5 bg-[#354944]/10 hover:bg-[#354944]/20 text-[#354944] border border-[#354944]/20 text-xs font-extrabold rounded-xl flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer self-start sm:self-auto"
-                      >
-                        <Sparkles className="w-3.5 h-3.5 text-[#C89D32]" />
-                        <span>Buat Draf Analisis Otomatis</span>
-                      </button>
-                    )}
-                  </div>
+                    {/* B. OPTA POLAR-AREA CHART (VISUALISASI 7 PILAR) */}
+                    <ScoutingPolarAreaPanel
+                      categoryList={futsalCategoryList}
+                      overallScore={axisScores.overall}
+                      overallGrade={overallGrade}
+                      activeCategoryKey={activeModalCategoryKey}
+                      onSelectCategory={(key) => {
+                        setActiveModalCategoryKey(key);
+                      }}
+                      onOpenEdit={(key) => {
+                        if (key) setActiveModalCategoryKey(key);
+                        setIsEditingIndicators(true);
+                      }}
+                      isArchived={isArchived}
+                      sportName="Futsal"
+                    />
 
-                  <textarea
-  aria-label="evaluation section coach note"
-  name="coachNote"
-  id="evaluation-section-coach-note"
-                    disabled={isArchived}
-                    rows={2.5}
-                    value={coachNote}
-                    onChange={(e) => setCoachNote(e.target.value)}
-                    placeholder={`Contoh: Atlet ${selectedStudent.studentName} sangat kuat pada posisi ${currentPosIndicatorsConfig.shortLabel} dengan kontrol sole dan rotasi passing cepat. Perlu peningkatan stamina transisi.`}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#354944] font-medium text-slate-800 leading-normal disabled:opacity-60 disabled:cursor-not-allowed"
-                  />
+                    {/* C. COMPACT COACH NOTES & AI DRAFT ANALYSIS */}
+                    <div className="p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl bg-white border border-slate-200 shadow-xs space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <label htmlFor="evaluation-section-coach-note" className="text-xs font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                          <MessageSquare className="w-4 h-4 text-[#354944]" />
+                          <span>Catatan Pelatih</span>
+                        </label>
+                        {!isArchived && (
+                          <button
+                            type="button"
+                            onClick={handleGenerateDraft}
+                            className="min-h-[38px] px-3 py-1.5 bg-[#354944]/10 hover:bg-[#354944]/20 text-[#354944] border border-[#354944]/20 text-xs font-extrabold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                          >
+                            <Sparkles className="w-3.5 h-3.5 text-[#C89D32]" />
+                            <span>Draf Analisis AI</span>
+                          </button>
+                        )}
+                      </div>
 
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-1.5">
-                    <p className="text-[10px] text-slate-400">
-                      * Hasil assessment Futsal ini tersimpan permanen dan otomatis dapat diakses oleh Wali Murid di Portal Resmi.
-                    </p>
-                    <button
-                      type="submit"
-                      disabled={isSaving || isArchived}
-                      className={`w-full sm:w-auto px-5 py-2 font-bold text-xs rounded-xl border-b-2 shadow-xs transition-all flex items-center justify-center gap-1.5 ${
-                        isArchived 
-                          ? 'bg-slate-300 text-slate-500 border-slate-400 cursor-not-allowed opacity-80'
-                          : 'bg-[#354944] hover:bg-[#2B3D38] text-white border-[#C89D32] cursor-pointer disabled:opacity-50'
-                      }`}
-                    >
-                      {isSaving ? (
-                        <>
-                          <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
-                          <span>Menyimpan Assessment Futsal...</span>
-                        </>
-                      ) : isArchived ? (
-                        <span>Evaluasi Terkunci (Mode Baca-Saja)</span>
-                      ) : (
-                        <>
-                          <Award className="w-3.5 h-3.5 text-[#C89D32]" />
-                          <span>Simpan Assessment Futsal ({futsalTierConfig.shortLabel})</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
+                      <textarea
+                        aria-label="evaluation section coach note"
+                        name="coachNote"
+                        id="evaluation-section-coach-note"
+                        disabled={isArchived}
+                        rows={2}
+                        value={coachNote}
+                        onChange={(e) => setCoachNote(e.target.value)}
+                        placeholder={`Catatan evaluasi untuk ${selectedStudent.studentName}...`}
+                        className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-1 focus:ring-[#354944] font-medium text-slate-800 leading-normal disabled:opacity-60"
+                      />
+
+                      <div className="flex justify-end pt-1">
+                        <button
+                          type="submit"
+                          disabled={isSaving || isArchived}
+                          className={`w-full sm:w-auto min-h-[44px] px-5 py-2.5 font-bold text-xs rounded-xl border-b-2 shadow-xs transition-all flex items-center justify-center gap-1.5 ${
+                            isArchived 
+                              ? 'bg-slate-300 text-slate-500 border-slate-400 cursor-not-allowed opacity-80'
+                              : 'bg-[#354944] hover:bg-[#2B3D38] text-white border-[#C89D32] cursor-pointer disabled:opacity-50'
+                          }`}
+                        >
+                          {isSaving ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin text-white" />
+                              <span>Menyimpan...</span>
+                            </>
+                          ) : isArchived ? (
+                            <span>Evaluasi Terkunci</span>
+                          ) : (
+                            <>
+                              <Award className="w-4 h-4 text-[#C89D32]" />
+                              <span>Simpan Assessment</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
 
                     {/* MODAL FOKUS PENILAIAN KATEGORI */}
                     <CategoryAssessmentModal
@@ -3351,330 +3242,174 @@ function FootballAssessmentView({
 
       {/* 2. FORM PENILAIAN ATHLETE ASSESSMENT WORKSPACE */}
       {selectedStudent && (
-        <form onSubmit={handleSaveEvaluation} className="space-y-4">
-          
-          {/* A. PERFORMANCE OVERVIEW HEADER CARD */}
-          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 rounded-3xl p-4 sm:p-5 text-white shadow-xs border border-slate-700/60 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3.5">
-              <div className="w-12 h-12 rounded-2xl bg-[#354944] border-2 border-[#C89D32] flex items-center justify-center font-bold text-white shadow-sm shrink-0">
-                <Compass className="w-6 h-6 text-[#C89D32]" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-base sm:text-lg font-black tracking-tight text-white">
-                    {selectedStudent.studentName}
-                  </span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/10 text-slate-200 border border-white/15">
-                    {tierConfig.shortLabel} &bull; {studentAge} Thn
-                  </span>
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#354944] text-[#C89D32] border border-[#C89D32]/40">
-                    Posisi: {selectedPosition}
-                  </span>
-                </div>
-                <p className="text-xs text-slate-300 font-medium mt-0.5">
-                  {selectedClass?.className || selectedClass?.name || "Kelas Sepakbola"} &bull; Evaluasi: {formatDateIndonesian(evaluationDate)}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 self-end sm:self-center">
-              <div className="text-right">
-                <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-400 block">
-                  Skor Performa
-                </span>
-                <div className="flex items-baseline gap-1">
-                  <span className="font-mono text-2xl sm:text-3xl font-black text-[#C89D32]">
-                    {axisScores.overall}
-                  </span>
-                  <span className="text-xs font-bold text-slate-400">/ 100</span>
-                </div>
-              </div>
-              <div className="flex flex-col items-center">
-                <span className={`px-3 py-1 text-xs font-black rounded-xl border shadow-2xs ${overallGrade.badge}`}>
-                  {overallGrade.grade}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* B. OPTA POLAR-AREA CHART (VISUALISASI 7 PILAR) */}
-          <ScoutingPolarAreaPanel
-            categoryList={footballCategoryList}
-            overallScore={axisScores.overall}
-            overallGrade={overallGrade}
-            activeCategoryKey={activeModalCategoryKey}
-            onSelectCategory={(key) => {
-              setActiveModalCategoryKey(key);
-            }}
-            onOpenEdit={(key) => {
-              if (key) setActiveModalCategoryKey(key);
-              setIsEditingIndicators(true);
-            }}
-            isArchived={isArchived}
-            sportName={detectedSport || "Sepakbola"}
-          />
-
+        <form onSubmit={handleSaveEvaluation} className="space-y-3.5">
           {isEditingIndicators ? (
-            /* DEDICATED EDIT PENILAIAN INDIKATOR VIEW */
+            /* DEDICATED EDIT PENILAIAN INDIKATOR VIEW (CONFIG + PRESETS + 7 CATEGORIES) */
             <AthleteAssessmentEditView
               studentName={selectedStudent.studentName}
-              sportLabel={`${detectedSport || "Sepakbola"} ${tierConfig.label}`}
+              sportLabel={`${detectedSport || "Sepakbola"} • ${tierConfig.shortLabel}`}
+              sportType="football"
+              activeTier={activeTier}
               categoryList={footballCategoryList}
               initialScores={scores}
               activeCategoryKey={activeModalCategoryKey}
-              onSave={(updatedScores) => {
+              selectedPosition={selectedPosition}
+              secondaryPosition={secondaryPosition}
+              selectedSpecialization={selectedSpecialization}
+              selectedStyleCode={selectedStyleCode}
+              availablePositions={availablePositions}
+              secondaryPositions={SECONDARY_FOOTBALL_POSITIONS}
+              playingStyles={FOOTBALL_PLAYING_STYLES}
+              getPositionConfigFn={getPositionConfig}
+              getStyleConfigFn={getStyleConfig}
+              resolvePositionIndicatorsFn={getPositionIndicatorsForTier}
+              onSave={(updatedScores, updatedConfig) => {
                 setScores(updatedScores);
+                if (updatedConfig) {
+                  if (updatedConfig.selectedPosition) setSelectedPosition(updatedConfig.selectedPosition);
+                  if (updatedConfig.secondaryPosition !== undefined) setSecondaryPosition(updatedConfig.secondaryPosition);
+                  if (updatedConfig.selectedSpecialization) setSelectedSpecialization(updatedConfig.selectedSpecialization);
+                  if (updatedConfig.selectedStyleCode) setSelectedStyleCode(updatedConfig.selectedStyleCode);
+                }
                 setIsEditingIndicators(false);
               }}
               onCancel={() => {
                 setIsEditingIndicators(false);
               }}
               isArchived={isArchived}
-              tierLabel={`${detectedSport} ${tierConfig.label} (${tierConfig.shortLabel})`}
+              tierLabel={`${detectedSport} ${tierConfig.label}`}
             />
           ) : (
             <>
-              {/* C. ASSESSMENT CONFIGURATION (POSISI, SPESIALISASI, GAYA BERMAIN, & PRESETS) */}
-              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <span className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                <Target className="w-4 h-4 text-emerald-600" />
-                <span>Konfigurasi Posisi, Peran Taktis, &amp; Preset Cepat</span>
-              </span>
-              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200/60">
-                Tier {activeTier} &bull; {tierConfig.label}
-              </span>
-            </div>
+              {/* A. COMPACT ATHLETE HEADER & OVERALL SCORE */}
+              <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 text-white shadow-xs border border-slate-700/60 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-[#354944] border border-[#C89D32] flex items-center justify-center font-bold text-white shrink-0">
+                    <Compass className="w-5 h-5 text-[#C89D32]" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-sm sm:text-base font-black tracking-tight text-white truncate">
+                        {selectedStudent.studentName}
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#354944] text-[#C89D32] border border-[#C89D32]/40">
+                        {selectedPosition}{activeTier >= 3 && secondaryPosition && secondaryPosition !== 'NONE' ? ` / ${secondaryPosition}` : ''}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-300 font-medium truncate">
+                      {tierConfig.shortLabel} ({studentAge} Thn) &bull; {formatDateIndonesian(evaluationDate)}
+                    </p>
+                  </div>
+                </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {/* Posisi Utama */}
-              <div>
-                <label htmlFor="football-selected-position" className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5">
-                  1. Posisi Utama
-                </label>
-                <select
-                  id="football-selected-position"
-                  aria-label="Posisi Utama"
-                  disabled={isArchived}
-                  value={selectedPosition}
-                  onChange={(e) => handlePositionChange(e.target.value)}
-                  className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-800 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow-2xs"
-                >
-                  {availablePositions.map((p) => (
-                    <option key={p.code} value={p.code}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <div className="text-right">
+                    <div className="flex items-baseline gap-0.5 justify-end">
+                      <span className="font-mono text-xl sm:text-2xl font-black text-[#C89D32]">
+                        {axisScores.overall}
+                      </span>
+                      <span className="text-[10px] font-bold text-slate-400">/100</span>
+                    </div>
+                    <span className={`inline-block px-2 py-0.5 text-[10px] font-black rounded-md border ${overallGrade.badge}`}>
+                      {overallGrade.grade}
+                    </span>
+                  </div>
+                </div>
               </div>
 
-              {/* Posisi Kedua jika Tier >= 3 */}
-              {activeTier >= 3 && (
-                <div>
-                  <label htmlFor="football-secondary-position" className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5">
-                    2. Posisi Alternatif (Secondary)
-                  </label>
-                  <select
-                    id="football-secondary-position"
-                    aria-label="Posisi Alternatif"
-                    disabled={isArchived}
-                    value={secondaryPosition}
-                    onChange={(e) => handleSecondaryPositionChange(e.target.value)}
-                    className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-800 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow-2xs"
-                  >
-                    {SECONDARY_FOOTBALL_POSITIONS.map((sp) => (
-                      <option key={sp.code} value={sp.code}>
-                        {sp.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
+              {/* B. OPTA POLAR-AREA CHART (VISUALISASI 7 PILAR) */}
+              <ScoutingPolarAreaPanel
+                categoryList={footballCategoryList}
+                overallScore={axisScores.overall}
+                overallGrade={overallGrade}
+                activeCategoryKey={activeModalCategoryKey}
+                onSelectCategory={(key) => {
+                  setActiveModalCategoryKey(key);
+                }}
+                onOpenEdit={(key) => {
+                  if (key) setActiveModalCategoryKey(key);
+                  setIsEditingIndicators(true);
+                }}
+                isArchived={isArchived}
+                sportName={detectedSport || "Sepakbola"}
+              />
 
-              {/* Spesialisasi Peran jika Tier >= 3 */}
-              {activeTier >= 3 && (
-                <div>
-                  <label htmlFor="football-selected-specialization" className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5">
-                    3. Spesialisasi Peran
+              {/* C. COMPACT COACH NOTES & AI DRAFT ANALYSIS */}
+              <div className="p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl bg-white border border-slate-200 shadow-xs space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <label htmlFor="evaluation-section-coach-note" className="text-xs font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                    <MessageSquare className="w-4 h-4 text-[#354944]" />
+                    <span>Catatan Pelatih</span>
                   </label>
-                  <select
-                    id="football-selected-specialization"
-                    aria-label="Spesialisasi Peran"
-                    disabled={isArchived}
-                    value={selectedSpecialization}
-                    onChange={(e) => setSelectedSpecialization(e.target.value)}
-                    className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-800 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow-2xs"
-                  >
-                    {(getPositionConfig(selectedPosition).specializations || []).map((spec) => (
-                      <option key={spec} value={spec}>
-                        {spec}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Profil Gaya Bermain STY jika Tier >= 3 */}
-              {activeTier >= 3 && (
-                <div className="md:col-span-2 lg:col-span-3">
-                  <label htmlFor="football-selected-style-code" className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5">
-                    4. Profil Gaya Bermain Taktis (STY)
-                  </label>
-                  <select
-                    id="football-selected-style-code"
-                    aria-label="Profil Gaya Bermain STY"
-                    disabled={isArchived}
-                    value={selectedStyleCode}
-                    onChange={(e) => setSelectedStyleCode(e.target.value)}
-                    className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-800 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow-2xs"
-                  >
-                    {FOOTBALL_PLAYING_STYLES.map((st) => (
-                      <option key={st.code} value={st.code}>
-                        {st.code} — {st.name} ({st.desc})
-                      </option>
-                    ))}
-                  </select>
-
-                  {getStyleConfig(selectedStyleCode) && (
-                    <div className="mt-2 p-2.5 bg-emerald-50/70 border border-emerald-100 rounded-xl text-xs flex items-center gap-2">
-                      <Radio className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <div>
-                        <span className="font-extrabold text-emerald-950">
-                          {getStyleConfig(selectedStyleCode).code} — {getStyleConfig(selectedStyleCode).name}:
-                        </span>{" "}
-                        <span className="text-emerald-800 font-medium">{getStyleConfig(selectedStyleCode).desc}</span>
-                      </div>
-                    </div>
+                  {!isArchived && (
+                    <button
+                      type="button"
+                      onClick={handleGenerateDraft}
+                      className="min-h-[38px] px-3 py-1.5 bg-[#354944]/10 hover:bg-[#354944]/20 text-[#354944] border border-[#354944]/30 text-xs font-extrabold rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-[#C89D32]" />
+                      <span>Draf Analisis AI</span>
+                    </button>
                   )}
                 </div>
-              )}
-            </div>
 
-            {/* Preset Nilai Cepat Global */}
-            <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                <Sliders className="w-3.5 h-3.5 text-emerald-600" />
-                <span>Preset Nilai Cepat Seluruh Indikator:</span>
-              </span>
-
-              <div className="grid grid-cols-4 gap-1.5 w-full sm:w-auto">
-                <button
-                  type="button"
+                <textarea
+                  aria-label="evaluation section coach note"
+                  name="coachNote"
+                  id="evaluation-section-coach-note"
                   disabled={isArchived}
-                  onClick={() => handleSetAllGlobalValue(0)}
-                  className="py-1.5 px-3 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Reset semua indikator ke 0"
-                >
-                  <RotateCcw className="w-3 h-3 shrink-0" />
-                  <span>Reset</span>
-                </button>
-                <button
-                  type="button"
-                  disabled={isArchived}
-                  onClick={() => handleSetAllGlobalValue(50)}
-                  className="py-1.5 px-3 text-[11px] font-bold rounded-xl flex items-center justify-center bg-slate-100 hover:bg-slate-700 hover:text-white text-slate-800 border border-slate-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Standard
-                </button>
-                <button
-                  type="button"
-                  disabled={isArchived}
-                  onClick={() => handleSetAllGlobalValue(75)}
-                  className="py-1.5 px-3 text-[11px] font-bold rounded-xl flex items-center justify-center bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-800 border border-blue-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Good
-                </button>
-                <button
-                  type="button"
-                  disabled={isArchived}
-                  onClick={() => handleSetAllGlobalValue(90)}
-                  className="py-1.5 px-3 text-[11px] font-bold rounded-xl flex items-center justify-center bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-800 border border-emerald-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Elite
-                </button>
-              </div>
-            </div>
-          </div>
-
-                {/* CATATAN & SIMPAN */}
-                <div className="p-3 sm:p-3.5 rounded-xl bg-white border border-slate-200 shadow-sm space-y-2.5">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
-                    <label htmlFor="evaluation-section-coach-note" className="block text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                      <MessageSquare className="w-4 h-4 text-[#354944]" />
-                      <span>Catatan Evaluasi Taktis &amp; Rekomendasi Pelatih ({tierConfig.shortLabel})</span>
-                    </label>
-                    {!isArchived && (
-                      <button
-                        type="button"
-                        onClick={handleGenerateDraft}
-                        className="px-2.5 py-1 bg-[#354944]/10 hover:bg-[#354944]/20 text-[#354944] border border-[#354944]/30 text-[11px] font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer self-start sm:self-auto"
-                      >
-                        <Sparkles className="w-3.5 h-3.5 text-[#C89D32]" />
-                        <span>Buat Draf Analisis Otomatis</span>
-                      </button>
-                    )}
-                  </div>
-
-                  <textarea
-                    aria-label="evaluation section coach note"
-                    name="coachNote"
-                    id="evaluation-section-coach-note"
-                    disabled={isArchived}
-                    rows={2.5}
-                    value={coachNote}
-                    onChange={(e) => setCoachNote(e.target.value)}
-                    placeholder={`Contoh: Atlet ${selectedStudent.studentName} menunjukkan penempatan posisi dan timing finishing yang tajam. Perlu peningkatan koordinasi pressing.`}
-                    className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-medium text-slate-800 leading-relaxed disabled:opacity-60 disabled:cursor-not-allowed"
-                  />
-
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-2 pt-1">
-                    <p className="text-[10px] text-slate-400">
-                      * Hasil assessment ini tersimpan permanen dan otomatis dapat diakses oleh Wali Murid di Portal Resmi.
-                    </p>
-                    <button
-                      type="submit"
-                      disabled={isSaving || isArchived}
-                      className={`w-full sm:w-auto px-5 py-2 font-bold text-xs rounded-xl border-b-2 shadow-sm transition-all flex items-center justify-center gap-2 ${
-                        isArchived 
-                          ? 'bg-slate-300 text-slate-500 border-slate-400 cursor-not-allowed opacity-80'
-                          : 'bg-[#354944] hover:bg-[#2B3D38] text-white border-[#C89D32] cursor-pointer disabled:opacity-50'
-                      }`}
-                    >
-                      {isSaving ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin text-white" />
-                          <span>Menyimpan Assessment...</span>
-                        </>
-                      ) : isArchived ? (
-                        <span>Evaluasi Terkunci (Mode Baca-Saja)</span>
-                      ) : (
-                        <>
-                          <Award className="w-4 h-4 text-[#C89D32]" />
-                          <span>Simpan Assessment ({tierConfig.shortLabel})</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/* MODAL FOKUS PENILAIAN KATEGORI */}
-                <CategoryAssessmentModal
-                  isOpen={isModalOpen}
-                  onClose={() => setIsModalOpen(false)}
-                  categoryList={footballCategoryList}
-                  activeCategoryKey={activeModalCategoryKey}
-                  setActiveCategoryKey={setActiveModalCategoryKey}
-                  scores={scores}
-                  onScoreChange={handleScoreChange}
-                  onAdjustScore={handleAdjustScore}
-                  onSetCategoryPreset={handleSetCategoryPreset}
-                  isArchived={isArchived}
+                  rows={2}
+                  value={coachNote}
+                  onChange={(e) => setCoachNote(e.target.value)}
+                  placeholder={`Catatan evaluasi untuk ${selectedStudent.studentName}...`}
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-medium text-slate-800 leading-relaxed disabled:opacity-60"
                 />
-              </>
-            )}
 
-          </form>
-            )}
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="submit"
+                    disabled={isSaving || isArchived}
+                    className={`w-full sm:w-auto min-h-[44px] px-5 py-2.5 font-bold text-xs rounded-xl border-b-2 shadow-sm transition-all flex items-center justify-center gap-1.5 ${
+                      isArchived 
+                        ? 'bg-slate-300 text-slate-500 border-slate-400 cursor-not-allowed opacity-80'
+                        : 'bg-[#354944] hover:bg-[#2B3D38] text-white border-[#C89D32] cursor-pointer disabled:opacity-50'
+                    }`}
+                  >
+                    {isSaving ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-white" />
+                        <span>Menyimpan...</span>
+                      </>
+                    ) : isArchived ? (
+                      <span>Evaluasi Terkunci</span>
+                    ) : (
+                      <>
+                        <Award className="w-4 h-4 text-[#C89D32]" />
+                        <span>Simpan Assessment</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* MODAL FOKUS PENILAIAN KATEGORI */}
+              <CategoryAssessmentModal
+                isOpen={isModalOpen}
+                onClose={() => setIsModalOpen(false)}
+                categoryList={footballCategoryList}
+                activeCategoryKey={activeModalCategoryKey}
+                setActiveCategoryKey={setActiveModalCategoryKey}
+                scores={scores}
+                onScoreChange={handleScoreChange}
+                onAdjustScore={handleAdjustScore}
+                onSetCategoryPreset={handleSetCategoryPreset}
+                isArchived={isArchived}
+              />
+            </>
+          )}
+
+        </form>
+      )}
 
       {/* RIWAYAT */}
       <HistorySection
@@ -4649,40 +4384,49 @@ function Standard4PillarView({
 // =====================================================================
 // REUSABLE HISTORY SECTION
 // =====================================================================
-function HistorySection({
-  history,
-  loadingHistory,
-  filterStudentId,
+export function HistorySection({
+  history = [],
+  loadingHistory = false,
+  filterStudentId = 'ALL',
   setFilterStudentId,
-  students,
+  students = [],
   onDeleteEvaluation,
   isArchived = false
 }) {
+  const [expandedIds, setExpandedIds] = useState({});
+
+  const toggleDetail = (id) => {
+    setExpandedIds((prev) => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+
   const filteredHistory = filterStudentId === 'ALL'
     ? history
     : history.filter((h) => h.studentId === filterStudentId);
 
   return (
-    <div className="bg-white rounded-xl p-3 sm:p-3.5 border border-slate-200 shadow-sm space-y-3">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-100 pb-2">
+    <div className="bg-white rounded-2xl sm:rounded-3xl p-3.5 sm:p-4 border border-slate-200 shadow-xs space-y-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 border-b border-slate-100 pb-2.5">
         <div className="flex items-center gap-2">
           <Award className="w-4 h-4 text-emerald-600" />
           <h3 className="font-bold text-xs sm:text-sm text-slate-900">
-            Riwayat Rapor Assessment Tersimpan ({filteredHistory.length})
+            Riwayat Assessment ({filteredHistory.length})
           </h3>
         </div>
 
         <div className="flex items-center gap-2">
-          <Filter className="w-3.5 h-3.5 text-slate-400" />
+          <Filter className="w-3.5 h-3.5 text-slate-400 shrink-0" />
           <select
-  aria-label="evaluation section filter student id"
-  name="filterStudentId"
-  id="evaluation-section-filter-student-id"
+            aria-label="evaluation section filter student id"
+            name="filterStudentId"
+            id="evaluation-section-filter-student-id"
             value={filterStudentId}
-            onChange={(e) => setFilterStudentId(e.target.value)}
-            className="px-2.5 py-1 text-xs bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-700 cursor-pointer"
+            onChange={(e) => setFilterStudentId && setFilterStudentId(e.target.value)}
+            className="min-h-[40px] px-2.5 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 font-bold text-slate-700 cursor-pointer"
           >
-            <option value="ALL">Semua Siswa Kelas Ini</option>
+            <option value="ALL">Semua Atlet</option>
             {students.map((st) => (
               <option key={st.id} value={st.id}>{st.studentName}</option>
             ))}
@@ -4691,59 +4435,68 @@ function HistorySection({
       </div>
 
       {loadingHistory ? (
-        <p className="py-6 text-center text-xs text-slate-400 font-medium">Memuat riwayat assessment...</p>
+        <p className="py-5 text-center text-xs text-slate-400 font-medium">Memuat riwayat...</p>
       ) : filteredHistory.length === 0 ? (
-        <div className="py-6 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl p-3">
-          Belum ada rekam assessment disimpan untuk siswa/kelas ini.
+        <div className="py-5 text-center text-xs text-slate-400 border border-dashed border-slate-200 rounded-xl p-3">
+          Belum ada riwayat assessment tersimpan.
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
           {filteredHistory.map((item) => {
             const ps = item.pillarScores || {};
             const gradeInfo = getScoreGrade(item.overallScore || 0);
+            const isExpanded = Boolean(expandedIds[item.id]);
 
             return (
               <div 
                 key={item.id} 
-                className="p-2.5 sm:p-3 rounded-xl border border-slate-200 bg-slate-50/50 hover:bg-white hover:border-emerald-400 transition-all space-y-2 relative group shadow-2xs"
+                className="p-3 rounded-2xl border border-slate-200 bg-slate-50/50 hover:bg-white transition-all space-y-2 shadow-2xs"
               >
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <h4 className="font-bold text-xs sm:text-sm text-slate-900">{item.studentName}</h4>
+                {/* Compact Summary Row: Athlete Name, Date, Coach, Score, Grade */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <h4 className="font-bold text-xs sm:text-sm text-slate-900 truncate">{item.studentName}</h4>
                       {item.playerRole && (
                         <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-emerald-100 text-emerald-800 border border-emerald-200">
-                          {item.playerRole} {item.specialization && item.specialization !== 'N/A' && item.specialization !== 'Eksplorasi/Dasar' && item.specialization !== 'Eksplorasi Futsal' ? `• ${item.specialization}` : ''}
-                        </span>
-                      )}
-                      {item.activeTier && (
-                        <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-amber-100 text-amber-800 border border-amber-200">
-                          Tier {item.activeTier}
-                        </span>
-                      )}
-                      {item.styleCode && item.styleCode !== 'N/A' && (
-                        <span className="px-1.5 py-0.5 text-[9px] font-bold uppercase rounded bg-slate-800 text-slate-100">
-                          {item.styleCode}
+                          {item.playerRole}
                         </span>
                       )}
                     </div>
-                    <p className="text-[10px] text-slate-500 flex items-center gap-1 mt-0.5">
-                      <Calendar className="w-3 h-3 text-emerald-600" />
-                      <span>Tgl: {formatDateIndonesian(item.date)}</span> &bull; 
-                      <span>Pelatih: {item.evaluator || 'Pelatih'}</span>
+                    <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-0.5 truncate">
+                      <Calendar className="w-3 h-3 text-emerald-600 shrink-0" />
+                      <span>{formatDateIndonesian(item.date)}</span>
+                      <span>&bull;</span>
+                      <span className="truncate">{item.evaluator || 'Pelatih'}</span>
                     </p>
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <span className={`px-2 py-0.5 text-[11px] font-bold rounded-lg border ${gradeInfo.badge}`}>
-                      {item.overallScore || 0} / 100
-                    </span>
-                    {!isArchived && (
+                    <div className="text-right">
+                      <span className="font-mono text-xs sm:text-sm font-black text-slate-900 block">
+                        {item.overallScore || 0}/100
+                      </span>
+                      <span className={`inline-block px-1.5 py-0.2 text-[9px] font-black rounded border ${gradeInfo.badge}`}>
+                        {gradeInfo.grade.split(' ')[0]}
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => toggleDetail(item.id)}
+                      className="min-h-[38px] px-2.5 py-1 text-[11px] font-bold text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-xl transition-colors cursor-pointer flex items-center gap-1"
+                    >
+                      <span>{isExpanded ? 'Tutup' : 'Lihat Detail'}</span>
+                      <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    {!isArchived && onDeleteEvaluation && (
                       <button
                         type="button"
                         onClick={() => onDeleteEvaluation(item.id, item.studentName)}
                         title="Hapus Evaluasi"
-                        className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors cursor-pointer"
+                        aria-label={`Hapus evaluasi ${item.studentName}`}
+                        className="w-9 h-9 min-w-[36px] min-h-[36px] flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition-colors cursor-pointer"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
@@ -4751,52 +4504,56 @@ function HistorySection({
                   </div>
                 </div>
 
-                {/* Breakdown Badges */}
-                {ps.fisik !== undefined && ps.komunikasi !== undefined ? (
-                  <div className="grid grid-cols-4 sm:grid-cols-7 gap-1 text-[9px] text-center font-bold">
-                    <div className="p-1 bg-rose-50 text-rose-800 rounded-lg border border-rose-100">
-                      <span className="block text-[7px] uppercase font-bold text-rose-600">Fisik</span>
-                      <span>{ps.fisik}</span>
-                    </div>
-                    <div className="p-1 bg-blue-50 text-blue-800 rounded-lg border border-blue-100">
-                      <span className="block text-[7px] uppercase font-bold text-blue-600">Teknik</span>
-                      <span>{ps.teknik}</span>
-                    </div>
-                    <div className="p-1 bg-purple-50 text-purple-800 rounded-lg border border-purple-100">
-                      <span className="block text-[7px] uppercase font-bold text-purple-600">Taktik</span>
-                      <span>{ps.taktik}</span>
-                    </div>
-                    <div className="p-1 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-100">
-                      <span className="block text-[7px] uppercase font-bold text-emerald-600">Mental</span>
-                      <span>{ps.mental}</span>
-                    </div>
-                    <div className="p-1 bg-cyan-50 text-cyan-800 rounded-lg border border-cyan-100">
-                      <span className="block text-[7px] uppercase font-bold text-cyan-600">Dev.</span>
-                      <span>{ps.perkembangan}</span>
-                    </div>
-                    <div className="p-1 bg-amber-50 text-amber-800 rounded-lg border border-amber-100">
-                      <span className="block text-[7px] uppercase font-bold text-amber-600">Kom.</span>
-                      <span>{ps.komunikasi}</span>
-                    </div>
-                    <div className="p-1 bg-indigo-50 text-indigo-800 rounded-lg border border-indigo-100 col-span-2 sm:col-span-1">
-                      <span className="block text-[7px] uppercase font-bold text-indigo-600">Posisi</span>
-                      <span>{ps.khususPosisi || ps.position}</span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-5 gap-1 text-[9px] text-center font-bold">
-                    <div className="p-1 bg-rose-50 text-rose-800 rounded-md">Fisik: {ps.fisik || 0}</div>
-                    <div className="p-1 bg-blue-50 text-blue-800 rounded-md">Teknik: {ps.teknik || 0}</div>
-                    <div className="p-1 bg-purple-50 text-purple-800 rounded-md">Taktik: {ps.taktik || 0}</div>
-                    <div className="p-1 bg-emerald-50 text-emerald-800 rounded-md">Mental: {ps.mental || 0}</div>
-                    <div className="p-1 bg-indigo-50 text-indigo-800 rounded-md">Posisi: {ps.position || 0}</div>
-                  </div>
-                )}
+                {/* Collapsible Details: Pillar Breakdown & Full Coach Notes */}
+                {isExpanded && (
+                  <div className="pt-2 border-t border-slate-200/70 space-y-2 animate-in fade-in duration-150">
+                    {ps.fisik !== undefined && ps.komunikasi !== undefined ? (
+                      <div className="grid grid-cols-4 sm:grid-cols-7 gap-1 text-[9px] text-center font-bold">
+                        <div className="p-1 bg-rose-50 text-rose-800 rounded-lg border border-rose-100">
+                          <span className="block text-[7px] uppercase font-bold text-rose-600">Fisik</span>
+                          <span>{ps.fisik}</span>
+                        </div>
+                        <div className="p-1 bg-blue-50 text-blue-800 rounded-lg border border-blue-100">
+                          <span className="block text-[7px] uppercase font-bold text-blue-600">Teknik</span>
+                          <span>{ps.teknik}</span>
+                        </div>
+                        <div className="p-1 bg-purple-50 text-purple-800 rounded-lg border border-purple-100">
+                          <span className="block text-[7px] uppercase font-bold text-purple-600">Taktik</span>
+                          <span>{ps.taktik}</span>
+                        </div>
+                        <div className="p-1 bg-emerald-50 text-emerald-800 rounded-lg border border-emerald-100">
+                          <span className="block text-[7px] uppercase font-bold text-emerald-600">Mental</span>
+                          <span>{ps.mental}</span>
+                        </div>
+                        <div className="p-1 bg-cyan-50 text-cyan-800 rounded-lg border border-cyan-100">
+                          <span className="block text-[7px] uppercase font-bold text-cyan-600">Dev.</span>
+                          <span>{ps.perkembangan}</span>
+                        </div>
+                        <div className="p-1 bg-amber-50 text-amber-800 rounded-lg border border-amber-100">
+                          <span className="block text-[7px] uppercase font-bold text-amber-600">Kom.</span>
+                          <span>{ps.komunikasi}</span>
+                        </div>
+                        <div className="p-1 bg-indigo-50 text-indigo-800 rounded-lg border border-indigo-100 col-span-2 sm:col-span-1">
+                          <span className="block text-[7px] uppercase font-bold text-indigo-600">Posisi</span>
+                          <span>{ps.khususPosisi || ps.position}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-5 gap-1 text-[9px] text-center font-bold">
+                        <div className="p-1 bg-rose-50 text-rose-800 rounded-md">Fisik: {ps.fisik || 0}</div>
+                        <div className="p-1 bg-blue-50 text-blue-800 rounded-md">Teknik: {ps.teknik || 0}</div>
+                        <div className="p-1 bg-purple-50 text-purple-800 rounded-md">Taktik: {ps.taktik || 0}</div>
+                        <div className="p-1 bg-emerald-50 text-emerald-800 rounded-md">Mental: {ps.mental || 0}</div>
+                        <div className="p-1 bg-indigo-50 text-indigo-800 rounded-md">Posisi: {ps.position || 0}</div>
+                      </div>
+                    )}
 
-                {item.coachNote && (
-                  <div className="p-2 bg-emerald-50/70 border border-emerald-200/80 rounded-lg text-xs text-emerald-950 leading-relaxed whitespace-pre-line">
-                    <strong className="block text-[10px] uppercase font-bold text-emerald-800 mb-0.5">Catatan Pelatih:</strong>
-                    "{item.coachNote}"
+                    {item.coachNote && (
+                      <div className="p-2.5 bg-emerald-50/70 border border-emerald-200/80 rounded-xl text-xs text-emerald-950 leading-relaxed whitespace-pre-line">
+                        <strong className="block text-[10px] uppercase font-bold text-emerald-800 mb-0.5">Catatan Pelatih:</strong>
+                        "{item.coachNote}"
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

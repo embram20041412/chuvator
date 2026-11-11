@@ -171,3 +171,56 @@ test('AthleteAssessmentEditView: renders dedicated assessment edit view with bac
   assert.ok(markup.includes('Stamina'));
 });
 
+test('AthleteAssessmentEditView: consolidates Position & Tactical Role Configuration and Global Presets', () => {
+  const mockCategories = [
+    { key: 'fisik', label: '1. Kondisi Fisik', shortLabel: 'Fisik', count: 2, score: 80, indicators: ['Sprint', 'Stamina'] },
+    { key: 'posisi', label: '7. Khusus Posisi (ST)', shortLabel: 'Khusus Posisi', count: 1, score: 85, indicators: ['Finishing'], isSpecial: true }
+  ];
+
+  const markup = renderToStaticMarkup(
+    <AthleteAssessmentEditView
+      studentName="Rizky Pratama"
+      sportLabel="SepakBola • Fase 3"
+      sportType="football"
+      activeTier={3}
+      categoryList={mockCategories}
+      initialScores={{ Sprint: 80, Stamina: 80, Finishing: 85 }}
+      selectedPosition="ST"
+      secondaryPosition="RW"
+      selectedSpecialization="Poacher"
+      selectedStyleCode="STY07"
+      availablePositions={[
+        { code: 'ST', label: 'ST — Striker' },
+        { code: 'CM', label: 'CM — Central Midfielder' }
+      ]}
+      secondaryPositions={[
+        { code: 'NONE', label: 'Tidak Ada' },
+        { code: 'RW', label: 'RW — Right Winger' }
+      ]}
+      playingStyles={[
+        { code: 'STY07', name: 'Target Man', desc: 'Penyerang tengah pemantul bola' }
+      ]}
+      getPositionConfigFn={() => ({ specializations: ['Poacher', 'False 9'] })}
+      getStyleConfigFn={() => ({ code: 'STY07', name: 'Target Man', desc: 'Penyerang tengah pemantul bola' })}
+      onSave={() => {}}
+      onCancel={() => {}}
+      tierLabel="SepakBola Fase 3"
+    />
+  );
+
+  // Verify Position & Tactical Role Config section is rendered inside Edit View
+  assert.ok(markup.includes('Konfigurasi Posisi &amp; Peran Taktis') || markup.includes('Konfigurasi Posisi & Peran Taktis'));
+  assert.ok(markup.includes('1. Posisi Utama'));
+  assert.ok(markup.includes('2. Posisi Alternatif'));
+  assert.ok(markup.includes('3. Spesialisasi Peran'));
+  assert.ok(markup.includes('4. Profil Gaya Bermain Taktis (STY)'));
+
+  // Verify Global Presets are rendered inside Edit View
+  assert.ok(markup.includes('Preset Penilaian Cepat'));
+  assert.ok(markup.includes('Reset'));
+  assert.ok(markup.includes('Standard'));
+  assert.ok(markup.includes('Good'));
+  assert.ok(markup.includes('Elite'));
+});
+
+

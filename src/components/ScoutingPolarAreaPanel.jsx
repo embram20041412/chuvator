@@ -237,31 +237,31 @@ export default function ScoutingPolarAreaPanel({
   const scaleLevels = [25, 50, 75, 100];
 
   return (
-    <div className="bg-white rounded-3xl border border-slate-200/90 shadow-xs overflow-hidden transition-all">
+    <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-xs overflow-hidden transition-all">
       {/* 1. HEADER PANEL BAR */}
-      <div className="px-4 py-3 sm:px-6 sm:py-3.5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-gradient-to-r from-slate-50/80 via-white to-slate-50/50">
-        <div className="flex items-center gap-3">
+      <div className="px-3.5 py-3 sm:px-5 sm:py-3.5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-gradient-to-r from-slate-50/80 via-white to-slate-50/50">
+        <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl bg-[#101D38] text-white flex items-center justify-center font-bold shrink-0 shadow-2xs border border-[#C89D32]/40">
-            <BarChart2 className="w-5 h-5 text-[#C89D32]" />
+            <BarChart2 className="w-4 h-4 text-[#C89D32]" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="font-extrabold text-sm sm:text-base text-slate-900 tracking-tight">
+              <h3 className="font-extrabold text-xs sm:text-sm text-slate-900 tracking-tight">
                 Scouting Polar-Area Chart
               </h3>
               <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#101D38]/5 text-[#101D38] border border-[#101D38]/15">
                 Opta Nightingale Rose
               </span>
             </div>
-            <p className="text-[11px] text-slate-500 font-medium">
-              Visualisasi 7 pilar performa atlet &bull; Skala 0 &mdash; 100
+            <p className="text-[10px] text-slate-500 font-medium">
+              7 pilar performa &bull; Ketuk sektor untuk edit
             </p>
           </div>
         </div>
 
         {/* Action Controls & Realtime Score Badge */}
         <div className="flex items-center gap-2 self-end sm:self-center flex-wrap">
-          <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-100/80 rounded-xl border border-slate-200">
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100/80 rounded-xl border border-slate-200 min-h-[40px]">
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
               Rata-Rata:
             </span>
@@ -273,13 +273,13 @@ export default function ScoutingPolarAreaPanel({
             </span>
           </div>
 
-          {/* Dedicated "Edit Penilaian" Navigation Button */}
+          {/* Dedicated "Edit Penilaian" Navigation Button (44px touch target) */}
           {onOpenEdit && !isArchived && (
             <button
               type="button"
               onClick={() => onOpenEdit(currentFocalKey || undefined)}
-              className="px-3 py-1 text-xs font-black text-white bg-[#101D38] hover:bg-[#1d2d52] border border-[#C89D32]/40 rounded-xl shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
-              title="Buka Lembar Penilaian Indikator Lengkap"
+              className="min-h-[44px] px-3.5 py-2 text-xs font-black text-white bg-[#101D38] hover:bg-[#1d2d52] border border-[#C89D32]/40 rounded-xl shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Buka halaman Edit Penilaian"
             >
               <Edit3 className="w-3.5 h-3.5 text-[#C89D32]" />
               <span>Edit Penilaian</span>
@@ -290,17 +290,17 @@ export default function ScoutingPolarAreaPanel({
           <button
             type="button"
             onClick={() => setShowMobileChart(!showMobileChart)}
-            className="lg:hidden px-2.5 py-1 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg shadow-2xs hover:bg-slate-50 flex items-center gap-1 transition-colors cursor-pointer"
+            className="lg:hidden min-h-[44px] px-2.5 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-xl shadow-2xs hover:bg-slate-50 flex items-center gap-1 transition-colors cursor-pointer"
           >
             {showMobileChart ? (
               <>
                 <ChevronUp className="w-3.5 h-3.5 text-slate-500" />
-                <span className="text-[11px]">Sembunyikan</span>
+                <span className="text-[11px]">Tutup</span>
               </>
             ) : (
               <>
                 <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
-                <span className="text-[11px]">Buka Chart</span>
+                <span className="text-[11px]">Chart</span>
               </>
             )}
           </button>
