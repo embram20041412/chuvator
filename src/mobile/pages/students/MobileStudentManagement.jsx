@@ -52,7 +52,11 @@ import IdCardGenerator from '../../../components/IdCardGenerator';
  * Mobile-First Student Management for CHUVATOR Sports Management Application.
  * Scoped strictly under .chua-mobile-app
  */
-export default function MobileStudentManagement({ userProfile }) {
+export default function MobileStudentManagement({
+  userProfile,
+  activeAcademyId: propAcademyId = '',
+  onStudentsChanged = null
+}) {
   const tenantId = userProfile?.tenant?.id || userProfile?.tenantId || userProfile?.uid;
   const userAccess = useUserAccessScope(userProfile);
   const { isCoachOnly, coachProfile, isOwner, isSuperAdmin } = userAccess;
@@ -65,7 +69,7 @@ export default function MobileStudentManagement({ userProfile }) {
   // Workspace Academies & Active Workspace State
   const [academies, setAcademies] = useState([]);
   const [activeAcademyId, setActiveAcademyId] = useState(() => {
-    return localStorage.getItem('activeAcademyId') || '';
+    return propAcademyId || localStorage.getItem('activeAcademyId') || '';
   });
 
   // Data States
@@ -94,6 +98,14 @@ export default function MobileStudentManagement({ userProfile }) {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  // Sync when parent MobileAcademyHub changes workspace
+  useEffect(() => {
+    if (propAcademyId && propAcademyId !== activeAcademyId) {
+      setActiveAcademyId(propAcademyId);
+      setSelectedClassFilter('');
+    }
+  }, [propAcademyId, activeAcademyId]);
+
   // FETCH DATA WITH STRICT DATABASE QUERY LEVEL ISOLATION FOR COACH ROLE
   const fetchAllData = useCallback(async () => {
     if (!tenantId) return;
@@ -108,13 +120,13 @@ export default function MobileStudentManagement({ userProfile }) {
       setAcademies(acadList || []);
       setAcademyClasses(classList || []);
 
-      let targetId = activeAcademyId;
+      let targetId = propAcademyId || activeAcademyId;
       if (acadList && acadList.length > 0) {
         if (isCoachOnly && coachProfile?.academy_id) {
           targetId = coachProfile.academy_id;
         } else {
-          const stored = localStorage.getItem('activeAcademyId');
-          const found = acadList.find((a) => a.id === stored);
+          const preferred = propAcademyId || localStorage.getItem('activeAcademyId');
+          const found = acadList.find((a) => a.id === preferred);
           targetId = found ? found.id : acadList[0].id;
         }
         setActiveAcademyId(targetId);
@@ -164,7 +176,7 @@ export default function MobileStudentManagement({ userProfile }) {
     } finally {
       setIsLoading(false);
     }
-  }, [tenantId, activeAcademyId, isCoachOnly, coachProfile]);
+  }, [tenantId, propAcademyId, activeAcademyId, isCoachOnly, coachProfile]);
 
   useEffect(() => {
     fetchAllData();
@@ -292,25 +304,15 @@ export default function MobileStudentManagement({ userProfile }) {
         </div>
       )}
 
-      {/* A. STUDENT MANAGEMENT ACTION & SUMMARY BAR */}
-      <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-10 h-10 flex items-center justify-center shrink-0">
-            <App3DMobileIcon name="siswa" className="w-8 h-8" alt="Siswa" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                {activeAcademy?.sport || 'General Sports'}
-              </span>
-              <span className="text-[11px] font-extrabold text-slate-800">
-                {statsSummary.total} Siswa Terdaftar
-              </span>
-            </div>
-            <p className="text-[10px] text-slate-400 mt-0.5 truncate my-0">
-              Daftar atlet, kelompok kelas, &amp; monitoring iuran SPP
-            </p>
-          </div>
+      {/* A. COMPACT STUDENT MANAGEMENT HEADER BAR */}
+      <div className="bg-white px-3.5 py-2.5 rounded-[16px] border border-[#E7EBF2] shadow-[0_2px_8px_rgba(16,29,56,0.04)] flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="text-sm font-bold text-[#17233D] truncate my-0">
+            Data Siswa &amp; SPP
+          </h3>
+          <p className="text-xs text-[#68758B] font-medium my-0">
+            {statsSummary.total} Atlet Terdaftar
+          </p>
         </div>
 
         {/* Add Student Button (Owner/Admin only) */}
@@ -321,10 +323,10 @@ export default function MobileStudentManagement({ userProfile }) {
               setEditingStudent(null);
               setShowAddModal(true);
             }}
-            className="p-2.5 rounded-xl bg-[var(--chua-m-emerald)] hover:opacity-90 text-white font-bold text-xs flex items-center gap-1 shadow-xs shrink-0 cursor-pointer"
+            className="min-h-[44px] px-3.5 py-2 rounded-xl bg-[#2455E8] hover:opacity-90 text-white font-semibold text-xs flex items-center gap-1.5 shadow-xs shrink-0 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>+ Siswa</span>
+            <span>Tambah Siswa</span>
           </button>
         )}
       </div>

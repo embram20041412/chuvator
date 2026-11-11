@@ -19,10 +19,11 @@
 }
 
 /* Page Wrapper */
-.chua-mobile-page {
+.chua-mobile-page,
+.chua-mobile-app.chua-mobile-page {
   min-h: 100vh;
   min-height: 100dvh;
-  background-color: var(--chua-m-bg);
+  background-color: var(--chua-m-bg) !important;
   display: flex;
   flex-direction: column;
   position: relative;
@@ -30,7 +31,9 @@
   padding-bottom: calc(var(--chua-m-bottom-nav-height) + var(--chua-m-safe-bottom) + 16px);
 }
 
-.chua-mobile-page-content {
+.chua-mobile-page-content,
+.chua-mobile-app main.chua-mobile-page-content {
+  background-color: var(--chua-m-bg) !important;
   padding-left: var(--chua-m-padding-x);
   padding-right: var(--chua-m-padding-x);
   padding-top: var(--chua-m-spacing-md);
@@ -492,3 +495,128 @@
   from { opacity: 0; transform: translateY(-16px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ========================================================================= */
+/* PHASE A — ACADEMY MOBILE NAVIGATION & CONTEXT SELECTORS                   */
+/* ========================================================================= */
+
+.chua-mobile-app .chua-m-academy-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chua-mobile-app .chua-m-workspace-selector {
+  width: 100%;
+  min-height: 52px;
+  background-color: var(--chua-m-surface);
+  border: 1px solid var(--chua-m-border);
+  border-radius: 16px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  text-align: left;
+  box-shadow: var(--chua-m-shadow-subtle);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.chua-mobile-app .chua-m-workspace-selector:active:not(:disabled) {
+  background-color: var(--chua-m-surface-subtle);
+  border-color: var(--chua-m-blue);
+}
+
+.chua-mobile-app .chua-m-primary-nav {
+  background-color: var(--chua-m-surface);
+  border: 1px solid var(--chua-m-border);
+  border-radius: 16px;
+  padding: 4px;
+  box-shadow: var(--chua-m-shadow-subtle);
+  width: 100%;
+  overflow: hidden;
+}
+
+.chua-mobile-app .chua-m-primary-nav-btn {
+  min-height: 48px;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 6px 2px;
+  border: none;
+  background: transparent;
+  color: var(--chua-m-text-secondary);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.15;
+  cursor: pointer;
+  position: relative;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  min-width: 0;
+}
+
+.chua-mobile-app .chua-m-primary-nav-btn-active {
+  background-color: rgba(36, 85, 232, 0.08);
+  color: var(--chua-m-text-primary);
+  font-weight: 700;
+}
+
+.chua-mobile-app .chua-m-class-selector {
+  width: 100%;
+  min-height: 48px;
+  background-color: var(--chua-m-surface);
+  border: 1px solid var(--chua-m-border);
+  border-radius: 16px;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  text-align: left;
+  box-shadow: var(--chua-m-shadow-subtle);
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.chua-mobile-app .chua-m-class-selector:active {
+  background-color: var(--chua-m-surface-subtle);
+  border-color: var(--chua-m-blue);
+}
+
+.chua-mobile-app .chua-m-segmented-subnav {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  background-color: #E7EBF2;
+  border-radius: 14px;
+  width: 100%;
+}
+
+.chua-mobile-app .chua-m-segmented-subnav-btn {
+  min-height: 44px;
+  border-radius: 10px;
+  border: none;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--chua-m-text-secondary);
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.chua-mobile-app .chua-m-segmented-subnav-btn-active {
+  background-color: var(--chua-m-blue);
+  color: #FFFFFF;
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(36, 85, 232, 0.24);
+}
+

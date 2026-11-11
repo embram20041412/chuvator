@@ -8,7 +8,11 @@ import {
   LayoutDashboard,
   Building2,
   Lock,
-  Plus
+  Plus,
+  ChevronDown,
+  CheckCircle2,
+  Search,
+  BookOpen
 } from 'lucide-react';
 
 import useArenaData from '../../../hooks/useArenaData';
@@ -31,14 +35,20 @@ import ClassModal from '../../../components/ClassModal';
 import CreateAcademyModal from '../../../components/CreateAcademyModal';
 import LockScheduleModal from '../../../components/LockScheduleModal';
 
-// Dedicated mobile student management
+// Dedicated mobile student management & mobile UI primitives
 import MobileStudentManagement from '../students/MobileStudentManagement';
-import App3DMobileIcon from '../../components/App3DMobileIcon';
+import MobileBottomSheet from '../../components/MobileBottomSheet';
 
 /**
  * MobileAcademyHub Component
- * Unified, single-navigation Mobile Presentation for Akademi Module.
- * Fully integrates all 5 tabs: Dasbor, Siswa & SPP, Pelatih, Kelas, Presensi.
+ * Phase A — Redesigned Mobile Navigation & Context Hierarchy for Akademi Module.
+ * Hierarchy:
+ * 1. Header Akademi
+ * 2. Compact Workspace Selector (Bottom Sheet)
+ * 3. Navigasi Utama (Dasbor, Siswa, Kelas, Presensi, Pelatih)
+ * 4. Context Kelas (Compact Class Selector Bottom Sheet with Search when on Presensi)
+ * 5. Sub-Navigation Presensi ([ Presensi ] [ Evaluasi ] [ Growth ])
+ * 6. Konten Halaman
  * Scoped strictly under .chua-mobile-app
  */
 export default function MobileAcademyHub({ userProfile }) {
@@ -64,6 +74,13 @@ export default function MobileAcademyHub({ userProfile }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const validTabs = ['dasbor', 'siswa', 'pelatih', 'kelas', 'presensi'];
   const tabParam = searchParams.get('tab');
+  const subTabParam = searchParams.get('subtab');
+
+  const resolveSubTab = (raw) => {
+    if (raw === 'evaluasi') return 'evaluasi';
+    if (raw === 'antropometri' || raw === 'growth') return 'antropometri';
+    return 'presensi';
+  };
 
   const [activeTab, setActiveTab] = useState(() => {
     if (tabParam && validTabs.includes(tabParam)) {
@@ -74,6 +91,14 @@ export default function MobileAcademyHub({ userProfile }) {
     }
     return isCoachOnly ? 'kelas' : 'dasbor';
   });
+
+  // Sub-tabs & selector sheet states
+  const [classSubTab, setClassSubTab] = useState('active'); // 'active' | 'archived'
+  const [attendanceSubTab, setAttendanceSubTab] = useState(() => resolveSubTab(subTabParam)); // 'presensi' | 'evaluasi' | 'antropometri'
+  const [selectedClassId, setSelectedClassId] = useState('');
+  const [showWorkspaceSheet, setShowWorkspaceSheet] = useState(false);
+  const [showClassSheet, setShowClassSheet] = useState(false);
+  const [classSearchQuery, setClassSearchQuery] = useState('');
 
   // Keep state synced with URL changes (back/forward buttons)
   useEffect(() => {
@@ -86,12 +111,24 @@ export default function MobileAcademyHub({ userProfile }) {
     } else if (!tabParam) {
       setActiveTab(isCoachOnly ? 'kelas' : 'dasbor');
     }
-  }, [tabParam, isCoachOnly]);
+    if (subTabParam) {
+      setAttendanceSubTab(resolveSubTab(subTabParam));
+    }
+  }, [tabParam, subTabParam, isCoachOnly]);
 
   const handleTabChange = (tab) => {
     if (isCoachOnly && (tab === 'dasbor' || tab === 'siswa' || tab === 'pelatih')) return;
     setActiveTab(tab);
-    setSearchParams({ tab });
+    if (tab === 'presensi') {
+      setSearchParams({ tab, subtab: attendanceSubTab });
+    } else {
+      setSearchParams({ tab });
+    }
+  };
+
+  const handleAttendanceSubTabChange = (subTab) => {
+    setAttendanceSubTab(subTab);
+    setSearchParams({ tab: 'presensi', subtab: subTab });
   };
 
   // Academies & Active Workspace
@@ -108,11 +145,6 @@ export default function MobileAcademyHub({ userProfile }) {
   const [loadingCoaches, setLoadingCoaches] = useState(true);
   const [loadingClasses, setLoadingClasses] = useState(true);
   const [coachesError, setCoachesError] = useState(null);
-
-  // Sub-tabs & modal states
-  const [classSubTab, setClassSubTab] = useState('active'); // 'active' | 'archived'
-  const [attendanceSubTab, setAttendanceSubTab] = useState('presensi'); // 'presensi' | 'evaluasi' | 'antropometri'
-  const [selectedClassId, setSelectedClassId] = useState('');
 
   // Modals
   const [showCreateAcademyModal, setShowCreateAcademyModal] = useState(false);
@@ -217,6 +249,17 @@ export default function MobileAcademyHub({ userProfile }) {
     fetchAllData();
   }, [tenantId]);
 
+  // Handle Workspace Switch with Clean Context Reset
+  const handleSelectWorkspace = (newAcademyId) => {
+    if (!newAcademyId || isCoachOnly) return;
+    setActiveAcademyId(newAcademyId);
+    localStorage.setItem('activeAcademyId', newAcademyId);
+    setSelectedClassId('');
+    setShowWorkspaceSheet(false);
+    fetchCoaches(newAcademyId);
+    fetchArchivedClasses(newAcademyId);
+  };
+
   // Active Academy
   const activeAcademy = useMemo(() => {
     return academies.find((a) => a.id === activeAcademyId) || (academies.length > 0 ? academies[0] : null);
@@ -304,7 +347,22 @@ export default function MobileAcademyHub({ userProfile }) {
     };
   }, [activeClasses, activeArchivedClasses]);
 
-  // Auto-select first class if none selected
+  // Filtered Attendance Classes for Searchable Class Bottom Sheet
+  const filteredAttendanceClasses = useMemo(() => {
+    const q = classSearchQuery.trim().toLowerCase();
+    if (!q) return attendanceClasses;
+    const filterFn = (cls) =>
+      (cls.className || '').toLowerCase().includes(q) ||
+      (cls.sport || '').toLowerCase().includes(q) ||
+      (cls.coachName || '').toLowerCase().includes(q);
+    return {
+      active: attendanceClasses.active.filter(filterFn),
+      archived: attendanceClasses.archived.filter(filterFn),
+      all: attendanceClasses.all.filter(filterFn)
+    };
+  }, [attendanceClasses, classSearchQuery]);
+
+  // Auto-select first class if none selected or when switching workspaces
   useEffect(() => {
     const allAvailable = attendanceClasses.all;
     if (allAvailable.length > 0) {
@@ -320,6 +378,18 @@ export default function MobileAcademyHub({ userProfile }) {
   const selectedClass = useMemo(() => {
     return attendanceClasses.all.find((c) => c.id === selectedClassId) || null;
   }, [attendanceClasses.all, selectedClassId]);
+
+  // Primary Navigation Items
+  const navItems = useMemo(() => {
+    const items = [
+      { id: 'dasbor', label: 'Dasbor', icon: LayoutDashboard, coachAllowed: false },
+      { id: 'siswa', label: 'Siswa', icon: Users, coachAllowed: false },
+      { id: 'kelas', label: 'Kelas', icon: BookOpen, coachAllowed: true },
+      { id: 'presensi', label: 'Presensi', icon: ClipboardCheck, coachAllowed: true },
+      { id: 'pelatih', label: 'Pelatih', icon: GraduationCap, coachAllowed: false }
+    ];
+    return isCoachOnly ? items.filter((i) => i.coachAllowed) : items;
+  }, [isCoachOnly]);
 
   // Handlers for Class Management
   const handleOpenCreateClass = () => {
@@ -424,172 +494,207 @@ export default function MobileAcademyHub({ userProfile }) {
   };
 
   return (
-    <div className="space-y-4">
-      {/* Messages */}
+    <div className="chua-m-academy-container">
+      {/* Feedback Messages */}
       {successMsg && (
-        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-xl font-bold flex items-center justify-between">
+        <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs rounded-2xl font-semibold flex items-center justify-between">
           <span>{successMsg}</span>
-          <button onClick={() => setSuccessMsg(null)} className="text-emerald-600 font-bold">✕</button>
+          <button type="button" onClick={() => setSuccessMsg(null)} className="text-emerald-700 font-bold px-1">✕</button>
         </div>
       )}
       {errorMsg && (
-        <div className="p-3 bg-red-50 border border-red-200 text-red-800 text-xs rounded-xl font-bold flex items-center justify-between">
+        <div className="p-3 bg-red-50 border border-red-200 text-red-800 text-xs rounded-2xl font-semibold flex items-center justify-between">
           <span>{errorMsg}</span>
-          <button onClick={() => setErrorMsg(null)} className="text-red-600 font-bold">✕</button>
+          <button type="button" onClick={() => setErrorMsg(null)} className="text-red-700 font-bold px-1">✕</button>
         </div>
       )}
 
-      {/* TOP HEADER: WORKSPACE INFO & SELECTOR */}
-      <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs space-y-2.5">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-10 h-10 flex items-center justify-center shrink-0">
-              <App3DMobileIcon name="akademi" className="w-8 h-8" alt={activeAcademy?.name || 'Akademi'} />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
-                  {activeAcademy?.sport || 'General Sports'}
-                </span>
-                <span className="text-[10px] text-slate-400 font-semibold">
-                  {activeStudents.length} Siswa &bull; {activeClasses.length} Kelas
-                </span>
-              </div>
-              <h2 className="text-sm font-extrabold text-slate-800 truncate my-0">
-                {activeAcademy?.name || 'Akademi Olahraga'}
-              </h2>
-            </div>
-          </div>
-
-          {/* Action buttons */}
-          {isCoachOnly ? (
-            <button
-              type="button"
-              onClick={() => {
-                setPwdErr(null);
-                setPwdMsg(null);
-                setShowCoachPasswordModal(true);
-              }}
-              className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs flex items-center gap-1 shrink-0 cursor-pointer"
-              title="Ganti Password"
-            >
-              <Lock className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Password</span>
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowCreateAcademyModal(true)}
-              className="p-2 rounded-xl bg-[var(--chua-m-navy)] text-white font-bold text-xs flex items-center gap-1 shadow-xs shrink-0 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Akademi</span>
-            </button>
-          )}
+      {/* ==================================================== */}
+      {/* 1. HEADER AKADEMI                                    */}
+      {/* ==================================================== */}
+      <div className="flex items-center justify-between gap-2 pt-0.5">
+        <div className="min-w-0">
+          <h1 className="text-base font-bold text-[#101D38] tracking-tight my-0 truncate">
+            Akademi Olahraga
+          </h1>
         </div>
 
-        {/* Dropdown Workspace Switcher */}
-        {academies.length > 1 && !isCoachOnly && (
-          <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
-            <span className="text-[11px] font-semibold text-slate-500">Workspace:</span>
-            <select
-              value={activeAcademyId}
-              onChange={(e) => {
-                const newId = e.target.value;
-                setActiveAcademyId(newId);
-                localStorage.setItem('activeAcademyId', newId);
-                fetchCoaches(newId);
-                fetchArchivedClasses(newId);
-              }}
-              className="text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 outline-none max-w-[200px] truncate"
-            >
-              {academies.map((ac) => (
-                <option key={ac.id} value={ac.id}>
-                  {ac.name} ({ac.sport || 'Umum'})
-                </option>
-              ))}
-            </select>
+        {isCoachOnly ? (
+          <button
+            type="button"
+            onClick={() => {
+              setPwdErr(null);
+              setPwdMsg(null);
+              setShowCoachPasswordModal(true);
+            }}
+            className="min-h-[38px] px-3 py-1.5 rounded-xl bg-white border border-[#E7EBF2] text-[#17233D] font-semibold text-xs flex items-center gap-1.5 shrink-0 cursor-pointer"
+            title="Ganti Password"
+          >
+            <Lock className="w-3.5 h-3.5 text-[#68758B]" />
+            <span>Password</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowCreateAcademyModal(true)}
+            className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[#101D38] text-white font-semibold text-xs flex items-center gap-1.5 shrink-0 cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Workspace</span>
+          </button>
+        )}
+      </div>
+
+      {/* ==================================================== */}
+      {/* 2. COMPACT WORKSPACE SELECTOR                        */}
+      {/* ==================================================== */}
+      <button
+        type="button"
+        disabled={isCoachOnly}
+        onClick={() => {
+          if (!isCoachOnly) setShowWorkspaceSheet(true);
+        }}
+        className={`chua-m-workspace-selector ${isCoachOnly ? 'cursor-default' : 'cursor-pointer'}`}
+        aria-label="Pilih Workspace Akademi"
+      >
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-bold text-[#17233D] truncate leading-snug">
+            {activeAcademy?.name || 'Pilih Workspace Akademi'}
+          </div>
+          <div className="text-xs text-[#68758B] font-medium truncate mt-0.5 flex items-center gap-1.5">
+            <span>{activeAcademy?.sport || 'Umum'}</span>
+            <span aria-hidden="true">&middot;</span>
+            <span className={!isCoachOnly ? 'text-[#2455E8] font-semibold' : ''}>
+              {isCoachOnly ? `${activeClasses.length} Kelas Aktif` : 'Pilih Workspace'}
+            </span>
+          </div>
+        </div>
+
+        {!isCoachOnly && (
+          <div className="w-8 h-8 rounded-xl bg-[#F5F7FC] border border-[#E7EBF2] flex items-center justify-center shrink-0 text-[#2455E8]">
+            <ChevronDown className="w-4 h-4" />
           </div>
         )}
-      </div>
-
-      {/* SINGLE PRIMARY MOBILE NAVIGATION (5 TABS) */}
-      <div className="bg-white p-1.5 rounded-2xl border border-slate-200/80 shadow-2xs flex items-center gap-1 overflow-x-auto scrollbar-none">
-        {!isCoachOnly && (
-          <button
-            type="button"
-            onClick={() => handleTabChange('dasbor')}
-            className={`flex-1 min-w-[76px] py-2 px-2 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-              activeTab === 'dasbor'
-                ? 'bg-[var(--chua-m-navy)] text-white shadow-xs'
-                : 'text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            <App3DMobileIcon name="ai_insight" active={activeTab === 'dasbor'} className="w-4 h-4 shrink-0" />
-            <span className="whitespace-nowrap">Dasbor</span>
-          </button>
-        )}
-
-        {!isCoachOnly && (
-          <button
-            type="button"
-            onClick={() => handleTabChange('siswa')}
-            className={`flex-1 min-w-[76px] py-2 px-2 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-              activeTab === 'siswa'
-                ? 'bg-[var(--chua-m-navy)] text-white shadow-xs'
-                : 'text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            <App3DMobileIcon name="siswa" active={activeTab === 'siswa'} className="w-4 h-4 shrink-0" />
-            <span className="whitespace-nowrap">Siswa</span>
-          </button>
-        )}
-
-        <button
-          type="button"
-          onClick={() => handleTabChange('kelas')}
-          className={`flex-1 min-w-[76px] py-2 px-2 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-            activeTab === 'kelas'
-              ? 'bg-[var(--chua-m-navy)] text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-50'
-          }`}
-        >
-          <App3DMobileIcon name="booking" active={activeTab === 'kelas'} className="w-4 h-4 shrink-0" />
-          <span className="whitespace-nowrap">Kelas</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => handleTabChange('presensi')}
-          className={`flex-1 min-w-[76px] py-2 px-2 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-            activeTab === 'presensi'
-              ? 'bg-[var(--chua-m-navy)] text-white shadow-xs'
-              : 'text-slate-600 hover:bg-slate-50'
-          }`}
-        >
-          <App3DMobileIcon name="presensi" active={activeTab === 'presensi'} className="w-4 h-4 shrink-0" />
-          <span className="whitespace-nowrap">Presensi</span>
-        </button>
-
-        {!isCoachOnly && (
-          <button
-            type="button"
-            onClick={() => handleTabChange('pelatih')}
-            className={`flex-1 min-w-[76px] py-2 px-2 rounded-xl font-extrabold text-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-              activeTab === 'pelatih'
-                ? 'bg-[var(--chua-m-navy)] text-white shadow-xs'
-                : 'text-slate-600 hover:bg-slate-50'
-            }`}
-          >
-            <App3DMobileIcon name="staf_pelatih" active={activeTab === 'pelatih'} className="w-4 h-4 shrink-0" />
-            <span className="whitespace-nowrap">Pelatih</span>
-          </button>
-        )}
-      </div>
+      </button>
 
       {/* ==================================================== */}
-      {/* TAB CONTENT 1: DASBOR AKADEMI (DATA AKTUAL) */}
+      {/* 3. NAVIGASI UTAMA AKADEMI (5 TABS, NO H-SCROLL)       */}
       {/* ==================================================== */}
+      <nav className="chua-m-primary-nav" aria-label="Navigasi Utama Akademi">
+        <div className={`grid ${isCoachOnly ? 'grid-cols-2' : 'grid-cols-5'} gap-1`}>
+          {navItems.map((item) => {
+            const IconComponent = item.icon;
+            const isActive = activeTab === item.id;
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => handleTabChange(item.id)}
+                className={`chua-m-primary-nav-btn ${isActive ? 'chua-m-primary-nav-btn-active' : ''}`}
+                aria-current={isActive ? 'page' : undefined}
+              >
+                <IconComponent
+                  className={`w-4 h-4 shrink-0 transition-colors ${
+                    isActive ? 'text-[#2455E8]' : 'text-[#68758B]'
+                  }`}
+                />
+                <span className="truncate max-w-full">{item.label}</span>
+                {isActive && (
+                  <span
+                    className="w-4 h-0.5 rounded-full bg-[#2455E8] mt-0.5"
+                    aria-hidden="true"
+                  />
+                )}
+              </button>
+            );
+          })}
+        </div>
+      </nav>
+
+      {/* ==================================================== */}
+      {/* 4. CONTEXT KELAS & 5. SUB-NAVIGATION PRESENSI        */}
+      {/* ==================================================== */}
+      {activeTab === 'presensi' && (
+        <div className="space-y-2.5">
+          {/* 4. Compact Class Selector */}
+          <button
+            type="button"
+            onClick={() => {
+              setClassSearchQuery('');
+              setShowClassSheet(true);
+            }}
+            className="chua-m-class-selector cursor-pointer"
+            aria-label="Pilih Kelas Latihan"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="text-xs sm:text-sm font-bold text-[#17233D] truncate leading-snug">
+                {selectedClass ? selectedClass.className : 'Pilih Kelas Latihan'}
+              </div>
+              <div className="text-[11px] text-[#68758B] font-medium truncate mt-0.5 flex items-center gap-1.5">
+                <span>
+                  {selectedClass
+                    ? `${selectedClass.sport || activeAcademy?.sport || 'Olahraga'}${
+                        selectedClass.isArchived ? ' · Arsip' : ''
+                      }`
+                    : 'Belum ada kelas dipilih'}
+                </span>
+                <span aria-hidden="true">&middot;</span>
+                <span className="text-[#2455E8] font-semibold">Pilih Kelas</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1 text-xs font-semibold text-[#2455E8] shrink-0">
+              <span>Pilih Kelas</span>
+              <ChevronDown className="w-4 h-4" />
+            </div>
+          </button>
+
+          {/* 5. Segmented Sub-Navigation: [ Presensi ] [ Evaluasi ] [ Growth ] */}
+          <div className="chua-m-segmented-subnav" role="tablist" aria-label="Sub-navigasi Presensi">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={attendanceSubTab === 'presensi'}
+              onClick={() => handleAttendanceSubTabChange('presensi')}
+              className={`chua-m-segmented-subnav-btn ${
+                attendanceSubTab === 'presensi' ? 'chua-m-segmented-subnav-btn-active' : ''
+              }`}
+            >
+              <span>Presensi</span>
+            </button>
+
+            <button
+              type="button"
+              role="tab"
+              aria-selected={attendanceSubTab === 'evaluasi'}
+              onClick={() => handleAttendanceSubTabChange('evaluasi')}
+              className={`chua-m-segmented-subnav-btn ${
+                attendanceSubTab === 'evaluasi' ? 'chua-m-segmented-subnav-btn-active' : ''
+              }`}
+            >
+              <span>Evaluasi</span>
+            </button>
+
+            <button
+              type="button"
+              role="tab"
+              aria-selected={attendanceSubTab === 'antropometri'}
+              onClick={() => handleAttendanceSubTabChange('antropometri')}
+              className={`chua-m-segmented-subnav-btn ${
+                attendanceSubTab === 'antropometri' ? 'chua-m-segmented-subnav-btn-active' : ''
+              }`}
+            >
+              <span>Growth</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ==================================================== */}
+      {/* 6. KONTEN HALAMAN                                    */}
+      {/* ==================================================== */}
+
+      {/* TAB CONTENT 1: DASBOR AKADEMI */}
       {activeTab === 'dasbor' && !isCoachOnly && (
         <div>
           <AcademyDashboard
@@ -605,34 +710,35 @@ export default function MobileAcademyHub({ userProfile }) {
             onAddClass={handleOpenCreateClass}
             onPaySpp={() => handleTabChange('siswa')}
             onViewStudentDetail={() => handleTabChange('siswa')}
+            isMobile={true}
           />
         </div>
       )}
 
-      {/* ==================================================== */}
       {/* TAB CONTENT 2: SISWA & SPP */}
-      {/* ==================================================== */}
       {activeTab === 'siswa' && !isCoachOnly && (
         <div>
-          <MobileStudentManagement userProfile={userProfile} />
+          <MobileStudentManagement
+            userProfile={userProfile}
+            activeAcademyId={activeAcademy?.id || activeAcademyId}
+            onStudentsChanged={fetchAllData}
+          />
         </div>
       )}
 
-      {/* ==================================================== */}
-      {/* TAB CONTENT 3: KELAS & JADWAL (DATA AKTUAL) */}
-      {/* ==================================================== */}
+      {/* TAB CONTENT 3: KELAS & JADWAL */}
       {activeTab === 'kelas' && (
-        <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
+        <div className="bg-white p-3.5 rounded-[16px] border border-[#E7EBF2] shadow-[0_2px_8px_rgba(16,29,56,0.04)] space-y-3">
           {/* Sub-header: Toggle Kelas Aktif / Arsip & Buat Kelas */}
           <div className="flex items-center justify-between gap-2 flex-wrap">
-            <div className="inline-flex items-center p-0.5 bg-slate-100 rounded-xl border border-slate-200">
+            <div className="inline-flex items-center p-1 bg-[#F5F7FC] rounded-xl border border-[#E7EBF2]">
               <button
                 type="button"
                 onClick={() => setClassSubTab('active')}
-                className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${
+                className={`min-h-[36px] px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                   classSubTab === 'active'
-                    ? 'bg-[var(--chua-m-navy)] text-white shadow-xs'
-                    : 'text-slate-600'
+                    ? 'bg-[#2455E8] text-white font-bold shadow-xs'
+                    : 'text-[#68758B]'
                 }`}
               >
                 Aktif ({activeClasses.length})
@@ -643,10 +749,10 @@ export default function MobileAcademyHub({ userProfile }) {
                   setClassSubTab('archived');
                   fetchArchivedClasses();
                 }}
-                className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${
+                className={`min-h-[36px] px-3 py-1 text-xs font-semibold rounded-lg transition-all cursor-pointer ${
                   classSubTab === 'archived'
-                    ? 'bg-[var(--chua-m-navy)] text-white shadow-xs'
-                    : 'text-slate-600'
+                    ? 'bg-[#2455E8] text-white font-bold shadow-xs'
+                    : 'text-[#68758B]'
                 }`}
               >
                 Arsip ({activeArchivedClasses.length})
@@ -657,27 +763,27 @@ export default function MobileAcademyHub({ userProfile }) {
               <button
                 type="button"
                 onClick={handleOpenCreateClass}
-                className="px-2.5 py-1.5 bg-[var(--chua-m-emerald)] hover:opacity-90 text-white font-bold text-xs rounded-xl flex items-center gap-1 shadow-xs cursor-pointer"
+                className="min-h-[38px] px-3 py-1.5 bg-[#101D38] hover:opacity-90 text-white font-semibold text-xs rounded-xl flex items-center gap-1 shadow-xs cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
-                <span>+ Kelas</span>
+                <span>Tambah Kelas</span>
               </button>
             )}
           </div>
 
           {/* Render Actual AcademyClasses List */}
           {(classSubTab === 'active' ? loadingClasses : false) ? (
-            <p className="py-8 text-center text-xs text-slate-500 font-medium">Memuat data kelas...</p>
+            <p className="py-8 text-center text-xs text-[#68758B] font-medium">Memuat data kelas...</p>
           ) : (classSubTab === 'active' ? activeClasses : activeArchivedClasses).length === 0 ? (
-            <div className="py-8 text-center border-2 border-dashed border-slate-200 rounded-xl p-4 space-y-2">
+            <div className="py-8 text-center border border-dashed border-[#E7EBF2] rounded-2xl p-4 space-y-2">
               <Calendar className="w-8 h-8 text-slate-300 mx-auto" />
-              <p className="text-xs font-bold text-slate-700 my-0">
+              <p className="text-xs font-bold text-[#17233D] my-0">
                 {classSubTab === 'active' ? 'Belum Ada Kelas Latihan Aktif' : 'Belum Ada Kelas yang Diarsipkan'}
               </p>
-              <p className="text-[11px] text-slate-400 my-0">
+              <p className="text-[11px] text-[#68758B] my-0">
                 {canManageClasses && classSubTab === 'active'
-                  ? 'Klik tombol "+ Kelas" di atas untuk menambahkan kelompok latihan.'
-                  : 'Kelas akademi akan otomatis muncul setelah ditambahkan oleh admin.'}
+                  ? 'Ketuk tombol "Tambah Kelas" untuk membuat kelompok latihan baru.'
+                  : 'Kelas akademi akan muncul setelah ditambahkan oleh admin.'}
               </p>
             </div>
           ) : (
@@ -696,84 +802,9 @@ export default function MobileAcademyHub({ userProfile }) {
         </div>
       )}
 
-      {/* ==================================================== */}
-      {/* TAB CONTENT 4: PRESENSI, EVALUASI & GROWTH (DATA AKTUAL) */}
-      {/* ==================================================== */}
+      {/* TAB CONTENT 4: PRESENSI, EVALUASI & GROWTH (ISI INTERNAL TETAP) */}
       {activeTab === 'presensi' && (
-        <div className="space-y-3">
-          {/* Sub-tab Pill Navigation */}
-          <div className="bg-white p-2 rounded-2xl border border-slate-200/80 shadow-xs space-y-2.5">
-            <div className="grid grid-cols-3 gap-1 p-0.5 bg-slate-100 rounded-xl">
-              <button
-                type="button"
-                onClick={() => setAttendanceSubTab('presensi')}
-                className={`py-1.5 px-1 text-xs font-bold rounded-lg transition-all text-center flex items-center justify-center gap-1 ${
-                  attendanceSubTab === 'presensi'
-                    ? 'bg-[var(--chua-m-navy)] text-white shadow-xs'
-                    : 'text-slate-600'
-                }`}
-              >
-                <App3DMobileIcon name="presensi" className="w-3.5 h-3.5 shrink-0" />
-                <span>Presensi</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setAttendanceSubTab('evaluasi')}
-                className={`py-1.5 px-1 text-xs font-bold rounded-lg transition-all text-center flex items-center justify-center gap-1 ${
-                  attendanceSubTab === 'evaluasi'
-                    ? 'bg-[var(--chua-m-navy)] text-white shadow-xs'
-                    : 'text-slate-600'
-                }`}
-              >
-                <App3DMobileIcon name="evaluasi" className="w-3.5 h-3.5 shrink-0" />
-                <span>Evaluasi</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setAttendanceSubTab('antropometri')}
-                className={`py-1.5 px-1 text-xs font-bold rounded-lg transition-all text-center flex items-center justify-center gap-1 ${
-                  attendanceSubTab === 'antropometri'
-                    ? 'bg-[var(--chua-m-navy)] text-white shadow-xs'
-                    : 'text-slate-600'
-                }`}
-              >
-                <App3DMobileIcon name="ai_insight" className="w-3.5 h-3.5 shrink-0" />
-                <span>Growth</span>
-              </button>
-            </div>
-
-            {/* Class Selector Dropdown for Attendance / Assessment */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-600 whitespace-nowrap">Pilih Kelas:</span>
-              <select
-                value={selectedClassId}
-                onChange={(e) => setSelectedClassId(e.target.value)}
-                className="w-full text-xs font-bold text-slate-800 bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1.5 outline-none"
-              >
-                <option value="">-- Pilih Kelas Latihan --</option>
-                {attendanceClasses.active.length > 0 && (
-                  <optgroup label="── Kelas Aktif ──">
-                    {attendanceClasses.active.map((cls) => (
-                      <option key={cls.id} value={cls.id}>
-                        {cls.className} ({cls.sport || 'Umum'})
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-                {attendanceClasses.archived.length > 0 && (
-                  <optgroup label="── Arsip Kelas ──">
-                    {attendanceClasses.archived.map((cls) => (
-                      <option key={cls.id} value={cls.id}>
-                        {cls.className} (Arsip)
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-              </select>
-            </div>
-          </div>
-
-          {/* Render Actual Attendance Component */}
+        <div>
           {attendanceSubTab === 'presensi' && (
             <AttendanceSection
               selectedClass={selectedClass}
@@ -782,7 +813,6 @@ export default function MobileAcademyHub({ userProfile }) {
             />
           )}
 
-          {/* Render Actual Evaluation Component */}
           {attendanceSubTab === 'evaluasi' && (
             <EvaluationSection
               selectedClass={selectedClass}
@@ -792,7 +822,6 @@ export default function MobileAcademyHub({ userProfile }) {
             />
           )}
 
-          {/* Render Actual Growth Tracker Component */}
           {attendanceSubTab === 'antropometri' && (
             <GrowthTrackerSection
               selectedClass={selectedClass}
@@ -806,19 +835,14 @@ export default function MobileAcademyHub({ userProfile }) {
         </div>
       )}
 
-      {/* ==================================================== */}
-      {/* TAB CONTENT 5: TIM PELATIH (DATA AKTUAL) */}
-      {/* ==================================================== */}
+      {/* TAB CONTENT 5: TIM PELATIH */}
       {activeTab === 'pelatih' && !isCoachOnly && (
-        <div className="bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs space-y-3">
-          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+        <div className="bg-white p-3.5 rounded-[16px] border border-[#E7EBF2] shadow-[0_2px_8px_rgba(16,29,56,0.04)] space-y-3">
+          <div className="flex items-center justify-between pb-2.5 border-b border-[#E7EBF2]">
             <div>
-              <h3 className="font-extrabold text-sm text-slate-800 my-0">
+              <h3 className="font-bold text-sm text-[#17233D] my-0">
                 Tim Pelatih ({activeCoaches.length})
               </h3>
-              <p className="text-[11px] text-slate-400 my-0.5">
-                Pelatih dan instruktur resmi {activeAcademy?.name || 'akademi'}.
-              </p>
             </div>
             <button
               type="button"
@@ -826,10 +850,10 @@ export default function MobileAcademyHub({ userProfile }) {
                 setEditingCoach(null);
                 setShowCoachModal(true);
               }}
-              className="px-2.5 py-1.5 bg-[var(--chua-m-emerald)] hover:opacity-90 text-white font-bold text-xs rounded-xl flex items-center gap-1 shadow-xs cursor-pointer"
+              className="min-h-[38px] px-3 py-1.5 bg-[#2455E8] hover:opacity-90 text-white font-semibold text-xs rounded-xl flex items-center gap-1 shadow-xs cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>+ Pelatih</span>
+              <span>Tambah Pelatih</span>
             </button>
           </div>
 
@@ -908,6 +932,174 @@ export default function MobileAcademyHub({ userProfile }) {
           )}
         </div>
       )}
+
+      {/* BOTTOM SHEET: WORKSPACE SELECTOR */}
+      <MobileBottomSheet
+        isOpen={showWorkspaceSheet}
+        onClose={() => setShowWorkspaceSheet(false)}
+        title="Pilih Workspace Akademi"
+      >
+        <div className="space-y-3">
+          {academies.length === 0 ? (
+            <p className="text-xs text-[#68758B] py-4 text-center my-0">
+              Belum ada workspace akademi terdaftar.
+            </p>
+          ) : (
+            <div className="space-y-2 max-h-[52vh] overflow-y-auto pr-0.5">
+              {academies.map((ac) => {
+                const isSelected = ac.id === (activeAcademy?.id || activeAcademyId);
+                return (
+                  <button
+                    key={ac.id}
+                    type="button"
+                    onClick={() => handleSelectWorkspace(ac.id)}
+                    className={`w-full min-h-[52px] p-3 rounded-2xl text-left flex items-center justify-between gap-3 transition-all cursor-pointer border ${
+                      isSelected
+                        ? 'bg-[#2455E8]/[0.06] border-[#2455E8] text-[#17233D]'
+                        : 'bg-white border-[#E7EBF2] text-[#17233D] hover:bg-[#F5F7FC]'
+                    }`}
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs sm:text-sm font-bold text-[#17233D] truncate">
+                        {ac.name}
+                      </div>
+                      <div className="text-[11px] font-medium text-[#68758B] truncate mt-0.5">
+                        {ac.sport || 'Olahraga Umum'}
+                      </div>
+                    </div>
+                    {isSelected && (
+                      <CheckCircle2 className="w-4 h-4 text-[#2455E8] shrink-0" />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {!isCoachOnly && (
+            <button
+              type="button"
+              onClick={() => {
+                setShowWorkspaceSheet(false);
+                setShowCreateAcademyModal(true);
+              }}
+              className="w-full min-h-[48px] px-4 py-2.5 rounded-xl bg-[#101D38] text-white font-semibold text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Buat Workspace Akademi Baru</span>
+            </button>
+          )}
+        </div>
+      </MobileBottomSheet>
+
+      {/* BOTTOM SHEET: CLASS SELECTOR (WITH SEARCH) */}
+      <MobileBottomSheet
+        isOpen={showClassSheet}
+        onClose={() => setShowClassSheet(false)}
+        title="Pilih Kelas Latihan"
+      >
+        <div className="space-y-3">
+          {attendanceClasses.all.length > 3 && (
+            <div className="relative">
+              <Search className="w-4 h-4 text-[#68758B] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={classSearchQuery}
+                onChange={(e) => setClassSearchQuery(e.target.value)}
+                placeholder="Cari nama kelas atau pelatih..."
+                className="w-full min-h-[44px] pl-10 pr-3 py-2 text-xs bg-[#F5F7FC] border border-[#E7EBF2] rounded-xl text-[#17233D] outline-none focus:border-[#2455E8]"
+              />
+            </div>
+          )}
+
+          {filteredAttendanceClasses.all.length === 0 ? (
+            <p className="text-xs text-[#68758B] py-6 text-center my-0">
+              {classSearchQuery.trim()
+                ? 'Tidak ada kelas yang cocok dengan pencarian.'
+                : 'Belum ada kelas latihan tersedia pada workspace ini.'}
+            </p>
+          ) : (
+            <div className="space-y-3 max-h-[55vh] overflow-y-auto pr-0.5">
+              {filteredAttendanceClasses.active.length > 0 && (
+                <div className="space-y-1.5">
+                  <div className="text-[11px] font-bold text-[#68758B] px-1">
+                    Kelas Aktif ({filteredAttendanceClasses.active.length})
+                  </div>
+                  {filteredAttendanceClasses.active.map((cls) => {
+                    const isSelected = cls.id === selectedClassId;
+                    return (
+                      <button
+                        key={cls.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedClassId(cls.id);
+                          setShowClassSheet(false);
+                        }}
+                        className={`w-full min-h-[50px] p-3 rounded-2xl text-left flex items-center justify-between gap-3 transition-all cursor-pointer border ${
+                          isSelected
+                            ? 'bg-[#2455E8]/[0.06] border-[#2455E8] text-[#17233D]'
+                            : 'bg-white border-[#E7EBF2] text-[#17233D] hover:bg-[#F5F7FC]'
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs sm:text-sm font-bold text-[#17233D] truncate">
+                            {cls.className}
+                          </div>
+                          <div className="text-[11px] font-medium text-[#68758B] truncate mt-0.5">
+                            {cls.sport || activeAcademy?.sport || 'Umum'}
+                            {cls.coachName ? ` · Pelatih: ${cls.coachName}` : ''}
+                          </div>
+                        </div>
+                        {isSelected && (
+                          <CheckCircle2 className="w-4 h-4 text-[#2455E8] shrink-0" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {filteredAttendanceClasses.archived.length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  <div className="text-[11px] font-bold text-[#68758B] px-1">
+                    Arsip Kelas ({filteredAttendanceClasses.archived.length})
+                  </div>
+                  {filteredAttendanceClasses.archived.map((cls) => {
+                    const isSelected = cls.id === selectedClassId;
+                    return (
+                      <button
+                        key={cls.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedClassId(cls.id);
+                          setShowClassSheet(false);
+                        }}
+                        className={`w-full min-h-[50px] p-3 rounded-2xl text-left flex items-center justify-between gap-3 transition-all cursor-pointer border ${
+                          isSelected
+                            ? 'bg-[#2455E8]/[0.06] border-[#2455E8] text-[#17233D]'
+                            : 'bg-white border-[#E7EBF2] text-[#17233D] hover:bg-[#F5F7FC]'
+                        }`}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <div className="text-xs sm:text-sm font-bold text-[#17233D] truncate">
+                            {cls.className}
+                          </div>
+                          <div className="text-[11px] font-medium text-[#68758B] truncate mt-0.5">
+                            {cls.sport || activeAcademy?.sport || 'Umum'} · Arsip
+                          </div>
+                        </div>
+                        {isSelected && (
+                          <CheckCircle2 className="w-4 h-4 text-[#2455E8] shrink-0" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </MobileBottomSheet>
 
       {/* MODAL: COACH MANAGEMENT */}
       <CoachModal

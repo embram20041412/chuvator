@@ -89,7 +89,8 @@ export default function AcademyDashboard({
   onAddStudent,
   onAddClass,
   onPaySpp,
-  onViewStudentDetail
+  onViewStudentDetail,
+  isMobile = false
 }) {
   const currentMonth = useMemo(() => new Date().toISOString().slice(0, 7), []);
 
@@ -220,55 +221,86 @@ export default function AcademyDashboard({
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4 sm:space-y-5">
       {/* =============================================================== */}
       {/* HEADER BANNER AKADEMI SPESIFIK & SIKLUS PENAGIHAN               */}
       {/* =============================================================== */}
-      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs rounded-xl p-3 sm:px-4 sm:py-3 relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-2.5">
-        <div className="flex items-center space-x-2.5 z-10 min-w-0 w-full md:w-auto">
-          <div className="hidden sm:flex w-9 h-9 bg-[#354944]/10 border border-[#354944]/20 rounded-xl items-center justify-center shrink-0 p-1 text-[#354944] dark:text-[#C89D32]">
-            <Akademi3DIcon className="w-5 h-5" />
+      {isMobile ? (
+        <div className="bg-white border border-[#E7EBF2] rounded-[16px] p-3 flex items-center justify-between gap-2 shadow-[0_2px_8px_rgba(16,29,56,0.04)]">
+          <div className="text-xs text-[#68758B] font-medium min-w-0 truncate">
+            <span>Siklus SPP: </span>
+            <strong className="text-[#17233D] font-semibold">Tgl {sppBillingStartDay}–{sppDueDay}</strong>
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center space-x-2 flex-wrap gap-y-0.5">
-              <h2 className="text-xs sm:text-base font-bold text-slate-900 dark:text-white tracking-tight truncate">
-                Dasbor BI &amp; Analytics &bull; {activeAcademy.name}
-              </h2>
-              <span className="px-1.5 py-0.5 bg-[#C89D32]/15 text-[#C89D32] border border-[#C89D32]/30 rounded-full text-[9px] font-extrabold uppercase tracking-wider">
-                {activeAcademy.categoryLabel || activeAcademy.category || 'Akademi'}
-              </span>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {onAddStudent && (
+              <button
+                type="button"
+                onClick={onAddStudent}
+                className="min-h-[38px] px-3 py-1.5 bg-[#2455E8] text-white text-xs font-semibold rounded-xl flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Siswa</span>
+              </button>
+            )}
+            {onAddClass && (
+              <button
+                type="button"
+                onClick={onAddClass}
+                className="min-h-[38px] px-3 py-1.5 bg-[#101D38] text-white text-xs font-semibold rounded-xl flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Kelas</span>
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs rounded-xl p-3 sm:px-4 sm:py-3 relative overflow-hidden flex flex-col md:flex-row justify-between items-center gap-2.5">
+          <div className="flex items-center space-x-2.5 z-10 min-w-0 w-full md:w-auto">
+            <div className="hidden sm:flex w-9 h-9 bg-[#354944]/10 border border-[#354944]/20 rounded-xl items-center justify-center shrink-0 p-1 text-[#354944] dark:text-[#C89D32]">
+              <Akademi3DIcon className="w-5 h-5" />
             </div>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 flex items-center space-x-1.5 flex-wrap gap-y-0.5 font-medium">
-              <span>Siklus: Tgl <strong className="text-slate-800 dark:text-slate-200">{sppBillingStartDay}</strong></span>
-              <span className="text-slate-300 dark:text-slate-700">&bull;</span>
-              <span>Jatuh Tempo: Tgl <strong className="text-slate-800 dark:text-slate-200">{sppDueDay}</strong></span>
-              <span className="text-slate-300 dark:text-slate-700">&bull;</span>
-              <span className="inline-flex items-center px-1.5 py-0.2 bg-[#354944]/10 text-[#354944] dark:text-[#C89D32] border border-[#354944]/20 rounded text-[9px] font-bold">{activeClasses.length} Kelas</span>
-            </p>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center space-x-2 flex-wrap gap-y-0.5">
+                <h2 className="text-xs sm:text-base font-bold text-slate-900 dark:text-white tracking-tight truncate">
+                  Dasbor BI &amp; Analytics &bull; {activeAcademy.name}
+                </h2>
+                <span className="px-1.5 py-0.5 bg-[#C89D32]/15 text-[#C89D32] border border-[#C89D32]/30 rounded-full text-[9px] font-extrabold uppercase tracking-wider">
+                  {activeAcademy.categoryLabel || activeAcademy.category || 'Akademi'}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 flex items-center space-x-1.5 flex-wrap gap-y-0.5 font-medium">
+                <span>Siklus: Tgl <strong className="text-slate-800 dark:text-slate-200">{sppBillingStartDay}</strong></span>
+                <span className="text-slate-300 dark:text-slate-700">&bull;</span>
+                <span>Jatuh Tempo: Tgl <strong className="text-slate-800 dark:text-slate-200">{sppDueDay}</strong></span>
+                <span className="text-slate-300 dark:text-slate-700">&bull;</span>
+                <span className="inline-flex items-center px-1.5 py-0.2 bg-[#354944]/10 text-[#354944] dark:text-[#C89D32] border border-[#354944]/20 rounded text-[9px] font-bold">{activeClasses.length} Kelas</span>
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:flex items-center gap-1.5 z-10 shrink-0 w-full md:w-auto">
+            {onAddStudent && (
+              <button
+                onClick={onAddStudent}
+                className="bg-[#C89D32] hover:bg-[#B38A28] text-white px-2.5 py-1.5 text-xs font-semibold rounded-lg shadow-xs transition-all flex items-center justify-center space-x-1 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Daftar Siswa</span>
+              </button>
+            )}
+            {onAddClass && (
+              <button
+                onClick={onAddClass}
+                className="bg-[#354944] hover:bg-[#2B3D38] text-white px-2.5 py-1.5 text-xs font-semibold rounded-lg shadow-xs transition-all flex items-center justify-center space-x-1 cursor-pointer"
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>Buat Kelas</span>
+              </button>
+            )}
           </div>
         </div>
-
-        <div className="grid grid-cols-2 sm:flex items-center gap-1.5 z-10 shrink-0 w-full md:w-auto">
-          {onAddStudent && (
-            <button
-              onClick={onAddStudent}
-              className="bg-[#C89D32] hover:bg-[#B38A28] text-white px-2.5 py-1.5 text-xs font-semibold rounded-lg shadow-xs transition-all flex items-center justify-center space-x-1 cursor-pointer"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Daftar Siswa</span>
-            </button>
-          )}
-          {onAddClass && (
-            <button
-              onClick={onAddClass}
-              className="bg-[#354944] hover:bg-[#2B3D38] text-white px-2.5 py-1.5 text-xs font-semibold rounded-lg shadow-xs transition-all flex items-center justify-center space-x-1 cursor-pointer"
-            >
-              <BookOpen className="w-3.5 h-3.5" />
-              <span>Buat Kelas</span>
-            </button>
-          )}
-        </div>
-      </div>
+      )}
 
       {/* =============================================================== */}
       {/* 1. BAGIAN ATAS (SCORECARDS METRIK UTAMA TOPOGRAPHY CARDS)        */}
