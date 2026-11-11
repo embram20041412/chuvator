@@ -637,7 +637,8 @@ export default function MobileParentManagementMain({
   initialError = null,
   initialSuccessResult = null,
   initialWhatsAppModal = null,
-  initialDeleteTarget = null
+  initialDeleteTarget = null,
+  initialActionMessage = null
 }) {
   const activeService = serviceOverride || parentService;
   const tenantId = resolveTenantId(userProfile);
@@ -684,41 +685,128 @@ export default function MobileParentManagementMain({
 
   // Action feedback states
   const [actionLoadingId, setActionLoadingId] = useState(null);
-  const [actionMessage, setActionMessage] = useState(null);
+  const [actionMessage, setActionMessage] = useState(initialActionMessage);
 
-  const fetchParents = useCallback(async () => {
-    if (!tenantId) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const data = await activeService.getParentAccounts();
-      const rawList = Array.isArray(data) ? data : [];
-      setParents(filterParentsByTenant(rawList, tenantId));
-    } catch (err) {
-      console.error('[MobileParentManagementMain] Error fetching parents:', err);
-      setLoadError(err?.message || 'Gagal memuat daftar akun wali murid.');
-    } finally {
-      setLoading(false);
-    }
-  }, [tenantId, activeService]);
+  // Lifecycle, Request Sequence & Timer Refs
+  const isMountedRef = useRef(true);
+  const fetchSeqRef = useRef(0);
+  const activeTenantRef = useRef(tenantId);
+  activeTenantRef.current = tenantId;
+  const prevTenantIdRef = useRef(tenantId);
+  const copiedLinkTimerRef = useRef(null);
+  const copiedMessageTimerRef = useRef(null);
 
   useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      fetchSeqRef.current += 1;
+      if (copiedLinkTimerRef.current) {
+        clearTimeout(copiedLinkTimerRef.current);
+        copiedLinkTimerRef.current = null;
+      }
+      if (copiedMessageTimerRef.current) {
+        clearTimeout(copiedMessageTimerRef.current);
+        copiedMessageTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  const fetchParents = useCallback(
+    async (targetTenant = tenantId) => {
+      const requestedTenant = targetTenant ? String(targetTenant).trim() : null;
+      if (!requestedTenant) {
+        fetchSeqRef.current += 1;
+        if (isMountedRef.current) {
+          setParents([]);
+          setLoadError(null);
+          setLoading(false);
+        }
+        return;
+      }
+
+      const requestId = ++fetchSeqRef.current;
+      if (isMountedRef.current) {
+        setLoading(true);
+        setLoadError(null);
+      }
+
+      try {
+        const data = await activeService.getParentAccounts();
+        if (
+          !isMountedRef.current ||
+          requestId !== fetchSeqRef.current ||
+          activeTenantRef.current !== requestedTenant
+        ) {
+          return;
+        }
+        const rawList = Array.isArray(data) ? data : [];
+        setParents(filterParentsByTenant(rawList, requestedTenant));
+      } catch (err) {
+        if (
+          !isMountedRef.current ||
+          requestId !== fetchSeqRef.current ||
+          activeTenantRef.current !== requestedTenant
+        ) {
+          return;
+        }
+        console.error('[MobileParentManagementMain] Error fetching parents:', err);
+        setParents([]);
+        setLoadError(err?.message || 'Gagal memuat daftar akun wali murid.');
+      } finally {
+        if (
+          isMountedRef.current &&
+          requestId === fetchSeqRef.current &&
+          activeTenantRef.current === requestedTenant
+        ) {
+          setLoading(false);
+        }
+      }
+    },
+    [tenantId, activeService]
+  );
+
+  useEffect(() => {
+    const tenantChanged = prevTenantIdRef.current !== tenantId;
+    if (tenantChanged) {
+      prevTenantIdRef.current = tenantId;
+      // Invalidate any in-flight request from previous tenant and clear stale state immediately
+      fetchSeqRef.current += 1;
+      setParents(Array.isArray(initialParents) ? filterParentsByTenant(initialParents, tenantId) : []);
+      setLoadError(initialError || null);
+      setActionMessage(null);
+      setActiveWhatsAppModal(null);
+      setParentToDelete(null);
+    }
+
     if (!tenantId) {
+      setParents([]);
       setLoading(false);
       return;
     }
-    if (!Array.isArray(initialParents)) {
-      fetchParents();
-    }
-  }, [tenantId, fetchParents, initialParents]);
 
-  // Auto-dismiss actionMessage after 5 seconds
+    if (Array.isArray(initialParents)) {
+      setParents(filterParentsByTenant(initialParents, tenantId));
+      setLoading(false);
+      return;
+    }
+
+    if (initialError && !tenantChanged) {
+      setLoading(false);
+      return;
+    }
+
+    fetchParents(tenantId);
+  }, [tenantId, fetchParents, initialParents, initialError]);
+
+  // Auto-dismiss actionMessage after 5 seconds (cleaned up on unmount or message change)
   useEffect(() => {
     if (!actionMessage) return undefined;
-    const timer = setTimeout(() => setActionMessage(null), 5000);
+    const timer = setTimeout(() => {
+      if (isMountedRef.current) {
+        setActionMessage(null);
+      }
+    }, 5000);
     return () => clearTimeout(timer);
   }, [actionMessage]);
 
@@ -760,6 +848,7 @@ export default function MobileParentManagementMain({
       return;
     }
 
+    const requestedTenant = tenantId;
     setFormError(null);
     setIsSearchingStudents(true);
     setHasSearchedKK(true);
@@ -768,15 +857,19 @@ export default function MobileParentManagementMain({
 
     try {
       const result = await activeService.searchStudentsByKK(kkCheck.normalized);
+      if (!isMountedRef.current || activeTenantRef.current !== requestedTenant) return;
       const list = Array.isArray(result?.data) ? result.data : [];
       setSearchResults(list);
       if (list.length === 0) {
         setFormError('Tidak ditemukan siswa dengan nomor KK tersebut di tenant ini.');
       }
     } catch (err) {
+      if (!isMountedRef.current || activeTenantRef.current !== requestedTenant) return;
       setFormError(err?.message || 'Gagal mencari data siswa berdasarkan nomor KK.');
     } finally {
-      setIsSearchingStudents(false);
+      if (isMountedRef.current && activeTenantRef.current === requestedTenant) {
+        setIsSearchingStudents(false);
+      }
     }
   };
 
@@ -828,6 +921,7 @@ export default function MobileParentManagementMain({
       return;
     }
 
+    const requestedTenant = tenantId;
     setFormError(null);
     setIsSubmitting(true);
     submitLockRef.current = true;
@@ -843,15 +937,19 @@ export default function MobileParentManagementMain({
       });
 
       const result = await activeService.createParentAccount(payload);
+      if (!isMountedRef.current || activeTenantRef.current !== requestedTenant) return;
       setSuccessResult(result);
       setCopiedLink(false);
       setCopiedMessage(false);
-      await fetchParents();
+      await fetchParents(requestedTenant);
     } catch (err) {
+      if (!isMountedRef.current || activeTenantRef.current !== requestedTenant) return;
       setFormError(err?.message || 'Gagal membuat akun wali murid.');
     } finally {
-      setIsSubmitting(false);
       submitLockRef.current = false;
+      if (isMountedRef.current) {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -860,6 +958,7 @@ export default function MobileParentManagementMain({
     if (!tenantId || !parentId) return;
     if (actionLoadingId === parentId || isGeneratingWhatsApp) return;
 
+    const requestedTenant = tenantId;
     setActionLoadingId(parentId);
     setActionMessage(null);
     setIsGeneratingWhatsApp(true);
@@ -868,21 +967,25 @@ export default function MobileParentManagementMain({
 
     try {
       const res = await activeService.generateWhatsAppInvitation(parentId);
+      if (!isMountedRef.current || activeTenantRef.current !== requestedTenant) return;
       const modalPayload = res?.data || res;
       const topStatus = res?.status || modalPayload?.status || (modalPayload?.isConfirmed ? 'ACTIVATED' : 'READY_TO_SEND');
       setActiveWhatsAppModal({
         ...modalPayload,
         status: topStatus
       });
-      await fetchParents();
+      await fetchParents(requestedTenant);
     } catch (err) {
+      if (!isMountedRef.current || activeTenantRef.current !== requestedTenant) return;
       setActionMessage({
         type: 'error',
         text: err?.message || 'Gagal menyiapkan tautan WhatsApp.'
       });
     } finally {
-      setIsGeneratingWhatsApp(false);
-      setActionLoadingId(null);
+      if (isMountedRef.current) {
+        setIsGeneratingWhatsApp(false);
+        setActionLoadingId(null);
+      }
     }
   };
 
@@ -892,8 +995,17 @@ export default function MobileParentManagementMain({
       if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(link);
       }
+      if (!isMountedRef.current) return false;
       setCopiedLink(true);
-      setTimeout(() => setCopiedLink(false), 3000);
+      if (copiedLinkTimerRef.current) {
+        clearTimeout(copiedLinkTimerRef.current);
+      }
+      copiedLinkTimerRef.current = setTimeout(() => {
+        if (isMountedRef.current) {
+          setCopiedLink(false);
+        }
+        copiedLinkTimerRef.current = null;
+      }, 3000);
       return true;
     } catch (_) {
       return false;
@@ -906,8 +1018,17 @@ export default function MobileParentManagementMain({
       if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(msg);
       }
+      if (!isMountedRef.current) return false;
       setCopiedMessage(true);
-      setTimeout(() => setCopiedMessage(false), 3000);
+      if (copiedMessageTimerRef.current) {
+        clearTimeout(copiedMessageTimerRef.current);
+      }
+      copiedMessageTimerRef.current = setTimeout(() => {
+        if (isMountedRef.current) {
+          setCopiedMessage(false);
+        }
+        copiedMessageTimerRef.current = null;
+      }, 3000);
       return true;
     } catch (_) {
       return false;
@@ -924,6 +1045,7 @@ export default function MobileParentManagementMain({
   const handleConfirmDelete = async () => {
     if (!tenantId || !parentToDelete?.id || isDeleting) return;
     const targetId = parentToDelete.id;
+    const requestedTenant = tenantId;
 
     setIsDeleting(true);
     setActionLoadingId(targetId);
@@ -931,20 +1053,24 @@ export default function MobileParentManagementMain({
 
     try {
       await activeService.deleteParentAccount(targetId);
+      if (!isMountedRef.current || activeTenantRef.current !== requestedTenant) return;
       setParentToDelete(null);
       setActionMessage({
         type: 'success',
         text: `Akun wali murid "${parentToDelete.name || parentToDelete.full_name || parentToDelete.email}" berhasil dihapus secara aman.`
       });
-      await fetchParents();
+      await fetchParents(requestedTenant);
     } catch (err) {
+      if (!isMountedRef.current || activeTenantRef.current !== requestedTenant) return;
       setActionMessage({
         type: 'error',
         text: err?.message || 'Gagal menghapus akun wali murid.'
       });
     } finally {
-      setIsDeleting(false);
-      setActionLoadingId(null);
+      if (isMountedRef.current) {
+        setIsDeleting(false);
+        setActionLoadingId(null);
+      }
     }
   };
 

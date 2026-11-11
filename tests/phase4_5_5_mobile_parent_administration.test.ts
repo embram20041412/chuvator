@@ -2,20 +2,192 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import React from 'react';
+import React, { act } from 'react';
 import { renderToString } from 'react-dom/server';
+import { createRoot } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
+import { parentService } from '../src/services/parentService.js';
 
-// Setup Mock Window for Node.js SSR test environment
-if (typeof globalThis.window === 'undefined') {
-  (globalThis as any).window = {
-    innerWidth: 1024,
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    dispatchEvent: () => true,
-    location: { origin: 'https://chuvator.pages.dev', search: '' }
-  };
+// Setup lightweight W3C DOM & Window harness for React 19 createRoot + act in Node.js
+class MiniDOMNode {
+  nodeType: number;
+  nodeName: string;
+  childNodes: MiniDOMNode[] = [];
+  parentNode: MiniDOMNode | null = null;
+  ownerDocument: any = null;
+  nodeValue: string | null = null;
+  constructor(nodeType: number, nodeName: string) {
+    this.nodeType = nodeType;
+    this.nodeName = nodeName;
+  }
+  appendChild(child: MiniDOMNode) {
+    if (child.nodeType === 11) {
+      while (child.childNodes.length) this.appendChild(child.childNodes[0]);
+      return child;
+    }
+    if (child.parentNode) child.parentNode.removeChild(child);
+    child.parentNode = this;
+    this.childNodes.push(child);
+    return child;
+  }
+  removeChild(child: MiniDOMNode) {
+    const idx = this.childNodes.indexOf(child);
+    if (idx !== -1) {
+      this.childNodes.splice(idx, 1);
+      child.parentNode = null;
+    }
+    return child;
+  }
+  insertBefore(newNode: MiniDOMNode, refNode: MiniDOMNode | null) {
+    if (!refNode) return this.appendChild(newNode);
+    if (newNode.nodeType === 11) {
+      while (newNode.childNodes.length) this.insertBefore(newNode.childNodes[0], refNode);
+      return newNode;
+    }
+    if (newNode.parentNode) newNode.parentNode.removeChild(newNode);
+    const idx = this.childNodes.indexOf(refNode);
+    if (idx === -1) return this.appendChild(newNode);
+    newNode.parentNode = this;
+    this.childNodes.splice(idx, 0, newNode);
+    return newNode;
+  }
+  get firstChild(): MiniDOMNode | null {
+    return this.childNodes[0] || null;
+  }
+  get lastChild(): MiniDOMNode | null {
+    return this.childNodes[this.childNodes.length - 1] || null;
+  }
+  get nextSibling(): MiniDOMNode | null {
+    if (!this.parentNode) return null;
+    const i = this.parentNode.childNodes.indexOf(this);
+    return this.parentNode.childNodes[i + 1] || null;
+  }
+  get textContent(): string {
+    if (this.nodeType === 3 || this.nodeType === 8) return this.nodeValue || '';
+    return this.childNodes.map((c) => c.textContent).join('');
+  }
+  set textContent(v: string) {
+    if (this.nodeType === 3 || this.nodeType === 8) {
+      this.nodeValue = String(v ?? '');
+    } else {
+      this.childNodes.forEach((c) => (c.parentNode = null));
+      this.childNodes = [];
+      if (v !== null && v !== undefined && v !== '') {
+        const t = new MiniDOMNode(3, '#text');
+        t.nodeValue = String(v);
+        t.ownerDocument = this.ownerDocument;
+        this.appendChild(t);
+      }
+    }
+  }
 }
+
+class MiniDOMElement extends MiniDOMNode {
+  tagName: string;
+  attributes: Record<string, string> = {};
+  style: Record<string, any> = {};
+  namespaceURI = 'http://www.w3.org/1999/xhtml';
+  onclick: ((e?: any) => void) | null = null;
+  disabled = false;
+  value = '';
+  checked = false;
+  constructor(tag: string, doc: any) {
+    super(1, tag.toUpperCase());
+    this.tagName = tag.toUpperCase();
+    this.ownerDocument = doc;
+  }
+  setAttribute(k: string, v: string) {
+    this.attributes[k] = String(v);
+  }
+  getAttribute(k: string) {
+    return this.attributes[k] ?? null;
+  }
+  removeAttribute(k: string) {
+    delete this.attributes[k];
+  }
+  addEventListener() {}
+  removeEventListener() {}
+  get innerHTML(): string {
+    return this.childNodes.map((c: any) => c.outerHTML ?? c.textContent).join('');
+  }
+  set innerHTML(_v: string) {
+    this.childNodes.forEach((c) => (c.parentNode = null));
+    this.childNodes = [];
+  }
+  get outerHTML(): string {
+    const attrs = Object.entries(this.attributes)
+      .map(([k, v]) => ` ${k}="${v}"`)
+      .join('');
+    return `<${this.tagName.toLowerCase()}${attrs}>${this.innerHTML}</${this.tagName.toLowerCase()}>`;
+  }
+  findByTestId(testId: string): MiniDOMElement | null {
+    if (this.attributes['data-testid'] === testId) return this;
+    for (const child of this.childNodes) {
+      if (child instanceof MiniDOMElement) {
+        const found = child.findByTestId(testId);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+}
+
+function setupMiniDOMEnvironment() {
+  const doc: any = new MiniDOMNode(9, '#document');
+  doc.defaultView = globalThis;
+  doc.activeElement = null;
+  doc.documentElement = new MiniDOMElement('html', doc);
+  doc.body = new MiniDOMElement('body', doc);
+  doc.createElement = (tag: string) => new MiniDOMElement(tag, doc);
+  doc.createElementNS = (_ns: string, tag: string) => new MiniDOMElement(tag, doc);
+  doc.createTextNode = (text: string) => {
+    const n = new MiniDOMNode(3, '#text');
+    n.nodeValue = String(text);
+    n.ownerDocument = doc;
+    return n;
+  };
+  doc.createComment = (text: string) => {
+    const n = new MiniDOMNode(8, '#comment');
+    n.nodeValue = String(text);
+    n.ownerDocument = doc;
+    return n;
+  };
+  doc.createDocumentFragment = () => {
+    const n = new MiniDOMNode(11, '#document-fragment');
+    n.ownerDocument = doc;
+    return n;
+  };
+  doc.addEventListener = () => {};
+  doc.removeEventListener = () => {};
+
+  (globalThis as any).document = doc;
+  (globalThis as any).window = globalThis;
+  (globalThis as any).window.innerWidth = 390;
+  (globalThis as any).window.addEventListener = () => {};
+  (globalThis as any).window.removeEventListener = () => {};
+  (globalThis as any).window.dispatchEvent = () => true;
+  (globalThis as any).window.location = { origin: 'https://chuvator.pages.dev', search: '' };
+  (globalThis as any).HTMLIFrameElement = class {};
+  (globalThis as any).Element = MiniDOMElement;
+  (globalThis as any).Node = MiniDOMNode;
+  try {
+    Object.defineProperty(globalThis, 'navigator', {
+      value: {
+        userAgent: 'node-dom',
+        clipboard: { writeText: async () => {} }
+      },
+      configurable: true,
+      writable: true
+    });
+  } catch (_) {}
+  (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
+
+  const container = doc.createElement('div') as MiniDOMElement;
+  doc.body.appendChild(container);
+  return { doc, container };
+}
+
+setupMiniDOMEnvironment();
 
 import { onRequestGet as parentListHandler } from '../functions/api/tenant/parents/index.js';
 import ParentManagementPage, { ParentDesktopMain } from '../src/pages/ParentManagementPage.jsx';
@@ -1346,6 +1518,747 @@ test('CHUVATOR — Phase 4.5.5 Mobile Parent Administration Test Suite', async (
     } finally {
       globalThis.fetch = originalFetch;
     }
+  });
+
+  /* ========================================================================= */
+  /* TEST 21: Phase 4.5.5.2.2 — React DOM Mount & Service Mock Integration     */
+  /* ========================================================================= */
+  await t.test('TEST 21 [REACT DOM MOUNT + SERVICE MOCK]: Phase 4.5.5.2.2 — Mount MobileParentManagementMain dengan createRoot & act, verifikasi loading state dan 8 skenario parentService.getParentAccounts', async () => {
+    const { container } = setupMiniDOMEnvironment();
+    const root = createRoot(container as any);
+    const originalGetParents = parentService.getParentAccounts;
+
+    try {
+      // 3A. Component Mount: Loading state -> getParentAccounts dipanggil -> student_name, fallback name, multi-student, count
+      let getParentsCallCount = 0;
+      let resolveInitialMount: ((data: any) => void) | null = null;
+
+      parentService.getParentAccounts = () => {
+        getParentsCallCount += 1;
+        return new Promise((resolve) => {
+          resolveInitialMount = resolve;
+        });
+      };
+
+      await act(async () => {
+        root.render(
+          React.createElement(MemoryRouter, { initialEntries: ['/parents'] },
+            React.createElement(MobileParentManagementMain, {
+              userProfile: mockOwnerProfile
+            })
+          )
+        );
+      });
+
+      // Saat request masih berjalan, loading state wajib muncul dan parentService.getParentAccounts telah dipanggil
+      assert.equal(getParentsCallCount, 1, 'parentService.getParentAccounts wajib dipanggil saat mount');
+      assert.ok(container.innerHTML.includes('mobile-parent-loading'), 'Loading state wajib tampil saat request sedang berjalan');
+
+      // Selesaikan request dengan data:
+      // - Wali 1: 1 siswa (student_name terisi, name null)
+      // - Wali 2: beberapa siswa (student_name terisi + fallback name ketika student_name kosong)
+      await act(async () => {
+        resolveInitialMount!([
+          {
+            id: 'dom-p-1',
+            tenant_id: 'tenant-gor-101',
+            full_name: 'Wali Mount Satu',
+            email: 'mount1@mail.com',
+            phone: '6281210000001',
+            status: 'active',
+            invitationStatus: 'ACTIVATED',
+            links: [
+              { student: { id: 'dom-s-1', student_name: 'Naufal Pratama', name: null, kk_last4: '1234' } }
+            ]
+          },
+          {
+            id: 'dom-p-2',
+            tenant_id: 'tenant-gor-101',
+            full_name: 'Wali Mount Multi',
+            email: 'mount2@mail.com',
+            phone: '6281210000002',
+            status: 'pending',
+            invitationStatus: 'READY_TO_SEND',
+            links: [
+              { student: { id: 'dom-s-2', student_name: 'Zahra Putri', name: 'Zahra Lama', kk_last4: '5678' } },
+              { student: { id: 'dom-s-3', student_name: '', name: 'Reza Fallback', kk_last4: '5678' } }
+            ]
+          }
+        ]);
+      });
+
+      assert.equal(container.innerHTML.includes('mobile-parent-loading'), false, 'Loading state wajib hilang setelah response diterima');
+      assert.ok(container.innerHTML.includes('Naufal Pratama'), 'Nama siswa dari student_name wajib tampil');
+      assert.ok(container.innerHTML.includes('Zahra Putri'), 'Prioritas student_name wajib tampil');
+      assert.equal(container.innerHTML.includes('Zahra Lama'), false);
+      assert.ok(container.innerHTML.includes('Reza Fallback'), 'Fallback name wajib tampil ketika student_name kosong');
+      assert.ok(container.innerHTML.includes('Siswa Terhubung (1)'), 'Jumlah siswa (1) wajib sesuai relasi');
+      assert.ok(container.innerHTML.includes('Siswa Terhubung (2)'), 'Jumlah siswa (2) wajib sesuai relasi');
+
+      await act(async () => {
+        root.unmount();
+      });
+
+      // 3B. Uji ke-8 skenario Service Mock Integration melalui mount nyata
+      const scenarios: Array<{
+        name: string;
+        mockFn: () => Promise<any>;
+        verify: (html: string) => void;
+      }> = [
+        {
+          name: '1. Satu wali dengan satu siswa',
+          mockFn: async () => [
+            {
+              id: 'sc1-p',
+              tenant_id: 'tenant-gor-101',
+              full_name: 'Wali Skenario 1',
+              email: 'sc1@mail.com',
+              phone: '6281200000001',
+              links: [{ student: { id: 'sc1-s', student_name: 'Aldi Taher Siswa', name: null } }]
+            }
+          ],
+          verify: (html) => {
+            assert.ok(html.includes('Aldi Taher Siswa'));
+            assert.ok(html.includes('Siswa Terhubung (1)'));
+          }
+        },
+        {
+          name: '2. Satu wali dengan beberapa siswa',
+          mockFn: async () => [
+            {
+              id: 'sc2-p',
+              tenant_id: 'tenant-gor-101',
+              full_name: 'Wali Skenario 2',
+              email: 'sc2@mail.com',
+              phone: '6281200000002',
+              links: [
+                { student: { id: 'sc2-s1', student_name: 'Bayu Siswa 1', name: null } },
+                { student: { id: 'sc2-s2', student_name: 'Bela Siswa 2', name: null } },
+                { student: { id: 'sc2-s3', student_name: 'Bimo Siswa 3', name: null } }
+              ]
+            }
+          ],
+          verify: (html) => {
+            assert.ok(html.includes('Bayu Siswa 1'));
+            assert.ok(html.includes('Bela Siswa 2'));
+            assert.ok(html.includes('Bimo Siswa 3'));
+            assert.ok(html.includes('Siswa Terhubung (3)'));
+          }
+        },
+        {
+          name: '3. student_name tersedia, name null',
+          mockFn: async () => [
+            {
+              id: 'sc3-p',
+              tenant_id: 'tenant-gor-101',
+              full_name: 'Wali Skenario 3',
+              email: 'sc3@mail.com',
+              phone: '6281200000003',
+              links: [{ student: { id: 'sc3-s', student_name: 'Cahya StudentName', name: null } }]
+            }
+          ],
+          verify: (html) => {
+            assert.ok(html.includes('Cahya StudentName'));
+          }
+        },
+        {
+          name: '4. student_name kosong, name tersedia',
+          mockFn: async () => [
+            {
+              id: 'sc4-p',
+              tenant_id: 'tenant-gor-101',
+              full_name: 'Wali Skenario 4',
+              email: 'sc4@mail.com',
+              phone: '6281200000004',
+              links: [{ student: { id: 'sc4-s', student_name: '   ', name: 'Dewi FallbackName' } }]
+            }
+          ],
+          verify: (html) => {
+            assert.ok(html.includes('Dewi FallbackName'));
+          }
+        },
+        {
+          name: '5. links kosong',
+          mockFn: async () => [
+            {
+              id: 'sc5-p',
+              tenant_id: 'tenant-gor-101',
+              full_name: 'Wali Skenario 5',
+              email: 'sc5@mail.com',
+              phone: '6281200000005',
+              links: []
+            }
+          ],
+          verify: (html) => {
+            assert.ok(html.includes('Siswa Terhubung (0)'));
+            assert.ok(html.includes('Belum ada siswa terhubung'));
+            assert.equal(html.includes('Data relasi siswa gagal dimuat'), false);
+          }
+        },
+        {
+          name: '6. linksError true',
+          mockFn: async () => [
+            {
+              id: 'sc6-p',
+              tenant_id: 'tenant-gor-101',
+              full_name: 'Wali Skenario 6',
+              email: 'sc6@mail.com',
+              phone: '6281200000006',
+              linksError: true,
+              links: []
+            }
+          ],
+          verify: (html) => {
+            assert.ok(html.includes('Data relasi siswa gagal dimuat'));
+            assert.equal(html.includes('Belum ada siswa terhubung'), false);
+          }
+        },
+        {
+          name: '7. links null',
+          mockFn: async () => [
+            {
+              id: 'sc7-p',
+              tenant_id: 'tenant-gor-101',
+              full_name: 'Wali Skenario 7',
+              email: 'sc7@mail.com',
+              phone: '6281200000007',
+              links: null
+            }
+          ],
+          verify: (html) => {
+            assert.ok(html.includes('Data relasi siswa gagal dimuat'));
+            assert.equal(html.includes('Belum ada siswa terhubung'), false);
+          }
+        },
+        {
+          name: '8. Response gagal atau HTTP error',
+          mockFn: async () => {
+            throw new Error('HTTP 500: Gagal mengambil daftar akun wali murid dari server.');
+          },
+          verify: (html) => {
+            assert.ok(html.includes('mobile-parent-error'));
+            assert.ok(html.includes('HTTP 500: Gagal mengambil daftar akun wali murid dari server.'));
+          }
+        }
+      ];
+
+      for (const sc of scenarios) {
+        const subEnv = setupMiniDOMEnvironment();
+        const subRoot = createRoot(subEnv.container as any);
+        let called = 0;
+        parentService.getParentAccounts = async () => {
+          called += 1;
+          return sc.mockFn();
+        };
+
+        await act(async () => {
+          subRoot.render(
+            React.createElement(MemoryRouter, { initialEntries: ['/parents'] },
+              React.createElement(MobileParentManagementMain, {
+                userProfile: mockOwnerProfile
+              })
+            )
+          );
+        });
+
+        assert.equal(called, 1, `parentService.getParentAccounts wajib terpanggil pada skenario: ${sc.name}`);
+        sc.verify(subEnv.container.innerHTML);
+
+        await act(async () => {
+          subRoot.unmount();
+        });
+      }
+    } finally {
+      parentService.getParentAccounts = originalGetParents;
+    }
+  });
+
+  /* ========================================================================= */
+  /* TEST 22: Phase 4.5.5.2.2 — Endpoint Handler -> parentService -> React Mount*/
+  /* ========================================================================= */
+  await t.test('TEST 22 [ENDPOINT -> SERVICE -> REACT MOUNT]: Phase 4.5.5.2.2 — Handler asli onRequestGet diteruskan melalui parentService.getParentAccounts ke mount MobileParentManagementMain', async () => {
+    const originalFetch = globalThis.fetch;
+    const originalGetParents = parentService.getParentAccounts;
+    const mockSupabaseUrl = 'https://mock-supabase.local';
+    const activeTenantId = 'tenant-gor-101';
+    const capturedSupabaseUrls: string[] = [];
+
+    try {
+      globalThis.fetch = async (url: any) => {
+        const urlStr = String(url);
+        capturedSupabaseUrls.push(urlStr);
+
+        if (urlStr.includes('/rest/v1/parent_accounts')) {
+          return new Response(
+            JSON.stringify([
+              {
+                id: 'ep-parent-1',
+                tenant_id: activeTenantId,
+                auth_uid: null,
+                full_name: 'Hendra Kusuma',
+                email: 'hendra@mail.com',
+                phone: '6281230000001',
+                created_at: '2026-11-01T00:00:00Z'
+              },
+              {
+                id: 'ep-parent-2',
+                tenant_id: activeTenantId,
+                auth_uid: null,
+                full_name: 'Lina Marlina',
+                email: 'lina@mail.com',
+                phone: '6281230000002',
+                created_at: '2026-11-01T00:00:00Z'
+              }
+            ]),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+
+        if (urlStr.includes('/rest/v1/parent_student_links')) {
+          return new Response(
+            JSON.stringify([
+              {
+                parent_account_id: 'ep-parent-1',
+                student: {
+                  id: 'ep-std-1',
+                  name: null,
+                  student_name: 'Kevin Kusuma',
+                  kk_last4: '3506011234569876', // akan disanitasi menjadi 4 digit terakhir '9876'
+                  kk: '3506011234569876',
+                  kk_hmac: 'hmac-secret-dont-leak'
+                }
+              },
+              {
+                parent_account_id: 'ep-parent-2',
+                student: {
+                  id: 'ep-std-2',
+                  name: 'Putri Marlina Fallback',
+                  student_name: null,
+                  kk_last4: '4321'
+                }
+              }
+            ]),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+
+        return new Response(JSON.stringify([]), { status: 200 });
+      };
+
+      // Hubungkan parentService.getParentAccounts langsung ke eksekusi onRequestGet asli
+      parentService.getParentAccounts = async () => {
+        const ctx = {
+          request: new Request('https://chuvator.pages.dev/api/tenant/parents', {
+            method: 'GET',
+            headers: {
+              'Authorization': 'Bearer test-staff-token',
+              'Origin': 'https://chuvator.pages.dev',
+              'x-test-staff-role': 'owner',
+              'x-test-staff-uid': 'staff-uid-101',
+              'x-test-tenant-id': activeTenantId
+            }
+          }),
+          env: {
+            SUPABASE_URL: mockSupabaseUrl,
+            SUPABASE_SERVICE_ROLE_KEY: 'service-role-key',
+            KK_HMAC_SECRET: 'hmac-secret-1234567890123456',
+            APP_URL: 'https://chuvator.pages.dev',
+            ALLOWED_ORIGINS: 'https://chuvator.pages.dev',
+            ENVIRONMENT: 'development'
+          }
+        };
+        const response = await parentListHandler(ctx as any);
+        const payload = await response.json();
+        // Verifikasi kontrak di lapisan boundary:
+        assert.equal(JSON.stringify(payload).includes('3506011234569876'), false, 'Nomor KK 16 digit tidak boleh bocor');
+        assert.equal(JSON.stringify(payload).includes('hmac-secret-dont-leak'), false, 'HMAC tidak boleh bocor');
+        assert.equal(payload.data[0].links[0].student.kk_last4, '9876', 'kk_last4 wajib dibatasi maksimal 4 digit');
+        return payload.data;
+      };
+
+      const { container } = setupMiniDOMEnvironment();
+      const root = createRoot(container as any);
+
+      await act(async () => {
+        root.render(
+          React.createElement(MemoryRouter, { initialEntries: ['/parents'] },
+            React.createElement(MobileParentManagementMain, {
+              userProfile: mockOwnerProfile
+            })
+          )
+        );
+      });
+
+      const linksQuery = capturedSupabaseUrls.find((u) => u.includes('/rest/v1/parent_student_links'));
+      assert.ok(linksQuery?.includes('select=parent_account_id,student:students(id,name,student_name,kk_last4)'));
+
+      // Pastikan relasi parent tidak tertukar di DOM kartu masing-masing
+      const cardParent1 = container.findByTestId('mobile-parent-card-ep-parent-1');
+      const cardParent2 = container.findByTestId('mobile-parent-card-ep-parent-2');
+      assert.ok(cardParent1, 'Kartu ep-parent-1 wajib ter-render');
+      assert.ok(cardParent2, 'Kartu ep-parent-2 wajib ter-render');
+      assert.ok(cardParent1!.innerHTML.includes('Kevin Kusuma'), 'ep-parent-1 wajib menampilkan Kevin Kusuma');
+      assert.equal(cardParent1!.innerHTML.includes('Putri Marlina Fallback'), false, 'Relasi tidak boleh tertukar ke ep-parent-1');
+      assert.ok(cardParent2!.innerHTML.includes('Putri Marlina Fallback'), 'ep-parent-2 wajib menampilkan Putri Marlina Fallback');
+      assert.equal(cardParent2!.innerHTML.includes('Kevin Kusuma'), false, 'Relasi tidak boleh tertukar ke ep-parent-2');
+
+      await act(async () => {
+        root.unmount();
+      });
+    } finally {
+      globalThis.fetch = originalFetch;
+      parentService.getParentAccounts = originalGetParents;
+    }
+  });
+
+  /* ========================================================================= */
+  /* TEST 23: Phase 4.5.5.2.2 — React Lifecycle (1-6) & Timer/Subscription Audit*/
+  /* ========================================================================= */
+  await t.test('TEST 23 [REACT LIFECYCLE & CLEANUP]: Phase 4.5.5.2.2 — Mount/Unmount saat request berjalan, pergantian Tenant A -> Tenant B, proteksi late response Tenant A, dan cleanup timer saat unmount', async () => {
+    const originalGetParents = parentService.getParentAccounts;
+
+    const tenantAProfile = {
+      tenantId: 'tenant-A',
+      role: 'owner',
+      tenant: { id: 'tenant-A', name: 'GOR CABANG A' }
+    };
+    const tenantBProfile = {
+      tenantId: 'tenant-B',
+      role: 'owner',
+      tenant: { id: 'tenant-B', name: 'GOR CABANG B' }
+    };
+
+    try {
+      // Skenario Lifecycle 2: Mount -> request masih berjalan -> unmount -> response selesai setelah unmount
+      {
+        const { container } = setupMiniDOMEnvironment();
+        const root = createRoot(container as any);
+        let resolvePendingRequest: ((val: any) => void) | null = null;
+
+        parentService.getParentAccounts = () =>
+          new Promise((resolve) => {
+            resolvePendingRequest = resolve;
+          });
+
+        await act(async () => {
+          root.render(
+            React.createElement(MemoryRouter, { initialEntries: ['/parents'] },
+              React.createElement(MobileParentManagementMain, {
+                userProfile: tenantAProfile
+              })
+            )
+          );
+        });
+
+        assert.ok(container.innerHTML.includes('mobile-parent-loading'));
+
+        // Unmount ketika request masih in-flight
+        await act(async () => {
+          root.unmount();
+        });
+        assert.equal(container.innerHTML, '');
+
+        // Selesaikan request setelah unmount -> tidak boleh melempar error atau memodifikasi DOM
+        await act(async () => {
+          resolvePendingRequest!([
+            {
+              id: 'unmounted-parent',
+              tenant_id: 'tenant-A',
+              full_name: 'Wali Setelah Unmount',
+              links: [{ student: { id: 's-u', student_name: 'Siswa Unmount' } }]
+            }
+          ]);
+        });
+        assert.equal(container.innerHTML, '');
+      }
+
+      // Skenario Lifecycle 3, 4, 5:
+      // - Mount dengan Tenant A (request A berjalan lambat)
+      // - Tenant berubah menjadi Tenant B saat request A belum selesai
+      // - Request Tenant B selesai lebih dulu dan merender data Tenant B
+      // - Response Tenant A akhirnya datang terlambat -> TIDAK BOLEH menimpa data Tenant B!
+      {
+        const { container } = setupMiniDOMEnvironment();
+        const root = createRoot(container as any);
+
+        let resolveTenantA: ((val: any) => void) | null = null;
+        let resolveTenantB: ((val: any) => void) | null = null;
+        let callIdx = 0;
+
+        parentService.getParentAccounts = () => {
+          callIdx += 1;
+          if (callIdx === 1) {
+            return new Promise((resolve) => {
+              resolveTenantA = resolve;
+            });
+          }
+          return new Promise((resolve) => {
+            resolveTenantB = resolve;
+          });
+        };
+
+        // 1. Mount dengan Tenant A
+        await act(async () => {
+          root.render(
+            React.createElement(MemoryRouter, { initialEntries: ['/parents'] },
+              React.createElement(MobileParentManagementMain, {
+                userProfile: tenantAProfile
+              })
+            )
+          );
+        });
+        assert.equal(callIdx, 1);
+
+        // 2. Ubah prop userProfile ke Tenant B sementara request Tenant A belum selesai
+        await act(async () => {
+          root.render(
+            React.createElement(MemoryRouter, { initialEntries: ['/parents'] },
+              React.createElement(MobileParentManagementMain, {
+                userProfile: tenantBProfile
+              })
+            )
+          );
+        });
+        assert.equal(callIdx, 2, 'Perubahan tenant wajib memicu fetch baru untuk Tenant B');
+
+        // 3. Selesaikan request Tenant B terlebih dahulu
+        await act(async () => {
+          resolveTenantB!([
+            {
+              id: 'parent-tenant-b',
+              tenant_id: 'tenant-B',
+              full_name: 'Wali Resmi Tenant B',
+              email: 'walib@gorb.id',
+              phone: '6281299990002',
+              links: [{ student: { id: 'std-b', student_name: 'Siswa Cabang B Resmi' } }]
+            }
+          ]);
+        });
+
+        assert.ok(container.innerHTML.includes('Wali Resmi Tenant B'));
+        assert.ok(container.innerHTML.includes('Siswa Cabang B Resmi'));
+
+        // 4. Sekarang response Tenant A yang terlambat akhirnya datang (bahkan seandainya berisi record tanpa filter)
+        await act(async () => {
+          resolveTenantA!([
+            {
+              id: 'parent-tenant-a-stale',
+              tenant_id: 'tenant-B', // sengaja disamakan untuk menguji bahwa sequence guard fetchSeqRef benar-benar menolak stale response!
+              full_name: 'Wali Stale Dari Request A',
+              email: 'stale@gora.id',
+              phone: '6281299990001',
+              links: [{ student: { id: 'std-a-stale', student_name: 'Siswa Stale Request A' } }]
+            }
+          ]);
+        });
+
+        // Buktikan response lama dari Request A TIDAK menimpa data Tenant B!
+        assert.ok(
+          container.innerHTML.includes('Wali Resmi Tenant B'),
+          'Data Tenant B wajib tetap tampil dan tidak tertimpa response terlambat dari Request A'
+        );
+        assert.ok(container.innerHTML.includes('Siswa Cabang B Resmi'));
+        assert.equal(
+          container.innerHTML.includes('Wali Stale Dari Request A'),
+          false,
+          'Response terlambat dari Request A wajib diabaikan oleh request sequence guard'
+        );
+        assert.equal(container.innerHTML.includes('Siswa Stale Request A'), false);
+
+        await act(async () => {
+          root.unmount();
+        });
+      }
+
+      // Skenario Lifecycle 6: Komponen di-unmount ketika timer notifikasi masih aktif
+      {
+        const { container } = setupMiniDOMEnvironment();
+        const root = createRoot(container as any);
+        const originalSetTimeout = globalThis.setTimeout;
+        const originalClearTimeout = globalThis.clearTimeout;
+        const activeTimers = new Set<any>();
+        let clearedTimerCount = 0;
+
+        globalThis.setTimeout = ((fn: any, ms?: number, ...args: any[]) => {
+          const id = originalSetTimeout(fn, ms, ...args);
+          if (ms === 5000 || ms === 3000) {
+            activeTimers.add(id);
+          }
+          return id;
+        }) as any;
+
+        globalThis.clearTimeout = ((id: any) => {
+          if (activeTimers.has(id)) {
+            activeTimers.delete(id);
+            clearedTimerCount += 1;
+          }
+          return originalClearTimeout(id);
+        }) as any;
+
+        try {
+          const mockSvcTimer = {
+            getParentAccounts: async () => [
+              {
+                id: 'p-timer-1',
+                tenant_id: 'tenant-A',
+                full_name: 'Wali Timer Test',
+                email: 'timer@mail.com',
+                phone: '6281277778888',
+                links: [{ student: { id: 's-t1', student_name: 'Siswa Timer' } }]
+              }
+            ]
+          };
+
+          await act(async () => {
+            root.render(
+              React.createElement(MemoryRouter, { initialEntries: ['/parents'] },
+                React.createElement(MobileParentManagementMain, {
+                  userProfile: tenantAProfile,
+                  serviceOverride: mockSvcTimer,
+                  initialActionMessage: {
+                    type: 'success',
+                    text: 'Notifikasi aktif 5 detik sebelum unmount'
+                  }
+                })
+              )
+            );
+          });
+
+          assert.ok(container.innerHTML.includes('Notifikasi aktif 5 detik sebelum unmount'));
+          assert.equal(activeTimers.size, 1, 'Timer notifikasi 5000ms wajib terdaftar saat banner notifikasi aktif');
+
+          // Unmount komponen ketika timer notifikasi masih aktif dan pastikan clearTimeout dipanggil
+          await act(async () => {
+            root.unmount();
+          });
+
+          assert.equal(activeTimers.size, 0, 'Tidak boleh ada timer komponen yang tertinggal setelah unmount');
+          assert.equal(clearedTimerCount, 1, 'clearTimeout wajib dipanggil tepat 1 kali untuk membersihkan timer notifikasi saat unmount');
+        } finally {
+          globalThis.setTimeout = originalSetTimeout;
+          globalThis.clearTimeout = originalClearTimeout;
+        }
+      }
+
+      // 3E. Audit kode sumber untuk memastikan tidak ada klaim palsu terkait subscription
+      const mobileSource = fs.readFileSync(
+        path.resolve(process.cwd(), 'src/mobile/pages/admin/MobileParentManagementMain.jsx'),
+        'utf8'
+      );
+      assert.equal(
+        mobileSource.includes('.channel('),
+        false,
+        'MobileParentManagementMain tidak menggunakan Supabase realtime channel'
+      );
+      assert.equal(
+        mobileSource.includes('addEventListener('),
+        false,
+        'MobileParentManagementMain tidak mendaftarkan window/document event listener'
+      );
+    } finally {
+      parentService.getParentAccounts = originalGetParents;
+    }
+  });
+
+  /* ========================================================================= */
+  /* TEST 24: Phase 4.5.5.2.2 — Dynamic Tenant Isolation (Section 4)           */
+  /* ========================================================================= */
+  await t.test('TEST 24 [TENANT ISOLATION LIFECYCLE]: Phase 4.5.5.2.2 — Isolasi penuh saat transisi Tenant A -> Tenant B -> Tenant Kosong tanpa kebocoran data sebelumnya', async () => {
+    const { container } = setupMiniDOMEnvironment();
+    const root = createRoot(container as any);
+    let fetchCalls = 0;
+
+    const mixedBackendList = [
+      {
+        id: 'p-ten-a',
+        tenant_id: 'tenant-A',
+        full_name: 'Wali Cabang A',
+        email: 'a@cabang.id',
+        phone: '6281200010001',
+        links: [{ student: { id: 's-a', student_name: 'Siswa Milik Tenant A' } }]
+      },
+      {
+        id: 'p-ten-b',
+        tenant_id: 'tenant-B',
+        full_name: 'Wali Cabang B',
+        email: 'b@cabang.id',
+        phone: '6281200020002',
+        links: [{ student: { id: 's-b', student_name: 'Siswa Milik Tenant B' } }]
+      },
+      {
+        id: 'p-no-tenant',
+        tenant_id: null,
+        full_name: 'Wali Tanpa Tenant ID',
+        email: 'notenant@cabang.id',
+        phone: '6281200030003',
+        links: [{ student: { id: 's-nt', student_name: 'Siswa Tanpa Tenant' } }]
+      }
+    ];
+
+    const mockSvc = {
+      getParentAccounts: async () => {
+        fetchCalls += 1;
+        return mixedBackendList;
+      }
+    };
+
+    // 1. Mount sebagai Tenant A
+    await act(async () => {
+      root.render(
+        React.createElement(MemoryRouter, { initialEntries: ['/parents'] },
+          React.createElement(MobileParentManagementMain, {
+            userProfile: { tenantId: 'tenant-A', role: 'owner', tenant: { id: 'tenant-A', name: 'CABANG A' } },
+            serviceOverride: mockSvc
+          })
+        )
+      );
+    });
+
+    assert.equal(fetchCalls, 1);
+    assert.ok(container.innerHTML.includes('Wali Cabang A'));
+    assert.ok(container.innerHTML.includes('Siswa Milik Tenant A'));
+    assert.equal(container.innerHTML.includes('Wali Cabang B'), false);
+    assert.equal(container.innerHTML.includes('Siswa Milik Tenant B'), false);
+    assert.equal(container.innerHTML.includes('Wali Tanpa Tenant ID'), false);
+
+    // 2. Ganti ke Tenant B -> hanya menerima parent Tenant B, data Tenant A langsung hilang
+    await act(async () => {
+      root.render(
+        React.createElement(MemoryRouter, { initialEntries: ['/parents'] },
+          React.createElement(MobileParentManagementMain, {
+            userProfile: { tenantId: 'tenant-B', role: 'owner', tenant: { id: 'tenant-B', name: 'CABANG B' } },
+            serviceOverride: mockSvc
+          })
+        )
+      );
+    });
+
+    assert.equal(fetchCalls, 2);
+    assert.ok(container.innerHTML.includes('Wali Cabang B'));
+    assert.ok(container.innerHTML.includes('Siswa Milik Tenant B'));
+    assert.equal(container.innerHTML.includes('Wali Cabang A'), false, 'Data Tenant A tidak boleh tersisa setelah pindah ke Tenant B');
+    assert.equal(container.innerHTML.includes('Siswa Milik Tenant A'), false);
+    assert.equal(container.innerHTML.includes('Wali Tanpa Tenant ID'), false);
+
+    // 3. Ganti ke profil tanpa tenant (meskipun memiliki id & uid) -> TIDAK melakukan fetch dan menampilkan pesan konteks tidak tersedia
+    await act(async () => {
+      root.render(
+        React.createElement(MemoryRouter, { initialEntries: ['/parents'] },
+          React.createElement(MobileParentManagementMain, {
+            userProfile: { id: 'user-id-fallback-forbidden', uid: 'user-uid-fallback-forbidden', role: 'owner' },
+            serviceOverride: mockSvc
+          })
+        )
+      );
+    });
+
+    assert.equal(fetchCalls, 2, 'Tenant kosong dilarang memicu pemanggilan getParentAccounts');
+    assert.ok(container.innerHTML.includes('mobile-parent-no-tenant'));
+    assert.equal(container.innerHTML.includes('Wali Cabang B'), false);
+
+    await act(async () => {
+      root.unmount();
+    });
   });
 });
 
