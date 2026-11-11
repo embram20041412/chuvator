@@ -40,13 +40,27 @@ import MobileEmptyState from '../../components/MobileEmptyState';
 import MobileTenantBackfillCard from '../../components/MobileTenantBackfillCard';
 
 /**
+ * Strict UUID Validator for Database Tenant IDs
+ * Ensures tenantId matches canonical hex 8-4-4-4-12 UUID format.
+ * Rejects 'global', 'null', 'undefined', empty strings, and non-UUID formats.
+ */
+export const isValidUUID = (id) => {
+  if (!id || typeof id !== 'string') return false;
+  const cleanId = id.trim().toLowerCase();
+  if (['global', 'null', 'undefined', ''].includes(cleanId)) return false;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(cleanId);
+};
+
+/**
  * Canonical Tenant ID Resolver for CHUVATOR Mobile Staff
  * Strictly adheres to tenant hierarchy: profile.tenant.id, profile.tenantId, profile.tenant.tenant_id.
  * NEVER falls back to userProfile.id or userProfile.uid (User ID is NOT a Tenant ID).
  */
 export const resolveTenantId = (profile) => {
   if (!profile) return null;
-  return profile.tenant?.id || profile.tenantId || profile.tenant?.tenant_id || null;
+  const rawId = profile.tenant?.id || profile.tenantId || profile.tenant?.tenant_id || null;
+  return isValidUUID(rawId) ? rawId : null;
 };
 
 /**
@@ -64,17 +78,10 @@ export default function MobileStaffMain({ userProfile }) {
     loading: roleLoading 
   } = authRole;
 
-  // Single Source of Truth: Canonical Verified Tenant ID from DB via useAuthRole
-  // Rejects empty, null, undefined, and 'global' strings. Never falls back to user ID or unverified profile.
+  // Single Source of Truth: Canonical DB-Verified UUID Tenant ID via useAuthRole
+  // Strict UUID validation: rejects non-UUID strings, empty, null, undefined, 'global'.
   const rawVerifiedTenantId = String(verifiedTenantId || '').trim();
-  const isValidVerifiedTenant = Boolean(
-    rawVerifiedTenantId &&
-    rawVerifiedTenantId.toLowerCase() !== 'global' &&
-    rawVerifiedTenantId.toLowerCase() !== 'null' &&
-    rawVerifiedTenantId.toLowerCase() !== 'undefined'
-  );
-
-  const tenantId = isValidVerifiedTenant ? rawVerifiedTenantId : null;
+  const tenantId = isValidUUID(rawVerifiedTenantId) ? rawVerifiedTenantId : null;
   const tenantName = userProfile?.tenant?.name || 'Cabang Aktif';
 
   // Explicit Verified Role Hierarchy from useAuthRole (NOT userProfile.role directly)
@@ -108,13 +115,6 @@ export default function MobileStaffMain({ userProfile }) {
   const activeTenantIdRef = useRef(tenantId);
   const fetchSeqRef = useRef(0);
   const isMountedRef = useRef(true);
-
-  // Immediate Tenant Context Guard:
-  // When DB-verified tenantId changes, update activeTenantIdRef and invalidate inflight requests immediately
-  if (activeTenantIdRef.current !== tenantId) {
-    activeTenantIdRef.current = tenantId;
-    fetchSeqRef.current += 1;
-  }
 
   // Navigation Tabs: 'staff_list' | 'invitations_list'
   const [activeTab, setActiveTab] = useState('staff_list');
