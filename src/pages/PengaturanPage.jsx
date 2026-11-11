@@ -54,8 +54,9 @@ import {
   Send
 } from 'lucide-react';
 import { Pengaturan3DIcon } from '../components/icons/App3DIcons';
-import { uploadToCloudinary } from '../services/uploadService';
 import { useTheme } from '../context/ThemeContext';
+import useMobileViewport from '../mobile/hooks/useMobileViewport';
+import MobileCourtPricingMain from '../mobile/pages/admin/MobileCourtPricingMain';
 
 const SUPPORTED_SPORTS = [
   'Badminton', 
@@ -86,7 +87,12 @@ export function parseNumberFromDots(val) {
   return Number(numStr) || 0;
 }
 
-export default function PengaturanPage({ userProfile, onTenantUpdated }) {
+/**
+ * PengaturanDesktopMain Component
+ * Original untouched desktop settings & court pricing interface.
+ * All hooks are called unconditionally at the top level of this component.
+ */
+export function PengaturanDesktopMain({ userProfile, onTenantUpdated = () => {} }) {
   const navigate = useNavigate();
   const { theme, isDark, setTheme } = useTheme();
   const { tenantProfile, courts, isLoading } = useArenaData(userProfile);
@@ -462,6 +468,7 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
     setTenantSuccessMsg(null);
 
     try {
+      const { uploadToCloudinary } = await import('../services/uploadService');
       const uploadResult = await uploadToCloudinary(file, {
         tenantId: tenant.id,
         category: 'logos',
@@ -2149,5 +2156,40 @@ export default function PengaturanPage({ userProfile, onTenantUpdated }) {
     </div>
   );
 }
+
+/**
+ * Canonical Tenant ID Resolver for Pengaturan & Court Pricing
+ * Strictly follows tenant hierarchy: profile.tenant.id, profile.tenantId, profile.tenant.tenant_id.
+ * NEVER falls back to userProfile.id or userProfile.uid (User ID is NOT a Tenant ID).
+ */
+export const resolveTenantId = (profile) => {
+  if (!profile) return null;
+  return profile.tenant?.id || profile.tenantId || profile.tenant?.tenant_id || null;
+};
+
+/**
+ * PengaturanPage (Viewport & Tab Wrapper)
+ * Adheres strictly to React Rules of Hooks.
+ * Unconditionally calls useMobileViewport(767) at top level.
+ * Delegates to MobileCourtPricingMain when isMobile and tab === 'tarif'.
+ * Maintains original PengaturanDesktopMain for desktop (>=768px) and other settings tabs.
+ */
+export default function PengaturanPage({ userProfile, onTenantUpdated = () => {} }) {
+  const isMobile = useMobileViewport(767);
+  const [searchParams] = useSearchParams();
+  const currentTab = searchParams.get('tab') || 'profil';
+
+  if (isMobile && currentTab === 'tarif') {
+    return <MobileCourtPricingMain userProfile={userProfile} />;
+  }
+
+  return (
+    <PengaturanDesktopMain 
+      userProfile={userProfile} 
+      onTenantUpdated={onTenantUpdated} 
+    />
+  );
+}
+
 
 
