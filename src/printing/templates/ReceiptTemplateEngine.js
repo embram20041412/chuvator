@@ -412,6 +412,12 @@ function normalizeItems(raw = {}, docType) {
  * Strictly preserves transaction monetary fields from payload without independent recalculation.
  */
 export function normalizePrintDocument(rawPayload = {}, options = {}) {
+  const paperOption =
+    options.paper ||
+    (options.paperSize
+      ? { size: options.paperSize, orientation: options.orientation }
+      : null);
+
   // If already normalized and only paper/options are being updated:
   if (
     rawPayload &&
@@ -422,10 +428,15 @@ export function normalizePrintDocument(rawPayload = {}, options = {}) {
     Array.isArray(rawPayload.items) &&
     !options.forceRebuild
   ) {
-    const resolvedPaper = resolvePaperSpec(options.paper || rawPayload.paper, rawPayload.docType);
+    const resolvedPaper = resolvePaperSpec(paperOption || rawPayload.paper, rawPayload.docType);
+    const normalizedIdentity =
+      rawPayload.tenantIdentity.headerName !== undefined
+        ? rawPayload.tenantIdentity
+        : resolveTenantIdentity(rawPayload.tenantIdentity);
+
     return {
       docType: rawPayload.docType,
-      tenantIdentity: rawPayload.tenantIdentity,
+      tenantIdentity: normalizedIdentity,
       meta: rawPayload.meta,
       items: rawPayload.items,
       summary: rawPayload.summary,
@@ -439,13 +450,14 @@ export function normalizePrintDocument(rawPayload = {}, options = {}) {
 
   const tx = rawPayload?.transaction || rawPayload?.transactionData || rawPayload || {};
   const docType = options.docType || rawPayload.docType || tx.docType || DOC_TYPES.THERMAL_RECEIPT;
-  const paper = resolvePaperSpec(options.paper || rawPayload.paper || tx.paper, docType);
+  const paper = resolvePaperSpec(paperOption || rawPayload.paper || tx.paper, docType);
 
   const tenantSource =
     options.tenantProfile ||
     options.tenantData ||
     rawPayload.tenantProfile ||
     rawPayload.tenantData ||
+    rawPayload.tenantIdentity ||
     rawPayload.arena ||
     tx.tenantData ||
     tx.arena ||

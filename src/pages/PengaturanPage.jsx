@@ -59,6 +59,7 @@ import useMobileViewport from '../mobile/hooks/useMobileViewport';
 import MobileCourtPricingMain from '../mobile/pages/admin/MobileCourtPricingMain';
 import MobileTenantProfileMain from '../mobile/pages/admin/MobileTenantProfileMain';
 import MobilePaymentSettingsMain from '../mobile/pages/admin/MobilePaymentSettingsMain';
+import PrinterSettingsPanel from '../printing/components/PrinterSettingsPanel';
 
 const SUPPORTED_SPORTS = [
   'Badminton', 
@@ -1308,6 +1309,18 @@ export function PengaturanDesktopMain({ userProfile, onTenantUpdated = () => {} 
                 )}
               </button>
             </div>
+
+            {/* KONFIGURASI PERANGKAT PRINTER WORKSTATION LOKAL & UJI CETAK (PHASE 3) */}
+            <PrinterSettingsPanel
+              userProfile={userProfile}
+              tenantProfile={tenant}
+              liveReceiptIdentity={{
+                receiptHeaderName,
+                receiptAddress,
+                receiptContact,
+                receiptFooterNote
+              }}
+            />
           </div>
         )}
 
