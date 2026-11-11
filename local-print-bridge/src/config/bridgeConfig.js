@@ -1,5 +1,5 @@
 /**
- * CHUVATOR — Local Print Bridge Configuration (Phase 4.3)
+ * CHUVATOR — Local Print Bridge Configuration (Phase 4.3.1 Security Hardening)
  */
 
 import fs from 'node:fs';
@@ -11,16 +11,28 @@ const CONFIG_FILE_PATH = path.join(os.homedir(), '.chuvator-bridge-config.json')
 export const DEFAULT_BRIDGE_CONFIG = Object.freeze({
   port: parseInt(process.env.BRIDGE_PORT || '9123', 10),
   host: '127.0.0.1',
-  version: '1.0.0',
+  version: '1.0.1',
   allowedOrigins: [
+    'https://chuvator.pages.dev',
+    'https://app.chuvator.com',
     'http://localhost:3000',
     'http://127.0.0.1:3000',
     'http://localhost:5173',
-    'http://127.0.0.1:5173',
-    'https://app.chuvator.com'
+    'http://127.0.0.1:5173'
+  ],
+  allowedHostHeaders: [
+    '127.0.0.1',
+    '127.0.0.1:9123',
+    'localhost',
+    'localhost:9123',
+    '[::1]',
+    '[::1]:9123'
   ],
   maxPayloadSizeBytes: 2 * 1024 * 1024, // 2MB
   jobTimeoutMs: 15000,
+  tokenTtlMs: 24 * 60 * 60 * 1000, // 24 Hours Token TTL
+  pairingRateLimitMaxAttempts: 5,
+  pairingRateLimitWindowMs: 60 * 1000,
   defaultPrinterType: 'bluetooth_spp'
 });
 
@@ -31,7 +43,11 @@ export function loadBridgePersistedConfig() {
       const parsed = JSON.parse(data);
       return {
         ...DEFAULT_BRIDGE_CONFIG,
-        ...parsed
+        ...parsed,
+        allowedOrigins: Array.from(new Set([
+          ...DEFAULT_BRIDGE_CONFIG.allowedOrigins,
+          ...(parsed.allowedOrigins || [])
+        ]))
       };
     }
   } catch {
@@ -50,7 +66,7 @@ export function saveBridgePersistedConfig(configPatch) {
     };
     fs.writeFileSync(CONFIG_FILE_PATH, JSON.stringify(updated, null, 2), 'utf-8');
     return updated;
-  } catch (err) {
+  } catch {
     return null;
   }
 }
