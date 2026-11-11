@@ -38,6 +38,16 @@ import MobileBadge from '../../components/MobileBadge';
 import MobileEmptyState from '../../components/MobileEmptyState';
 
 /**
+ * Canonical Tenant ID Resolver for CHUVATOR Mobile Staff
+ * Strictly adheres to tenant hierarchy: profile.tenant.id, profile.tenantId, profile.tenant.tenant_id.
+ * NEVER falls back to userProfile.id or userProfile.uid (User ID is NOT a Tenant ID).
+ */
+export const resolveTenantId = (profile) => {
+  if (!profile) return null;
+  return profile.tenant?.id || profile.tenantId || profile.tenant?.tenant_id || null;
+};
+
+/**
  * MobileStaffMain Component
  * Mobile-First Staff & Access Management for CHUVATOR Sports Arena & Academy ERP.
  * Strictly scoped under .chua-mobile-app with >=44px touch targets and native mobile ergonomics.
@@ -45,7 +55,7 @@ import MobileEmptyState from '../../components/MobileEmptyState';
  */
 export default function MobileStaffMain({ userProfile }) {
   const { canManageStaff, canInviteAdmins, loading: roleLoading } = useAuthRole(userProfile);
-  const tenantId = userProfile?.tenant?.id || userProfile?.tenantId || userProfile?.id || userProfile?.uid;
+  const tenantId = resolveTenantId(userProfile);
   const tenantName = userProfile?.tenant?.name || 'Cabang Aktif';
 
   // Navigation Tabs: 'staff_list' | 'invitations_list'
@@ -113,9 +123,12 @@ export default function MobileStaffMain({ userProfile }) {
   }, [tenantId]);
 
   useEffect(() => {
-    fetchData();
+    if (!tenantId) {
+      setLoadingData(false);
+      return;
+    }
 
-    if (!tenantId) return;
+    fetchData();
 
     // Realtime listener for users_staff and invitations
     const staffChannel = supabase
@@ -167,7 +180,7 @@ export default function MobileStaffMain({ userProfile }) {
     }
 
     if (!tenantId) {
-      setFormError('ID Tenant tidak ditemukan.');
+      setFormError('Konteks cabang (Tenant ID) tidak tersedia.');
       return;
     }
 
@@ -357,6 +370,22 @@ export default function MobileStaffMain({ userProfile }) {
           <h2 className="text-base font-bold text-slate-900">Akses Terbatas: Khusus Owner / Admin</h2>
           <p className="text-xs text-slate-500 leading-relaxed">
             Halaman Manajemen Staf &amp; Hak Akses hanya dapat diakses oleh Pemilik (Owner) atau Admin cabang aktif.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!tenantId) {
+    return (
+      <div className="chua-mobile-app min-h-screen bg-[#F5F7FC] p-4 flex items-center justify-center text-slate-800">
+        <div className="bg-white border border-amber-200 rounded-2xl p-6 text-center max-w-sm shadow-sm space-y-3">
+          <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mx-auto">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <h2 className="text-base font-bold text-slate-900">Konteks Cabang (Tenant) Tidak Ditemukan</h2>
+          <p className="text-xs text-slate-500 leading-relaxed">
+            Akun Anda tidak memiliki asosiasi cabang/tenant yang valid. Hubungi administrator sistem.
           </p>
         </div>
       </div>

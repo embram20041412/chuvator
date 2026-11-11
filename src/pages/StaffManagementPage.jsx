@@ -34,13 +34,23 @@ import useMobileViewport from '../mobile/hooks/useMobileViewport';
 import MobileStaffMain from '../mobile/pages/admin/MobileStaffMain';
 
 /**
+ * Canonical Tenant ID Resolver for CHUVATOR
+ * Strictly adheres to tenant hierarchy: profile.tenant.id, profile.tenantId, profile.tenant.tenant_id.
+ * NEVER falls back to userProfile.id or userProfile.uid (User ID is NOT a Tenant ID).
+ */
+export const resolveTenantId = (profile) => {
+  if (!profile) return null;
+  return profile.tenant?.id || profile.tenantId || profile.tenant?.tenant_id || null;
+};
+
+/**
  * StaffDesktopMain Component
  * Original untouched desktop staff & access management interface.
  * All hooks are called unconditionally at the top level of this component.
  */
 export function StaffDesktopMain({ userProfile }) {
   const { canManageStaff, canInviteAdmins, loading: roleLoading } = useAuthRole(userProfile);
-  const tenantId = userProfile?.tenant?.id || userProfile?.tenantId || userProfile?.id || userProfile?.uid;
+  const tenantId = resolveTenantId(userProfile);
   const tenantName = userProfile?.tenant?.name || 'Cabang Aktif';
 
   // Navigation tab inside Staff Management: 'staff_list' | 'invitations_list'
@@ -100,9 +110,12 @@ export function StaffDesktopMain({ userProfile }) {
   }, [tenantId]);
 
   useEffect(() => {
-    fetchData();
+    if (!tenantId) {
+      setLoadingData(false);
+      return;
+    }
 
-    if (!tenantId) return;
+    fetchData();
 
     // Realtime listener untuk tabel users_staff & invitations
     const staffChannel = supabase
@@ -260,6 +273,20 @@ export function StaffDesktopMain({ userProfile }) {
           <h2 className="text-lg font-bold text-slate-800">Akses Terbatas: Khusus Owner / Admin</h2>
           <p className="text-slate-600 text-xs mt-1">
             Halaman Manajemen Staf &amp; Undangan hanya dapat diakses oleh Pemilik (*Owner*) atau Admin cabang aktif.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!tenantId) {
+    return (
+      <div className="p-8 max-w-3xl mx-auto">
+        <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6 text-center">
+          <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-3" />
+          <h2 className="text-lg font-bold text-slate-800">Konteks Cabang (Tenant) Tidak Ditemukan</h2>
+          <p className="text-slate-600 text-xs mt-1">
+            Akun Anda tidak memiliki asosiasi cabang/tenant yang valid. Hubungi administrator sistem.
           </p>
         </div>
       </div>

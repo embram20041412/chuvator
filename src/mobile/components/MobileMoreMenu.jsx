@@ -74,7 +74,7 @@ export default function MobileMoreMenu({ isOpen, onClose, userProfile }) {
       subtitle: 'Manajemen Akses & Sesi',
       path: '/staff',
       icon3d: 'staf_pelatih',
-      show: userAccess.isOwner || userAccess.isSuperAdmin,
+      show: userAccess.canManageStaff || userAccess.isOwner || userAccess.isAdmin || userAccess.isSuperAdmin,
     },
   ];
 
