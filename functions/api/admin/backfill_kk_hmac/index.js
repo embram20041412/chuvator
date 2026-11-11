@@ -306,13 +306,24 @@ export async function onRequestPost(context) {
         );
       }
 
-      // Validasi Fencing Lease Token & Expiry Timestamp
+      // Validasi Fencing Lease Token Wajib Sebelum Operasi Apapun (Recovery maupun Normal Continuation)
       if (!leaseToken) {
         return new Response(
           JSON.stringify({
             success: false,
             code: 'MISSING_LEASE_TOKEN',
             message: 'Lease token wajib disertakan untuk melanjutkan (resume) siklus run aktif.'
+          }),
+          { status: 409, headers: corsHeaders }
+        );
+      }
+
+      if (leaseToken !== String(existingRun.lease_token || '').trim()) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            code: 'FENCING_TOKEN_STALE',
+            message: 'Lease token yang disertakan telah usang atau tidak cocok. Worker lain telah mengambil alih run ini.'
           }),
           { status: 409, headers: corsHeaders }
         );
@@ -369,7 +380,12 @@ export async function onRequestPost(context) {
             JSON.stringify({
               success: false,
               code: 'LEASE_RECOVERY_FAILED',
-              message: 'Gagal melakukan pemulihan lease pada database.'
+              message: 'Gagal melakukan pemulihan lease pada database.',
+              runId: existingRun.run_id,
+              leaseToken: existingRun.lease_token,
+              tenantId: authoritativeTenantId,
+              lastCursor: existingRun.last_cursor || null,
+              leaseRecovered: false
             }),
             { status: 500, headers: corsHeaders }
           );
@@ -391,21 +407,9 @@ export async function onRequestPost(context) {
         const recoveredRun = patchedRows[0];
         runId = recoveredRun.run_id;
         leaseToken = recoveredRun.lease_token;
-        dbCursor = existingRun.last_cursor || null; // cursor dibaca dari database secara immutabel
+        dbCursor = recoveredRun.last_cursor || null; // Cursor resmi dibaca dari hasil CAS (patchedRows[0].last_cursor)
         leaseRecovered = true;
       } else {
-        // Lease belum expired: Validasi Fencing Lease Token
-        if (leaseToken !== String(existingRun.lease_token || '').trim()) {
-          return new Response(
-            JSON.stringify({
-              success: false,
-              code: 'FENCING_TOKEN_STALE',
-              message: 'Lease token yang disertakan telah usang. Worker lain telah mengambil alih run ini.'
-            }),
-            { status: 409, headers: corsHeaders }
-          );
-        }
-
         runId = existingRun.run_id;
         leaseToken = existingRun.lease_token;
         dbCursor = existingRun.last_cursor || null;
@@ -480,7 +484,13 @@ export async function onRequestPost(context) {
         JSON.stringify({
           success: false,
           code: 'STUDENT_BATCH_FETCH_FAILED',
-          message: 'Gagal mengambil data siswa untuk eksekusi batch.'
+          message: 'Gagal mengambil data siswa untuk eksekusi batch.',
+          runId,
+          leaseToken,
+          tenantId: runTenantId,
+          lastCursor: dbCursor,
+          leaseRecovered: Boolean(leaseRecovered),
+          data: { runId, leaseToken, tenantId: runTenantId, lastCursor: dbCursor, leaseRecovered: Boolean(leaseRecovered) }
         }),
         { status: 500, headers: corsHeaders }
       );
@@ -492,7 +502,13 @@ export async function onRequestPost(context) {
         JSON.stringify({
           success: false,
           code: 'INVALID_STUDENT_BATCH_RESPONSE',
-          message: 'Format data batch siswa dari database tidak valid.'
+          message: 'Format data batch siswa dari database tidak valid.',
+          runId,
+          leaseToken,
+          tenantId: runTenantId,
+          lastCursor: dbCursor,
+          leaseRecovered: Boolean(leaseRecovered),
+          data: { runId, leaseToken, tenantId: runTenantId, lastCursor: dbCursor, leaseRecovered: Boolean(leaseRecovered) }
         }),
         { status: 500, headers: corsHeaders }
       );

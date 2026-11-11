@@ -44,6 +44,9 @@ export default function TenantBackfillControlCard({ tenantId = null, tenantName 
   const isRoleAllowed = userRole === 'owner' || userRole === 'admin';
   const canOperate = isTenantValid && isRoleAllowed;
 
+  // Max automatic batch iterations per UI session (prevents infinite UI loops)
+  const MAX_AUTO_BATCH_ITERATIONS = 20;
+
   // Run Dry-Run (Read-Only Analysis)
   const handleRunDryRun = async () => {
     if (!canOperate || loadingDryRun || loadingExecute) return;
@@ -74,12 +77,15 @@ export default function TenantBackfillControlCard({ tenantId = null, tenantName 
     let currentRunId = initialRunId;
     let currentLeaseToken = initialLeaseToken;
     let isDone = false;
+    let iterationCount = 0;
 
     let accumProcessed = batchStats.totalProcessed;
     let accumSkipped = batchStats.totalSkipped;
     let accumFailed = batchStats.totalFailed;
 
-    while (!isDone && !shouldPauseRef.current) {
+    while (!isDone && !shouldPauseRef.current && iterationCount < MAX_AUTO_BATCH_ITERATIONS) {
+      iterationCount++;
+
       try {
         const res = await executeKkHmacBackfill({
           tenantId,
@@ -122,11 +128,21 @@ export default function TenantBackfillControlCard({ tenantId = null, tenantName 
         };
         setExecuteResult(execSummary);
 
-        if (resData.completed === true || resData.hasMoreRows === false) {
+        // D.1 & D.2: completed === true ADALAH SATU-SATUNYA INDIKATOR KEBERHASILAN FINAL
+        if (resData.completed === true) {
           isDone = true;
           setIsCompleted(true);
           setActiveRunId(null);
           setActiveLeaseToken(null);
+          break;
+        }
+
+        // Jika tidak ada baris tersisa namun status belum completed: true (misal RPC complete gagal)
+        if (resData.hasMoreRows === false && resData.completed !== true) {
+          isDone = true;
+          setIsCompleted(false);
+          setExecuteError(resData.message || 'Batch selesai diproses namun status COMPLETED belum terkonfirmasi oleh server database.');
+          // Pertahankan activeRunId & activeLeaseToken agar pengguna dapat melakukan retry resume
           break;
         }
       } catch (err) {
@@ -139,8 +155,12 @@ export default function TenantBackfillControlCard({ tenantId = null, tenantName 
     }
 
     setLoadingExecute(false);
+
     if (shouldPauseRef.current) {
       setIsPaused(true);
+    } else if (iterationCount >= MAX_AUTO_BATCH_ITERATIONS && !isDone) {
+      setIsPaused(true);
+      setExecuteError(`Batas Otomatis Sesi UI (${MAX_AUTO_BATCH_ITERATIONS} batch) tercapai. Klik "Lanjutkan (Resume)" untuk meneruskan siklus.`);
     }
 
     // Refresh dry-run data after batch execution ends/pauses
@@ -343,16 +363,24 @@ export default function TenantBackfillControlCard({ tenantId = null, tenantName 
 
       {/* Alert Sukses / Status Eksekusi */}
       {executeResult && (
-        <div className="p-4 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 rounded-xl flex items-start space-x-3 text-emerald-800 dark:text-emerald-300 text-sm">
-          <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+        <div className={`p-4 rounded-xl flex items-start space-x-3 text-sm ${
+          isCompleted 
+            ? 'bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-emerald-800 dark:text-emerald-300' 
+            : 'bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 text-amber-800 dark:text-amber-300'
+        }`}>
+          {isCompleted ? (
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5" />
+          ) : (
+            <Info className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          )}
           <div className="flex-1">
             <p className="font-bold">
-              {isCompleted ? 'Seluruh Backfill Selesai Dituntaskan' : isPaused ? 'Batch Di-pause Oleh Pengguna' : 'Iterasi Batch Berhasil'}
+              {isCompleted ? 'Seluruh Backfill Selesai Dituntaskan (Status COMPLETED)' : isPaused ? 'Batch Di-pause Oleh Pengguna' : 'Iterasi Batch Selesai (Menunggu Penyelesaian Status Server)'}
             </p>
-            <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-0.5">
+            <p className="text-xs mt-0.5 opacity-90">
               {executeResult.message || `Berhasil memproses data tenant ${tenantName}.`}
             </p>
-            <div className="text-[11px] font-mono text-emerald-800 dark:text-emerald-300 mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
+            <div className="text-[11px] font-mono mt-1.5 flex flex-wrap gap-x-4 gap-y-1 opacity-90">
               <span>Diproses Batch Ini: {executeResult.lastBatchProcessed ?? executeResult.processed}</span>
               <span>Total Diproses: {batchStats.totalProcessed}</span>
               <span>Total Skipped: {batchStats.totalSkipped}</span>
