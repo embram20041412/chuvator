@@ -23,6 +23,9 @@ import {
   requestUsbPrinterByUserGesture,
   requestBluetoothPrinterByUserGesture
 } from './PrinterDiscovery.js';
+import {
+  findPrinterUsbInterfaceAndEndpoint
+} from '../adapters/WebUSBPrintAdapter.js';
 
 export { CONNECTION_STATUS };
 
@@ -47,14 +50,20 @@ export class PrinterConnectionManager {
     };
 
     this.activeDeviceHandle = null;
+    this.activeEndpointInfo = null;
+    this.isInterfaceClaimed = false;
     this.listeners = new Set();
     this._boundBleDisconnect = null;
+    this._usbDisconnectListener = null;
 
     this._attachGlobalHardwareListeners();
   }
 
   _attachGlobalHardwareListeners() {
     if (this.envNavigator?.usb && typeof this.envNavigator.usb.addEventListener === 'function') {
+      if (this._usbDisconnectListener && typeof this.envNavigator.usb.removeEventListener === 'function') {
+        this.envNavigator.usb.removeEventListener('disconnect', this._usbDisconnectListener);
+      }
       this._usbDisconnectListener = (event) => {
         const disconnectedDevice = event?.device;
         if (!disconnectedDevice) return;
@@ -192,24 +201,70 @@ export class PrinterConnectionManager {
     });
 
     try {
-      this.activeDeviceHandle = usbDevice || null;
+      if (!usbDevice.opened && typeof usbDevice.open === 'function') {
+        await usbDevice.open();
+      }
+
+      let endpointInfo = findPrinterUsbInterfaceAndEndpoint(usbDevice);
+      if (!endpointInfo && Array.isArray(usbDevice.configurations) && usbDevice.configurations.length > 0) {
+        const firstConfig = usbDevice.configurations[0];
+        if (typeof usbDevice.selectConfiguration === 'function') {
+          await usbDevice.selectConfiguration(firstConfig.configurationValue ?? 1);
+        }
+        endpointInfo = findPrinterUsbInterfaceAndEndpoint(usbDevice);
+      }
+
+      if (!endpointInfo) {
+        if (usbDevice.opened && typeof usbDevice.close === 'function') {
+          try {
+            await usbDevice.close();
+          } catch {}
+        }
+        return this._setState({
+          status: CONNECTION_STATUS.ERROR,
+          adapter: 'webusb',
+          deviceMetadata: metadata,
+          printerDisplayName: metadata.name,
+          directEscPosTransmissionReady: false,
+          statusMessage: `Perangkat USB "${metadata.name}" tidak memiliki interface printer atau endpoint OUT yang kompatibel.`,
+          errorMessage: 'Interface atau endpoint printer USB tidak kompatibel.'
+        });
+      }
+
+      if (typeof usbDevice.claimInterface === 'function') {
+        await usbDevice.claimInterface(endpointInfo.interfaceNumber);
+      }
+
+      this.activeDeviceHandle = usbDevice;
+      this.activeEndpointInfo = endpointInfo;
+      this.isInterfaceClaimed = true;
+
       return this._setState({
         status: CONNECTION_STATUS.CONNECTED,
         adapter: 'webusb',
         deviceMetadata: metadata,
         printerDisplayName: metadata.name,
-        directEscPosTransmissionReady: false,
-        statusMessage: `Perangkat USB "${metadata.name}" terhubung & terdaftar di workstation ini. (Catatan: Transmisi langsung ESC/POS diaktifkan pada Phase 4; Test Print saat ini menggunakan Browser/System Print).`,
+        directEscPosTransmissionReady: true,
+        statusMessage: `Perangkat USB "${metadata.name}" berhasil terhubung dan antarmuka berhasil diklaim untuk pencetakan ESC/POS langsung.`,
         errorMessage: null
       });
     } catch (err) {
+      if (usbDevice && usbDevice.opened && typeof usbDevice.close === 'function') {
+        try {
+          await usbDevice.close();
+        } catch {}
+      }
+      this.activeDeviceHandle = null;
+      this.activeEndpointInfo = null;
+      this.isInterfaceClaimed = false;
+
       return this._setState({
         status: CONNECTION_STATUS.ERROR,
         adapter: 'webusb',
         deviceMetadata: metadata,
         printerDisplayName: metadata.name,
         directEscPosTransmissionReady: false,
-        statusMessage: `Gagal membuka koneksi USB ke "${metadata.name}".`,
+        statusMessage: `Gagal membuka koneksi dan mengklaim interface USB "${metadata.name}": ${err?.message || String(err)}`,
         errorMessage: err?.message || String(err)
       });
     }
@@ -329,6 +384,13 @@ export class PrinterConnectionManager {
         if (this.activeDeviceHandle.gatt?.connected && typeof this.activeDeviceHandle.gatt.disconnect === 'function') {
           this.activeDeviceHandle.gatt.disconnect();
         }
+        if (this.isInterfaceClaimed && this.activeEndpointInfo && typeof this.activeDeviceHandle.releaseInterface === 'function') {
+          try {
+            await this.activeDeviceHandle.releaseInterface(this.activeEndpointInfo.interfaceNumber);
+          } catch {
+            // Ignore release error
+          }
+        }
         if (this.activeDeviceHandle.opened && typeof this.activeDeviceHandle.close === 'function') {
           await this.activeDeviceHandle.close();
         }
@@ -337,6 +399,8 @@ export class PrinterConnectionManager {
       // Ignore hardware close error during disconnect
     } finally {
       this.activeDeviceHandle = null;
+      this.activeEndpointInfo = null;
+      this.isInterfaceClaimed = false;
       this._boundBleDisconnect = null;
     }
 
@@ -353,6 +417,9 @@ export class PrinterConnectionManager {
    */
   handleUnexpectedDisconnect(reason = 'Koneksi perangkat printer terputus.') {
     this.activeDeviceHandle = null;
+    this.activeEndpointInfo = null;
+    this.isInterfaceClaimed = false;
+    this._boundBleDisconnect = null;
     return this._setState({
       status: CONNECTION_STATUS.DISCONNECTED,
       directEscPosTransmissionReady: false,

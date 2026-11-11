@@ -23,15 +23,26 @@ import {
   buildIsolatedPrintHtml
 } from '../adapters/BrowserPrintAdapter.js';
 import {
+  WebUSBPrintAdapter
+} from '../adapters/WebUSBPrintAdapter.js';
+import {
   generatePDFDocument,
   downloadPDFDocument
 } from '../pdf/PDFGenerator.js';
 
 export class PrintEngine {
-  constructor() {
+  constructor(options = {}) {
     this.adapters = new Map();
     // Register default Phase 2 Browser/System Print Adapter
-    this.registerAdapter(PRINT_ADAPTERS.BROWSER, new BrowserPrintAdapter());
+    this.registerAdapter(
+      PRINT_ADAPTERS.BROWSER,
+      options.browserAdapter || new BrowserPrintAdapter()
+    );
+    // Register Phase 4.1 Direct WebUSB Print Adapter
+    this.registerAdapter(
+      PRINT_ADAPTERS.WEB_USB,
+      options.webUsbAdapter || new WebUSBPrintAdapter(options.webUsbOptions || {})
+    );
   }
 
   /**
