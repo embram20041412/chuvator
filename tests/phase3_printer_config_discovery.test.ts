@@ -352,12 +352,32 @@ test('Phase 3.7 - PrinterConnectionManager state transitions (DISCONNECTED, CONN
     productName: 'TM-T20II',
     manufacturerName: 'EPSON',
     opened: false,
+    configurations: [
+      {
+        configurationValue: 1,
+        interfaces: [
+          {
+            interfaceNumber: 0,
+            alternates: [
+              {
+                alternateSetting: 0,
+                interfaceClass: 7,
+                endpoints: [{ direction: 'out', type: 'bulk', endpointNumber: 1, packetSize: 64 }]
+              }
+            ]
+          }
+        ]
+      }
+    ],
     open: async function () {
       this.opened = true;
     },
     close: async function () {
       this.opened = false;
-    }
+    },
+    selectConfiguration: async function () {},
+    claimInterface: async function () {},
+    releaseInterface: async function () {}
   };
 
   const envWindow = {
@@ -383,7 +403,7 @@ test('Phase 3.7 - PrinterConnectionManager state transitions (DISCONNECTED, CONN
   const connectRes = await manager.pairAndConnectUsb();
   assert.equal(connectRes.status, 'CONNECTED');
   assert.equal(manager.getState().status, 'CONNECTED');
-  assert.equal(manager.getState().directEscPosTransmissionReady, false);
+  assert.equal(manager.getState().directEscPosTransmissionReady, true);
   assert.ok(observedStates.includes('CONNECTING'));
   assert.ok(observedStates.includes('CONNECTED'));
 

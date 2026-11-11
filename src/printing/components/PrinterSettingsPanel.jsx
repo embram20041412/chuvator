@@ -350,7 +350,7 @@ export default function PrinterSettingsPanel({
     };
   };
 
-  // Execute Test Print via PrintEngine & BrowserPrintAdapter
+  // Execute Test Print via PrintEngine & selected adapter (WebUSB or BrowserPrintAdapter)
   const handleRunTestPrint = async (mode = 'THERMAL') => {
     if (isTestingPrint) return;
     setIsTestingPrint(true);
@@ -358,20 +358,21 @@ export default function PrinterSettingsPanel({
 
     try {
       const { rawPayload, options } = createTestPrintPayload(mode);
-      // Always execute via BrowserPrintAdapter in Phase 3 as specified
+      const targetAdapter = preferredAdapter === PRINT_ADAPTERS.WEB_USB ? PRINT_ADAPTERS.WEB_USB : PRINT_ADAPTERS.BROWSER;
+
       const res = await printEngine.printDocument(rawPayload, {
         ...options,
-        adapter: PRINT_ADAPTERS.BROWSER
+        adapter: targetAdapter
       });
 
-      const directWarning =
-        preferredAdapter !== PRINT_ADAPTERS.BROWSER
-          ? ' (Catatan Phase 3: Transmisi langsung USB/BLE diaktifkan pada Phase 4; Test Print ini dijalankan melalui Browser/System Print).'
+      const noteText =
+        preferredAdapter === PRINT_ADAPTERS.WEB_BLUETOOTH
+          ? ' (Catatan: Transmisi langsung BLE diaktifkan pada Phase 4.2; Test Print dijalankan melalui Browser/System Print).'
           : '';
 
       setFeedbackNotice({
-        type: res.ok ? 'info' : 'error',
-        text: `${res.message}${directWarning}`
+        type: res.ok ? 'success' : 'error',
+        text: `${res.message}${noteText}`
       });
     } catch (err) {
       setFeedbackNotice({
