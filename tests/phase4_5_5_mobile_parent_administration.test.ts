@@ -17,6 +17,7 @@ if (typeof globalThis.window === 'undefined') {
   };
 }
 
+import { onRequestGet as parentListHandler } from '../functions/api/tenant/parents/index.js';
 import ParentManagementPage, { ParentDesktopMain } from '../src/pages/ParentManagementPage.jsx';
 import MobileParentManagementMain, {
   resolveTenantId,
@@ -852,9 +853,10 @@ test('CHUVATOR — Phase 4.5.5 Mobile Parent Administration Test Suite', async (
       ['Rizky Pratama', 'Nadia Pratama', 'Bagas Pratama']
     );
 
-    // 3. Relasi student berbentuk object (name, student_name, studentName, full_name)
+    // 3. Relasi student berbentuk object (prioritas student_name, fallback name, studentName, full_name)
     assert.equal(resolveStudentNameFromRecord({ id: 's-1', name: 'Dimas Anggara' }), 'Dimas Anggara');
     assert.equal(resolveStudentNameFromRecord({ id: 's-2', name: null, student_name: 'Ayu Lestari' }), 'Ayu Lestari');
+    assert.equal(resolveStudentNameFromRecord({ id: 's-2b', name: 'Nama Lama', student_name: 'Nama Utama Student' }), 'Nama Utama Student');
     assert.equal(resolveStudentNameFromRecord({ id: 's-3', studentName: 'Raka Saputra' }), 'Raka Saputra');
     assert.equal(resolveStudentNameFromRecord({ id: 's-4', full_name: 'Kirana Putri' }), 'Kirana Putri');
 
@@ -1012,5 +1014,339 @@ test('CHUVATOR — Phase 4.5.5 Mobile Parent Administration Test Suite', async (
     assert.ok(htmlDesktopUnchanged.includes('Manajemen Wali Murid'));
     assert.equal(htmlDesktopUnchanged.includes('mobile-parent-management-main'), false);
   });
+
+  /* ========================================================================= */
+  /* TEST 20: Phase 4.5.5.2.1 — Backend Response Contract & Mobile Integration */
+  /* ========================================================================= */
+  await t.test('TEST 20 [CONTRACT INTEGRATION]: Phase 4.5.5.2.1 — Kontrak Endpoint GET /api/tenant/parents dengan Mock Supabase REST Response (Skenario A-H)', async () => {
+    const mockSupabaseUrl = 'https://mock-supabase.local';
+    const mockServiceKey = 'service-role-key';
+    const appUrl = 'https://chuvator.pages.dev';
+    const activeTenantId = 'tenant-gor-101';
+    const originalFetch = globalThis.fetch;
+    let capturedUrls: string[] = [];
+
+    const createContext = (tenantId = activeTenantId, role = 'owner') => ({
+      request: new Request('https://chuvator.pages.dev/api/tenant/parents', {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer test-staff-token',
+          'Origin': appUrl,
+          'x-test-staff-role': role,
+          'x-test-staff-uid': 'staff-uid-101',
+          'x-test-tenant-id': tenantId,
+          'Content-Type': 'application/json'
+        }
+      }),
+      env: {
+        SUPABASE_URL: mockSupabaseUrl,
+        SUPABASE_SERVICE_ROLE_KEY: mockServiceKey,
+        SUPABASE_ANON_KEY: 'mock-anon-key',
+        KK_HMAC_SECRET: 'test-hmac-secret-1234567890123456',
+        APP_URL: appUrl,
+        ALLOWED_ORIGINS: appUrl,
+        ENVIRONMENT: 'development'
+      }
+    });
+
+    try {
+      // Skenario A, B, C, D, E, G, H dalam satu alur integrasi endpoint -> Mobile UI
+      capturedUrls = [];
+      globalThis.fetch = async (url: any) => {
+        const urlStr = String(url);
+        capturedUrls.push(urlStr);
+
+        if (urlStr.includes('/rest/v1/parent_accounts')) {
+          return new Response(
+            JSON.stringify([
+              {
+                id: 'parent-a',
+                tenant_id: activeTenantId,
+                auth_uid: null,
+                full_name: 'Wali Skenario A',
+                email: 'walia@mail.com',
+                phone: '6281211110001',
+                created_at: '2026-11-01T00:00:00Z'
+              },
+              {
+                id: 'parent-b',
+                tenant_id: activeTenantId,
+                auth_uid: null,
+                full_name: 'Wali Skenario B',
+                email: 'walib@mail.com',
+                phone: '6281211110002',
+                created_at: '2026-11-01T00:00:00Z'
+              },
+              {
+                id: 'parent-c',
+                tenant_id: activeTenantId,
+                auth_uid: null,
+                full_name: 'Wali Skenario C',
+                email: 'walic@mail.com',
+                phone: '6281211110003',
+                created_at: '2026-11-01T00:00:00Z'
+              },
+              {
+                id: 'parent-d',
+                tenant_id: activeTenantId,
+                auth_uid: null,
+                full_name: 'Wali Skenario D Multi Siswa',
+                email: 'walid@mail.com',
+                phone: '6281211110004',
+                created_at: '2026-11-01T00:00:00Z'
+              },
+              {
+                id: 'parent-e',
+                tenant_id: activeTenantId,
+                auth_uid: null,
+                full_name: 'Wali Skenario E Tanpa Siswa',
+                email: 'walie@mail.com',
+                phone: '6281211110005',
+                created_at: '2026-11-01T00:00:00Z'
+              },
+              // G. Parent milik tenant lain seandainya lolos dari REST mock
+              {
+                id: 'parent-foreign',
+                tenant_id: 'tenant-other-999',
+                auth_uid: null,
+                full_name: 'Wali Tenant Asing',
+                email: 'foreign@mail.com',
+                phone: '6281299999999',
+                created_at: '2026-11-01T00:00:00Z'
+              }
+            ]),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+
+        if (urlStr.includes('/rest/v1/parent_student_links')) {
+          return new Response(
+            JSON.stringify([
+              // A. Siswa dengan student_name terisi dan name null + H. Nomor KK lengkap di mock DB
+              {
+                parent_account_id: 'parent-a',
+                student: {
+                  id: 'std-a1',
+                  name: null,
+                  student_name: 'Arjuna Wijaya',
+                  kk_last4: '1122',
+                  kk: '3506019988771122',
+                  no_kk: '3506019988771122',
+                  kk_hmac: 'secret-hmac-hash-value'
+                }
+              },
+              // B. Siswa dengan student_name dan name keduanya terisi (prioritas student_name)
+              {
+                parent_account_id: 'parent-b',
+                student: {
+                  id: 'std-b1',
+                  name: 'Bima Nama Lama',
+                  student_name: 'Bima Sakti Utama',
+                  kk_last4: '3344'
+                }
+              },
+              // C. Siswa dengan student_name kosong dan name terisi (fallback ke name)
+              {
+                parent_account_id: 'parent-c',
+                student: {
+                  id: 'std-c1',
+                  name: 'Citra Lestari Fallback',
+                  student_name: '   ',
+                  kk_last4: '5566'
+                }
+              },
+              // D. Satu wali dengan beberapa siswa
+              {
+                parent_account_id: 'parent-d',
+                student: {
+                  id: 'std-d1',
+                  name: null,
+                  student_name: 'Daffa Pratama',
+                  kk_last4: '7788'
+                }
+              },
+              {
+                parent_account_id: 'parent-d',
+                student: {
+                  id: 'std-d2',
+                  name: 'Dinda Pratama',
+                  student_name: null,
+                  kk_last4: '7788'
+                }
+              },
+              // G. Relasi milik tenant lain yang mencoba bocor ke parent aktif maupun parent asing
+              {
+                parent_account_id: 'parent-a',
+                student: {
+                  id: 'std-foreign-leak-1',
+                  tenant_id: 'tenant-other-999',
+                  name: 'Siswa Bocor Tenant Lain',
+                  student_name: 'Siswa Bocor Tenant Lain',
+                  kk_last4: '9999'
+                }
+              },
+              {
+                parent_account_id: 'parent-foreign',
+                student: {
+                  id: 'std-foreign-leak-2',
+                  name: 'Siswa Wali Asing',
+                  student_name: 'Siswa Wali Asing',
+                  kk_last4: '0000'
+                }
+              }
+            ]),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+
+        return new Response(JSON.stringify([]), { status: 200 });
+      };
+
+      const res = await parentListHandler(createContext() as any);
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.equal(body.success, true);
+      assert.equal(body.linksError, false);
+
+      // Buktikan bahwa endpoint benar-benar meminta kolom student_name pada query REST Supabase
+      const linksQueryUrl = capturedUrls.find((u) => u.includes('/rest/v1/parent_student_links'));
+      assert.ok(linksQueryUrl, 'Endpoint wajib memanggil /rest/v1/parent_student_links');
+      assert.ok(
+        linksQueryUrl.includes('select=parent_account_id,student:students(id,name,student_name,kk_last4)'),
+        `Query parent_student_links wajib meminta id,name,student_name,kk_last4. Aktual: ${linksQueryUrl}`
+      );
+
+      const parentsData: any[] = body.data;
+      // G. Parent tenant asing ditolak
+      assert.equal(parentsData.some((p) => p.id === 'parent-foreign'), false);
+
+      // A. Siswa dengan student_name terisi dan name null
+      const parentA = parentsData.find((p) => p.id === 'parent-a');
+      assert.ok(parentA);
+      assert.equal(parentA.linksError, false);
+      assert.equal(parentA.links.length, 1, 'Siswa bocor dari tenant lain wajib ditolak dari links parent-a');
+      assert.equal(parentA.links[0].student.student_name, 'Arjuna Wijaya');
+      assert.equal(parentA.links[0].student.name, 'Arjuna Wijaya');
+      assert.equal(parentA.links[0].student.kk_last4, '1122');
+
+      // H. Nomor KK lengkap tidak boleh masuk response
+      const rawJsonString = JSON.stringify(body);
+      assert.equal(rawJsonString.includes('3506019988771122'), false, 'Nomor KK 16 digit lengkap dilarang masuk ke response');
+      assert.equal(rawJsonString.includes('secret-hmac-hash-value'), false, 'kk_hmac dilarang masuk ke response');
+      assert.equal('kk' in parentA.links[0].student, false);
+      assert.equal('no_kk' in parentA.links[0].student, false);
+
+      // B. Siswa dengan student_name dan name terisi -> prioritas student_name
+      const parentB = parentsData.find((p) => p.id === 'parent-b');
+      assert.ok(parentB);
+      assert.equal(parentB.links.length, 1);
+      assert.equal(parentB.links[0].student.student_name, 'Bima Sakti Utama');
+      assert.equal(parentB.links[0].student.name, 'Bima Sakti Utama');
+
+      // C. Siswa dengan student_name kosong dan name terisi -> fallback ke name
+      const parentC = parentsData.find((p) => p.id === 'parent-c');
+      assert.ok(parentC);
+      assert.equal(parentC.links.length, 1);
+      assert.equal(parentC.links[0].student.student_name, null);
+      assert.equal(parentC.links[0].student.name, 'Citra Lestari Fallback');
+
+      // D. Satu wali dengan beberapa siswa
+      const parentD = parentsData.find((p) => p.id === 'parent-d');
+      assert.ok(parentD);
+      assert.equal(parentD.links.length, 2);
+      assert.deepEqual(
+        parentD.links.map((l: any) => l.student.name),
+        ['Daffa Pratama', 'Dinda Pratama']
+      );
+
+      // E. Wali tanpa relasi siswa (query berhasil namun belum ada link)
+      const parentE = parentsData.find((p) => p.id === 'parent-e');
+      assert.ok(parentE);
+      assert.equal(parentE.linksError, false);
+      assert.ok(Array.isArray(parentE.links));
+      assert.equal(parentE.links.length, 0);
+
+      // Verifikasi render langsung hasil response endpoint pada MobileParentManagementMain
+      (globalThis as any).window.innerWidth = 390;
+      const htmlSuccessContract = renderToString(
+        React.createElement(MemoryRouter, { initialEntries: ['/parents'] },
+          React.createElement(MobileParentManagementMain, {
+            userProfile: mockOwnerProfile,
+            initialParents: parentsData
+          })
+        )
+      );
+
+      assert.ok(htmlSuccessContract.includes('Arjuna Wijaya'), 'Skenario A: student_name tampil di kartu mobile');
+      assert.ok(htmlSuccessContract.includes('Bima Sakti Utama'), 'Skenario B: prioritas student_name tampil di kartu mobile');
+      assert.equal(htmlSuccessContract.includes('Bima Nama Lama'), false, 'Skenario B: name lama tidak menimpa student_name');
+      assert.ok(htmlSuccessContract.includes('Citra Lestari Fallback'), 'Skenario C: fallback name tampil di kartu mobile');
+      assert.ok(htmlSuccessContract.includes('Daffa Pratama'), 'Skenario D: siswa ke-1 tampil di kartu mobile');
+      assert.ok(htmlSuccessContract.includes('Dinda Pratama'), 'Skenario D: siswa ke-2 tampil di kartu mobile');
+      assert.ok(htmlSuccessContract.includes('Belum ada siswa terhubung'), 'Skenario E: wali tanpa siswa menampilkan Belum ada siswa terhubung');
+      assert.equal(htmlSuccessContract.includes('Data relasi siswa gagal dimuat'), false);
+      assert.equal(htmlSuccessContract.includes('Siswa Bocor Tenant Lain'), false, 'Skenario G: tidak ada kebocoran siswa antar-tenant');
+      assert.equal(htmlSuccessContract.includes('Siswa Wali Asing'), false, 'Skenario G: tidak ada kebocoran wali antar-tenant');
+
+      // F. Query relasi parent_student_links gagal (mis. HTTP 500 dari Supabase REST)
+      globalThis.fetch = async (url: any) => {
+        const urlStr = String(url);
+        if (urlStr.includes('/rest/v1/parent_accounts')) {
+          return new Response(
+            JSON.stringify([
+              {
+                id: 'parent-f',
+                tenant_id: activeTenantId,
+                auth_uid: null,
+                full_name: 'Wali Skenario F Error Relasi',
+                email: 'walif@mail.com',
+                phone: '6281211110006',
+                created_at: '2026-11-01T00:00:00Z'
+              }
+            ]),
+            { status: 200, headers: { 'Content-Type': 'application/json' } }
+          );
+        }
+        if (urlStr.includes('/rest/v1/parent_student_links')) {
+          return new Response(JSON.stringify({ message: 'Database relation query error' }), {
+            status: 500,
+            headers: { 'Content-Type': 'application/json' }
+          });
+        }
+        return new Response(JSON.stringify([]), { status: 200 });
+      };
+
+      const resFailedLinks = await parentListHandler(createContext() as any);
+      assert.equal(resFailedLinks.status, 200);
+      const bodyFailedLinks = await resFailedLinks.json();
+      assert.equal(bodyFailedLinks.success, true);
+      assert.equal(bodyFailedLinks.linksError, true, 'Top-level linksError wajib true ketika query parent_student_links gagal');
+      assert.equal(bodyFailedLinks.data.length, 1);
+      assert.equal(bodyFailedLinks.data[0].linksError, true, 'Record wali wajib memiliki linksError: true ketika query relasi gagal');
+      assert.equal(bodyFailedLinks.data[0].links, null, 'Record wali wajib memiliki links: null (bukan array kosong) ketika query relasi gagal');
+
+      const htmlFailedContract = renderToString(
+        React.createElement(MemoryRouter, { initialEntries: ['/parents'] },
+          React.createElement(MobileParentManagementMain, {
+            userProfile: mockOwnerProfile,
+            initialParents: bodyFailedLinks.data
+          })
+        )
+      );
+
+      assert.ok(
+        htmlFailedContract.includes('Data relasi siswa gagal dimuat'),
+        'Skenario F: Mobile UI wajib menampilkan "Data relasi siswa gagal dimuat" ketika query relasi gagal'
+      );
+      assert.equal(
+        htmlFailedContract.includes('Belum ada siswa terhubung'),
+        false,
+        'Skenario F: Mobile UI dilarang menyatakan wali belum memiliki siswa ketika query relasi gagal'
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
+
 

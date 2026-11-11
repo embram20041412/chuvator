@@ -25,6 +25,108 @@ export async function onRequestOptions(context) {
   return new Response(null, { status: 204, headers: corsHeaders });
 }
 
+export function sanitizeKkLast4(val) {
+  if (typeof val !== 'string' && typeof val !== 'number') return null;
+  const trimmed = String(val).trim();
+  if (!trimmed) return null;
+  return trimmed.length > 4 ? trimmed.slice(-4) : trimmed;
+}
+
+export function normalizeStudentRelationRecord(rawStudent, parentTenantId = null) {
+  if (!rawStudent || typeof rawStudent !== 'object' || Array.isArray(rawStudent)) {
+    return null;
+  }
+
+  const rawRecordTenant =
+    rawStudent.tenant_id !== undefined && rawStudent.tenant_id !== null && String(rawStudent.tenant_id).trim() !== ''
+      ? rawStudent.tenant_id
+      : rawStudent.tenantId;
+
+  if (
+    parentTenantId &&
+    rawRecordTenant !== undefined &&
+    rawRecordTenant !== null &&
+    String(rawRecordTenant).trim() !== '' &&
+    String(rawRecordTenant).trim() !== String(parentTenantId).trim()
+  ) {
+    return { __rejectedForeignTenant: true };
+  }
+
+  const rawStudentName = typeof rawStudent.student_name === 'string' ? rawStudent.student_name.trim() : '';
+  const rawLegacyName = typeof rawStudent.name === 'string' ? rawStudent.name.trim() : '';
+
+  // Priority: 1. student_name, 2. name as fallback
+  const resolvedName = rawStudentName || rawLegacyName || null;
+
+  return {
+    id: rawStudent.id || null,
+    student_name: rawStudentName || null,
+    name: resolvedName,
+    kk_last4: sanitizeKkLast4(rawStudent.kk_last4)
+  };
+}
+
+export function normalizeParentStudentLinkRecord(rawLink, parentTenantId = null) {
+  if (!rawLink || typeof rawLink !== 'object' || !rawLink.parent_account_id) {
+    return null;
+  }
+
+  const rawLinkTenant =
+    rawLink.tenant_id !== undefined && rawLink.tenant_id !== null && String(rawLink.tenant_id).trim() !== ''
+      ? rawLink.tenant_id
+      : rawLink.tenantId;
+
+  if (
+    parentTenantId &&
+    rawLinkTenant !== undefined &&
+    rawLinkTenant !== null &&
+    String(rawLinkTenant).trim() !== '' &&
+    String(rawLinkTenant).trim() !== String(parentTenantId).trim()
+  ) {
+    return null;
+  }
+
+  const rawStudentRel = rawLink.student !== undefined ? rawLink.student : rawLink.students;
+
+  if (Array.isArray(rawStudentRel)) {
+    const normalizedArr = [];
+    let hadRejectedForeign = false;
+    for (const item of rawStudentRel) {
+      const norm = normalizeStudentRelationRecord(item, parentTenantId);
+      if (norm && norm.__rejectedForeignTenant) {
+        hadRejectedForeign = true;
+        continue;
+      }
+      if (norm) {
+        normalizedArr.push(norm);
+      }
+    }
+    if (normalizedArr.length === 0 && hadRejectedForeign) {
+      return null;
+    }
+    return {
+      parent_account_id: rawLink.parent_account_id,
+      student: normalizedArr
+    };
+  }
+
+  if (rawStudentRel && typeof rawStudentRel === 'object') {
+    const norm = normalizeStudentRelationRecord(rawStudentRel, parentTenantId);
+    if (norm && norm.__rejectedForeignTenant) {
+      return null;
+    }
+    return {
+      parent_account_id: rawLink.parent_account_id,
+      student: norm
+    };
+  }
+
+  return {
+    parent_account_id: rawLink.parent_account_id,
+    student: null
+  };
+}
+
 export async function onRequestGet(context) {
   const { request, env = {} } = context;
   const corsHeaders = getCorsHeaders(request, env);
@@ -65,26 +167,54 @@ export async function onRequestGet(context) {
       return new Response(JSON.stringify({ success: false, message: 'Gagal mengambil data akun wali murid.' }), { status: 500, headers: corsHeaders });
     }
 
-    const parents = await parentResp.json().catch(() => []);
+    const rawParents = await parentResp.json().catch(() => []);
+    const parents = Array.isArray(rawParents)
+      ? rawParents.filter(p => {
+          if (!p || typeof p !== 'object' || !p.id) return false;
+          if (role !== 'superadmin' && staffTenantId) {
+            if (!p.tenant_id || String(p.tenant_id).trim() !== String(staffTenantId).trim()) {
+              return false;
+            }
+          }
+          return true;
+        })
+      : [];
 
     const parentIds = parents.map(p => p.id);
+    const parentTenantMap = new Map(parents.map(p => [p.id, p.tenant_id || staffTenantId || null]));
     let linksMap = {};
+    let linksQueryFailed = false;
     if (parentIds.length > 0) {
-      const linksUrl = `${supabaseUrl}/rest/v1/parent_student_links?parent_account_id=in.(${parentIds.map(id => `"${id}"`).join(',')})&select=parent_account_id,student:students(id,name,kk_last4)`;
-      const linksResp = await fetch(linksUrl, {
-        method: 'GET',
-        headers: {
-          'apikey': serviceRoleKey,
-          'Authorization': `Bearer ${serviceRoleKey}`,
-          'Accept': 'application/json'
-        }
-      });
-      if (linksResp.ok) {
-        const linksData = await linksResp.json().catch(() => []);
-        linksData.forEach(l => {
-          linksMap[l.parent_account_id] = linksMap[l.parent_account_id] || [];
-          linksMap[l.parent_account_id].push(l);
+      const linksUrl = `${supabaseUrl}/rest/v1/parent_student_links?parent_account_id=in.(${parentIds.map(id => `"${id}"`).join(',')})&select=parent_account_id,student:students(id,name,student_name,kk_last4)`;
+      try {
+        const linksResp = await fetch(linksUrl, {
+          method: 'GET',
+          headers: {
+            'apikey': serviceRoleKey,
+            'Authorization': `Bearer ${serviceRoleKey}`,
+            'Accept': 'application/json'
+          }
         });
+        if (!linksResp.ok) {
+          linksQueryFailed = true;
+        } else {
+          const linksData = await linksResp.json().catch(() => null);
+          if (!Array.isArray(linksData)) {
+            linksQueryFailed = true;
+          } else {
+            linksData.forEach(l => {
+              if (!l || typeof l !== 'object' || !l.parent_account_id) return;
+              if (!parentTenantMap.has(l.parent_account_id)) return;
+              const parentTenantId = parentTenantMap.get(l.parent_account_id);
+              const normalizedLink = normalizeParentStudentLinkRecord(l, parentTenantId);
+              if (!normalizedLink) return;
+              linksMap[l.parent_account_id] = linksMap[l.parent_account_id] || [];
+              linksMap[l.parent_account_id].push(normalizedLink);
+            });
+          }
+        }
+      } catch (_) {
+        linksQueryFailed = true;
       }
     }
 
@@ -179,13 +309,15 @@ export async function onRequestGet(context) {
         name: p.full_name,
         status: isConfirmed ? 'active' : (invitationStatus === 'EXPIRED' ? 'expired' : 'pending'),
         invitationStatus,
-        links: linksMap[p.id] || []
+        linksError: linksQueryFailed,
+        links: linksQueryFailed ? null : (linksMap[p.id] || [])
       };
     }));
 
     return new Response(
       JSON.stringify({
         success: true,
+        linksError: linksQueryFailed,
         data: enrichedParents
       }),
       { status: 200, headers: corsHeaders }

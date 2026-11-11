@@ -270,7 +270,7 @@ export const UNAVAILABLE_STUDENT_NAME_LABEL = 'Nama siswa belum tersedia';
 
 /**
  * Safely extract a student's full name from a student object or link record.
- * - Reads only valid name fields: name, student_name, studentName, full_name, fullName.
+ * - Priority: 1. student_name (and studentName), 2. name as fallback (and full_name/fullName).
  * - NEVER uses id or student_id as a name fallback.
  * - NEVER fabricates dummy student names.
  * - Rejects strings that are raw UUIDs or equal to the record's own ID.
@@ -292,9 +292,9 @@ export function resolveStudentNameFromRecord(studentRecord, explicitId = null) {
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
   const candidates = [
-    studentRecord.name,
     studentRecord.student_name,
     studentRecord.studentName,
+    studentRecord.name,
     studentRecord.full_name,
     studentRecord.fullName
   ];
@@ -315,8 +315,8 @@ export function resolveStudentNameFromRecord(studentRecord, explicitId = null) {
 /**
  * Normalize and resolve linked students from a parent account record.
  * Supports:
- * - link.student as an object: { student: { id, name / student_name } }
- * - link.student as an array: { student: [{ id, name / student_name }, ...] }
+ * - link.student as an object: { student: { id, student_name, name } }
+ * - link.student as an array: { student: [{ id, student_name, name }, ...] }
  * - link.students as an object or array
  * - link with flattened student_name / studentName
  * - link.student === null / undefined or missing/blank name -> "Nama siswa belum tersedia"
@@ -336,7 +336,7 @@ export function resolveParentLinkedStudents(parent) {
 
   const rawLinks = parent.links !== undefined ? parent.links : parent.parent_student_links;
 
-  if (parent.linksError === true || rawLinks === null) {
+  if (parent.linksError === true || parent.links_error === true || rawLinks === null) {
     return {
       count: 0,
       items: [],
