@@ -1700,11 +1700,13 @@ export function PengaturanDesktopMain({ userProfile, onTenantUpdated = () => {} 
         <div className="space-y-3.5 text-left animate-fadeIn mt-3.5">
           
           {/* CARD AUDIT & CONTROLLED BACKFILL KK HMAC */}
-          <TenantBackfillControlCard
-            tenantId={tenant?.id || userProfile?.tenantId || 'global'}
-            tenantName={tenant?.name || 'Tenant Admin'}
-            userRole={userProfile?.role || 'owner'}
-          />
+          {(userProfile?.role === 'owner' || userProfile?.role === 'admin') && (
+            <TenantBackfillControlCard
+              tenantId={tenant?.id || userProfile?.tenantId || null}
+              tenantName={tenant?.name || 'Tenant Admin'}
+              userRole={userProfile?.role || 'owner'}
+            />
+          )}
 
           {/* CARD 1: FORM TERBITKAN UNDANGAN STAFF (NO PASSWORD FIELD) */}
           <div className="bg-white dark:bg-slate-900 rounded-xl p-3.5 sm:p-4 shadow-2xs border border-slate-200/80 dark:border-white/10 space-y-3.5">

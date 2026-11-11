@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { runKkHmacDryRun, executeKkHmacBackfill } from '../services/backfillService';
+import { runKkHmacDryRun, executeKkHmacBackfill, isValidBackfillTenantId } from '../services/backfillService';
 import { 
   ShieldCheck, 
   FileSearch, 
@@ -14,7 +14,7 @@ import {
   Info
 } from 'lucide-react';
 
-export default function TenantBackfillControlCard({ tenantId = 'global', tenantName = 'Tenant', userRole = 'owner' }) {
+export default function TenantBackfillControlCard({ tenantId = null, tenantName = 'Tenant', userRole = 'owner' }) {
   const [loadingDryRun, setLoadingDryRun] = useState(false);
   const [dryRunResult, setDryRunResult] = useState(null);
   const [dryRunError, setDryRunError] = useState(null);
@@ -23,8 +23,13 @@ export default function TenantBackfillControlCard({ tenantId = 'global', tenantN
   const [executeResult, setExecuteResult] = useState(null);
   const [executeError, setExecuteError] = useState(null);
 
+  const isTenantValid = isValidBackfillTenantId(tenantId);
+  const isRoleAllowed = userRole === 'owner' || userRole === 'admin';
+  const canOperate = isTenantValid && isRoleAllowed;
+
   // Run Dry-Run (Read-Only)
   const handleRunDryRun = async () => {
+    if (!canOperate || loadingDryRun || loadingExecute) return;
     setLoadingDryRun(true);
     setDryRunError(null);
     setExecuteResult(null);
@@ -42,7 +47,7 @@ export default function TenantBackfillControlCard({ tenantId = 'global', tenantN
 
   // Run Controlled Backfill Execution
   const handleExecuteBackfill = async () => {
-    if (eligibleCount === 0 || loadingExecute) return;
+    if (!canOperate || eligibleCount === 0 || loadingExecute) return;
     setLoadingExecute(true);
     setExecuteError(null);
 
@@ -61,6 +66,20 @@ export default function TenantBackfillControlCard({ tenantId = 'global', tenantN
 
   const eligibleCount = dryRunResult?.categories?.ELIGIBLE ?? 0;
   const reviewRequired = dryRunResult?.reviewRequired ?? 0;
+
+  if (!isRoleAllowed) {
+    return (
+      <div className="bg-slate-50 dark:bg-slate-900 rounded-2xl p-5 border border-slate-200 dark:border-white/10 flex items-center space-x-3 text-slate-500 text-xs">
+        <Lock className="w-5 h-5 text-slate-400 shrink-0" />
+        <div>
+          <p className="font-bold text-slate-700 dark:text-slate-300">Fasilitas Backfill Khusus Owner & Admin Tenant</p>
+          <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+            Fitur operasional backfill data siswa ini tidak tersedia untuk peran Superadmin atau staf non-pengelola.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white rounded-2xl p-6 shadow-sm border border-gray-200 space-y-5">
@@ -88,8 +107,9 @@ export default function TenantBackfillControlCard({ tenantId = 'global', tenantN
           <button
             data-testid="tenant-btn-dryrun"
             onClick={handleRunDryRun}
-            disabled={loadingDryRun || loadingExecute}
+            disabled={!canOperate || loadingDryRun || loadingExecute}
             className="px-3.5 py-2 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold text-xs rounded-xl border border-indigo-200 transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center space-x-1.5"
+            title={!isTenantValid ? "Identitas tenant tidak valid." : "Analisis simulasi read-only."}
           >
             {loadingDryRun ? (
               <>
@@ -107,13 +127,13 @@ export default function TenantBackfillControlCard({ tenantId = 'global', tenantN
           <button
             data-testid="tenant-btn-execute"
             onClick={handleExecuteBackfill}
-            disabled={eligibleCount === 0 || loadingExecute}
+            disabled={!canOperate || eligibleCount === 0 || loadingExecute}
             className={`px-4 py-2 font-semibold text-xs rounded-xl shadow-sm transition-colors flex items-center space-x-1.5 ${
-              eligibleCount === 0 || loadingExecute
+              !canOperate || eligibleCount === 0 || loadingExecute
                 ? 'bg-gray-200 text-gray-400 cursor-not-allowed opacity-60'
                 : 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer active:scale-95 shadow-emerald-600/20'
             }`}
-            title={eligibleCount === 0 ? "Tidak ada kandidat ELIGIBLE untuk dieksekusi." : "Eksekusi backfill data ELIGIBLE secara atomik."}
+            title={!isTenantValid ? "Tenant ID belum tersedia." : eligibleCount === 0 ? "Tidak ada kandidat ELIGIBLE untuk dieksekusi." : "Eksekusi backfill data ELIGIBLE secara atomik."}
           >
             {loadingExecute ? (
               <>

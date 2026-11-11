@@ -241,6 +241,7 @@ export async function onRequestPost(context) {
     let leaseToken = body.leaseToken ? String(body.leaseToken).trim() : null;
     const runTenantId = authoritativeTenantId;
     let dbCursor = null;
+    let leaseRecovered = false;
 
     if (requestRunId) {
       // -----------------------------------------------------------------------
@@ -328,20 +329,69 @@ export async function onRequestPost(context) {
         );
       }
 
-      if (existingRun.lease_expires_at && new Date(existingRun.lease_expires_at).getTime() <= Date.now()) {
-        return new Response(
-          JSON.stringify({
-            success: false,
-            code: 'LEASE_EXPIRED',
-            message: 'Masa berlaku lease untuk run ini telah kedaluwarsa.'
-          }),
-          { status: 409, headers: corsHeaders }
-        );
-      }
+      const isLeaseExpired = existingRun.lease_expires_at && new Date(existingRun.lease_expires_at).getTime() <= Date.now();
 
-      runId = existingRun.run_id;
-      leaseToken = existingRun.lease_token;
-      dbCursor = existingRun.last_cursor || null; // Selalu baca kursor dari DB!
+      if (isLeaseExpired) {
+        // ATOMIC COMPARE-AND-SWAP (CAS) LEASE RECOVERY
+        // Single atomic PATCH filtering exact run_id, tenant_id, status IN ('RUNNING','ACQUIRED'), and old lease_token
+        const newLeaseToken = crypto.randomUUID();
+        const nowIso = new Date().toISOString();
+        const newLeaseExpiresAt = new Date(Date.now() + 120_000).toISOString();
+
+        const patchCasUrl = `${supabaseUrl}/rest/v1/backfill_kk_runs?run_id=eq.${encodeURIComponent(existingRun.run_id)}&tenant_id=eq.${encodeURIComponent(authoritativeTenantId)}&status=in.("RUNNING","ACQUIRED")&lease_token=eq.${encodeURIComponent(existingRun.lease_token)}`;
+
+        const patchResp = await fetch(patchCasUrl, {
+          method: 'PATCH',
+          headers: {
+            'apikey': serviceRoleKey,
+            'Authorization': `Bearer ${serviceRoleKey}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=representation'
+          },
+          body: JSON.stringify({
+            lease_token: newLeaseToken,
+            status: 'RUNNING',
+            heartbeat_at: nowIso,
+            lease_expires_at: newLeaseExpiresAt,
+            updated_at: nowIso
+          })
+        }).catch(() => null);
+
+        if (!patchResp || !patchResp.ok) {
+          return new Response(
+            JSON.stringify({
+              success: false,
+              code: 'LEASE_RECOVERY_FAILED',
+              message: 'Gagal melakukan pemulihan lease pada database.'
+            }),
+            { status: 500, headers: corsHeaders }
+          );
+        }
+
+        const patchedRows = await patchResp.json().catch(() => []);
+        if (!Array.isArray(patchedRows) || patchedRows.length !== 1) {
+          // CAS matched 0 rows -> another worker modified or acquired lock!
+          return new Response(
+            JSON.stringify({
+              success: false,
+              code: 'FENCING_TOKEN_STALE',
+              message: 'Pemulihan lease gagal karena lock telah diubah atau diambil alih oleh worker lain.'
+            }),
+            { status: 409, headers: corsHeaders }
+          );
+        }
+
+        const recoveredRun = patchedRows[0];
+        runId = recoveredRun.run_id;
+        leaseToken = recoveredRun.lease_token;
+        dbCursor = recoveredRun.last_cursor || null;
+        leaseRecovered = true;
+      } else {
+        runId = existingRun.run_id;
+        leaseToken = existingRun.lease_token;
+        dbCursor = existingRun.last_cursor || null;
+        leaseRecovered = false;
+      }
     } else {
       // -----------------------------------------------------------------------
       // INISIASI RUN BARU DENGAN LEASE FENCING TOKEN & TENANT TERIKAT
@@ -777,6 +827,7 @@ export async function onRequestPost(context) {
     const batchData = {
       runId,
       leaseToken,
+      leaseRecovered: Boolean(typeof leaseRecovered !== 'undefined' ? leaseRecovered : false),
       tenantId: runTenantId,
       batchCount: studentsBatch.length,
       processed,
@@ -798,6 +849,7 @@ export async function onRequestPost(context) {
         code: batchCode,
         message: batchMessage,
         error: batchError,
+        leaseRecovered: Boolean(typeof leaseRecovered !== 'undefined' ? leaseRecovered : false),
         ...batchData,
         data: batchData
       }),
