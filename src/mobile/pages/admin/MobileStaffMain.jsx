@@ -59,11 +59,22 @@ export default function MobileStaffMain({ userProfile }) {
   const authRole = useAuthRole(userProfile);
   const { 
     role: verifiedRole, 
+    tenantId: verifiedTenantId,
     isSuperAdmin: verifiedSuperAdmin, 
     loading: roleLoading 
   } = authRole;
 
-  const tenantId = resolveTenantId(userProfile);
+  // Single Source of Truth: Canonical Verified Tenant ID from DB via useAuthRole
+  // Rejects empty, null, undefined, and 'global' strings. Never falls back to user ID or unverified profile.
+  const rawVerifiedTenantId = String(verifiedTenantId || '').trim();
+  const isValidVerifiedTenant = Boolean(
+    rawVerifiedTenantId &&
+    rawVerifiedTenantId.toLowerCase() !== 'global' &&
+    rawVerifiedTenantId.toLowerCase() !== 'null' &&
+    rawVerifiedTenantId.toLowerCase() !== 'undefined'
+  );
+
+  const tenantId = isValidVerifiedTenant ? rawVerifiedTenantId : null;
   const tenantName = userProfile?.tenant?.name || 'Cabang Aktif';
 
   // Explicit Verified Role Hierarchy from useAuthRole (NOT userProfile.role directly)
@@ -73,16 +84,37 @@ export default function MobileStaffMain({ userProfile }) {
   const isOwnerVerified = canonicalVerifiedRole === 'owner' && !isSuperadminVerified;
   const isAdminVerified = canonicalVerifiedRole === 'admin' && !isSuperadminVerified;
   
-  // Access decision relies 100% on verified hook result and fails closed while loading
-  const isAllowedStaffManager = (isOwnerVerified || isAdminVerified) && !isSuperadminVerified && !roleLoading;
+  // Access decision relies 100% on verified hook result and valid verified tenant context
+  const isAllowedStaffManager = (isOwnerVerified || isAdminVerified) && !isSuperadminVerified && !roleLoading && Boolean(tenantId);
 
   // Hierarchy: Only verified tenant Owner can invite new Admins on Mobile Staff
-  const canInviteAdminsMobile = isOwnerVerified && !roleLoading;
+  const canInviteAdminsMobile = isOwnerVerified && !roleLoading && Boolean(tenantId);
+
+  // Verified user profile context passed to downstream components (e.g., MobileTenantBackfillCard)
+  const verifiedUserProfile = useMemo(() => {
+    return {
+      ...userProfile,
+      role: canonicalVerifiedRole,
+      tenantId: tenantId,
+      tenant: {
+        ...(userProfile?.tenant || {}),
+        id: tenantId,
+        name: tenantName,
+      },
+    };
+  }, [userProfile, canonicalVerifiedRole, tenantId, tenantName]);
 
   // Refs for Tenant Switching & Component Lifecycle Safety
   const activeTenantIdRef = useRef(tenantId);
   const fetchSeqRef = useRef(0);
   const isMountedRef = useRef(true);
+
+  // Immediate Tenant Context Guard:
+  // When DB-verified tenantId changes, update activeTenantIdRef and invalidate inflight requests immediately
+  if (activeTenantIdRef.current !== tenantId) {
+    activeTenantIdRef.current = tenantId;
+    fetchSeqRef.current += 1;
+  }
 
   // Navigation Tabs: 'staff_list' | 'invitations_list'
   const [activeTab, setActiveTab] = useState('staff_list');
@@ -137,7 +169,7 @@ export default function MobileStaffMain({ userProfile }) {
       return;
     }
 
-    const currentSeq = ++fetchSeqRef.current;
+    const currentSeq = fetchSeqRef.current;
     if (isMountedRef.current) setLoadingData(true);
 
     try {
@@ -145,6 +177,8 @@ export default function MobileStaffMain({ userProfile }) {
         getStaffListByTenant(currentTenant),
         getInvitationsByTenant(currentTenant),
       ]);
+
+
 
       // Guard: Only update state if component is mounted, tenant hasn't changed, and sequence matches
       if (
@@ -210,8 +244,19 @@ export default function MobileStaffMain({ userProfile }) {
     fetchData();
 
     // Realtime listener for users_staff and invitations of active tenant
+    const channelName = `realtime_mobile_staff_${tenantId}`;
+    try {
+      const existingChannels = (supabase.getChannels ? supabase.getChannels() : []) || [];
+      const match = existingChannels.find(
+        (c) => c && (c.topic === `realtime:${channelName}` || c.topic === channelName)
+      );
+      if (match) {
+        supabase.removeChannel(match);
+      }
+    } catch (_) {}
+
     const staffChannel = supabase
-      .channel(`realtime_mobile_staff_${tenantId}`)
+      .channel(channelName)
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'users_staff', filter: `tenant_id=eq.${tenantId}` },
@@ -574,7 +619,7 @@ export default function MobileStaffMain({ userProfile }) {
 
       {/* 3. SEGMENTED TABS (STAF AKTIF VS UNDANGAN VS AUDIT HMAC) */}
       <div className="px-3.5 pt-3.5">
-        <div className={`grid ${userProfile?.role === 'owner' || userProfile?.role === 'admin' ? 'grid-cols-3' : 'grid-cols-2'} bg-slate-200/70 p-1 rounded-2xl gap-1`}>
+        <div className={`grid ${(isOwnerVerified || isAdminVerified) ? 'grid-cols-3' : 'grid-cols-2'} bg-slate-200/70 p-1 rounded-2xl gap-1`}>
           <button
             type="button"
             onClick={() => setActiveTab('staff_list')}
@@ -606,7 +651,7 @@ export default function MobileStaffMain({ userProfile }) {
             )}
           </button>
 
-          {(userProfile?.role === 'owner' || userProfile?.role === 'admin') && (
+          {(isOwnerVerified || isAdminVerified) && (
             <button
               type="button"
               onClick={() => setActiveTab('audit_hmac')}
@@ -626,7 +671,7 @@ export default function MobileStaffMain({ userProfile }) {
       {/* TAB CONTENT: AUDIT HMAC */}
       {activeTab === 'audit_hmac' && (
         <div className="px-3.5 pt-3 animate-fadeIn">
-          <MobileTenantBackfillCard userProfile={userProfile} />
+          <MobileTenantBackfillCard userProfile={verifiedUserProfile} />
         </div>
       )}
 
