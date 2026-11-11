@@ -154,6 +154,26 @@ export default function MobileStaffMain({ userProfile }) {
   const [actionFeedback, setActionFeedback] = useState(null);
   const [copiedId, setCopiedId] = useState(null);
 
+  // State-during-render Reset Pass: Idiomatic React state adjustment on tenant context change
+  // Guarantees zero stale tenant data, modals, links, or filters render before effects run
+  const [prevTenantId, setPrevTenantId] = useState(tenantId);
+  if (prevTenantId !== tenantId) {
+    setPrevTenantId(tenantId);
+    setStaffList([]);
+    setAllInvitations([]);
+    setSessionInviteLinks({});
+    setShowInviteSheet(false);
+    setShowInviteSuccessSheet(false);
+    setInviteSuccessData(null);
+    setStaffToDelete(null);
+    setInvitationToRevoke(null);
+    setSearchQuery('');
+    setRoleFilter('all');
+    setInvitationStatusFilter('all');
+    setActionFeedback(null);
+    setFormError(null);
+  }
+
   /**
    * DOCUMENTATION - SERVICE ERROR HANDLING CONTRACT LIMITATION:
    * Note: getStaffListByTenant() and getInvitationsByTenant() in staffService.js
@@ -177,8 +197,6 @@ export default function MobileStaffMain({ userProfile }) {
         getStaffListByTenant(currentTenant),
         getInvitationsByTenant(currentTenant),
       ]);
-
-
 
       // Guard: Only update state if component is mounted, tenant hasn't changed, and sequence matches
       if (
@@ -215,25 +233,10 @@ export default function MobileStaffMain({ userProfile }) {
   useEffect(() => {
     isMountedRef.current = true;
 
-    // Detect tenant change & reset operational state
+    // Detect tenant change & invalidate inflight requests for previous tenant
     if (activeTenantIdRef.current !== tenantId) {
       activeTenantIdRef.current = tenantId;
-      fetchSeqRef.current += 1; // Invalidate any inflight requests for previous tenant
-
-      // Clear previous tenant data immediately
-      setStaffList([]);
-      setAllInvitations([]);
-      setSessionInviteLinks({});
-
-      // Reset modals and state
-      setShowInviteSheet(false);
-      setShowInviteSuccessSheet(false);
-      setInviteSuccessData(null);
-      setStaffToDelete(null);
-      setInvitationToRevoke(null);
-      setSearchQuery('');
-      setActionFeedback(null);
-      setFormError(null);
+      fetchSeqRef.current += 1;
     }
 
     if (!tenantId || !isAllowedStaffManager) {
