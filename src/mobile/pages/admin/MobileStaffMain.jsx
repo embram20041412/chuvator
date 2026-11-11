@@ -20,7 +20,8 @@ import {
   Send, 
   Filter,
   CheckCircle,
-  AlertTriangle
+  AlertTriangle,
+  Loader2
 } from 'lucide-react';
 import { supabase } from '../../../config/supabase';
 import { 
@@ -55,20 +56,28 @@ export const resolveTenantId = (profile) => {
  * Eliminates all window.alert and window.confirm calls with rich bottom sheets.
  */
 export default function MobileStaffMain({ userProfile }) {
-  const { canManageStaff, canInviteAdmins, loading: roleLoading } = useAuthRole(userProfile);
+  const authRole = useAuthRole(userProfile);
+  const { 
+    role: verifiedRole, 
+    isSuperAdmin: verifiedSuperAdmin, 
+    loading: roleLoading 
+  } = authRole;
+
   const tenantId = resolveTenantId(userProfile);
   const tenantName = userProfile?.tenant?.name || 'Cabang Aktif';
 
-  // Explicit Verified Role Hierarchy (Mobile Staff Management is strictly for tenant Owner and Admin)
+  // Explicit Verified Role Hierarchy from useAuthRole (NOT userProfile.role directly)
   // Superadmin, Coach, Kasir, and Staff MUST BE DENIED access.
-  const rawRole = String(userProfile?.role || '').trim().toLowerCase();
-  const isSuperadminUser = rawRole === 'superadmin' || Boolean(userProfile?.is_superadmin) || Boolean(userProfile?.isSuperadmin);
-  const isOwnerUser = rawRole === 'owner' && !isSuperadminUser;
-  const isAdminUser = rawRole === 'admin' && !isSuperadminUser;
-  const isAllowedStaffManager = isOwnerUser || isAdminUser;
+  const canonicalVerifiedRole = String(verifiedRole || '').trim().toLowerCase();
+  const isSuperadminVerified = verifiedSuperAdmin || canonicalVerifiedRole === 'superadmin';
+  const isOwnerVerified = canonicalVerifiedRole === 'owner' && !isSuperadminVerified;
+  const isAdminVerified = canonicalVerifiedRole === 'admin' && !isSuperadminVerified;
+  
+  // Access decision relies 100% on verified hook result and fails closed while loading
+  const isAllowedStaffManager = (isOwnerVerified || isAdminVerified) && !isSuperadminVerified && !roleLoading;
 
-  // Hierarchy: Only tenant Owner can invite new Admins on Mobile Staff
-  const canInviteAdminsMobile = isOwnerUser;
+  // Hierarchy: Only verified tenant Owner can invite new Admins on Mobile Staff
+  const canInviteAdminsMobile = isOwnerVerified && !roleLoading;
 
   // Refs for Tenant Switching & Component Lifecycle Safety
   const activeTenantIdRef = useRef(tenantId);
@@ -427,7 +436,22 @@ export default function MobileStaffMain({ userProfile }) {
     return allInvitations.filter((inv) => inv.status === 'pending').length;
   }, [allInvitations]);
 
-  // Restricted Access Screen (403 for Superadmin, Kasir, Coach, Staff)
+  // 1. Loading State while useAuthRole verifies role from database (prevents temporary access leak)
+  if (roleLoading) {
+    return (
+      <div className="chua-mobile-app min-h-screen bg-[#F5F7FC] p-4 flex items-center justify-center text-slate-800">
+        <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center max-w-sm shadow-sm space-y-3">
+          <Loader2 className="w-8 h-8 text-[#2455E8] animate-spin mx-auto" />
+          <h2 className="text-sm font-bold text-slate-900 my-0">Memverifikasi Otorisasi Akses...</h2>
+          <p className="text-xs text-slate-500 leading-relaxed my-0">
+            Sistem sedang memverifikasi hak akses akun Anda di basis data cabang.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Restricted Access Screen (403 for Superadmin, Kasir, Coach, Staff, or unverified)
   if (!isAllowedStaffManager) {
     return (
       <div className="chua-mobile-app min-h-screen bg-[#F5F7FC] p-4 flex items-center justify-center text-slate-800">

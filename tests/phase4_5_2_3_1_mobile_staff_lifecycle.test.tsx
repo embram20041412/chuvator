@@ -33,6 +33,10 @@ function sleep(ms: number) {
 
 test('CHUVATOR — PHASE 4.5.2.3.1: Targeted Staff Access & Tenant Lifecycle Gap Closure Suite', async (t) => {
 
+  const originalRpc = supabase.rpc;
+  const originalFrom = supabase.from;
+  const originalAuth = supabase.auth;
+
   // Track removed channels for realtime unsubscribes
   const removedChannels: string[] = [];
   const originalRemoveChannel = supabase.removeChannel;
@@ -43,18 +47,99 @@ test('CHUVATOR — PHASE 4.5.2.3.1: Targeted Staff Access & Tenant Lifecycle Gap
     return originalRemoveChannel.call(supabase, channel);
   };
 
+  t.afterEach(() => {
+    supabase.rpc = originalRpc;
+    supabase.from = originalFrom;
+    supabase.auth = originalAuth;
+  });
+
+  function setupAuthSession(userId: string | null) {
+    (supabase as any).auth = {
+      ...originalAuth,
+      onAuthStateChange: (callback: any) => {
+        if (userId) {
+          Promise.resolve().then(() => {
+            callback('SIGNED_IN', { user: { id: userId, uid: userId } });
+          });
+        }
+        return {
+          data: {
+            subscription: {
+              unsubscribe: () => {}
+            }
+          }
+        };
+      }
+    };
+  }
+
+  // Helper to setup mock DB response for useAuthRole & page queries
+  function setupVerifiedDbMock(forcedRole: string = 'owner') {
+    (supabase as any).rpc = (fnName: string) => {
+      if (fnName === 'is_superadmin') {
+        return Promise.resolve({ data: forcedRole === 'superadmin', error: null });
+      }
+      return Promise.resolve({ data: null, error: null });
+    };
+
+    (supabase as any).from = (table: string) => {
+      if (table === 'tenants') {
+        return {
+          select: () => ({
+            eq: () => ({
+              limit: () => ({
+                maybeSingle: () => Promise.resolve({
+                  data: forcedRole === 'owner' ? { id: TENANT_A_UUID, tenant_id: TENANT_A_UUID, status: 'active' } : null,
+                  error: null
+                })
+              })
+            })
+          })
+        };
+      }
+      if (table === 'users_staff') {
+        return {
+          select: () => ({
+            eq: (col: string, val: string) => ({
+              limit: () => ({
+                maybeSingle: () => Promise.resolve({
+                  data: ['admin', 'kasir', 'coach', 'staff'].includes(forcedRole) ? { id: 's1', uid: val, role: forcedRole, tenant_id: TENANT_A_UUID, is_active: true, status: 'active' } : null,
+                  error: null
+                }),
+                order: () => Promise.resolve({ data: [], error: null })
+              }),
+              order: () => Promise.resolve({ data: [], error: null })
+            })
+          })
+        };
+      }
+      return {
+        select: () => ({
+          eq: () => ({ order: () => Promise.resolve({ data: [], error: null }) })
+        })
+      };
+    };
+  }
+
   // ===========================================================================
   // 1 & 2. Owner & Admin dapat membuka Mobile Staff Management
   // ===========================================================================
   await t.test('1 & 2. Owner dan Admin tenant dapat mengakses Mobile Staff Management', async () => {
     // Test Owner
+    setupAuthSession('u_owner');
+    setupVerifiedDbMock('owner');
+
     const containerOwner = document.createElement('div');
     document.body.appendChild(containerOwner);
     const rootOwner = ReactDOM.createRoot(containerOwner);
 
-    const ownerProfile = { tenant: { id: TENANT_A_UUID, name: 'GOR Senayan Mobile' }, role: 'owner' };
+    const ownerProfile = { id: 'u_owner', tenant: { id: TENANT_A_UUID, name: 'GOR Senayan Mobile' }, role: 'owner' };
     await act(async () => {
       rootOwner.render(React.createElement(MobileStaffMain, { userProfile: ownerProfile }));
+    });
+
+    await act(async () => {
+      await sleep(100);
     });
 
     assert.ok(containerOwner.innerHTML.includes('Manajemen Staf'), 'Owner dapat mengakses Mobile Staff Management');
@@ -66,13 +151,20 @@ test('CHUVATOR — PHASE 4.5.2.3.1: Targeted Staff Access & Tenant Lifecycle Gap
     document.body.removeChild(containerOwner);
 
     // Test Admin
+    setupAuthSession('u_admin');
+    setupVerifiedDbMock('admin');
+
     const containerAdmin = document.createElement('div');
     document.body.appendChild(containerAdmin);
     const rootAdmin = ReactDOM.createRoot(containerAdmin);
 
-    const adminProfile = { tenant: { id: TENANT_A_UUID, name: 'GOR Senayan Mobile' }, role: 'admin' };
+    const adminProfile = { id: 'u_admin', tenant: { id: TENANT_A_UUID, name: 'GOR Senayan Mobile' }, role: 'admin' };
     await act(async () => {
       rootAdmin.render(React.createElement(MobileStaffMain, { userProfile: adminProfile }));
+    });
+
+    await act(async () => {
+      await sleep(100);
     });
 
     assert.ok(containerAdmin.innerHTML.includes('Manajemen Staf'), 'Admin dapat mengakses Mobile Staff Management');
@@ -89,19 +181,26 @@ test('CHUVATOR — PHASE 4.5.2.3.1: Targeted Staff Access & Tenant Lifecycle Gap
   // ===========================================================================
   await t.test('3 & 4. Superadmin, Coach, Kasir, dan Staff ditolak (403) dari Mobile Staff Management', async () => {
     const restrictedProfiles = [
-      { tenant: { id: TENANT_A_UUID }, role: 'superadmin', is_superadmin: true },
-      { tenant: { id: TENANT_A_UUID }, role: 'coach' },
-      { tenant: { id: TENANT_A_UUID }, role: 'kasir' },
-      { tenant: { id: TENANT_A_UUID }, role: 'staff' },
+      { id: 'u_super', tenant: { id: TENANT_A_UUID }, role: 'superadmin', is_superadmin: true },
+      { id: 'u_coach', tenant: { id: TENANT_A_UUID }, role: 'coach' },
+      { id: 'u_kasir', tenant: { id: TENANT_A_UUID }, role: 'kasir' },
+      { id: 'u_staff', tenant: { id: TENANT_A_UUID }, role: 'staff' },
     ];
 
     for (const profile of restrictedProfiles) {
+      setupAuthSession(profile.id);
+      setupVerifiedDbMock(profile.role);
+
       const container = document.createElement('div');
       document.body.appendChild(container);
       const root = ReactDOM.createRoot(container);
 
       await act(async () => {
         root.render(React.createElement(MobileStaffMain, { userProfile: profile }));
+      });
+
+      await act(async () => {
+        await sleep(100);
       });
 
       assert.ok(
@@ -121,13 +220,20 @@ test('CHUVATOR — PHASE 4.5.2.3.1: Targeted Staff Access & Tenant Lifecycle Gap
   // ===========================================================================
   await t.test('5 & 6. Owner dapat mengundang Admin baru, sedangkan Admin tenant ditolak dari mengundang Admin', async () => {
     // 1. Check Admin UI -> Cannot invite admin
+    setupAuthSession('u_admin');
+    setupVerifiedDbMock('admin');
+
     const containerAdmin = document.createElement('div');
     document.body.appendChild(containerAdmin);
     const rootAdmin = ReactDOM.createRoot(containerAdmin);
 
-    const adminProfile = { tenant: { id: TENANT_A_UUID }, role: 'admin' };
+    const adminProfile = { id: 'u_admin', tenant: { id: TENANT_A_UUID }, role: 'admin' };
     await act(async () => {
       rootAdmin.render(React.createElement(MobileStaffMain, { userProfile: adminProfile }));
+    });
+
+    await act(async () => {
+      await sleep(100);
     });
 
     const inviteBtnAdmin = containerAdmin.querySelector('button.bg-\\[\\#2455E8\\]') as HTMLButtonElement;
@@ -149,13 +255,20 @@ test('CHUVATOR — PHASE 4.5.2.3.1: Targeted Staff Access & Tenant Lifecycle Gap
     document.body.removeChild(containerAdmin);
 
     // 2. Check Owner UI -> Can invite admin
+    setupAuthSession('u_owner');
+    setupVerifiedDbMock('owner');
+
     const containerOwner = document.createElement('div');
     document.body.appendChild(containerOwner);
     const rootOwner = ReactDOM.createRoot(containerOwner);
 
-    const ownerProfile = { tenant: { id: TENANT_A_UUID }, role: 'owner' };
+    const ownerProfile = { id: 'u_owner', tenant: { id: TENANT_A_UUID }, role: 'owner' };
     await act(async () => {
       rootOwner.render(React.createElement(MobileStaffMain, { userProfile: ownerProfile }));
+    });
+
+    await act(async () => {
+      await sleep(100);
     });
 
     const inviteBtnOwner = containerOwner.querySelector('button.bg-\\[\\#2455E8\\]') as HTMLButtonElement;
@@ -180,15 +293,26 @@ test('CHUVATOR — PHASE 4.5.2.3.1: Targeted Staff Access & Tenant Lifecycle Gap
   // 7, 8 & 11. Deferred Promise Race Condition: Inflight Fetch Tenant A dibuang saat berganti ke Tenant B
   // ===========================================================================
   await t.test('7, 8 & 11. Fetch terlambat Tenant A dibuang dan data Tenant A dibersihkan saat berganti ke Tenant B', async () => {
+    setupAuthSession('u_owner');
+
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = ReactDOM.createRoot(container);
 
     let resolveStaffQueryA: (res: any) => void;
     let resolveInvitesQueryA: (res: any) => void;
-    const originalFrom = supabase.from;
 
+    (supabase as any).rpc = () => Promise.resolve({ data: false, error: null });
     (supabase as any).from = (table: string) => {
+      if (table === 'tenants') {
+        return {
+          select: () => ({
+            eq: () => ({
+              limit: () => ({ maybeSingle: () => Promise.resolve({ data: { id: TENANT_A_UUID, tenant_id: TENANT_A_UUID, status: 'active' }, error: null }) })
+            })
+          })
+        };
+      }
       return {
         select: () => ({
           eq: (col: string, val: string) => {
@@ -222,15 +346,19 @@ test('CHUVATOR — PHASE 4.5.2.3.1: Targeted Staff Access & Tenant Lifecycle Gap
       };
     };
 
-    let profile = { tenant: { id: TENANT_A_UUID, name: 'Tenant A' }, role: 'owner' };
+    let profile = { id: 'u_owner', tenant: { id: TENANT_A_UUID, name: 'Tenant A' }, role: 'owner' };
 
     // 1. Mount with Tenant A profile (triggers pending query for Tenant A)
     await act(async () => {
       root.render(React.createElement(MobileStaffMain, { userProfile: profile }));
     });
 
+    await act(async () => {
+      await sleep(100);
+    });
+
     // 2. Switch profile to Tenant B while Tenant A query is pending!
-    profile = { tenant: { id: TENANT_B_UUID, name: 'Tenant B' }, role: 'owner' };
+    profile = { id: 'u_owner', tenant: { id: TENANT_B_UUID, name: 'Tenant B' }, role: 'owner' };
     await act(async () => {
       root.render(React.createElement(MobileStaffMain, { userProfile: profile }));
     });
@@ -248,15 +376,12 @@ test('CHUVATOR — PHASE 4.5.2.3.1: Targeted Staff Access & Tenant Lifecycle Gap
       if (resolveInvitesQueryA) {
         resolveInvitesQueryA([]);
       }
-      await sleep(30);
+      await sleep(100);
     });
 
     // 4. Verify Tenant A data DOES NOT appear in Tenant B view (Race Condition Protection)
     assert.ok(!container.innerHTML.includes('Staf Tenant A Lama Racun'), 'Fetch terlambat Tenant A dibuang dan TIDAK mencemari state Tenant B');
     assert.ok(container.innerHTML.includes('Staf Tenant B Eksklusif'), 'Data Tenant B ditampilkan dengan benar');
-
-    // Restore original supabase.from
-    (supabase as any).from = originalFrom;
 
     await act(async () => {
       root.unmount();
@@ -268,14 +393,25 @@ test('CHUVATOR — PHASE 4.5.2.3.1: Targeted Staff Access & Tenant Lifecycle Gap
   // 9. Component Unmount Safety: Request selesai pasca unmount tidak merubah state
   // ===========================================================================
   await t.test('9. Request yang selesai setelah unmount tidak memperbarui state atau menyebabkan error', async () => {
+    setupAuthSession('u_owner');
+    setupVerifiedDbMock('owner');
+
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = ReactDOM.createRoot(container);
 
     let resolveStaffQuery: (res: any) => void;
-    const originalFrom = supabase.from;
 
     (supabase as any).from = (table: string) => {
+      if (table === 'tenants') {
+        return {
+          select: () => ({
+            eq: () => ({
+              limit: () => ({ maybeSingle: () => Promise.resolve({ data: { id: TENANT_A_UUID, status: 'active' }, error: null }) })
+            })
+          })
+        };
+      }
       return {
         select: () => ({
           eq: (col: string, val: string) => {
@@ -294,10 +430,14 @@ test('CHUVATOR — PHASE 4.5.2.3.1: Targeted Staff Access & Tenant Lifecycle Gap
       };
     };
 
-    const userProfile = { tenant: { id: TENANT_A_UUID }, role: 'owner' };
+    const userProfile = { id: 'u_owner', tenant: { id: TENANT_A_UUID }, role: 'owner' };
 
     await act(async () => {
       root.render(React.createElement(MobileStaffMain, { userProfile }));
+    });
+
+    await act(async () => {
+      await sleep(100);
     });
 
     // Unmount component while fetch is pending!
@@ -317,7 +457,6 @@ test('CHUVATOR — PHASE 4.5.2.3.1: Targeted Staff Access & Tenant Lifecycle Gap
 
     assert.equal(container.innerHTML, '', 'Komponen dibersihkan total dari DOM dan tidak ada memory leak');
 
-    (supabase as any).from = originalFrom;
     document.body.removeChild(container);
   });
 
@@ -325,22 +464,33 @@ test('CHUVATOR — PHASE 4.5.2.3.1: Targeted Staff Access & Tenant Lifecycle Gap
   // 10. Realtime Channel Cleanup pada Tenant Switch & Unmount
   // ===========================================================================
   await t.test('10. Supabase Realtime channel dibersihkan (unsubscribe) saat pergantian tenant dan unmount', async () => {
+    setupAuthSession('u_owner');
+    setupVerifiedDbMock('owner');
+
     const initialChannelsCount = removedChannels.length;
 
     const container = document.createElement('div');
     document.body.appendChild(container);
     const root = ReactDOM.createRoot(container);
 
-    let profile = { tenant: { id: TENANT_A_UUID }, role: 'owner' };
+    let profile = { id: 'u_owner', tenant: { id: TENANT_A_UUID }, role: 'owner' };
 
     await act(async () => {
       root.render(React.createElement(MobileStaffMain, { userProfile: profile }));
     });
 
+    await act(async () => {
+      await sleep(100);
+    });
+
     // Switch tenant to B
-    profile = { tenant: { id: TENANT_B_UUID }, role: 'owner' };
+    profile = { id: 'u_owner', tenant: { id: TENANT_B_UUID }, role: 'owner' };
     await act(async () => {
       root.render(React.createElement(MobileStaffMain, { userProfile: profile }));
+    });
+
+    await act(async () => {
+      await sleep(100);
     });
 
     assert.ok(removedChannels.length > initialChannelsCount, 'Supabase realtime channel Tenant A dibersihkan saat berganti ke Tenant B');
