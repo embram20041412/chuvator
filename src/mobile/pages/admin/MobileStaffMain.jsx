@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { 
   Users, 
   UserPlus, 
@@ -59,6 +59,22 @@ export default function MobileStaffMain({ userProfile }) {
   const tenantId = resolveTenantId(userProfile);
   const tenantName = userProfile?.tenant?.name || 'Cabang Aktif';
 
+  // Explicit Verified Role Hierarchy (Mobile Staff Management is strictly for tenant Owner and Admin)
+  // Superadmin, Coach, Kasir, and Staff MUST BE DENIED access.
+  const rawRole = String(userProfile?.role || '').trim().toLowerCase();
+  const isSuperadminUser = rawRole === 'superadmin' || Boolean(userProfile?.is_superadmin) || Boolean(userProfile?.isSuperadmin);
+  const isOwnerUser = rawRole === 'owner' && !isSuperadminUser;
+  const isAdminUser = rawRole === 'admin' && !isSuperadminUser;
+  const isAllowedStaffManager = isOwnerUser || isAdminUser;
+
+  // Hierarchy: Only tenant Owner can invite new Admins on Mobile Staff
+  const canInviteAdminsMobile = isOwnerUser;
+
+  // Refs for Tenant Switching & Component Lifecycle Safety
+  const activeTenantIdRef = useRef(tenantId);
+  const fetchSeqRef = useRef(0);
+  const isMountedRef = useRef(true);
+
   // Navigation Tabs: 'staff_list' | 'invitations_list'
   const [activeTab, setActiveTab] = useState('staff_list');
 
@@ -97,41 +113,94 @@ export default function MobileStaffMain({ userProfile }) {
   const [actionFeedback, setActionFeedback] = useState(null);
   const [copiedId, setCopiedId] = useState(null);
 
-  // 1. Fetch staff list & invitations
+  /**
+   * DOCUMENTATION - SERVICE ERROR HANDLING CONTRACT LIMITATION:
+   * Note: getStaffListByTenant() and getInvitationsByTenant() in staffService.js
+   * catch all query errors and return an empty array ([]).
+   * Consequently, the mobile UI receives an empty array for both genuine
+   * empty datasets and failed database queries. The mobile interface cannot
+   * distinguish between a query failure and zero data records via the current service contract.
+   */
   const fetchData = useCallback(async () => {
-    if (!tenantId) {
-      setLoadingData(false);
+    const currentTenant = activeTenantIdRef.current;
+    if (!currentTenant || !isAllowedStaffManager) {
+      if (isMountedRef.current) setLoadingData(false);
       return;
     }
 
-    setLoadingData(true);
+    const currentSeq = ++fetchSeqRef.current;
+    if (isMountedRef.current) setLoadingData(true);
+
     try {
       const [staffResult, invitesResult] = await Promise.all([
-        getStaffListByTenant(tenantId),
-        getInvitationsByTenant(tenantId),
+        getStaffListByTenant(currentTenant),
+        getInvitationsByTenant(currentTenant),
       ]);
-      setStaffList(staffResult || []);
-      setAllInvitations(invitesResult || []);
+
+      // Guard: Only update state if component is mounted, tenant hasn't changed, and sequence matches
+      if (
+        isMountedRef.current &&
+        activeTenantIdRef.current === currentTenant &&
+        fetchSeqRef.current === currentSeq
+      ) {
+        setStaffList(staffResult || []);
+        setAllInvitations(invitesResult || []);
+      }
     } catch (error) {
-      console.error('[MobileStaffMain] Error fetching data:', error);
-      setActionFeedback({
-        type: 'error',
-        text: 'Gagal memuat data staf: ' + (error.message || 'Kesalahan jaringan'),
-      });
+      if (
+        isMountedRef.current &&
+        activeTenantIdRef.current === currentTenant &&
+        fetchSeqRef.current === currentSeq
+      ) {
+        console.error('[MobileStaffMain] Error fetching data:', error);
+        setActionFeedback({
+          type: 'error',
+          text: 'Gagal memuat data staf: ' + (error.message || 'Kesalahan jaringan'),
+        });
+      }
     } finally {
-      setLoadingData(false);
+      if (
+        isMountedRef.current &&
+        activeTenantIdRef.current === currentTenant &&
+        fetchSeqRef.current === currentSeq
+      ) {
+        setLoadingData(false);
+      }
     }
-  }, [tenantId]);
+  }, [isAllowedStaffManager]);
 
   useEffect(() => {
-    if (!tenantId) {
+    isMountedRef.current = true;
+
+    // Detect tenant change & reset operational state
+    if (activeTenantIdRef.current !== tenantId) {
+      activeTenantIdRef.current = tenantId;
+      fetchSeqRef.current += 1; // Invalidate any inflight requests for previous tenant
+
+      // Clear previous tenant data immediately
+      setStaffList([]);
+      setAllInvitations([]);
+      setSessionInviteLinks({});
+
+      // Reset modals and state
+      setShowInviteSheet(false);
+      setShowInviteSuccessSheet(false);
+      setInviteSuccessData(null);
+      setStaffToDelete(null);
+      setInvitationToRevoke(null);
+      setSearchQuery('');
+      setActionFeedback(null);
+      setFormError(null);
+    }
+
+    if (!tenantId || !isAllowedStaffManager) {
       setLoadingData(false);
       return;
     }
 
     fetchData();
 
-    // Realtime listener for users_staff and invitations
+    // Realtime listener for users_staff and invitations of active tenant
     const staffChannel = supabase
       .channel(`realtime_mobile_staff_${tenantId}`)
       .on(
@@ -151,9 +220,11 @@ export default function MobileStaffMain({ userProfile }) {
       .subscribe();
 
     return () => {
+      isMountedRef.current = false;
+      fetchSeqRef.current += 1;
       supabase.removeChannel(staffChannel);
     };
-  }, [tenantId, fetchData]);
+  }, [tenantId, isAllowedStaffManager, fetchData]);
 
   // Handler: Invite Staff Form Submission
   const handleInviteStaff = async (e) => {
@@ -174,8 +245,8 @@ export default function MobileStaffMain({ userProfile }) {
       return;
     }
 
-    // RBAC Hierarchy Enforcement: Only Owner/Superadmin can invite Admin
-    if (!canInviteAdmins && staffRole === 'admin') {
+    // RBAC Hierarchy Enforcement: Only Owner can invite Admin on Mobile Staff
+    if (!canInviteAdminsMobile && staffRole === 'admin') {
       setFormError('Akses ditolak: Hanya Pemilik (Owner) yang berwenang mengangkat Admin baru.');
       return;
     }
@@ -356,12 +427,8 @@ export default function MobileStaffMain({ userProfile }) {
     return allInvitations.filter((inv) => inv.status === 'pending').length;
   }, [allInvitations]);
 
-  // Restricted Access Screen (403 for Kasir, Coach, Staff)
-  const isRestrictedRole = !canManageStaff && (
-    !roleLoading || ['kasir', 'coach', 'pelatih', 'staff'].includes(String(userProfile?.role || '').toLowerCase())
-  );
-
-  if (isRestrictedRole) {
+  // Restricted Access Screen (403 for Superadmin, Kasir, Coach, Staff)
+  if (!isAllowedStaffManager) {
     return (
       <div className="chua-mobile-app min-h-screen bg-[#F5F7FC] p-4 flex items-center justify-center text-slate-800">
         <div className="bg-white border border-rose-200 rounded-2xl p-6 text-center max-w-sm shadow-sm space-y-3">
@@ -370,7 +437,7 @@ export default function MobileStaffMain({ userProfile }) {
           </div>
           <h2 className="text-base font-bold text-slate-900">Akses Terbatas: Khusus Owner / Admin</h2>
           <p className="text-xs text-slate-500 leading-relaxed">
-            Halaman Manajemen Staf &amp; Hak Akses hanya dapat diakses oleh Pemilik (Owner) atau Admin cabang aktif.
+            Halaman Manajemen Staf &amp; Hak Akses hanya dapat diakses oleh Pemilik (Owner) atau Admin cabang aktif. Peran Superadmin atau staf non-pengelola tidak memiliki akses ke fasilitas operasional tenant ini.
           </p>
         </div>
       </div>
@@ -956,11 +1023,11 @@ export default function MobileStaffMain({ userProfile }) {
               <option value="kasir">Kasir (Transaksi POS &amp; Jadwal Lapangan)</option>
               <option value="coach">Pelatih (Manajemen Kelas &amp; Siswa Akademi)</option>
               <option value="staff">Staf Operasional (Akses Umum Operasional)</option>
-              {canInviteAdmins && (
+              {canInviteAdminsMobile && (
                 <option value="admin">Admin Cabang (Kelola Staf &amp; Keuangan)</option>
               )}
             </select>
-            {!canInviteAdmins && (
+            {!canInviteAdminsMobile && (
               <p className="text-[10px] text-slate-500 mt-1 leading-normal">
                 * Pengangkatan Admin baru hanya dapat dilakukan oleh Pemilik (Owner).
               </p>
