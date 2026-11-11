@@ -32,13 +32,8 @@ const OPERATIONAL_HOURS = [
   { start: '22:00', end: '23:00' },
 ];
 
-export default function BookingPage({ userProfile }) {
-  const isMobile = useMobileViewport(767);
+export function BookingDesktopMain({ userProfile }) {
   const { courts, bookings, isLoading } = useArenaData(userProfile);
-
-  if (isMobile) {
-    return <MobileBookingMain userProfile={userProfile} />;
-  }
 
   // Date Filter (default today)
   const [selectedDate, setSelectedDate] = useState(
@@ -300,4 +295,20 @@ export default function BookingPage({ userProfile }) {
 
     </div>
   );
+}
+
+/**
+ * BookingPage (Viewport Wrapper)
+ * Adheres strictly to React Rules of Hooks.
+ * Calls ONLY useMobileViewport(767) unconditionally and delegates rendering
+ * to either MobileBookingMain (<= 767px) or BookingDesktopMain (>= 768px).
+ */
+export default function BookingPage({ userProfile }) {
+  const isMobile = useMobileViewport(767);
+
+  if (isMobile) {
+    return <MobileBookingMain userProfile={userProfile} />;
+  }
+
+  return <BookingDesktopMain userProfile={userProfile} />;
 }

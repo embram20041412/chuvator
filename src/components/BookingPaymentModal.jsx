@@ -42,7 +42,35 @@ export default function BookingPaymentModal({
   // Receipt & post-payment state
   const [completedTransaction, setCompletedTransaction] = useState(null);
   const [savedBooking, setSavedBooking] = useState(null);
+  const [copiedIndex, setCopiedIndex] = useState(null);
   const receiptRef = useRef(null);
+
+  // Extract all valid, active bank accounts configured by tenant unconditionally at top level
+  const activeBankAccounts = useMemo(() => {
+    if (!tenantProfile) return [];
+    const accounts = [];
+    if (Array.isArray(tenantProfile.bankAccounts) && tenantProfile.bankAccounts.length > 0) {
+      tenantProfile.bankAccounts.forEach((acc) => {
+        const bankName = String(acc?.bankName || '').trim();
+        const accountNumber = String(acc?.accountNumber || '').trim();
+        const accountName = String(acc?.accountName || acc?.accountHolder || '').trim();
+        if (bankName || accountNumber) {
+          accounts.push({
+            bankName: bankName || 'Bank',
+            accountNumber: accountNumber || '-',
+            accountName: accountName || tenantProfile.name || 'GOR Arena'
+          });
+        }
+      });
+    } else if (tenantProfile.bankName || tenantProfile.bankAccountNumber) {
+      accounts.push({
+        bankName: String(tenantProfile.bankName || 'Bank').trim(),
+        accountNumber: String(tenantProfile.bankAccountNumber || '-').trim(),
+        accountName: String(tenantProfile.bankAccountName || tenantProfile.bankAccountHolder || tenantProfile.name || 'GOR Arena').trim()
+      });
+    }
+    return accounts;
+  }, [tenantProfile]);
 
   // Reset states when modal opens or closes
   useEffect(() => {
@@ -52,6 +80,7 @@ export default function BookingPaymentModal({
       setCompletedTransaction(null);
       setSavedBooking(null);
       setErrorMsg(null);
+      setCopiedIndex(null);
     }
   }, [isOpen]);
 
@@ -59,6 +88,39 @@ export default function BookingPaymentModal({
   useEffect(() => {
     setCashReceived('');
   }, [paymentMethod]);
+
+  const handleCopy = (text, idx) => {
+    if (!text) return;
+    try {
+      navigator.clipboard.writeText(text);
+      setCopiedIndex(idx);
+      setTimeout(() => setCopiedIndex(null), 2000);
+    } catch {
+      setCopiedIndex(idx);
+      setTimeout(() => setCopiedIndex(null), 2000);
+    }
+  };
+
+  const handleDone = () => {
+    if (onPaymentSuccess && savedBooking) {
+      onPaymentSuccess(savedBooking);
+    }
+    setCompletedTransaction(null);
+    setSavedBooking(null);
+    onClose();
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const tenantQris = tenantProfile?.qrisImageBase64 || tenantProfile?.qrisUrl || '';
+
+  const arenaData = {
+    name: tenantProfile?.name || tenantProfile?.receiptHeaderName || 'KEDIRI SPORT ARENA',
+    address: tenantProfile?.address || tenantProfile?.alamat || tenantProfile?.receiptAddress || 'Jl. Letjen Soetoyo No. 20, Wates, Kediri',
+    phone: tenantProfile?.phone || tenantProfile?.whatsapp || tenantProfile?.receiptContact || '082131447972'
+  };
 
   if (!isOpen || !pendingBookingData) return null;
 
@@ -149,68 +211,6 @@ export default function BookingPaymentModal({
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const [copiedIndex, setCopiedIndex] = useState(null);
-
-  const handleCopy = (text, idx) => {
-    if (!text) return;
-    try {
-      navigator.clipboard.writeText(text);
-      setCopiedIndex(idx);
-      setTimeout(() => setCopiedIndex(null), 2000);
-    } catch {
-      setCopiedIndex(idx);
-      setTimeout(() => setCopiedIndex(null), 2000);
-    }
-  };
-
-  const handleDone = () => {
-    if (onPaymentSuccess && savedBooking) {
-      onPaymentSuccess(savedBooking);
-    }
-    setCompletedTransaction(null);
-    setSavedBooking(null);
-    onClose();
-  };
-
-  const handlePrint = () => {
-    window.print();
-  };
-
-  const tenantQris = tenantProfile?.qrisImageBase64 || tenantProfile?.qrisUrl || '';
-
-  // Extract all valid, active bank accounts configured by tenant
-  const activeBankAccounts = useMemo(() => {
-    if (!tenantProfile) return [];
-    const accounts = [];
-    if (Array.isArray(tenantProfile.bankAccounts) && tenantProfile.bankAccounts.length > 0) {
-      tenantProfile.bankAccounts.forEach((acc) => {
-        const bankName = String(acc?.bankName || '').trim();
-        const accountNumber = String(acc?.accountNumber || '').trim();
-        const accountName = String(acc?.accountName || acc?.accountHolder || '').trim();
-        if (bankName || accountNumber) {
-          accounts.push({
-            bankName: bankName || 'Bank',
-            accountNumber: accountNumber || '-',
-            accountName: accountName || tenantProfile.name || 'GOR Arena'
-          });
-        }
-      });
-    } else if (tenantProfile.bankName || tenantProfile.bankAccountNumber) {
-      accounts.push({
-        bankName: String(tenantProfile.bankName || 'Bank').trim(),
-        accountNumber: String(tenantProfile.bankAccountNumber || '-').trim(),
-        accountName: String(tenantProfile.bankAccountName || tenantProfile.bankAccountHolder || tenantProfile.name || 'GOR Arena').trim()
-      });
-    }
-    return accounts;
-  }, [tenantProfile]);
-
-  const arenaData = {
-    name: tenantProfile?.name || tenantProfile?.receiptHeaderName || 'KEDIRI SPORT ARENA',
-    address: tenantProfile?.address || tenantProfile?.alamat || tenantProfile?.receiptAddress || 'Jl. Letjen Soetoyo No. 20, Wates, Kediri',
-    phone: tenantProfile?.phone || tenantProfile?.whatsapp || tenantProfile?.receiptContact || '082131447972'
   };
 
   // =========================================================================
