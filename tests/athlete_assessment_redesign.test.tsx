@@ -4,6 +4,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ScoutingPolarAreaPanel, { OPTA_CATEGORY_CONFIG, getCategoryTheme } from '../src/components/ScoutingPolarAreaPanel';
 import AssessmentIndicatorsAccordion from '../src/components/AssessmentIndicatorsAccordion';
+import AthleteAssessmentEditView from '../src/components/AthleteAssessmentEditView';
 
 test('Opta Category Theme Mapping: accurately maps all 7 sports performance pillars', () => {
   const categories = ['fisik', 'teknik', 'taktik', 'mental', 'komunikasi', 'perkembangan', 'posisi'];
@@ -120,3 +121,53 @@ test('AssessmentIndicatorsAccordion: renders collapsible category sections with 
   assert.ok(markup.includes('Kecepatan Sprint'));
   assert.ok(markup.includes('75'));
 });
+
+test('ScoutingPolarAreaPanel: renders Edit Penilaian navigation button when onOpenEdit prop is passed', () => {
+  const mockCategories = [
+    { key: 'fisik', label: '1. Kondisi Fisik', shortLabel: 'Fisik', count: 2, score: 85, indicators: ['Sprint', 'Stamina'] }
+  ];
+
+  const markup = renderToStaticMarkup(
+    <ScoutingPolarAreaPanel
+      categoryList={mockCategories}
+      overallScore={85}
+      overallGrade={{ grade: 'A Sangat Baik', badge: 'bg-emerald-100 text-emerald-800' }}
+      activeCategoryKey="fisik"
+      sportName="Sepakbola"
+      onOpenEdit={() => {}}
+      isArchived={false}
+    />
+  );
+
+  assert.ok(markup.includes('Edit Penilaian'), 'Should render Edit Penilaian button when onOpenEdit is provided');
+  assert.ok(markup.includes('Ketuk untuk edit lembar penilaian indikator') || markup.includes('Ketuk untuk edit penilaian'));
+});
+
+test('AthleteAssessmentEditView: renders dedicated assessment edit view with back button, preview score, and actions', () => {
+  const mockCategories = [
+    { key: 'fisik', label: '1. Kondisi Fisik', shortLabel: 'Fisik', count: 2, score: 80, indicators: ['Sprint', 'Stamina'] }
+  ];
+
+  const markup = renderToStaticMarkup(
+    <AthleteAssessmentEditView
+      studentName="Budi Santoso"
+      sportLabel="Sepakbola Tier 3"
+      categoryList={mockCategories}
+      initialScores={{ Sprint: 80, Stamina: 80 }}
+      activeCategoryKey="fisik"
+      onSave={() => {}}
+      onCancel={() => {}}
+      tierLabel="Sepakbola Fase 3"
+    />
+  );
+
+  assert.ok(markup.includes('Edit Penilaian Indikator'));
+  assert.ok(markup.includes('Budi Santoso'));
+  assert.ok(markup.includes('Sepakbola Tier 3'));
+  assert.ok(markup.includes('Preview Rata-Rata:'));
+  assert.ok(markup.includes('Simpan Perubahan Nilai'));
+  assert.ok(markup.includes('Batal'));
+  assert.ok(markup.includes('Sprint'));
+  assert.ok(markup.includes('Stamina'));
+});
+

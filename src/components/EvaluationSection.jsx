@@ -111,6 +111,7 @@ import { isTennisSport } from '../config/tennisAssessmentData';
 import TennisAssessmentView from './TennisAssessmentView';
 import ScoutingPolarAreaPanel from './ScoutingPolarAreaPanel';
 import AssessmentIndicatorsAccordion from './AssessmentIndicatorsAccordion';
+import AthleteAssessmentEditView from './AthleteAssessmentEditView';
 
 // =====================================================================
 // RESTRUKTURISASI MATRIKS KPI 4-PILAR UNTUK CABANG OLAHRAGA LAIN
@@ -486,6 +487,7 @@ function FutsalAssessmentView({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeModalCategoryKey, setActiveModalCategoryKey] = useState('fisik');
   const [showAllInline, setShowAllInline] = useState(false);
+  const [isEditingIndicators, setIsEditingIndicators] = useState(false);
 
   // Scores state: { [indicatorName]: number }
   const [scores, setScores] = useState({});
@@ -1030,133 +1032,145 @@ function FutsalAssessmentView({
                   onSelectCategory={(key) => {
                     setActiveModalCategoryKey(key);
                   }}
+                  onOpenEdit={(key) => {
+                    if (key) setActiveModalCategoryKey(key);
+                    setIsEditingIndicators(true);
+                  }}
                   isArchived={isArchived}
                   sportName="Futsal"
                 />
 
-                {/* C. ASSESSMENT CONFIGURATION (POSISI, GAYA BERMAIN STY, & GLOBAL PRESETS) */}
-                <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-                    <span className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                      <Target className="w-4 h-4 text-orange-600" />
-                      <span>Konfigurasi Posisi, Gaya Bermain, &amp; Preset Cepat</span>
-                    </span>
-                    <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">
-                      {futsalTierConfig.label}
-                    </span>
-                  </div>
+                {isEditingIndicators ? (
+                  /* DEDICATED EDIT PENILAIAN INDIKATOR VIEW */
+                  <AthleteAssessmentEditView
+                    studentName={selectedStudent.studentName}
+                    sportLabel={`Futsal ${futsalTierConfig.label}`}
+                    categoryList={futsalCategoryList}
+                    initialScores={scores}
+                    activeCategoryKey={activeModalCategoryKey}
+                    onSave={(updatedScores) => {
+                      setScores(updatedScores);
+                      setIsEditingIndicators(false);
+                    }}
+                    onCancel={() => {
+                      setIsEditingIndicators(false);
+                    }}
+                    isArchived={isArchived}
+                    tierLabel={`Futsal ${futsalTierConfig.label} (${futsalTierConfig.shortLabel})`}
+                  />
+                ) : (
+                  <>
+                    {/* C. ASSESSMENT CONFIGURATION (POSISI, GAYA BERMAIN STY, & GLOBAL PRESETS) */}
+                    <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-4">
+                      <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                        <span className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                          <Target className="w-4 h-4 text-orange-600" />
+                          <span>Konfigurasi Posisi, Gaya Bermain, &amp; Preset Cepat</span>
+                        </span>
+                        <span className="text-[10px] font-bold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">
+                          {futsalTierConfig.label}
+                        </span>
+                      </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Posisi Pemain */}
-                    <div>
-                      <label htmlFor="futsal-selected-position" className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5">
-                        1. Posisi Pemain Futsal
-                      </label>
-                      <select
-                        id="futsal-selected-position"
-                        aria-label="Posisi Pemain Futsal"
-                        disabled={isArchived}
-                        value={selectedPosition}
-                        onChange={(e) => setSelectedPosition(e.target.value)}
-                        className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-bold text-slate-800 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow-2xs"
-                      >
-                        {availablePositions.map((p) => (
-                          <option key={p.code} value={p.code}>
-                            {p.label}
-                          </option>
-                        ))}
-                      </select>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Posisi Pemain */}
+                        <div>
+                          <label htmlFor="futsal-selected-position" className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5">
+                            1. Posisi Pemain Futsal
+                          </label>
+                          <select
+                            id="futsal-selected-position"
+                            aria-label="Posisi Pemain Futsal"
+                            disabled={isArchived}
+                            value={selectedPosition}
+                            onChange={(e) => setSelectedPosition(e.target.value)}
+                            className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-bold text-slate-800 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow-2xs"
+                          >
+                            {availablePositions.map((p) => (
+                              <option key={p.code} value={p.code}>
+                                {p.label}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Profil STY jika Tier >= 3 */}
+                        {activeFutsalTier >= 3 ? (
+                          <div>
+                            <label htmlFor="futsal-selected-style-code" className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5">
+                              2. Profil Gaya Bermain Taktis (STY)
+                            </label>
+                            <select
+                              id="futsal-selected-style-code"
+                              aria-label="Profil Gaya Bermain STY"
+                              disabled={isArchived}
+                              value={selectedStyleCode}
+                              onChange={(e) => setSelectedStyleCode(e.target.value)}
+                              className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-bold text-slate-800 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow-2xs"
+                            >
+                              {FUTSAL_PLAYING_STYLES.map((st) => (
+                                <option key={st.code} value={st.code}>
+                                  {st.code} &mdash; {st.name} ({st.desc})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 p-3 bg-emerald-50/70 border border-emerald-200/60 rounded-xl text-xs text-emerald-900 font-medium">
+                            <Info className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <span>Fokus pembinaan Tier 1 &amp; 2 adalah penguasaan sole control dan rotasi dasar lapangan sempit.</span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Preset Nilai Cepat Global */}
+                      <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                        <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                          <Sliders className="w-3.5 h-3.5 text-orange-600" />
+                          <span>Preset Nilai Cepat Seluruh Indikator:</span>
+                        </span>
+
+                        <div className="grid grid-cols-4 gap-1.5 w-full sm:w-auto">
+                          <button
+                            type="button"
+                            disabled={isArchived}
+                            onClick={() => handleSetAllGlobalValue(0)}
+                            className="py-1.5 px-3 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Reset semua indikator ke 0"
+                          >
+                            <RotateCcw className="w-3 h-3 shrink-0" />
+                            <span>Reset</span>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isArchived}
+                            onClick={() => handleSetAllGlobalValue(50)}
+                            className="py-1.5 px-3 text-[11px] font-bold rounded-xl flex items-center justify-center bg-slate-100 hover:bg-slate-700 hover:text-white text-slate-800 border border-slate-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Standard
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isArchived}
+                            onClick={() => handleSetAllGlobalValue(75)}
+                            className="py-1.5 px-3 text-[11px] font-bold rounded-xl flex items-center justify-center bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-800 border border-blue-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Good
+                          </button>
+                          <button
+                            type="button"
+                            disabled={isArchived}
+                            onClick={() => handleSetAllGlobalValue(90)}
+                            className="py-1.5 px-3 text-[11px] font-bold rounded-xl flex items-center justify-center bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-800 border border-emerald-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            Elite
+                          </button>
+                        </div>
+                      </div>
                     </div>
 
-                    {/* Profil STY jika Tier >= 3 */}
-                    {activeFutsalTier >= 3 ? (
-                      <div>
-                        <label htmlFor="futsal-selected-style-code" className="block text-xs font-extrabold text-slate-700 uppercase tracking-wider mb-1.5">
-                          2. Profil Gaya Bermain Taktis (STY)
-                        </label>
-                        <select
-                          id="futsal-selected-style-code"
-                          aria-label="Profil Gaya Bermain STY"
-                          disabled={isArchived}
-                          value={selectedStyleCode}
-                          onChange={(e) => setSelectedStyleCode(e.target.value)}
-                          className="w-full px-3.5 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#354944] font-bold text-slate-800 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed shadow-2xs"
-                        >
-                          {FUTSAL_PLAYING_STYLES.map((st) => (
-                            <option key={st.code} value={st.code}>
-                              {st.code} &mdash; {st.name} ({st.desc})
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 p-3 bg-emerald-50/70 border border-emerald-200/60 rounded-xl text-xs text-emerald-900 font-medium">
-                        <Info className="w-4 h-4 text-emerald-600 shrink-0" />
-                        <span>Fokus pembinaan Tier 1 &amp; 2 adalah penguasaan sole control dan rotasi dasar lapangan sempit.</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Preset Nilai Cepat Global */}
-                  <div className="pt-3 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-                    <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                      <Sliders className="w-3.5 h-3.5 text-orange-600" />
-                      <span>Preset Nilai Cepat Seluruh Indikator:</span>
-                    </span>
-
-                    <div className="grid grid-cols-4 gap-1.5 w-full sm:w-auto">
-                      <button
-                        type="button"
-                        disabled={isArchived}
-                        onClick={() => handleSetAllGlobalValue(0)}
-                        className="py-1.5 px-3 text-[11px] font-bold rounded-xl flex items-center justify-center gap-1 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Reset semua indikator ke 0"
-                      >
-                        <RotateCcw className="w-3 h-3 shrink-0" />
-                        <span>Reset</span>
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isArchived}
-                        onClick={() => handleSetAllGlobalValue(50)}
-                        className="py-1.5 px-3 text-[11px] font-bold rounded-xl flex items-center justify-center bg-slate-100 hover:bg-slate-700 hover:text-white text-slate-800 border border-slate-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Standard
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isArchived}
-                        onClick={() => handleSetAllGlobalValue(75)}
-                        className="py-1.5 px-3 text-[11px] font-bold rounded-xl flex items-center justify-center bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-800 border border-blue-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Good
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isArchived}
-                        onClick={() => handleSetAllGlobalValue(90)}
-                        className="py-1.5 px-3 text-[11px] font-bold rounded-xl flex items-center justify-center bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-800 border border-emerald-200 transition-all cursor-pointer shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        Elite
-                      </button>
-                    </div>
-                  </div>
-                </div>
-
-                {/* D. ASSESSMENT INDICATORS ACCORDION (LEMBAR PENILAIAN INDIKATOR) */}
-                <AssessmentIndicatorsAccordion
-                  categoryList={futsalCategoryList}
-                  scores={scores}
-                  onScoreChange={handleScoreChange}
-                  onAdjustScore={handleAdjustScore}
-                  onSetCategoryPreset={handleSetCategoryPreset}
-                  activeCategoryKey={activeModalCategoryKey}
-                  isArchived={isArchived}
-                  tierLabel={`Futsal ${futsalTierConfig.label} (${futsalTierConfig.shortLabel})`}
-                />
-
-                {/* 4. CATATAN & SIMPAN */}
-                <div className="p-5 sm:p-6 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-4">
+                    {/* 4. CATATAN & SIMPAN */}
+                    <div className="p-5 sm:p-6 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
                     <label className="block text-xs font-extrabold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                       <MessageSquare className="w-4 h-4 text-[#354944]" />
@@ -1216,19 +1230,21 @@ function FutsalAssessmentView({
                   </div>
                 </div>
 
-                {/* MODAL FOKUS PENILAIAN KATEGORI */}
-                <CategoryAssessmentModal
-                  isOpen={isModalOpen}
-                  onClose={() => setIsModalOpen(false)}
-                  categoryList={futsalCategoryList}
-                  activeCategoryKey={activeModalCategoryKey}
-                  setActiveCategoryKey={setActiveModalCategoryKey}
-                  scores={scores}
-                  onScoreChange={handleScoreChange}
-                  onAdjustScore={handleAdjustScore}
-                  onSetCategoryPreset={handleSetCategoryPreset}
-                  isArchived={isArchived}
-                />
+                    {/* MODAL FOKUS PENILAIAN KATEGORI */}
+                    <CategoryAssessmentModal
+                      isOpen={isModalOpen}
+                      onClose={() => setIsModalOpen(false)}
+                      categoryList={futsalCategoryList}
+                      activeCategoryKey={activeModalCategoryKey}
+                      setActiveCategoryKey={setActiveModalCategoryKey}
+                      scores={scores}
+                      onScoreChange={handleScoreChange}
+                      onAdjustScore={handleAdjustScore}
+                      onSetCategoryPreset={handleSetCategoryPreset}
+                      isArchived={isArchived}
+                    />
+                  </>
+                )}
 
               </form>
             )}
@@ -2804,6 +2820,7 @@ function FootballAssessmentView({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeModalCategoryKey, setActiveModalCategoryKey] = useState('fisik');
   const [showAllInline, setShowAllInline] = useState(false);
+  const [isEditingIndicators, setIsEditingIndicators] = useState(false);
 
   // Scores state: { [indicatorName]: number }
   const [scores, setScores] = useState({});
@@ -3389,12 +3406,36 @@ function FootballAssessmentView({
             onSelectCategory={(key) => {
               setActiveModalCategoryKey(key);
             }}
+            onOpenEdit={(key) => {
+              if (key) setActiveModalCategoryKey(key);
+              setIsEditingIndicators(true);
+            }}
             isArchived={isArchived}
             sportName={detectedSport || "Sepakbola"}
           />
 
-          {/* C. ASSESSMENT CONFIGURATION (POSISI, SPESIALISASI, GAYA BERMAIN, & PRESETS) */}
-          <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-4">
+          {isEditingIndicators ? (
+            /* DEDICATED EDIT PENILAIAN INDIKATOR VIEW */
+            <AthleteAssessmentEditView
+              studentName={selectedStudent.studentName}
+              sportLabel={`${detectedSport || "Sepakbola"} ${tierConfig.label}`}
+              categoryList={footballCategoryList}
+              initialScores={scores}
+              activeCategoryKey={activeModalCategoryKey}
+              onSave={(updatedScores) => {
+                setScores(updatedScores);
+                setIsEditingIndicators(false);
+              }}
+              onCancel={() => {
+                setIsEditingIndicators(false);
+              }}
+              isArchived={isArchived}
+              tierLabel={`${detectedSport} ${tierConfig.label} (${tierConfig.shortLabel})`}
+            />
+          ) : (
+            <>
+              {/* C. ASSESSMENT CONFIGURATION (POSISI, SPESIALISASI, GAYA BERMAIN, & PRESETS) */}
+              <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-4">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <span className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
                 <Target className="w-4 h-4 text-emerald-600" />
@@ -3555,18 +3596,6 @@ function FootballAssessmentView({
             </div>
           </div>
 
-          {/* D. ASSESSMENT INDICATORS ACCORDION (LEMBAR PENILAIAN INDIKATOR) */}
-          <AssessmentIndicatorsAccordion
-            categoryList={footballCategoryList}
-            scores={scores}
-            onScoreChange={handleScoreChange}
-            onAdjustScore={handleAdjustScore}
-            onSetCategoryPreset={handleSetCategoryPreset}
-            activeCategoryKey={activeModalCategoryKey}
-            isArchived={isArchived}
-            tierLabel={`${detectedSport} ${tierConfig.label} (${tierConfig.shortLabel})`}
-          />
-
                 {/* CATATAN & SIMPAN */}
                 <div className="p-3 sm:p-3.5 rounded-xl bg-white border border-slate-200 shadow-sm space-y-2.5">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
@@ -3587,9 +3616,9 @@ function FootballAssessmentView({
                   </div>
 
                   <textarea
-  aria-label="evaluation section coach note"
-  name="coachNote"
-  id="evaluation-section-coach-note"
+                    aria-label="evaluation section coach note"
+                    name="coachNote"
+                    id="evaluation-section-coach-note"
                     disabled={isArchived}
                     rows={2.5}
                     value={coachNote}
@@ -3641,8 +3670,10 @@ function FootballAssessmentView({
                   onSetCategoryPreset={handleSetCategoryPreset}
                   isArchived={isArchived}
                 />
+              </>
+            )}
 
-              </form>
+          </form>
             )}
 
       {/* RIWAYAT */}

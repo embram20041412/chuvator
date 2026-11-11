@@ -10,7 +10,8 @@ import {
   Target, 
   ChevronDown, 
   ChevronUp, 
-  Sparkles
+  Sparkles,
+  Edit3
 } from 'lucide-react';
 
 // ============================================================================
@@ -161,7 +162,7 @@ function describeSectorPath(cx, cy, rIn, rOut, startAngle, endAngle) {
  *   overallGrade?: { grade: string, badge?: string },
  *   activeCategoryKey?: string | null,
  *   onSelectCategory?: (key: string) => void,
- *   onEditCategory?: (key: string) => void,
+ *   onOpenEdit?: (key?: string) => void,
  *   isArchived?: boolean,
  *   sportName?: string
  * }} props
@@ -172,6 +173,7 @@ export default function ScoutingPolarAreaPanel({
   overallGrade = { grade: 'B', badge: 'bg-emerald-100 text-emerald-800' },
   activeCategoryKey = null,
   onSelectCategory,
+  onOpenEdit,
   isArchived = false,
   sportName = 'Sepakbola / Futsal'
 }) {
@@ -258,7 +260,7 @@ export default function ScoutingPolarAreaPanel({
         </div>
 
         {/* Action Controls & Realtime Score Badge */}
-        <div className="flex items-center gap-2 self-end sm:self-center">
+        <div className="flex items-center gap-2 self-end sm:self-center flex-wrap">
           <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-100/80 rounded-xl border border-slate-200">
             <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
               Rata-Rata:
@@ -270,6 +272,19 @@ export default function ScoutingPolarAreaPanel({
               {overallGrade.grade}
             </span>
           </div>
+
+          {/* Dedicated "Edit Penilaian" Navigation Button */}
+          {onOpenEdit && !isArchived && (
+            <button
+              type="button"
+              onClick={() => onOpenEdit(currentFocalKey || undefined)}
+              className="px-3 py-1 text-xs font-black text-white bg-[#101D38] hover:bg-[#1d2d52] border border-[#C89D32]/40 rounded-xl shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Buka Lembar Penilaian Indikator Lengkap"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-[#C89D32]" />
+              <span>Edit Penilaian</span>
+            </button>
+          )}
 
           {/* Mobile Collapse Toggle Button */}
           <button
@@ -397,9 +412,10 @@ export default function ScoutingPolarAreaPanel({
                       onMouseLeave={() => setHoveredKey(null)}
                       onClick={() => {
                         if (onSelectCategory) onSelectCategory(slice.key);
+                        if (onOpenEdit) onOpenEdit(slice.key);
                       }}
                     >
-                      <title>{`${slice.label}: ${slice.score} / 100`}</title>
+                      <title>{`${slice.label}: ${slice.score} / 100 — Ketuk untuk edit penilaian`}</title>
                     </path>
                   );
                 })}
@@ -423,6 +439,7 @@ export default function ScoutingPolarAreaPanel({
                       onMouseLeave={() => setHoveredKey(null)}
                       onClick={() => {
                         if (onSelectCategory) onSelectCategory(slice.key);
+                        if (onOpenEdit) onOpenEdit(slice.key);
                       }}
                     >
                       {/* Label Text */}
@@ -457,8 +474,12 @@ export default function ScoutingPolarAreaPanel({
 
               {/* E. CENTER HUB (OVERALL SCORE & HOVER PREVIEW) */}
               <g 
-                className="center-hub select-none"
+                className="center-hub select-none cursor-pointer"
+                onClick={() => {
+                  if (onOpenEdit) onOpenEdit(currentFocalKey || undefined);
+                }}
               >
+                <title>{onOpenEdit ? "Ketuk untuk edit lembar penilaian indikator" : "Ringkasan Skor"}</title>
                 {/* Outer ring of center circle */}
                 <circle
                   cx={cx}
@@ -508,12 +529,12 @@ export default function ScoutingPolarAreaPanel({
                       x={cx}
                       y={cy + 20}
                       textAnchor="middle"
-                      fontSize="8"
+                      fontSize="7.5"
                       fontWeight="800"
-                      fill="#64748B"
+                      fill={focalTheme.color}
                       className="select-none"
                     >
-                      / 100
+                      Ketuk Edit ✎
                     </text>
                   </g>
                 ) : (
@@ -562,7 +583,7 @@ export default function ScoutingPolarAreaPanel({
           {/* Quick Chart Hint */}
           <div className="flex items-center gap-1.5 mt-3 text-[11px] text-slate-500 font-medium">
             <Sparkles className="w-3.5 h-3.5 text-[#C89D32]" />
-            <span>Arahkan kursor atau ketuk irisan pilar untuk meninjau skor &bull; Evaluasi indikator pada lembar di bawah</span>
+            <span>Arahkan kursor atau ketuk irisan pilar untuk membuka lembar edit penilaian indikator</span>
           </div>
         </div>
       )}
