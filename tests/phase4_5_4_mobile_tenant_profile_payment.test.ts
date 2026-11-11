@@ -328,27 +328,52 @@ test('CHUVATOR — Phase 4.5.4 Mobile Tenant Profile & Payment Settings Test Sui
     // Validasi file kosong
     assert.equal(validateLogoFile(null).valid, false);
 
-    // Validasi tipe non-gambar
+    // Validasi tipe non-gambar (PDF ditolak untuk logo GOR)
     assert.equal(
       validateLogoFile({ name: 'dokumen.pdf', type: 'application/pdf', size: 100 * 1024 }).valid,
       false
     );
 
-    // Validasi ukuran > 5 MB
+    // Format yang diterima identik dengan gambar di uploadService.js (JPG, JPEG, PNG, WebP <= 5 MB)
     assert.equal(
-      validateLogoFile({ name: 'besar.png', type: 'image/png', size: 6 * 1024 * 1024 }).valid,
-      false
+      validateLogoFile({ name: 'logo.jpg', type: 'image/jpg', size: 350 * 1024 }).valid,
+      true,
+      'JPG (image/jpg) harus diterima'
     );
-
-    // Validasi gambar valid (PNG / JPG / WebP <= 5 MB)
+    assert.equal(
+      validateLogoFile({ name: 'logo.jpeg', type: 'image/jpeg', size: 450 * 1024 }).valid,
+      true,
+      'JPEG (image/jpeg) harus diterima'
+    );
     assert.equal(
       validateLogoFile({ name: 'logo.png', type: 'image/png', size: 400 * 1024 }).valid,
-      true
+      true,
+      'PNG (image/png) harus diterima'
     );
     assert.equal(
       validateLogoFile({ name: 'logo.webp', type: 'image/webp', size: 800 * 1024 }).valid,
-      true
+      true,
+      'WebP (image/webp) harus diterima'
     );
+
+    // Format gambar yang tidak didukung oleh uploadService.js wajib ditolak (SVG & GIF)
+    const svgCheck = validateLogoFile({ name: 'logo.svg', type: 'image/svg+xml', size: 50 * 1024 });
+    assert.equal(svgCheck.valid, false, 'SVG (image/svg+xml) harus ditolak');
+    assert.match(svgCheck.message || '', /image\/svg\+xml/);
+
+    const gifCheck = validateLogoFile({ name: 'logo.gif', type: 'image/gif', size: 150 * 1024 });
+    assert.equal(gifCheck.valid, false, 'GIF (image/gif) harus ditolak');
+    assert.match(gifCheck.message || '', /image\/gif/);
+
+    // File lebih dari 5 MB ditolak
+    const oversizeCheck = validateLogoFile({
+      name: 'besar.png',
+      type: 'image/png',
+      size: 5 * 1024 * 1024 + 1
+    });
+    assert.equal(oversizeCheck.valid, false, 'File lebih dari 5 MB harus ditolak');
+    assert.match(oversizeCheck.message || '', /5 MB/);
+
     assert.ok(SUPPORTED_SPORTS.includes('Badminton'));
     assert.ok(SUPPORTED_SPORTS.includes('Futsal'));
   });

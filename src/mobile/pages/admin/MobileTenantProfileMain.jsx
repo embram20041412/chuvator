@@ -126,7 +126,7 @@ export function validateLogoFile(file) {
       message: 'File yang dipilih harus berupa gambar (JPG, PNG, WebP).'
     };
   }
-  if (mimeType && !ALLOWED_LOGO_MIMES.includes(mimeType) && mimeType !== 'image/svg+xml') {
+  if (!ALLOWED_LOGO_MIMES.includes(mimeType)) {
     return {
       valid: false,
       message: `Format file "${mimeType}" tidak didukung. Gunakan JPG, PNG, atau WebP.`
