@@ -20,9 +20,11 @@ import {
   Check
 } from 'lucide-react';
 import { parentService } from '../services/parentService';
+import useMobileViewport from '../mobile/hooks/useMobileViewport';
+import MobileParentManagementMain, { resolveTenantId } from '../mobile/pages/admin/MobileParentManagementMain';
 
-export default function ParentManagementPage({ userProfile }) {
-  const tenantId = userProfile?.tenant?.id || userProfile?.tenantId || userProfile?.uid;
+export function ParentDesktopMain({ userProfile }) {
+  const tenantId = resolveTenantId(userProfile);
   
   // List States
   const [parents, setParents] = useState([]);
@@ -733,3 +735,20 @@ export default function ParentManagementPage({ userProfile }) {
     </div>
   );
 }
+
+/**
+ * ParentManagementPage (Viewport Wrapper)
+ * Adheres strictly to React Rules of Hooks.
+ * Calls ONLY useMobileViewport(767) unconditionally and delegates rendering
+ * to either MobileParentManagementMain (<= 767px) or ParentDesktopMain (>= 768px).
+ */
+export default function ParentManagementPage({ userProfile }) {
+  const isMobile = useMobileViewport(767);
+
+  if (isMobile) {
+    return <MobileParentManagementMain userProfile={userProfile} />;
+  }
+
+  return <ParentDesktopMain userProfile={userProfile} />;
+}
+
