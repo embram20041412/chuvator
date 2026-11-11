@@ -11,7 +11,9 @@ import {
   User,
   ShoppingBag,
   Sparkles,
-  ArrowRight
+  ArrowRight,
+  Copy,
+  Check
 } from 'lucide-react';
 
 export default function PosCheckoutModal({
@@ -49,17 +51,17 @@ export default function PosCheckoutModal({
 
   const isCash = useMemo(() => {
     const lower = selectedMethod.toLowerCase();
-    return lower.includes('tunai') || lower.includes('cash');
+    return lower === 'tunai (cash)' || lower.includes('tunai') || lower.includes('cash');
   }, [selectedMethod]);
 
   const isQris = useMemo(() => {
     const lower = selectedMethod.toLowerCase();
-    return lower.includes('qris') || lower.includes('transfer');
+    return lower === 'qris' || (lower.includes('qris') && !lower.includes('transfer'));
   }, [selectedMethod]);
 
-  const isCard = useMemo(() => {
+  const isTransfer = useMemo(() => {
     const lower = selectedMethod.toLowerCase();
-    return lower.includes('debit') || lower.includes('kredit') || lower.includes('card');
+    return lower === 'transfer bank' || lower.includes('transfer');
   }, [selectedMethod]);
 
   const cashNum = Number(cashReceivedInput) || 0;
@@ -89,6 +91,47 @@ export default function PosCheckoutModal({
     return Array.from(presets).sort((a, b) => a - b).slice(0, 5);
   }, [totalAmount]);
 
+  const [copiedBankIdx, setCopiedBankIdx] = useState(null);
+
+  const handleCopyBank = (text, idx) => {
+    if (!text) return;
+    try {
+      navigator.clipboard.writeText(text);
+      setCopiedBankIdx(idx);
+      setTimeout(() => setCopiedBankIdx(null), 2000);
+    } catch {
+      setCopiedBankIdx(idx);
+      setTimeout(() => setCopiedBankIdx(null), 2000);
+    }
+  };
+
+  // Extract all valid, active bank accounts configured by tenant
+  const activeBankAccounts = useMemo(() => {
+    if (!arena) return [];
+    const accounts = [];
+    if (Array.isArray(arena.bankAccounts) && arena.bankAccounts.length > 0) {
+      arena.bankAccounts.forEach((acc) => {
+        const bankName = String(acc?.bankName || '').trim();
+        const accountNumber = String(acc?.accountNumber || '').trim();
+        const accountName = String(acc?.accountName || acc?.accountHolder || '').trim();
+        if (bankName || accountNumber) {
+          accounts.push({
+            bankName: bankName || 'Bank',
+            accountNumber: accountNumber || '-',
+            accountName: accountName || arena.name || 'GOR Arena'
+          });
+        }
+      });
+    } else if (arena.bankName || arena.bankAccountNumber) {
+      accounts.push({
+        bankName: String(arena.bankName || 'Bank').trim(),
+        accountNumber: String(arena.bankAccountNumber || '-').trim(),
+        accountName: String(arena.bankAccountName || arena.bankAccountHolder || arena.name || 'GOR Arena').trim()
+      });
+    }
+    return accounts;
+  }, [arena]);
+
   if (!isOpen) return null;
 
   const handleSelectMethod = (method) => {
@@ -117,9 +160,6 @@ export default function PosCheckoutModal({
   };
 
   const qrisImage = arena?.qrisImageBase64 || arena?.qrisUrl || '';
-  const bankName = arena?.bankName || 'BCA';
-  const bankAcc = arena?.bankAccountNumber || '1234-567-890';
-  const bankHolder = arena?.bankAccountHolder || arena?.name || 'GOR Arena';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-fade-category">
@@ -214,7 +254,7 @@ export default function PosCheckoutModal({
             </div>
           </div>
 
-          {/* PILIHAN METODE PEMBAYARAN */}
+          {/* PILIHAN 3 METODE PEMBAYARAN: CASH, QRIS, TRANSFER BANK */}
           <div>
             <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-300 uppercase mb-1.5">
               Pilih Metode Pembayaran
@@ -235,7 +275,7 @@ export default function PosCheckoutModal({
 
               <button
                 type="button"
-                onClick={() => handleSelectMethod('QRIS / Transfer Bank')}
+                onClick={() => handleSelectMethod('QRIS')}
                 className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
                   isQris 
                     ? 'bg-purple-50 dark:bg-purple-950/40 border-purple-500 text-purple-800 dark:text-purple-300 font-bold ring-1 ring-purple-500' 
@@ -243,20 +283,20 @@ export default function PosCheckoutModal({
                 }`}
               >
                 <QrCode className="w-4 h-4 text-purple-600 dark:text-purple-400" />
-                <span className="text-[11px]">QRIS / Transfer</span>
+                <span className="text-[11px]">QRIS</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => handleSelectMethod('Kartu Debit/Kredit')}
+                onClick={() => handleSelectMethod('Transfer Bank')}
                 className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
-                  isCard 
+                  isTransfer 
                     ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-500 text-blue-800 dark:text-blue-300 font-bold ring-1 ring-blue-500' 
                     : 'bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-400 hover:bg-slate-50'
                 }`}
               >
                 <CreditCard className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                <span className="text-[11px]">Kartu Debit/EDC</span>
+                <span className="text-[11px]">Transfer Bank</span>
               </button>
             </div>
           </div>
@@ -346,10 +386,10 @@ export default function PosCheckoutModal({
               </div>
               <div>
                 <h4 className="text-xs font-bold text-purple-900 dark:text-purple-200">
-                  Pembayaran QRIS / Transfer Bank
+                  Pembayaran QRIS Instan
                 </h4>
                 <p className="text-[11px] text-purple-700 dark:text-purple-300 mt-0.5">
-                  Tunjukkan barcode QRIS arena atau transfer ke rekening resmi.
+                  Tunjukkan barcode QRIS arena kepada pelanggan.
                 </p>
               </div>
 
@@ -358,24 +398,80 @@ export default function PosCheckoutModal({
                   <img src={qrisImage} alt="QRIS Arena" className="w-36 h-36 object-contain mx-auto" />
                 </div>
               ) : (
-                <div className="p-3 bg-white dark:bg-[#14211E] rounded-xl border border-purple-200 dark:border-purple-800/50 text-left text-xs space-y-1">
-                  <p className="font-bold text-slate-800 dark:text-slate-200 uppercase">{bankName}</p>
-                  <p className="font-mono text-sm font-bold text-purple-700 dark:text-purple-300">{bankAcc}</p>
-                  <p className="text-[10px] text-slate-500">a.n. {bankHolder}</p>
+                <div className="p-3 bg-white dark:bg-[#14211E] rounded-xl border border-dashed border-purple-200 dark:border-purple-800/50 text-center text-xs space-y-1">
+                  <p className="font-bold text-purple-900 dark:text-purple-300">QRIS belum diunggah</p>
+                  <p className="text-[10px] text-slate-500">Unggah barcode QRIS melalui menu Pengaturan &gt; Rekening &amp; QRIS.</p>
                 </div>
               )}
             </div>
           )}
 
-          {isCard && (
-            <div className="p-4 bg-blue-50/60 dark:bg-blue-950/20 rounded-xl border border-blue-200 dark:border-blue-800/40 text-center space-y-2">
-              <CreditCard className="w-8 h-8 text-blue-600 dark:text-blue-400 mx-auto" />
-              <h4 className="text-xs font-bold text-blue-900 dark:text-blue-200">
-                Pembayaran Mesin EDC / Kartu
-              </h4>
-              <p className="text-[11px] text-blue-700 dark:text-blue-300">
-                Gesek atau tap kartu Debit / Kredit pelanggan pada terminal EDC kasir hingga slip keluar.
-              </p>
+          {isTransfer && (
+            <div className="p-3.5 bg-blue-50/60 dark:bg-blue-950/20 rounded-xl border border-blue-200 dark:border-blue-800/40 space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-blue-900 dark:text-blue-200 font-bold">
+                  <CreditCard className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <span>Informasi Rekening Transfer Bank:</span>
+                </div>
+                {activeBankAccounts.length > 0 && (
+                  <span className="text-[10px] font-semibold text-blue-700 dark:text-blue-300">
+                    {activeBankAccounts.length} Rekening
+                  </span>
+                )}
+              </div>
+
+              {activeBankAccounts.length === 0 ? (
+                <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-dashed border-amber-300 dark:border-amber-700 text-center space-y-1">
+                  <p className="font-bold text-amber-800 dark:text-amber-400 text-xs">
+                    Rekening bank belum dikonfigurasi
+                  </p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                    Atur nama bank dan nomor rekening pada menu Pengaturan &gt; Rekening &amp; QRIS.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {activeBankAccounts.map((acc, idx) => (
+                    <div
+                      key={idx}
+                      className="bg-white dark:bg-[#14211E] p-2.5 rounded-xl border border-blue-100 dark:border-blue-900/50 space-y-1 text-left shadow-2xs"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide text-xs">
+                          {acc.bankName}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyBank(acc.accountNumber, idx)}
+                          className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Salin nomor rekening"
+                        >
+                          {copiedBankIdx === idx ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-600" />
+                              <span className="text-emerald-600">Tersalin</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3" />
+                              <span>Salin</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-0.5">
+                        <span className="font-mono font-black text-blue-700 dark:text-blue-300 text-sm tracking-wider select-all break-all">
+                          {acc.accountNumber}
+                        </span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                          a.n. <strong className="text-slate-800 dark:text-slate-200 font-semibold">{acc.accountName}</strong>
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

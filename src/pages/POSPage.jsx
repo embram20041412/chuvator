@@ -156,9 +156,10 @@ export default function POSPage({ userProfile }) {
     address: tenantProfile?.address || tenantProfile?.alamat || tenantProfile?.receiptAddress || 'Jl. Letjen Soetoyo No. 20, Wates, Kediri',
     phone: tenantProfile?.phone || tenantProfile?.whatsapp || tenantProfile?.receiptContact || '082131447972',
     qrisImageBase64: tenantProfile?.qrisImageBase64 || tenantProfile?.qrisUrl || '',
-    bankName: tenantProfile?.bankName || 'BCA',
-    bankAccountNumber: tenantProfile?.bankAccountNumber || '1234-567-890',
-    bankAccountHolder: tenantProfile?.bankAccountHolder || tenantProfile?.name || 'GOR Arena'
+    bankAccounts: tenantProfile?.bankAccounts || [],
+    bankName: tenantProfile?.bankName || '',
+    bankAccountNumber: tenantProfile?.bankAccountNumber || '',
+    bankAccountHolder: tenantProfile?.bankAccountHolder || tenantProfile?.bankAccountName || tenantProfile?.name || 'GOR Arena'
   }), [tenantProfile]);
 
   // Barcode Scanner & Manual Barcode Entry States
@@ -1326,9 +1327,9 @@ export default function POSPage({ userProfile }) {
                   onChange={(e) => setPaymentMethod(e.target.value)}
                   className="px-2 py-1 text-xs bg-slate-50 dark:bg-white/10 border border-slate-200 dark:border-white/10 rounded-lg focus:bg-white focus:outline-none focus:border-[#354944] font-semibold text-slate-800 dark:text-slate-200 shrink-0 cursor-pointer"
                 >
-                  <option value="QRIS / Transfer">QRIS / Transfer Bank</option>
                   <option value="Tunai (Cash)">Tunai (Cash)</option>
-                  <option value="Kartu Debit/Kredit">Kartu Debit/Kredit</option>
+                  <option value="QRIS">QRIS</option>
+                  <option value="Transfer Bank">Transfer Bank</option>
                 </select>
               </div>
 

@@ -93,9 +93,10 @@ export default function MobilePosMain({ userProfile }) {
     address: tenantProfile?.address || tenantProfile?.alamat || tenantProfile?.receiptAddress || 'Jl. Letjen Soetoyo No. 20, Wates, Kediri',
     phone: tenantProfile?.phone || tenantProfile?.whatsapp || tenantProfile?.receiptContact || '082131447972',
     qrisImageBase64: tenantProfile?.qrisImageBase64 || tenantProfile?.qrisUrl || '',
-    bankName: tenantProfile?.bankName || 'BCA',
-    bankAccountNumber: tenantProfile?.bankAccountNumber || '1234-567-890',
-    bankAccountHolder: tenantProfile?.bankAccountHolder || tenantProfile?.name || 'GOR Arena'
+    bankAccounts: tenantProfile?.bankAccounts || [],
+    bankName: tenantProfile?.bankName || '',
+    bankAccountNumber: tenantProfile?.bankAccountNumber || '',
+    bankAccountHolder: tenantProfile?.bankAccountHolder || tenantProfile?.bankAccountName || tenantProfile?.name || 'GOR Arena'
   }), [tenantProfile]);
 
   // Barcode Scanner Integration

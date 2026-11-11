@@ -19,7 +19,9 @@ import {
   CreditCard, 
   Banknote,
   Printer,
-  CheckCircle2
+  CheckCircle2,
+  Copy,
+  Check
 } from 'lucide-react';
 
 export default function BookingPaymentModal({
@@ -149,6 +151,20 @@ export default function BookingPaymentModal({
     }
   };
 
+  const [copiedIndex, setCopiedIndex] = useState(null);
+
+  const handleCopy = (text, idx) => {
+    if (!text) return;
+    try {
+      navigator.clipboard.writeText(text);
+      setCopiedIndex(idx);
+      setTimeout(() => setCopiedIndex(null), 2000);
+    } catch {
+      setCopiedIndex(idx);
+      setTimeout(() => setCopiedIndex(null), 2000);
+    }
+  };
+
   const handleDone = () => {
     if (onPaymentSuccess && savedBooking) {
       onPaymentSuccess(savedBooking);
@@ -163,9 +179,33 @@ export default function BookingPaymentModal({
   };
 
   const tenantQris = tenantProfile?.qrisImageBase64 || tenantProfile?.qrisUrl || '';
-  const bankName = tenantProfile?.bankName || 'BCA';
-  const accountNumber = tenantProfile?.bankAccountNumber || '1234567890';
-  const accountHolder = tenantProfile?.bankAccountHolder || tenantProfile?.name || 'GOR Arena';
+
+  // Extract all valid, active bank accounts configured by tenant
+  const activeBankAccounts = useMemo(() => {
+    if (!tenantProfile) return [];
+    const accounts = [];
+    if (Array.isArray(tenantProfile.bankAccounts) && tenantProfile.bankAccounts.length > 0) {
+      tenantProfile.bankAccounts.forEach((acc) => {
+        const bankName = String(acc?.bankName || '').trim();
+        const accountNumber = String(acc?.accountNumber || '').trim();
+        const accountName = String(acc?.accountName || acc?.accountHolder || '').trim();
+        if (bankName || accountNumber) {
+          accounts.push({
+            bankName: bankName || 'Bank',
+            accountNumber: accountNumber || '-',
+            accountName: accountName || tenantProfile.name || 'GOR Arena'
+          });
+        }
+      });
+    } else if (tenantProfile.bankName || tenantProfile.bankAccountNumber) {
+      accounts.push({
+        bankName: String(tenantProfile.bankName || 'Bank').trim(),
+        accountNumber: String(tenantProfile.bankAccountNumber || '-').trim(),
+        accountName: String(tenantProfile.bankAccountName || tenantProfile.bankAccountHolder || tenantProfile.name || 'GOR Arena').trim()
+      });
+    }
+    return accounts;
+  }, [tenantProfile]);
 
   const arenaData = {
     name: tenantProfile?.name || tenantProfile?.receiptHeaderName || 'KEDIRI SPORT ARENA',
@@ -383,14 +423,72 @@ export default function BookingPaymentModal({
           )}
 
           {paymentMethod === 'Transfer Bank' && (
-            <div className="p-3 bg-[#354944]/5 dark:bg-[#354944]/15 border border-[#354944]/20 rounded-xl space-y-1.5 text-xs">
-              <p className="font-bold text-[#354944] dark:text-[#C89D32] text-xs">Informasi Rekening Bank GOR:</p>
-              <div className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 space-y-0.5">
-                <p className="text-slate-500 dark:text-slate-400 text-[11px]">Bank: <span className="font-bold text-slate-900 dark:text-slate-100">{bankName}</span></p>
-                <p className="text-slate-500 dark:text-slate-400 text-[11px]">No. Rekening: <span className="font-black text-[#354944] dark:text-[#C89D32] text-xs font-mono">{accountNumber}</span></p>
-                <p className="text-slate-500 dark:text-slate-400 text-[11px]">Atas Nama: <span className="font-bold text-slate-900 dark:text-slate-100">{accountHolder}</span></p>
+            <div className="p-3 bg-[#354944]/5 dark:bg-[#354944]/15 border border-[#354944]/20 rounded-xl space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <p className="font-bold text-[#354944] dark:text-[#C89D32] text-xs">Informasi Rekening Bank Tenant:</p>
+                {activeBankAccounts.length > 0 && (
+                  <span className="text-[10px] font-semibold text-slate-500 dark:text-slate-400">
+                    {activeBankAccounts.length} Rekening Aktif
+                  </span>
+                )}
               </div>
-              <p className="text-[10px] text-[#354944] dark:text-[#C89D32] italic">Transfer sesuai total tagihan dan simpan bukti transfer.</p>
+
+              {activeBankAccounts.length === 0 ? (
+                <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-dashed border-amber-300 dark:border-amber-700/60 text-center space-y-1">
+                  <p className="font-bold text-amber-800 dark:text-amber-400 text-xs">
+                    Rekening pembayaran belum dikonfigurasi
+                  </p>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Silakan atur rekening bank tenant di menu Pengaturan &gt; Rekening &amp; QRIS.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {activeBankAccounts.map((acc, idx) => (
+                    <div
+                      key={idx}
+                      className="bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-slate-200 dark:border-slate-700 space-y-1 shadow-2xs"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-900 dark:text-slate-100 text-xs uppercase tracking-wide">
+                          {acc.bankName}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopy(acc.accountNumber, idx)}
+                          className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Salin nomor rekening"
+                        >
+                          {copiedIndex === idx ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-600" />
+                              <span className="text-emerald-600">Tersalin</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3" />
+                              <span>Salin</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-0.5">
+                        <span className="font-mono font-black text-[#354944] dark:text-[#C89D32] text-sm tracking-wider select-all break-all">
+                          {acc.accountNumber}
+                        </span>
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
+                          a.n. <strong className="text-slate-800 dark:text-slate-200 font-semibold">{acc.accountName}</strong>
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <p className="text-[10px] text-[#354944] dark:text-[#C89D32] italic">
+                Transfer sesuai total tagihan dan simpan bukti transfer.
+              </p>
             </div>
           )}
 

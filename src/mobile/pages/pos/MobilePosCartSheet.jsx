@@ -12,7 +12,9 @@ import {
   CheckCircle2, 
   AlertCircle,
   ArrowRight,
-  Receipt
+  Receipt,
+  Copy,
+  Check
 } from 'lucide-react';
 
 export default function MobilePosCartSheet({
@@ -44,12 +46,17 @@ export default function MobilePosCartSheet({
 
   const isCash = useMemo(() => {
     const lower = paymentMethod.toLowerCase();
-    return lower.includes('tunai') || lower.includes('cash');
+    return lower === 'tunai (cash)' || lower.includes('tunai') || lower.includes('cash');
   }, [paymentMethod]);
 
   const isQris = useMemo(() => {
     const lower = paymentMethod.toLowerCase();
-    return lower.includes('qris') || lower.includes('transfer');
+    return lower === 'qris' || (lower.includes('qris') && !lower.includes('transfer'));
+  }, [paymentMethod]);
+
+  const isTransfer = useMemo(() => {
+    const lower = paymentMethod.toLowerCase();
+    return lower === 'transfer bank' || lower.includes('transfer');
   }, [paymentMethod]);
 
   const cashNum = Number(cashReceivedInput) || 0;
@@ -77,6 +84,47 @@ export default function MobilePosCartSheet({
     return Array.from(presets).sort((a, b) => a - b).slice(0, 5);
   }, [totalAmount]);
 
+  const [copiedBankIdx, setCopiedBankIdx] = useState(null);
+
+  const handleCopyBank = (text, idx) => {
+    if (!text) return;
+    try {
+      navigator.clipboard.writeText(text);
+      setCopiedBankIdx(idx);
+      setTimeout(() => setCopiedBankIdx(null), 2000);
+    } catch {
+      setCopiedBankIdx(idx);
+      setTimeout(() => setCopiedBankIdx(null), 2000);
+    }
+  };
+
+  // Extract all valid, active bank accounts configured by tenant
+  const activeBankAccounts = useMemo(() => {
+    if (!arenaData) return [];
+    const accounts = [];
+    if (Array.isArray(arenaData.bankAccounts) && arenaData.bankAccounts.length > 0) {
+      arenaData.bankAccounts.forEach((acc) => {
+        const bankName = String(acc?.bankName || '').trim();
+        const accountNumber = String(acc?.accountNumber || '').trim();
+        const accountName = String(acc?.accountName || acc?.accountHolder || '').trim();
+        if (bankName || accountNumber) {
+          accounts.push({
+            bankName: bankName || 'Bank',
+            accountNumber: accountNumber || '-',
+            accountName: accountName || arenaData.name || 'GOR Arena'
+          });
+        }
+      });
+    } else if (arenaData.bankName || arenaData.bankAccountNumber) {
+      accounts.push({
+        bankName: String(arenaData.bankName || 'Bank').trim(),
+        accountNumber: String(arenaData.bankAccountNumber || '-').trim(),
+        accountName: String(arenaData.bankAccountName || arenaData.bankAccountHolder || arenaData.name || 'GOR Arena').trim()
+      });
+    }
+    return accounts;
+  }, [arenaData]);
+
   if (!isOpen) return null;
 
   const handleSubmit = (e) => {
@@ -99,9 +147,6 @@ export default function MobilePosCartSheet({
   };
 
   const qrisImage = arenaData?.qrisImageBase64 || arenaData?.qrisUrl || '';
-  const bankName = arenaData?.bankName || 'BCA';
-  const bankAcc = arenaData?.bankAccountNumber || '1234-567-890';
-  const bankHolder = arenaData?.bankAccountHolder || arenaData?.name || 'GOR Arena';
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 backdrop-blur-xs p-0 sm:p-4 overflow-y-auto">
@@ -267,7 +312,7 @@ export default function MobilePosCartSheet({
 
               <button
                 type="button"
-                onClick={() => setPaymentMethod('QRIS / Transfer Bank')}
+                onClick={() => setPaymentMethod('QRIS')}
                 className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
                   isQris
                     ? 'bg-[#354944]/10 border-[#354944] text-[#354944] dark:text-[#C89D32] font-bold shadow-2xs'
@@ -275,20 +320,20 @@ export default function MobilePosCartSheet({
                 }`}
               >
                 <QrCode className="w-4 h-4 text-purple-600" />
-                <span className="text-[10px] font-bold">QRIS / Transfer</span>
+                <span className="text-[10px] font-bold">QRIS</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => setPaymentMethod('Kartu Debit/Kredit')}
+                onClick={() => setPaymentMethod('Transfer Bank')}
                 className={`p-2.5 rounded-xl border flex flex-col items-center justify-center gap-1 transition-all cursor-pointer ${
-                  paymentMethod.includes('Debit')
+                  isTransfer
                     ? 'bg-[#354944]/10 border-[#354944] text-[#354944] dark:text-[#C89D32] font-bold shadow-2xs'
                     : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
                 }`}
               >
                 <CreditCard className="w-4 h-4 text-blue-600" />
-                <span className="text-[10px] font-bold">Debit / EDC</span>
+                <span className="text-[10px] font-bold">Transfer Bank</span>
               </button>
             </div>
           </div>
@@ -346,15 +391,83 @@ export default function MobilePosCartSheet({
           {isQris && (
             <div className="p-3.5 bg-purple-50/60 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-800/40 rounded-2xl text-center space-y-2">
               <p className="text-xs font-bold text-purple-900 dark:text-purple-200">
-                Scan QRIS atau Transfer Rekening GOR
+                Scan QRIS Instan
               </p>
               {qrisImage ? (
                 <img src={qrisImage} alt="QRIS Arena" className="w-32 h-32 object-contain mx-auto bg-white p-1 rounded-xl shadow-2xs" />
               ) : (
-                <div className="p-2.5 bg-white dark:bg-slate-900 rounded-xl border text-xs text-slate-600 dark:text-slate-300 text-left font-mono">
-                  <p>Bank: <strong>{bankName}</strong></p>
-                  <p>No Rek: <strong>{bankAcc}</strong></p>
-                  <p>a.n. <strong>{bankHolder}</strong></p>
+                <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-dashed border-purple-200 dark:border-purple-800/50 text-center text-xs space-y-1">
+                  <p className="font-bold text-purple-900 dark:text-purple-300">QRIS belum diunggah</p>
+                  <p className="text-[10px] text-slate-500">Unggah barcode QRIS melalui menu Pengaturan &gt; Rekening &amp; QRIS.</p>
+                </div>
+              )}
+            </div>
+          )}
+
+          {isTransfer && (
+            <div className="p-3.5 bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/40 rounded-2xl space-y-2 text-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-blue-900 dark:text-blue-200 font-bold">
+                  <CreditCard className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                  <span>Informasi Rekening Transfer Bank:</span>
+                </div>
+                {activeBankAccounts.length > 0 && (
+                  <span className="text-[10px] font-semibold text-blue-700 dark:text-blue-300">
+                    {activeBankAccounts.length} Rekening
+                  </span>
+                )}
+              </div>
+
+              {activeBankAccounts.length === 0 ? (
+                <div className="p-3 bg-white dark:bg-slate-900 rounded-lg border border-dashed border-amber-300 dark:border-amber-700 text-center space-y-1">
+                  <p className="font-bold text-amber-800 dark:text-amber-400 text-xs">
+                    Rekening bank belum dikonfigurasi
+                  </p>
+                  <p className="text-[10px] text-slate-500 dark:text-slate-400">
+                    Atur nama bank dan nomor rekening pada menu Pengaturan &gt; Rekening &amp; QRIS.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {activeBankAccounts.map((acc, idx) => (
+                    <div
+                      key={idx}
+                      className="bg-white dark:bg-slate-900 p-2.5 rounded-xl border border-blue-100 dark:border-blue-900/50 space-y-1 text-left shadow-2xs"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide text-xs">
+                          {acc.bankName}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleCopyBank(acc.accountNumber, idx)}
+                          className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 flex items-center gap-1 transition-colors cursor-pointer"
+                          title="Salin nomor rekening"
+                        >
+                          {copiedBankIdx === idx ? (
+                            <>
+                              <Check className="w-3 h-3 text-emerald-600" />
+                              <span className="text-emerald-600">Tersalin</span>
+                            </>
+                          ) : (
+                            <>
+                              <Copy className="w-3 h-3" />
+                              <span>Salin</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+
+                      <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-0.5">
+                        <span className="font-mono font-black text-blue-700 dark:text-blue-300 text-sm tracking-wider select-all break-all">
+                          {acc.accountNumber}
+                        </span>
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                          a.n. <strong className="text-slate-800 dark:text-slate-200 font-semibold">{acc.accountName}</strong>
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
