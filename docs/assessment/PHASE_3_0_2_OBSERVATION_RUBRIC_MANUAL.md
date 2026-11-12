@@ -64,7 +64,7 @@ TOTAL: 188 CANONICAL OBSERVATION RUBRICS
 
 ### 3. THE 4-LEVEL BEHAVIORALLY ANCHORED RATING SCALE
 
-To ensure cross-evaluator reliability, CHUVATOR defines a universal 4-level developmental rating scale:
+To ensure cross-evaluator reliability, CHUVATOR defines a universal 4-level developmental rating scale based on behavioral density, environmental pressure, and action outcome efficacy (rejecting generic percentage thresholds):
 
 ```
 +---------------------------------------------------------------------------------------+
@@ -72,25 +72,26 @@ To ensure cross-evaluator reliability, CHUVATOR defines a universal 4-level deve
 +-------+-------------------------+-----------------------------------------------------+
 | Level | Anchor Label            | Operational Behavioral Definition                   |
 +-------+-------------------------+-----------------------------------------------------+
-|   1   | INEFFECTIVE /           | Frequent technical or decision-making breakdowns;   |
-|       | INCONSISTENT            | fails to execute the action even under zero or low  |
-|       |                         | opponent pressure; reactive rather than anticipatory;|
-|       |                         | execution success rate <40%.                        |
+|   1   | INEFFECTIVE /           | Frequent technical or tactical breakdowns; unable to|
+|       | INCONSISTENT            | execute the target action even under low opponent   |
+|       |                         | pressure; reactive rather than anticipatory;        |
+|       |                         | decisions lead to unforced turnovers or loss of     |
+|       |                         | structural balance.                                 |
 +-------+-------------------------+-----------------------------------------------------+
-|   2   | DEVELOPING /            | Executes correctly under zero or low pressure;      |
-|       | LOW PRESSURE ONLY       | action degrades significantly under high opponent   |
-|       |                         | pressure, limited space, or physical fatigue;       |
-|       |                         | inconsistent execution success rate (40%–69%).      |
+|   2   | DEVELOPING /            | Executes reliably under low pressure or uncontested |
+|       | LOW PRESSURE ONLY       | space; action quality degrades significantly under  |
+|       |                         | tight spatial/temporal pressure or fatigue;         |
+|       |                         | inconsistent tactical impact during match phases.   |
 +-------+-------------------------+-----------------------------------------------------+
-|   3   | PROFICIENT /            | Consistently executes with proper technique and sound|
-|       | COMPETENT MATCH LEVEL   | tactical awareness under full match pressure;       |
-|       |                         | makes rapid decisions; reliable team contributor;   |
-|       |                         | execution success rate 70%–84%.                     |
+|   3   | PROFICIENT /            | Consistently executes with proper technique and     |
+|       | COMPETENT MATCH LEVEL   | sound tactical awareness under full competitive     |
+|       |                         | match pressure; makes rapid, coherent decisions;    |
+|       |                         | dependable contributor to team tactical objectives. |
 +-------+-------------------------+-----------------------------------------------------+
-|   4   | ADVANCED /              | Flawless or near-flawless execution under intense   |
-|       | MASTERY / ELITE         | physical and temporal pressure; demonstrates        |
-|       |                         | anticipatory vision, deception, and creative problem|
-|       |                         | solving; elevates teammates; success rate >=85%.    |
+|   4   | ADVANCED /              | Exceptional execution under extreme physical and    |
+|       | MASTERY / ELITE         | temporal pressure; demonstrates anticipatory vision,|
+|       |                         | creative problem solving, and deceptive intent;     |
+|       |                         | elevates the tactical effectiveness of teammates.   |
 +-------+-------------------------+-----------------------------------------------------+
 ```
 
@@ -117,9 +118,9 @@ The 188 rubrics are organized into **11 Core Behavioral Domains**. Below are the
 - **Evaluation Context:** Live 7v7 / 11v11 game phases.
 - **Minimum Opportunities:** Minimum **12 attempted passes**.
 - **Level Anchors:**
-  - *Level 1 (Ineffective):* Passes under-hit or wildly over-hit ($>30\%$ turnover rate); forces passes directly into covered central lanes; passes behind recipient's run.
+  - *Level 1 (Ineffective):* Passes under-hit or wildly over-hit; frequent unforced turnovers; forces passes directly into covered central lanes; passes behind recipient's run.
   - *Level 2 (Developing):* Accurate on stationary, short-distance passes ($<10\text{ m}$) under low pressure; struggles with pass weighting on long diagonals or driven line-breaking balls; telegraphed intentions.
-  - *Level 3 (Proficient):* Consistently hits intended foot with correct pace and trajectory; chooses safe possession vs penetrative risk appropriately; completes $>80\%$ of attempted passes under pressure.
+  - *Level 3 (Proficient):* Consistently hits intended foot with correct pace and trajectory; chooses safe possession vs penetrative risk appropriately; reliably maintains team possession under active pressing.
   - *Level 4 (Mastery):* Elite vision; executes penetrative line-breaking passes with deceptive body shape (looking left, passing right); perfectly weights through-balls into space behind defensive line.
 
 #### DOMAIN 3: Dribbling & 1v1 Ball Carrying (Technical Domain)
@@ -152,7 +153,7 @@ The 188 rubrics are organized into **11 Core Behavioral Domains**. Below are the
 - **Level Anchors:**
   - *Level 1 (Ineffective):* Dives in recklessly; gets bypassed easily by basic change of direction; squares body up flat-footed; commits fouls in dangerous areas.
   - *Level 2 (Developing):* Jockeys adequately in open space; mistimes tackle when opponent feints; slow to turn and recover when beaten; lacks physical aggression in 50-50 balls.
-  - *Level 3 (Proficient):* Patient, balanced jockeying stance; guides attacker toward weaker foot or touchline; times tackle accurately when attacker takes heavy touch; wins $>65\%$ of ground duels.
+  - *Level 3 (Proficient):* Patient, balanced jockeying stance; guides attacker toward weaker foot or touchline; times tackle accurately when attacker takes heavy touch; cleanly wins ground duels without over-committing.
   - *Level 4 (Mastery):* Master of defensive timing; uses body positioning and feigned commitments to bait attacker into mistakes; clean, decisive dispossessions without fouling; instant transition to attack.
 
 #### DOMAIN 6: Transition Play (Tactical Domain)

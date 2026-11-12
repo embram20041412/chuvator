@@ -104,6 +104,13 @@ $$\text{Maturity Offset (years)} = -9.236 + (0.0002708 \times (LL \times SH)) - 
 - **-1.0 year $\le$ Maturity Offset $\le$ +1.0 year:** Circa-PHV (Peak Growth Spurt — High Vulnerability to overuse injuries).
 - **Maturity Offset > +1.0 year:** Post-PHV (Adult-like training tolerance).
 
+#### 3.3 Maturity Estimation Limitations & Safeguards for Minors
+1. **Prediction Error Bounds:** Mirwald's equation has a standard error of estimate (SEE) of $\pm 0.50$ to $\pm 0.59$ years ($95\%\text{ CI} \approx \pm 1.1\text{ years}$). The model tends to underestimate maturity in early maturers and overestimate maturity in late maturers (Malina et al., 2015). It is scientifically invalid in athletes younger than $10.5$ years or older than $15.5$ years.
+2. **Prohibition of Direct Scoring Multipliers:** Biological maturity offset must **NEVER** be used as a mathematical multiplier to artificially inflate or penalize canonical 1–100 indicator scores. It functions strictly as a diagnostic context variable.
+3. **Prohibition of De-selection:** Coaches and scouts are strictly forbidden from releasing, cutting, or benching late-maturing youth players on the basis of maturity scores.
+4. **Bio-Banding Utilization:** Maturity offset should only be used to organize bio-banded training games (grouping players by biological rather than chronological age) to minimize injury risk and reduce early-maturer physical dominance.
+5. **Physical Privacy & Safeguarding:** Anthropometric measurements (sitting height, body mass) must be conducted in private screening enclosures by certified sports science personnel, with parent/guardian or designated chaperone presence mandated.
+
 ---
 
 ### 4. ENVIRONMENTAL & FACILITY TESTING STANDARDS

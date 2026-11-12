@@ -1,16 +1,26 @@
 # CHUVATOR — FOOTBALL SCOUTING COMBINE & ASSESSMENT BATTERY
 ## PHASE 3.0.2: SCIENTIFIC REFERENCES & BIBLIOGRAPHIC INVENTORY
 
-**Document Version:** 3.0.2  
-**Status:** COMPLETE PEER-REVIEWED SCIENTIFIC BASELINE  
+**Document Version:** 3.0.2.1  
+**Status:** AUDITED PEER-REVIEWED SCIENTIFIC BASELINE  
 **Classification:** Academic Bibliography & Scientific Grounding  
 **Scope:** Football Performance Testing, Biomechanics, Exercise Physiology, and Psychometrics  
 
 ---
 
+### EVIDENCE CLASSIFICATION TAXONOMY
+
+All 43 references supporting the CHUVATOR Testing Manual are stratified into 4 evidentiary categories:
+1. **Category A: Direct Empirical Evidence (18 Citations):** Peer-reviewed validation of the exact testing protocol, equipment parameters, and construct reliability in football cohorts.
+2. **Category B: Foundational Theoretical Evidence (14 Citations):** Established exercise physiology, biomechanical laws, and psychometric measurement models.
+3. **Category C: Indirect / Extrapolated Evidence (7 Citations):** High-quality motor competence literature from adjacent sports or non-football pediatric populations.
+4. **Category D: Requires Local Indonesian Validation (4 Citations):** Studies indicating the need for population-specific maturational and normative calibration.
+
+---
+
 ### 1. SPRINT KINEMATICS, ACCELERATION, AND MAXIMUM VELOCITY
 
-1. **Altmann, S., Ringhof, S., Neumann, R., Woll, A., & Rumpf, M. C. (2019).** Validity and reliability of methods to assess speed characteristics in football: A systematic review. *Sports Medicine*, 49(6), 919–951.  
+1. **Altmann, S., Ringhof, S., Neumann, R., Woll, A., & Rumpf, M. C. (2019).** [Category A] Validity and reliability of methods to assess speed characteristics in football: A systematic review. *Sports Medicine*, 49(6), 919–951.  
    https://doi.org/10.1007/s40279-019-01086-6
 2. **Buchheit, M., Samozino, P., Glynn, J. A., Michael, B. S., Al Haddad, H., Mendez-Villanueva, A., & Morin, J. B. (2014).** Mechanical determinants of acceleration and maximal sprinting speed in young soccer players. *Journal of Sports Sciences*, 32(20), 1906–1913.  
    https://doi.org/10.1080/02640414.2014.965191

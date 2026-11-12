@@ -92,8 +92,7 @@ This manual details the exact testing protocols for all **18 OBJECTIVE_MEASURABL
 17. **Position Applicability:** Universal, highly predictive for attacking midfielders, wingers, and fullbacks.
 18. **Scientific References:**
     - Sheppard, J. M., & Young, W. B. (2006). Agility literature review: Classifications, training and testing. *Journal of Sports Sciences*, 24(9), 919–932. https://doi.org/10.1080/02640410500457109
-    - Paul, D. J., Gabbett, T. J., & Nassis, G. P. (2016). Agility in team sports: Testing, training and factors affecting performance. *Sports Medicine*, 46(3), 421–442. https://doi.org/10.1007/s40279-015-0428-2
-19. **Evidence Quality & Limitations:** **REQUIRES SCIENTIFIC VALIDATION**. While the construct validity is superior to pre-planned tests, field reliability depends heavily on the visual stimulus technology. Standardized video-projection of human opponents is optimal in laboratory settings but commercially impractical in field combines. Light-pod proxy is acceptable provided stimulus timing is randomized.
+19. **Evidence Quality & Limitations:** **REQUIRES SCIENTIFIC VALIDATION**. While the construct validity is theoretically superior to pre-planned tests, field reliability depends heavily on the visual stimulus technology. Standardized video-projection of human opponents is optimal in laboratory settings but commercially impractical in field combines. Light-pod testing is an intermediate field proxy that measures non-specific directional response latency to an abstract visual stimulus; it must be interpreted as a general reactive motor baseline, NOT as an equivalent of game-situation football agility or tactical anticipation.
 
 ---
 
@@ -362,38 +361,39 @@ This manual details the exact testing protocols for all **18 OBJECTIVE_MEASURABL
 ### PROTOCOL 11: FTB-UNI-PHY-12 — KEKUATAN TUBUH
 
 1. **Canonical ID & Name:** `FTB-UNI-PHY-12` — Kekuatan Tubuh
-2. **Physical/Technical Attribute Measured:** Maximum isometric lower/upper-body muscular strength or upper-body relative muscular endurance.
-3. **Scientific Definition:** The peak force-generating capacity of skeletal muscle during a standardized multi-joint contraction without change in joint angle (Haff et al., 2015).
+2. **Physical/Technical Attribute Measured:** Maximum isometric lower-body/posterior chain force production capacity or functional lower-body muscular endurance.
+3. **Scientific Definition:** The peak force-generating capacity of the lower extremity and hip extensor musculature (gluteus maximus, hamstrings, quadriceps, spinal erectors) during a standardized multi-joint contraction (Haff et al., 2015).
 4. **Recommended Test Protocol:**
-   - *Primary (T3–T4):* Isometric Mid-Thigh Pull (IMTP) using dual axial force plates.
-   - *Field Proxy (T1–T2):* Standardized 1-Minute Maximum Push-Up Test (cadence-controlled or maximum continuous repetitions to failure per ACSM standards).
-5. **Why This Test is Appropriate:** Maximum strength underpins sprinting speed, change of direction, jumping height, and reduces hamstring and ACL injury risk. However, 1RM barbell testing (squat/bench) poses significant injury risks in adolescent athletes without mature lifting technique (Lloyd & Oliver, 2012). IMTP provides a zero-movement, zero-injury-risk metric of peak force.
+   - *Laboratory Standard (T3–T4):* Isometric Mid-Thigh Pull (IMTP) using dual axial force plates ($1,000\text{ Hz}$).
+   - *Field Proxy (T1–T2 and Academies without Force Plates):* Single-Leg Isometric Wall Squat Hold ($90^\circ$ knee flexion) to volitional fatigue (seconds), or 5RM Trap Bar Deadlift (Tier 3/4 under certified S&C coach supervision).
+   - *CRITICAL CONSTRUCT EXCLUSION:* Upper-body push-up tests are **STRICTLY PROHIBITED** as a proxy for `FTB-UNI-PHY-12` because push-ups measure anterior upper-body muscular endurance (pectoralis, triceps) and completely fail to measure lower-body football strength.
+5. **Why This Test is Appropriate:** Maximum lower-body strength underpins sprint acceleration, change of direction braking impulse, vertical jumping, and protects against hamstring and ACL injuries. IMTP provides a zero-movement, zero-injury-risk metric of peak force (Comfort et al., 2014; Haff et al., 2015).
 6. **Equipment Required:**
    - IMTP: Custom rigid pull rack with dual force plates ($1,000\text{ Hz}$) and immovable barbell bar.
-   - Field Proxy: Non-slip exercise mat, $10\text{ cm}$ foam chest block, digital metronome ($60\text{ bpm}$).
+   - Field Proxy: Solid vertical wall, digital goniometer ($90^\circ$ knee angle verification), digital stopwatch.
 7. **Equipment Calibration:** Force plates calibrated with certified weights; zero-load tare before athlete steps on plates.
-8. **Testing Area & Setup Dimensions:** Solid level concrete floor for IMTP rack.
+8. **Testing Area & Setup Dimensions:** Solid level concrete floor for IMTP rack or flat dry floor against a smooth wall.
 9. **Athlete Preparation & Warm-up:** Full RAMP warm-up with specific isometric hip/knee extension potentiation.
 10. **Exact Testing Instructions (Indonesian):**
     - *IMTP:* *"Posisikan tubuh seperti awalan deadlift (lutut ditekuk $125^\circ-135^\circ$, pinggul $140^\circ-150^\circ$). Pegang bar erat-erat dengan strap. Saat aba-aba '3, 2, 1, TARIK!', dorong lantai sekuat-kuatnya ke bawah selama 5 detik penuh seolah-olah ingin menembus lantai!"*
-    - *Push-Up Proxy:* *"Lakukan push-up dengan tubuh lurus sempurna dari kepala hingga tumit. Turunkan dada hingga menyentuh balok 10 cm, lalu dorong kembali ke atas hingga siku lurus sempurna."*
+    - *Wall Squat Field Proxy:* *"Posisikan punggung menempel rata pada dinding dengan satu kaki terangkat di depan. Turunkan badan hingga lutut kaki tumpu membentuk sudut 90 derajat sempurna. Tahan posisi ini selama mungkin hingga tidak mampu lagi mempertahankan sudut 90 derajat."*
 11. **Number of Attempts & Rest Intervals:**
     - IMTP: 2 maximal trials of 5 seconds. Rest interval: **3 minutes**.
-    - Push-Up: 1 continuous attempt to volitional fatigue.
+    - Wall Squat Proxy: 1 maximal trial per leg (Right and Left). Rest interval: **3 minutes** between legs.
 12. **Raw Measurement Format & Units:**
     - IMTP: Peak Force in **Newtons (N)** and Relative Peak Force ($\text{N/kg}$).
-    - Push-Up Proxy: Completed valid repetitions (integer count).
+    - Wall Squat Proxy: Holding time in **seconds (s)** to nearest whole second per limb.
 13. **Valid and Invalid Attempts:**
     - *IMTP Valid:* No pre-tension countermovement (slight dip before pull invalidates trial); maximum pull sustained for $\ge 3\text{ s}$.
-    - *Push-Up Valid:* Full elbow extension at top; chest contacts block; hips do not sag or pike.
-14. **Data Recording Procedure:** Direct raw export from force plate software.
+    - *Wall Squat Valid:* Knee angle strictly maintained at $90^\circ$ verified by evaluator; hands off thighs; non-stance foot clear of floor.
+14. **Data Recording Procedure:** Direct raw export from force plate software, or stopwatch record for right and left limbs.
 15. **Safety Precautions & Contraindications:** Back injuries, disc herniation, or acute spinal issues contraindicate IMTP.
-16. **Age/Development Applicability:** IMTP strictly for T3 (U14+) and T4. Push-up proxy used for T1 and T2.
+16. **Age/Development Applicability:** IMTP strictly for T3 (U14+) and T4. Wall squat proxy used for T1, T2, and T3 field combines.
 17. **Position Applicability:** Universal. Center-Backs, Strikers, and Goalkeepers require higher absolute peak force.
 18. **Scientific References:**
     - Haff, G. G., Ruben, R. P., Lider, J., Twine, C., & Cormie, P. (2015). A systematic review of the isometric mid-thigh pull. *Journal of Strength and Conditioning Research*, 29(6), 1736–1750. https://doi.org/10.1519/JSC.0000000000000858
     - Lloyd, R. S., & Oliver, J. L. (2012). The youth physical development model: A new approach to long-term athletic development. *Strength & Conditioning Journal*, 34(3), 61–72. https://doi.org/10.1519/SSC.0b013e31825760ea
-19. **Evidence Quality & Limitations:** **REQUIRES SCIENTIFIC VALIDATION (Due to Equipment Disparity)**. IMTP is gold standard ($\text{ICC} > 0.95$), but force plates are rarely available in grassroots academies. Push-up proxies measure relative upper-body muscular endurance, not lower-body football strength.
+19. **Evidence Quality & Limitations:** **REQUIRES SCIENTIFIC VALIDATION (Due to Field Proxy Disparity)**. IMTP is gold standard ($\text{ICC} > 0.95$), but force plates are rarely available in grassroots academies. The single-leg wall squat proxy isolates lower-body quadriceps endurance, but does not capture true maximum multi-joint dynamic force capacity.
 
 ---
 

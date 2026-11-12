@@ -43,12 +43,18 @@ A. SINGLE-STATION LINEAR TESTING (20 Athletes, 8 Tests sequentially on 1 station
    - Total Linear Time Required                  : 450 minutes (~7.5 HOURS!)
    - VERDICT: SEVERE FAILURE. Extreme fatigue, loss of focus, and high injury risk.
 
-B. CHUVATOR 4-STATION PARALLEL CIRCUIT (20 Athletes in 4 squads of 5 athletes)
-   - Staggered intake & RAMP warm-up in squads of 5 : 20 min
-   - Station rotation time (4 stations x 18 min each): 72 min
-   - Station transition & hydration buffer         : 8 min
-   - Total Combine Circuit Time                    : 100 MINUTES (~1.67 HOURS)
-   - VERDICT: PASS. Neuromuscularly fresh, scientifically valid, safe, and efficient.
+B. CHUVATOR AUDITED 4-STATION PARALLEL CIRCUIT (20 Athletes in 4 squads of 5 athletes)
+   - Station 0: Intake, Screening & Anthropometry (50cm box, stadiometer): 25 min
+   - Central Zone: Standardized RAMP Warm-Up (Raise, Activate, Mobilize, Potentiate): 20 min
+   - Balanced 4-Station Circuit Rotation ($4 \times 22\text{ min} + 8\text{ min}$ transition buffer): 96 min
+     * Station 1: Mobility & Balance (WBLT Ankle + Y-Balance Lower Quarter)
+     * Station 2: Lower-Body Power (CMJ Contact Mat + Standing Broad Jump)
+     * Station 3: Linear Speed (10m & 30m Dual-Beam Photogate Splits)
+     * Station 4: COD & Technical (505 COD Test + Doppler Radar Kick Test)
+   - Mandatory Rehydration & Carbohydrate Recovery Break: 24 min
+   - Terminal Aerobic Phase (Yo-Yo IR1 in 2 Heats of 10): 30 min
+   - Total Combine Duration: **165 MINUTES (~2.75 HOURS)**
+   - VERDICT: PASS. Eliminates Station 1 bottleneck; guarantees full neuromuscular recovery between sprint and jump trials.
 ========================================================================================
 ```
 
@@ -74,7 +80,7 @@ The pilot study deploys **$N = 36$ youth male football players** divided into tw
 
 ---
 
-### 4. FIELD STATION ARCHITECTURE & CIRCUIT TIMING
+### 4. AUDITED FIELD STATION ARCHITECTURE & CIRCUIT TIMING
 
 The combine operates as a **Synchronized 4-Station Parallel Circuit** with a dedicated Intake/Anthropometry Station and an isolated Metabolic/Aerobic block.
 
@@ -99,52 +105,49 @@ The combine operates as a **Synchronized 4-Station Parallel Circuit** with a ded
          ┌─────────────────────────┴─────────────────────────┐
          ▼                                                   ▼
 ┌──────────────────────────────┐            ┌──────────────────────────────┐
-│ STATION 1: MOBILITY & JUMP   │            │ STATION 2: LINEAR SPEED      │
-│ - WBLT Ankle Dorsiflexion    │            │ - Dual-Beam Timing Gates     │
-│ - Y-Balance Lower Quarter    │            │ - Integrated 10m Accel Split │
-│ - CMJ Vertical Jump Height   │            │ - 30m Flying Speed Split     │
-│ - Standing Broad Jump        │            │                              │
+│ STATION 1: MOBILITY & BALANCE│            │ STATION 2: EXPLOSIVE POWER   │
+│ - WBLT Ankle Dorsiflexion    │            │ - CMJ Vertical Jump Height   │
+│ - Y-Balance Lower Quarter    │            │ - Standing Broad Jump (cm)   │
 │ Staff: 1 Evaluator + 1 Scribe│            │ Staff: 1 Evaluator + 1 Scribe│
-│ Capacity: 4–5 athletes       │            │ Capacity: 4–5 athletes       │
+│ Capacity: 4–5 athletes (22m) │            │ Capacity: 4–5 athletes (18m) │
 └──────────────┬───────────────┘            └──────────────┬───────────────┘
                │                                           │
                ▼                                           ▼
 ┌──────────────────────────────┐            ┌──────────────────────────────┐
-│ STATION 3: COD & AGILITY     │            │ STATION 4: TECHNICAL KICK    │
-│ - 505 COD Test (Right Turn)  │            │ - Doppler Radar Gun          │
-│ - 505 COD Test (Left Turn)   │            │ - Stationary Instep Strike   │
-│ - COD Deficit Calculation    │            │ - Dominant / Non-Dominant    │
-│                              │            │                              │
+│ STATION 3: LINEAR SPEED      │            │ STATION 4: COD & KICK SPEED  │
+│ - 3 Dual-Beam Timing Gates   │            │ - 505 COD Test (Right & Left)│
+│ - Integrated 10m Accel Split │            │ - COD Deficit Calculation    │
+│ - 30m Flying Speed Split     │            │ - Doppler Radar Ball Kick    │
 │ Staff: 1 Evaluator + 1 Scribe│            │ Staff: 1 Evaluator + 1 Scribe│
-│ Capacity: 4–5 athletes       │            │ Capacity: 4–5 athletes       │
+│ Capacity: 4–5 athletes (20m) │            │ Capacity: 4–5 athletes (22m) │
 └──────────────┬───────────────┘            └──────────────┬───────────────┘
                │                                           │
                └───────────────────┬───────────────────────┘
                                    │
                                    ▼
           ┌──────────────────────────────────────────────────┐
-          │  RECOVERY & REHYDRATION ZONE (45 MIN BREAK)      │
-          │  Fluid replenishment, electrolyte snack, rest    │
+          │  RECOVERY & REHYDRATION ZONE (24 MIN BREAK)      │
+          │  Fluid replenishment, electrolyte snack, vitals  │
           └────────────────────────┬─────────────────────────┘
                                    │
                                    ▼
           ┌──────────────────────────────────────────────────┐
           │  STATION 5: AEROBIC INTERMITTENT ENDURANCE       │
           │  - Yo-Yo Intermittent Recovery Level 1 (YYIR1)   │
-          │  - Conducted as single group test (Max 12/heat)  │
-          │  - STRICT RULE: NO RSA ON SAME DAY!              │
+          │  - Conducted as single group test (Max 10/heat)  │
+          │  - STRICT RULE: NO RSA ON SAME DAY! (30 min)     │
           └──────────────────────────────────────────────────┘
 ```
 
 #### 4.1 Station Workload & Timing Budget
 - **Squad Size:** 4 to 5 athletes per station squad.
-- **Rotation Duration:** Exactly **18 minutes per station**.
-- **Athlete Throughput at Station 2 (Sprint Station as Pacing Benchmark):**
+- **Rotation Duration:** **22 minutes per station**.
+- **Athlete Throughput at Station 3 (Sprint Station as Pacing Benchmark):**
   - 5 athletes $\times 2$ trials $= 10$ sprints total.
   - Sprint duration: $\sim 4.5\text{ s}$ per run.
   - Reset and return walk: $45\text{ s}$.
-  - Staggered start every $60\text{ s}$ allows each athlete a full **$4\text{ minutes}$ of rest between their 2 trials** while keeping the station constantly active ($10\text{ sprints} \times 1\text{ min} = 10\text{ min}$ run time $+ 8\text{ min}$ buffer).
-  - Total station time: **18 minutes**.
+  - Staggered start every $60\text{ s}$ allows each athlete a full **$4\text{ minutes}$ of rest between their 2 trials** while keeping the station constantly active ($10\text{ sprints} \times 1\text{ min} = 10\text{ min}$ run time $+ 10\text{ min}$ buffer).
+  - Total station time: **20 minutes**.
 
 ---
 
