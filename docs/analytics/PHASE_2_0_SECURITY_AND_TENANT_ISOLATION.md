@@ -17,15 +17,15 @@ Pengisolasian data antar-tenant (*multi-tenant isolation*) pada CHUVATOR Phase 2
 - **Mekanisme**: `tenantId` diekstrak dari JWT token / profil akun terautentikasi dan diteruskan ke modul Analytics.
 - **Status**: **VERIFIED**
 
-### Layer 2: Service Query & Engine Filtering
+### Layer 2: Service Query & Engine Filtering (Fail-Closed)
 - **Lokasi**: `src/services/supabaseAcademyService.js` & `src/services/analyticsEngine.js`.
-- **Mekanisme**: Setiap query Supabase SDK diikat dengan `.eq('tenant_id', tenantId)`. Di dalam `analyticsEngine.js`, fungsi `analyzeAcademyTeamPerformance` memfilter ulang array siswa dan evaluasi berdasarkan `tenantId`.
-- **Status**: **VERIFIED**
+- **Mekanisme**: Setiap query Supabase SDK diikat dengan `.eq('tenant_id', tenantId)`. Di dalam `analyticsEngine.js`, fungsi `analyzeAcademyTeamPerformance` menerapkan validasi fail-closed: jika `tenantId` bernilai `null`, `undefined`, atau string kosong (`""`), agregasi dibatalkan secara eksplisit dan mengembalikan error `INVALID_TENANT_ID` dengan count 0 dan nilai metrics `null`.
+- **Status**: **VERIFIED (PASS)**
 
 ### Layer 3: Database Row-Level Security (RLS)
 - **Lokasi**: Supabase PostgreSQL Engine (`public.academy_evaluations`, `public.students`, `public.academy_classes`).
 - **Mekanisme**: Kebijakan RLS membatasi baris data yang dapat dibaca sesuai `auth.uid()` dan `tenant_id`.
-- **Status Verification Note**: **VERIFIED VIA CLIENT SDK BEHAVIOR**. *(Direct SQL Policy Audit: UNVERIFIED — tidak ada eksekusi SQL/DDL langsung per aturan keamanan produksi).*
+- **Audit Status**: **DATABASE RLS: NOT VERIFIED** *(Tidak dilakukan perubahan SQL/DDL maupun inspeksi langsung terhadap kebijakan RLS Supabase produksi sesuai aturan batas eksekusi).*
 
 ---
 

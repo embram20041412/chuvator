@@ -84,10 +84,17 @@ export default function AnalyticsSection({
     fetchEvals();
   }, [tenantId, selectedClass?.id]);
 
-  // Default selected student
+  // Default selected student and context switch cleanup
   useEffect(() => {
-    if (students.length > 0 && !selectedStudentId) {
-      setSelectedStudentId(students[0].id);
+    if (students.length > 0) {
+      const exists = students.some((s) => s.id === selectedStudentId);
+      if (!exists) {
+        setSelectedStudentId(students[0].id);
+        setComparisonStudentId('');
+      }
+    } else {
+      setSelectedStudentId('');
+      setComparisonStudentId('');
     }
   }, [students, selectedStudentId]);
 

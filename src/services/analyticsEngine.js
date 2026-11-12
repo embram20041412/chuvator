@@ -557,13 +557,26 @@ export function analyzeAcademyTeamPerformance({
   sport = 'football',
   tenantId = null
 }) {
-  // Enforce Tenant Isolation
-  const filteredStudents = tenantId
-    ? students.filter((s) => s.tenantId === tenantId)
-    : students;
-  const filteredEvals = tenantId
-    ? evaluations.filter((e) => e.tenantId === tenantId)
-    : evaluations;
+  // Enforce Tenant Isolation (Fail-Closed)
+  if (!tenantId || typeof tenantId !== 'string' || tenantId.trim() === '') {
+    return {
+      error: 'INVALID_TENANT_ID',
+      message: 'Tenant ID valid diperlukan untuk agregasi analitik akademi.',
+      tenantId: null,
+      totalStudents: 0,
+      evaluatedStudentsCount: 0,
+      untestedStudentsCount: 0,
+      coverageRatePercent: 0,
+      teamOverallAverage: null,
+      teamCategoryAverages: {},
+      positionDistribution: {}
+    };
+  }
+
+  const cleanTenantId = tenantId.trim();
+
+  const filteredStudents = students.filter((s) => Boolean(s && s.tenantId === cleanTenantId));
+  const filteredEvals = evaluations.filter((e) => Boolean(e && e.tenantId === cleanTenantId));
 
   const totalStudents = filteredStudents.length;
   const evaluatedStudentIds = new Set(filteredEvals.map((e) => e.studentId).filter(Boolean));

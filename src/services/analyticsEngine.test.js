@@ -240,3 +240,60 @@ test('13. Longitudinal Integrity: Position change, tier change, coverage shift, 
   assert.equal(dev.trendClassification, 'ESTABLISHED_TREND'); // >= 3 sessions = ESTABLISHED_TREND
   assert.equal(dev.trendDirection, 'IMPROVING');
 });
+
+// TEST 14: Strict Fail-Closed Tenant Isolation (Section 3.B Compliance)
+test('14. Strict Fail-Closed Tenant Isolation: null, undefined, empty, mixed, missing tenantId', () => {
+  const students = [
+    { id: 's1', name: 'Tenant A Student 1', tenantId: 'tenant-a' },
+    { id: 's2', name: 'Tenant A Student 2', tenantId: 'tenant-a' },
+    { id: 's3', name: 'Tenant B Student', tenantId: 'tenant-b' },
+    { id: 's4', name: 'No Tenant Student', tenantId: null }
+  ];
+
+  const evaluations = [
+    { id: 'e1', studentId: 's1', tenantId: 'tenant-a', activeTier: 1, scores: { 'FTB-UNI-PHY-01': 90 } },
+    { id: 'e2', studentId: 's2', tenantId: 'tenant-a', activeTier: 1, scores: { 'FTB-UNI-PHY-01': 80 } },
+    { id: 'e3', studentId: 's3', tenantId: 'tenant-b', activeTier: 1, scores: { 'FTB-UNI-PHY-01': 30 } },
+    { id: 'e4', studentId: 's4', tenantId: null, activeTier: 1, scores: { 'FTB-UNI-PHY-01': 50 } }
+  ];
+
+  // 14.1. Valid tenantId ('tenant-a')
+  const validRes = analyzeAcademyTeamPerformance({ evaluations, students, sport: 'football', tenantId: 'tenant-a' });
+  assert.equal(validRes.error, undefined);
+  assert.equal(validRes.totalStudents, 2);
+  assert.equal(validRes.evaluatedStudentsCount, 2);
+  assert.equal(validRes.teamCategoryAverages.fisik, 85); // (90 + 80) / 2
+
+  // 14.2. Null tenantId -> FAIL CLOSED
+  const nullRes = analyzeAcademyTeamPerformance({ evaluations, students, sport: 'football', tenantId: null });
+  assert.equal(nullRes.error, 'INVALID_TENANT_ID');
+  assert.equal(nullRes.totalStudents, 0);
+  assert.equal(nullRes.evaluatedStudentsCount, 0);
+  assert.equal(nullRes.teamOverallAverage, null);
+
+  // 14.3. Undefined tenantId -> FAIL CLOSED
+  const undefinedRes = analyzeAcademyTeamPerformance({ evaluations, students, sport: 'football', tenantId: undefined });
+  assert.equal(undefinedRes.error, 'INVALID_TENANT_ID');
+  assert.equal(undefinedRes.totalStudents, 0);
+  assert.equal(undefinedRes.evaluatedStudentsCount, 0);
+
+  // 14.4. Empty string tenantId -> FAIL CLOSED
+  const emptyRes = analyzeAcademyTeamPerformance({ evaluations, students, sport: 'football', tenantId: '' });
+  assert.equal(emptyRes.error, 'INVALID_TENANT_ID');
+  assert.equal(emptyRes.totalStudents, 0);
+  assert.equal(emptyRes.evaluatedStudentsCount, 0);
+
+  // 14.5. Mixed Tenant Data & Missing Evaluation tenantId
+  const teamBRes = analyzeAcademyTeamPerformance({ evaluations, students, sport: 'football', tenantId: 'tenant-b' });
+  assert.equal(teamBRes.totalStudents, 1);
+  assert.equal(teamBRes.evaluatedStudentsCount, 1);
+  assert.equal(teamBRes.teamCategoryAverages.fisik, 30);
+  // Ensure Tenant A and No-Tenant data did NOT leak into Tenant B result
+  assert.notEqual(teamBRes.teamCategoryAverages.fisik, 85);
+
+  // 14.6. Empty students and evaluations
+  const emptyDataRes = analyzeAcademyTeamPerformance({ evaluations: [], students: [], sport: 'football', tenantId: 'tenant-a' });
+  assert.equal(emptyDataRes.totalStudents, 0);
+  assert.equal(emptyDataRes.evaluatedStudentsCount, 0);
+  assert.equal(emptyDataRes.teamOverallAverage, null);
+});
