@@ -94,7 +94,7 @@ Metab   | Aerobic Intermittent Recovery (YYIR1)| JBL PA Speaker, Cones      | Al
 
 ```
 ====================================================================================================
-CHUVATOR COMBINE MASTER TIMELINE (MORNING COMBINE: 07:30 – 10:15 WIB)
+CHUVATOR COMBINE MASTER TIMELINE (MORNING COMBINE: 07:30 – 11:00 WIB)
 ====================================================================================================
 Clock Time    | Duration | Event / Activity                                | Athlete State
 --------------|:--------:|-------------------------------------------------|-------------------------
@@ -114,7 +114,8 @@ Clock Time    | Duration | Event / Activity                                | Ath
 10:15 – 10:45 |  30 min  | AEROBIC PHASE: Yo-Yo IR1 (2 Heats of 10)        | Terminal Aerobic Effort
 10:45 – 11:00 |  15 min  | Cool-Down, Foam Rolling, Data Reconciliation     | Post-Test Debrief
 ====================================================================================================
-TOTAL COMBINE DURATION: 165 MINUTES (Circuit: 96 min | Intake/Warmup: 45 min | Break/Endurance: 53 min)
+TOTAL COMBINE DURATION: 210 MINUTES (3.5 HOURS)
+Summation Check: 25 + 20 + (4 x 22) + (3 x 3) + 23 + 30 + 15 = 210 min. Exactly verified.
 ====================================================================================================
 ```
 

@@ -46,14 +46,15 @@ A. SINGLE-STATION LINEAR TESTING (20 Athletes, 8 Tests sequentially on 1 station
 B. CHUVATOR AUDITED 4-STATION PARALLEL CIRCUIT (20 Athletes in 4 squads of 5 athletes)
    - Station 0: Intake, Screening & Anthropometry (50cm box, stadiometer): 25 min
    - Central Zone: Standardized RAMP Warm-Up (Raise, Activate, Mobilize, Potentiate): 20 min
-   - Balanced 4-Station Circuit Rotation ($4 \times 22\text{ min} + 8\text{ min}$ transition buffer): 96 min
+   - Balanced 4-Station Circuit Rotation ($4 \times 22\text{ min} + 3 \times 3\text{ min}$ transition buffer): 97 min
      * Station 1: Mobility & Balance (WBLT Ankle + Y-Balance Lower Quarter)
      * Station 2: Lower-Body Power (CMJ Contact Mat + Standing Broad Jump)
      * Station 3: Linear Speed (10m & 30m Dual-Beam Photogate Splits)
      * Station 4: COD & Technical (505 COD Test + Doppler Radar Kick Test)
-   - Mandatory Rehydration & Carbohydrate Recovery Break: 24 min
+   - Mandatory Rehydration & Carbohydrate Recovery Break: 23 min
    - Terminal Aerobic Phase (Yo-Yo IR1 in 2 Heats of 10): 30 min
-   - Total Combine Duration: **165 MINUTES (~2.75 HOURS)**
+   - Cool-Down, Foam Rolling & Dual-Entry Data Audit: 15 min
+   - Total Combine Duration: **210 MINUTES (3.5 HOURS)**
    - VERDICT: PASS. Eliminates Station 1 bottleneck; guarantees full neuromuscular recovery between sprint and jump trials.
 ========================================================================================
 ```
