@@ -77,7 +77,7 @@ export default function MobileAcademyHub({ userProfile }) {
   const subTabParam = searchParams.get('subtab');
 
   const resolveSubTab = (raw) => {
-    if (raw === 'evaluasi') return 'evaluasi';
+    if (raw === 'evaluasi' || raw === 'analitik' || raw === 'analytics') return 'evaluasi';
     if (raw === 'antropometri' || raw === 'growth') return 'antropometri';
     return 'presensi';
   };
@@ -820,10 +820,11 @@ export default function MobileAcademyHub({ userProfile }) {
               activeAcademy={activeAcademy}
               userProfile={userProfile}
               isMobile={true}
+              initialAssessmentView={subTabParam === 'analitik' || subTabParam === 'analytics' ? 'analytics' : 'assessment'}
             />
           )}
 
-          {attendanceSubTab === 'antropometri' && (
+          {(attendanceSubTab === 'antropometri' || attendanceSubTab === 'perkembangan') && (
             <GrowthTrackerSection
               selectedClass={selectedClass}
               students={activeStudents}

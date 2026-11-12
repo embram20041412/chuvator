@@ -12,20 +12,22 @@ import {
   Target
 } from 'lucide-react';
 import { getCategoryTheme } from './ScoutingPolarAreaPanel';
+import { resolveIndicatorScore } from '../config/footballAssessmentData';
 
 // ============================================================================
 // SINGLE INDICATOR CARD (SLIDER + STEPPER, MOBILE-FIRST 44PX TOUCH TARGETS)
 // ============================================================================
 export function AccordionIndicatorCard({
   title,
-  value = 0,
+  value = null,
   isSpecial = false,
   onScoreChange,
   onAdjust,
   isArchived = false,
   accentColor = '#10B981'
 }) {
-  const numVal = Math.max(0, Math.min(100, Number(value) || 0));
+  const isUntested = value === null || value === undefined;
+  const numVal = isUntested ? 0 : Math.max(0, Math.min(100, Number(value)));
 
   return (
     <div className={`p-3 bg-white border ${isSpecial ? 'border-indigo-200/90' : 'border-slate-200/90'} rounded-2xl space-y-2 shadow-2xs`}>
@@ -50,9 +52,10 @@ export function AccordionIndicatorCard({
 
           <span 
             className="w-9 text-center font-black font-mono text-sm tabular-nums"
-            style={{ color: accentColor }}
+            style={{ color: isUntested ? '#94A3B8' : accentColor }}
+            title={isUntested ? 'UNTESTED (Belum Dinilai)' : `Skor: ${numVal}`}
           >
-            {numVal}
+            {isUntested ? '—' : numVal}
           </span>
 
           <button
@@ -155,8 +158,8 @@ export default function AssessmentIndicatorsAccordion({
     const total = indicators.length;
     if (total === 0) return { total: 0, rated: 0, isCompleted: true };
     const rated = indicators.filter((ind) => {
-      const s = scores[ind];
-      return s !== undefined && s !== null && s > 0;
+      const s = resolveIndicatorScore(scores, ind);
+      return s !== null && s !== undefined;
     }).length;
     return {
       total,
@@ -329,21 +332,7 @@ export default function AssessmentIndicatorsAccordion({
                           {indicators.map((ind) => {
                             const indId = typeof ind === 'object' ? ind.id : ind;
                             const indName = typeof ind === 'object' ? ind.name : ind;
-                            
-                            // Dual-key lookup with legacy support
-                            let value = scores[indId];
-                            if (value === undefined && typeof ind === 'object') {
-                              value = scores[ind.name];
-                              if (value === undefined && ind.legacy_keys) {
-                                for (const lk of ind.legacy_keys) {
-                                  if (scores[lk] !== undefined) {
-                                    value = scores[lk];
-                                    break;
-                                  }
-                                }
-                              }
-                            }
-                            const finalValue = value !== undefined ? value : 0;
+                            const finalValue = resolveIndicatorScore(scores, ind);
 
                             return (
                               <AccordionIndicatorCard
@@ -537,21 +526,7 @@ export default function AssessmentIndicatorsAccordion({
                         {indicators.map((ind) => {
                           const indId = typeof ind === 'object' ? ind.id : ind;
                           const indName = typeof ind === 'object' ? ind.name : ind;
-                          
-                          // Dual-key lookup with legacy support
-                          let value = scores[indId];
-                          if (value === undefined && typeof ind === 'object') {
-                            value = scores[ind.name];
-                            if (value === undefined && ind.legacy_keys) {
-                              for (const lk of ind.legacy_keys) {
-                                if (scores[lk] !== undefined) {
-                                  value = scores[lk];
-                                  break;
-                                }
-                              }
-                            }
-                          }
-                          const finalValue = value !== undefined ? value : 0;
+                          const finalValue = resolveIndicatorScore(scores, ind);
 
                           return (
                             <AccordionIndicatorCard

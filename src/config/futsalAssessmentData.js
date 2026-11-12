@@ -2,6 +2,20 @@
 // KAMUS DATA "ATHLETE DEVELOPMENT ASSESSMENT" (4-TIER LTAD FUTSAL)
 // =====================================================================
 
+import {
+  parseValidAgeInput,
+  resolveIndicatorScore,
+  calculateCategoryAverage,
+  calculateOverallScore
+} from './footballAssessmentData';
+
+export {
+  parseValidAgeInput,
+  resolveIndicatorScore,
+  calculateCategoryAverage,
+  calculateOverallScore
+};
+
 export const FUTSAL_TIER_CONFIGS = {
   1: {
     tier: 1,
@@ -34,51 +48,14 @@ export const FUTSAL_TIER_CONFIGS = {
 };
 
 export function detectFutsalTierFromAge(ageInput) {
-  if (ageInput === undefined || ageInput === null || ageInput === '') return 1;
-  
-  let parsed = 0;
-  if (typeof ageInput === 'number') {
-    parsed = ageInput;
-  } else {
-    const ageStr = String(ageInput);
-    if (ageStr.includes('-') || ageStr.includes('/')) {
-      try {
-        const birthDate = new Date(ageStr);
-        if (!isNaN(birthDate.getTime())) {
-          const today = new Date();
-          let age = today.getFullYear() - birthDate.getFullYear();
-          const m = today.getMonth() - birthDate.getMonth();
-          if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-            age--;
-          }
-          parsed = age;
-        } else {
-          parsed = parseInt(ageStr.replace(/\D/g, ''), 10) || 0;
-        }
-      } catch (e) {
-        parsed = parseInt(ageStr.replace(/\D/g, ''), 10) || 0;
-      }
-    } else {
-      const digits = ageStr.replace(/\D/g, '');
-      parsed = parseInt(digits, 10) || 0;
-    }
-  }
-
-  if (parsed > 100) {
-    const currentYear = new Date().getFullYear();
-    if (parsed >= 1900 && parsed <= currentYear) {
-      parsed = currentYear - parsed;
-    } else {
-      parsed = 10;
-    }
-  }
-
-  if (parsed <= 0) return 1;
+  const parsed = parseValidAgeInput(ageInput);
+  if (parsed === null || parsed <= 0) return 'AGE_UNVERIFIED';
   if (parsed <= 12) return 1; // Usia Dini (6-12 Thn)
   if (parsed >= 13 && parsed <= 15) return 2; // Youth (13-15 Thn)
   if (parsed >= 16 && parsed <= 19) return 3; // Junior (16-19 Thn)
   return 4; // Fase Profesional (> 19 / >= 20 Thn)
 }
+
 
 export const FUTSAL_POSITIONS = [
   {
@@ -373,16 +350,18 @@ export const FUTSAL_CORE_CATEGORIES = {
 export function getFilteredFutsalIndicatorsForCategory(categoryKey, activeTier) {
   const cat = FUTSAL_CORE_CATEGORIES[categoryKey];
   if (!cat) return [];
+  const safeTier = typeof activeTier === 'number' && activeTier >= 1 ? activeTier : 1;
   return cat.indicators
-    .filter((ind) => ind.minTier <= activeTier);
+    .filter((ind) => ind.minTier <= safeTier);
 }
 
 /**
  * Get available Futsal positions list depending on activeTier
  */
 export function getAvailableFutsalPositionsForTier(activeTier) {
-  if (activeTier === 1) return FUTSAL_TIER_1_POSITIONS;
-  if (activeTier === 2) return FUTSAL_TIER_2_POSITIONS;
+  const safeTier = typeof activeTier === 'number' && activeTier >= 1 ? activeTier : 1;
+  if (safeTier === 1) return FUTSAL_TIER_1_POSITIONS;
+  if (safeTier === 2) return FUTSAL_TIER_2_POSITIONS;
   return FUTSAL_POSITIONS;
 }
 
@@ -390,7 +369,8 @@ export function getAvailableFutsalPositionsForTier(activeTier) {
  * Get Futsal position indicators depending on activeTier
  */
 export function getFutsalPositionIndicatorsForTier(code, activeTier) {
-  if (activeTier === 1) {
+  const safeTier = typeof activeTier === 'number' && activeTier >= 1 ? activeTier : 1;
+  if (safeTier === 1) {
     const t1 = FUTSAL_TIER_1_POSITIONS.find((p) => p.code === code) || FUTSAL_TIER_1_POSITIONS[0];
     return {
       code: t1.code,
@@ -404,9 +384,9 @@ export function getFutsalPositionIndicatorsForTier(code, activeTier) {
   const posCfg = getFutsalPositionConfig(code);
   let sliced = posCfg.indicators;
 
-  if (activeTier === 2) {
+  if (safeTier === 2) {
     sliced = posCfg.indicators.slice(0, 6);
-  } else if (activeTier === 3) {
+  } else if (safeTier === 3) {
     sliced = posCfg.code === 'UNIVERSAL' ? posCfg.indicators.slice(0, 8) : posCfg.indicators.slice(0, 9);
   }
 
