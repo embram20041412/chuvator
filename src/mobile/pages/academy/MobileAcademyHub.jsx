@@ -631,15 +631,13 @@ export default function MobileAcademyHub({ userProfile }) {
                 {selectedClass ? selectedClass.className : 'Pilih Kelas Latihan'}
               </div>
               <div className="text-[11px] text-[#68758B] font-medium truncate mt-0.5 flex items-center gap-1.5">
-                <span>
+                <span className="truncate">
                   {selectedClass
                     ? `${selectedClass.sport || activeAcademy?.sport || 'Olahraga'}${
-                        selectedClass.isArchived ? ' · Arsip' : ''
-                      }`
+                        selectedClass.schedule ? ` · ${selectedClass.schedule}` : ''
+                      }${selectedClass.isArchived ? ' · Arsip' : ''}`
                     : 'Belum ada kelas dipilih'}
                 </span>
-                <span aria-hidden="true">&middot;</span>
-                <span className="text-[#2455E8] font-semibold">Pilih Kelas</span>
               </div>
             </div>
 
@@ -810,6 +808,7 @@ export default function MobileAcademyHub({ userProfile }) {
               selectedClass={selectedClass}
               students={activeStudents}
               tenantId={tenantId}
+              isMobile={true}
             />
           )}
 
