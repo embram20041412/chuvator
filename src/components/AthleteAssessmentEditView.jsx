@@ -22,6 +22,24 @@ export function getScoreGrade(score) {
 }
 
 /**
+ * Resolves a score from the scores object using an indicator object or string.
+ * Supports dual-key lookup (ID or Name) and legacy keys.
+ */
+function resolveIndicatorScore(scores, indicator) {
+  if (!scores) return 0;
+  if (typeof indicator === 'string') return scores[indicator] !== undefined ? scores[indicator] : 0;
+  
+  if (indicator.id && scores[indicator.id] !== undefined) return scores[indicator.id];
+  if (indicator.name && scores[indicator.name] !== undefined) return scores[indicator.name];
+  if (indicator.legacy_keys) {
+    for (const lk of indicator.legacy_keys) {
+      if (scores[lk] !== undefined) return scores[lk];
+    }
+  }
+  return 0;
+}
+
+/**
  * @param {{
  *   studentName?: string,
  *   sportLabel?: string,
@@ -146,7 +164,8 @@ export default function AthleteAssessmentEditView({
     setDraftScores((prev) => {
       const updated = { ...prev };
       catObj.indicators.forEach((ind) => {
-        updated[ind] = presetScore;
+        const key = typeof ind === 'object' ? ind.id : ind;
+        updated[key] = presetScore;
       });
       return updated;
     });
@@ -159,7 +178,8 @@ export default function AthleteAssessmentEditView({
       const updated = { ...prev };
       effectiveCategoryList.forEach((cat) => {
         (cat.indicators || []).forEach((ind) => {
-          updated[ind] = presetScore;
+          const key = typeof ind === 'object' ? ind.id : ind;
+          updated[key] = presetScore;
         });
       });
       return updated;
@@ -178,7 +198,7 @@ export default function AthleteAssessmentEditView({
 
       let catTotal = 0;
       inds.forEach((ind) => {
-        const val = draftScores[ind] !== undefined ? draftScores[ind] : 0;
+        const val = resolveIndicatorScore(draftScores, ind);
         if (val > 0) ratedCount++;
         catTotal += val;
       });

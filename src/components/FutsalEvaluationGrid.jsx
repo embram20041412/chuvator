@@ -23,12 +23,29 @@ import {
   ResponsiveContainer
 } from 'recharts';
 import {
-  FUTSAL_LTAD_TIERS,
-  FUTSAL_CORE_PILLARS,
-  FUTSAL_UNIVERSAL_HYBRID_METRICS,
-  FUTSAL_PRIMARY_POSITIONS,
-  getFilteredFutsalMetricsForTier
-} from './futsalAssessmentConstants';
+  FUTSAL_TIER_CONFIGS,
+  FUTSAL_CORE_CATEGORIES,
+  FUTSAL_POSITIONS,
+  getFilteredFutsalIndicatorsForCategory,
+  getFutsalPositionConfig
+} from '../config/futsalAssessmentData';
+
+// Helper for dual-key resolution (ID or Name)
+function resolveScore(scores, indicator) {
+  if (!scores || !indicator) return 0;
+  const id = typeof indicator === 'object' ? indicator.id : indicator;
+  const name = typeof indicator === 'object' ? indicator.name : indicator;
+  const legacyKeys = typeof indicator === 'object' ? indicator.legacy_keys : [];
+
+  if (scores[id] !== undefined) return Number(scores[id]);
+  if (scores[name] !== undefined) return Number(scores[name]);
+  if (legacyKeys) {
+    for (const lk of legacyKeys) {
+      if (scores[lk] !== undefined) return Number(scores[lk]);
+    }
+  }
+  return 0;
+}
 
 export default function FutsalEvaluationGrid({
   futsalScores,
@@ -43,54 +60,52 @@ export default function FutsalEvaluationGrid({
 }) {
   if (!futsalScores) return null;
 
-  const tierConfig = FUTSAL_LTAD_TIERS[activeTier] || FUTSAL_LTAD_TIERS[3];
-  const activePosConfig = FUTSAL_PRIMARY_POSITIONS[futsalPos.primaryPosition] || FUTSAL_PRIMARY_POSITIONS.FLANK;
+  const tierConfig = FUTSAL_TIER_CONFIGS[activeTier] || FUTSAL_TIER_CONFIGS[1];
+  
+  // Use config from new registry
+  const posCode = futsalPos.primaryPosition || 'FIXO';
+  const posConfig = getFutsalPositionConfig(posCode);
 
-  // Title for Tactical Card (Tier 1 & Tier 2: "Persepsi Ruang Sempit & Pengenalan Permainan")
-  const tacticalCardTitle = (activeTier === 1 || activeTier === 2)
-    ? FUTSAL_CORE_PILLARS.taktik.titleTier1
-    : FUTSAL_CORE_PILLARS.taktik.titleDefault;
+  // Titles
+  const tacticalCardTitle = (activeTier === 1)
+    ? FUTSAL_CORE_CATEGORIES.taktik.titleTier1
+    : FUTSAL_CORE_CATEGORIES.taktik.titleDefault;
 
-  // Title for Physical Card
   const physicalCardTitle = activeTier === 1
-    ? FUTSAL_CORE_PILLARS.fisik.titleTier1
-    : FUTSAL_CORE_PILLARS.fisik.titleDefault;
+    ? FUTSAL_CORE_CATEGORIES.fisik.titleTier1
+    : FUTSAL_CORE_CATEGORIES.fisik.titleDefault;
 
-  // Title for Technical Card
   const technicalCardTitle = activeTier === 1
-    ? FUTSAL_CORE_PILLARS.teknik.titleTier1
-    : FUTSAL_CORE_PILLARS.teknik.titleDefault;
+    ? FUTSAL_CORE_CATEGORIES.teknik.titleTier1
+    : FUTSAL_CORE_CATEGORIES.teknik.titleDefault;
 
-  // Title for Mental Card
   const mentalCardTitle = activeTier === 1
-    ? FUTSAL_CORE_PILLARS.mental.titleTier1
-    : FUTSAL_CORE_PILLARS.mental.titleDefault;
+    ? FUTSAL_CORE_CATEGORIES.mental.titleTier1
+    : FUTSAL_CORE_CATEGORIES.mental.titleDefault;
 
-  // Title for Teamwork Card
   const teamworkCardTitle = activeTier === 1
-    ? FUTSAL_CORE_PILLARS.teamwork.titleTier1
-    : FUTSAL_CORE_PILLARS.teamwork.titleDefault;
+    ? FUTSAL_CORE_CATEGORIES.komunikasi.titleTier1
+    : FUTSAL_CORE_CATEGORIES.komunikasi.titleDefault;
 
-  // Title for Health Card
   const healthCardTitle = activeTier === 1
-    ? FUTSAL_CORE_PILLARS.health.titleTier1
-    : FUTSAL_CORE_PILLARS.health.titleDefault;
+    ? FUTSAL_CORE_CATEGORIES.perkembangan.titleTier1
+    : FUTSAL_CORE_CATEGORIES.perkembangan.titleDefault;
 
   // Card 7 Title
-  let positionCardTitle = `7. Parameter Spesifik Posisi: ${futsalScores.activePosLabel || activePosConfig.label}`;
+  let positionCardTitle = `7. Parameter Spesifik Posisi: ${posConfig.shortLabel}`;
   if (activeTier === 1) {
-    positionCardTitle = `7. ${futsalScores.posCardTitle || 'Stimulasi Gerak Dasar & Refleks Ruang Sempit'}`;
+    positionCardTitle = `7. Stimulasi Gerak Dasar & Refleks Ruang Sempit`;
   } else if (activeTier === 2) {
-    positionCardTitle = `7. ${futsalScores.posCardTitle || 'Fundamental Teknik & Duel 1v1 Futsal'}`;
+    positionCardTitle = `7. Fundamental Teknik & Duel 1v1 Futsal`;
   }
 
-  // Filtered metrics for 6 pillars based on activeTier
-  const physicalMetrics = getFilteredFutsalMetricsForTier('fisik', activeTier);
-  const technicalMetrics = getFilteredFutsalMetricsForTier('teknik', activeTier);
-  const tacticalMetrics = getFilteredFutsalMetricsForTier('taktik', activeTier);
-  const mentalMetrics = getFilteredFutsalMetricsForTier('mental', activeTier);
-  const teamworkMetrics = getFilteredFutsalMetricsForTier('teamwork', activeTier);
-  const healthMetrics = getFilteredFutsalMetricsForTier('health', activeTier);
+  // Filtered indicators for 6 pillars based on activeTier
+  const physicalIndicators = getFilteredFutsalIndicatorsForCategory('fisik', activeTier);
+  const technicalIndicators = getFilteredFutsalIndicatorsForCategory('teknik', activeTier);
+  const tacticalIndicators = getFilteredFutsalIndicatorsForCategory('taktik', activeTier);
+  const mentalIndicators = getFilteredFutsalIndicatorsForCategory('mental', activeTier);
+  const communicationIndicators = getFilteredFutsalIndicatorsForCategory('komunikasi', activeTier);
+  const developmentIndicators = getFilteredFutsalIndicatorsForCategory('perkembangan', activeTier);
 
   return (
     <div className="space-y-6">
@@ -98,45 +113,43 @@ export default function FutsalEvaluationGrid({
       <div className="bg-slate-900 text-white rounded-2xl p-4 sm:p-5 border border-slate-800 shadow-md flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-full text-xs font-extrabold">
+            <span className={`inline-flex items-center gap-1.5 px-3 py-1 bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-full text-xs font-extrabold`}>
               <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-              <span>{tierConfig.shortBadge}</span>
+              <span>{tierConfig.shortLabel}</span>
             </span>
             <span className="text-xs text-slate-400 font-semibold">&bull; Kurikulum Berjenjang Futsal</span>
           </div>
           <p className="text-xs text-slate-300 leading-relaxed pt-0.5">
-            <strong>Fokus Pembinaan:</strong> {tierConfig.focusDescription}
+            <strong>Fokus Pembinaan:</strong> {tierConfig.desc}
           </p>
         </div>
 
         {/* Override Dropdown */}
         <div className="shrink-0 flex items-center gap-2 bg-slate-800/90 p-2 rounded-xl border border-slate-700">
-          <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider whitespace-nowrap pl-1">
+          <label className="text-[11px] font-bold text-slate-300 uppercase tracking-wider whitespace-nowrap pl-1" htmlFor="manual-tier-select">
             Override Jenjang:
           </label>
           <select
-  aria-label="futsal evaluation grid manual futsal tier override"
-  name="manualFutsalTierOverride"
-  id="futsal-evaluation-grid-manual-futsal-tier-override"
+            id="manual-tier-select"
             value={manualFutsalTierOverride}
             onChange={(e) => setManualFutsalTierOverride(e.target.value)}
             className="px-3 py-1.5 bg-slate-900 border border-slate-700 rounded-lg text-xs font-bold text-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer"
           >
             <option value="AUTO">⚡ Otomatis Usia Siswa</option>
-            <option value="1">Tier 1 — Usia Dini (U-5 s.d. U-7)</option>
-            <option value="2">Tier 2 — Usia Anak (U-8 s.d. U-12)</option>
-            <option value="3">Tier 3 — Usia Remaja (U-13 s.d. U-16)</option>
-            <option value="4">Tier 4 — Pemuda / Pro (U-17+)</option>
+            <option value="1">Tier 1 — Usia Dini (6–12 Thn)</option>
+            <option value="2">Tier 2 — Youth (13–15 Thn)</option>
+            <option value="3">Tier 3 — Junior (16–19 Thn)</option>
+            <option value="4">Tier 4 — Profesional (&ge; 20 Thn)</option>
           </select>
         </div>
       </div>
 
-      {/* 1. Profil Atlet / 7-Axis (atau 8-Axis) Futsal Scouting Radar */}
+      {/* 1. Profil Atlet / Radar */}
       <div className="bg-[#2B3D38] border border-[#354944] rounded-3xl p-5 sm:p-6 text-white shadow-md space-y-3 w-full">
         <div className="flex items-center justify-between border-b border-[#354944] pb-2">
           <span className="text-xs font-black uppercase tracking-wider text-[#D4A73A] flex items-center gap-1.5">
             <BarChart2 className="w-4 h-4 text-[#D4A73A]" />
-            <span>Profil Atlet / {futsalScores.isUniversal ? '8-Axis' : '7-Axis'} Futsal Scouting Radar</span>
+            <span>Profil Atlet / Futsal Scouting Radar</span>
           </span>
           <div className="flex items-center gap-1.5">
             {futsalPos.isFlyingGK && (activeTier >= 3) && (
@@ -145,7 +158,7 @@ export default function FutsalEvaluationGrid({
                 <span>Flying GK</span>
               </span>
             )}
-            {futsalScores.isUniversal && (activeTier >= 3) && (
+            {futsalPos.primaryPosition === 'UNIVERSAL' && (activeTier >= 3) && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-black bg-amber-500/20 text-amber-300 border border-amber-500/40">
                 <Layers className="w-2.5 h-2.5 text-amber-400" />
                 <span>Hybrid</span>
@@ -154,7 +167,6 @@ export default function FutsalEvaluationGrid({
           </div>
         </div>
 
-        {/* Recharts Container */}
         <div className="h-64 min-h-[250px] w-full flex items-center justify-center min-w-0">
           <ResponsiveContainer width="100%" height={250}>
             <RadarChart data={radarData} margin={{ top: 10, right: 25, bottom: 10, left: 25 }}>
@@ -167,7 +179,7 @@ export default function FutsalEvaluationGrid({
         </div>
       </div>
 
-      {/* 2. PANEL RINGKASAN SKOR KATEGORI (FULL-WIDTH STANDALONE CARD) */}
+      {/* 2. Ringkasan Skor */}
       <div className="bg-white border border-slate-200/80 rounded-2xl p-4 sm:p-5 space-y-3 shadow-2xs w-full">
         <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
@@ -187,8 +199,7 @@ export default function FutsalEvaluationGrid({
             { label: 'Mentalitas', score: futsalScores.mental, dot: 'bg-emerald-500' },
             { label: 'Kerja Sama Tim', score: futsalScores.teamwork, dot: 'bg-amber-500' },
             { label: 'Kesehatan & Dev.', score: futsalScores.health, dot: 'bg-teal-500' },
-            { label: `Khusus (${futsalScores.shortPosPill || activePosConfig.shortLabel || 'Posisi'})`, score: futsalScores.position, dot: 'bg-indigo-500' },
-            ...(futsalScores.isUniversal ? [{ label: 'Hybrid / Multi-Role', score: futsalScores.universal, dot: 'bg-cyan-500' }] : [])
+            { label: `Khusus (${posConfig.shortLabel})`, score: futsalScores.position, dot: 'bg-indigo-500' }
           ].map((item, idx) => (
             <div key={idx} className="bg-slate-50 border border-slate-200/80 rounded-xl p-3 flex items-center justify-between gap-2 min-w-0">
               <div className="flex items-center gap-1.5 min-w-0">
@@ -205,13 +216,9 @@ export default function FutsalEvaluationGrid({
         </div>
       </div>
 
-      {/* 2-COLUMN GRID UNTUK DETAIL SLIDER */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-        
-        {/* KOLOM KIRI (Physical, Technical) */}
         <div className="space-y-6">
-
-          {/* 2. Pilar 1: Physical — Kondisi Fisik Futsal */}
+          {/* Physical */}
           <div className="p-4 rounded-2xl border border-rose-200 bg-rose-50/30 space-y-3">
             <div className="flex items-center justify-between border-b border-rose-200/80 pb-2">
               <span className="text-xs font-black uppercase tracking-wider text-rose-700 flex items-center gap-1.5">
@@ -223,24 +230,21 @@ export default function FutsalEvaluationGrid({
               </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {physicalMetrics.map((kpi) => {
-                const val = scores[kpi] !== undefined ? scores[kpi] : 75;
+              {physicalIndicators.map((ind) => {
+                const val = resolveScore(scores, ind);
                 return (
-                  <div key={kpi} className="p-3 bg-white border border-rose-100 rounded-xl space-y-1.5 shadow-2xs">
+                  <div key={ind.id} className="p-3 bg-white border border-rose-100 rounded-xl space-y-1.5 shadow-2xs">
                     <div className="flex items-center justify-between text-xs font-bold">
-                      <span className="text-slate-800 truncate" title={kpi}>{kpi}</span>
+                      <span className="text-slate-800 truncate" title={ind.name}>{ind.name}</span>
                       <span className="font-black text-rose-600 text-sm">{val}</span>
                     </div>
                     <input
-  aria-label="futsal evaluation grid val"
-  name="val"
-  id="futsal-evaluation-grid-val"
                       type="range"
                       min="0"
                       max="100"
                       step="5"
                       value={val}
-                      onChange={(e) => handleScoreChange(kpi, e.target.value)}
+                      onChange={(e) => handleScoreChange(ind.id, e.target.value)}
                       className="w-full accent-rose-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
                     />
                   </div>
@@ -249,7 +253,7 @@ export default function FutsalEvaluationGrid({
             </div>
           </div>
 
-          {/* 3. Pilar 2: Technical — Teknik Futsal */}
+          {/* Technical */}
           <div className="p-4 rounded-2xl border border-blue-200 bg-blue-50/30 space-y-3">
             <div className="flex items-center justify-between border-b border-blue-200/80 pb-2">
               <span className="text-xs font-black uppercase tracking-wider text-blue-700 flex items-center gap-1.5">
@@ -261,24 +265,21 @@ export default function FutsalEvaluationGrid({
               </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {technicalMetrics.map((kpi) => {
-                const val = scores[kpi] !== undefined ? scores[kpi] : 75;
+              {technicalIndicators.map((ind) => {
+                const val = resolveScore(scores, ind);
                 return (
-                  <div key={kpi} className="p-3 bg-white border border-blue-100 rounded-xl space-y-1.5 shadow-2xs">
+                  <div key={ind.id} className="p-3 bg-white border border-blue-100 rounded-xl space-y-1.5 shadow-2xs">
                     <div className="flex items-center justify-between text-xs font-bold">
-                      <span className="text-slate-800 truncate" title={kpi}>{kpi}</span>
+                      <span className="text-slate-800 truncate" title={ind.name}>{ind.name}</span>
                       <span className="font-black text-blue-600 text-sm">{val}</span>
                     </div>
                     <input
-  aria-label="futsal evaluation grid val"
-  name="val"
-  id="futsal-evaluation-grid-val"
                       type="range"
                       min="0"
                       max="100"
                       step="5"
                       value={val}
-                      onChange={(e) => handleScoreChange(kpi, e.target.value)}
+                      onChange={(e) => handleScoreChange(ind.id, e.target.value)}
                       className="w-full accent-blue-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
                     />
                   </div>
@@ -287,7 +288,7 @@ export default function FutsalEvaluationGrid({
             </div>
           </div>
 
-          {/* 4. Pilar 6: Health & Development */}
+          {/* Health & Dev */}
           <div className="p-4 rounded-2xl border border-teal-200 bg-teal-50/30 space-y-3">
             <div className="flex items-center justify-between border-b border-teal-200/80 pb-2">
               <span className="text-xs font-black uppercase tracking-wider text-teal-700 flex items-center gap-1.5">
@@ -299,24 +300,21 @@ export default function FutsalEvaluationGrid({
               </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {healthMetrics.map((kpi) => {
-                const val = scores[kpi] !== undefined ? scores[kpi] : 75;
+              {developmentIndicators.map((ind) => {
+                const val = resolveScore(scores, ind);
                 return (
-                  <div key={kpi} className="p-3 bg-white border border-teal-100 rounded-xl space-y-1.5 shadow-2xs">
+                  <div key={ind.id} className="p-3 bg-white border border-teal-100 rounded-xl space-y-1.5 shadow-2xs">
                     <div className="flex items-center justify-between text-xs font-bold">
-                      <span className="text-slate-800 truncate" title={kpi}>{kpi}</span>
+                      <span className="text-slate-800 truncate" title={ind.name}>{ind.name}</span>
                       <span className="font-black text-teal-600 text-sm">{val}</span>
                     </div>
                     <input
-  aria-label="futsal evaluation grid val"
-  name="val"
-  id="futsal-evaluation-grid-val"
                       type="range"
                       min="0"
                       max="100"
                       step="5"
                       value={val}
-                      onChange={(e) => handleScoreChange(kpi, e.target.value)}
+                      onChange={(e) => handleScoreChange(ind.id, e.target.value)}
                       className="w-full accent-teal-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
                     />
                   </div>
@@ -324,15 +322,10 @@ export default function FutsalEvaluationGrid({
               })}
             </div>
           </div>
-
         </div>
 
-        {/* =================================================================== */}
-        {/* KOLOM KANAN (Tactical, Mental, Teamwork, Position Specific, Universal) */}
-        {/* =================================================================== */}
         <div className="space-y-6">
-          
-          {/* 1. Pilar 3: Tactical & Cognitive — Taktik dan Kognitif */}
+          {/* Tactical */}
           <div className="p-4 rounded-2xl border border-purple-200 bg-purple-50/30 space-y-3">
             <div className="flex items-center justify-between border-b border-purple-200/80 pb-2">
               <span className="text-xs font-black uppercase tracking-wider text-purple-700 flex items-center gap-1.5">
@@ -344,24 +337,21 @@ export default function FutsalEvaluationGrid({
               </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {tacticalMetrics.map((kpi) => {
-                const val = scores[kpi] !== undefined ? scores[kpi] : 75;
+              {tacticalIndicators.map((ind) => {
+                const val = resolveScore(scores, ind);
                 return (
-                  <div key={kpi} className="p-3 bg-white border border-purple-100 rounded-xl space-y-1.5 shadow-2xs">
+                  <div key={ind.id} className="p-3 bg-white border border-purple-100 rounded-xl space-y-1.5 shadow-2xs">
                     <div className="flex items-center justify-between text-xs font-bold">
-                      <span className="text-slate-800 truncate" title={kpi}>{kpi}</span>
+                      <span className="text-slate-800 truncate" title={ind.name}>{ind.name}</span>
                       <span className="font-black text-purple-600 text-sm">{val}</span>
                     </div>
                     <input
-  aria-label="futsal evaluation grid val"
-  name="val"
-  id="futsal-evaluation-grid-val"
                       type="range"
                       min="0"
                       max="100"
                       step="5"
                       value={val}
-                      onChange={(e) => handleScoreChange(kpi, e.target.value)}
+                      onChange={(e) => handleScoreChange(ind.id, e.target.value)}
                       className="w-full accent-purple-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
                     />
                   </div>
@@ -370,7 +360,7 @@ export default function FutsalEvaluationGrid({
             </div>
           </div>
 
-          {/* 2. Pilar 4: Mental — Mentalitas */}
+          {/* Mental */}
           <div className="p-4 rounded-2xl border border-emerald-200 bg-emerald-50/30 space-y-3">
             <div className="flex items-center justify-between border-b border-emerald-200/80 pb-2">
               <span className="text-xs font-black uppercase tracking-wider text-emerald-700 flex items-center gap-1.5">
@@ -382,24 +372,21 @@ export default function FutsalEvaluationGrid({
               </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {mentalMetrics.map((kpi) => {
-                const val = scores[kpi] !== undefined ? scores[kpi] : 75;
+              {mentalIndicators.map((ind) => {
+                const val = resolveScore(scores, ind);
                 return (
-                  <div key={kpi} className="p-3 bg-white border border-emerald-100 rounded-xl space-y-1.5 shadow-2xs">
+                  <div key={ind.id} className="p-3 bg-white border border-emerald-100 rounded-xl space-y-1.5 shadow-2xs">
                     <div className="flex items-center justify-between text-xs font-bold">
-                      <span className="text-slate-800 truncate" title={kpi}>{kpi}</span>
+                      <span className="text-slate-800 truncate" title={ind.name}>{ind.name}</span>
                       <span className="font-black text-emerald-600 text-sm">{val}</span>
                     </div>
                     <input
-  aria-label="futsal evaluation grid val"
-  name="val"
-  id="futsal-evaluation-grid-val"
                       type="range"
                       min="0"
                       max="100"
                       step="5"
                       value={val}
-                      onChange={(e) => handleScoreChange(kpi, e.target.value)}
+                      onChange={(e) => handleScoreChange(ind.id, e.target.value)}
                       className="w-full accent-emerald-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
                     />
                   </div>
@@ -408,7 +395,7 @@ export default function FutsalEvaluationGrid({
             </div>
           </div>
 
-          {/* 3. Pilar 5: Teamwork & Communication */}
+          {/* Teamwork */}
           <div className="p-4 rounded-2xl border border-amber-200 bg-amber-50/30 space-y-3">
             <div className="flex items-center justify-between border-b border-amber-200/80 pb-2">
               <span className="text-xs font-black uppercase tracking-wider text-amber-700 flex items-center gap-1.5">
@@ -420,24 +407,21 @@ export default function FutsalEvaluationGrid({
               </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {teamworkMetrics.map((kpi) => {
-                const val = scores[kpi] !== undefined ? scores[kpi] : 75;
+              {communicationIndicators.map((ind) => {
+                const val = resolveScore(scores, ind);
                 return (
-                  <div key={kpi} className="p-3 bg-white border border-amber-100 rounded-xl space-y-1.5 shadow-2xs">
+                  <div key={ind.id} className="p-3 bg-white border border-amber-100 rounded-xl space-y-1.5 shadow-2xs">
                     <div className="flex items-center justify-between text-xs font-bold">
-                      <span className="text-slate-800 truncate" title={kpi}>{kpi}</span>
+                      <span className="text-slate-800 truncate" title={ind.name}>{ind.name}</span>
                       <span className="font-black text-amber-600 text-sm">{val}</span>
                     </div>
                     <input
-  aria-label="futsal evaluation grid val"
-  name="val"
-  id="futsal-evaluation-grid-val"
                       type="range"
                       min="0"
                       max="100"
                       step="5"
                       value={val}
-                      onChange={(e) => handleScoreChange(kpi, e.target.value)}
+                      onChange={(e) => handleScoreChange(ind.id, e.target.value)}
                       className="w-full accent-amber-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
                     />
                   </div>
@@ -446,7 +430,7 @@ export default function FutsalEvaluationGrid({
             </div>
           </div>
 
-          {/* 4. Parameter Spesifik Posisi (Beradaptasi dengan Tier Futsal) */}
+          {/* Position Specific */}
           <div className="p-4 rounded-2xl border border-indigo-200 bg-indigo-50/30 space-y-3">
             <div className="flex items-center justify-between border-b border-indigo-200/80 pb-2">
               <span className="text-xs font-black uppercase tracking-wider text-indigo-700 flex items-center gap-1.5">
@@ -460,26 +444,26 @@ export default function FutsalEvaluationGrid({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {(futsalScores.posKPIs || []).map((kpi) => {
-                const val = scores[kpi] !== undefined ? scores[kpi] : 75;
+                // posKPIs are passed as objects or names from parent
+                const val = resolveScore(scores, kpi);
+                const indId = typeof kpi === 'object' ? kpi.id : kpi;
+                const indName = typeof kpi === 'object' ? kpi.name : kpi;
                 return (
-                  <div key={kpi} className="p-3 bg-white border border-indigo-100 rounded-xl space-y-1.5 shadow-2xs">
+                  <div key={indId} className="p-3 bg-white border border-indigo-100 rounded-xl space-y-1.5 shadow-2xs">
                     <div className="flex items-center justify-between text-xs font-bold">
-                      <span className="text-slate-900 font-extrabold flex items-center gap-1 truncate" title={kpi}>
+                      <span className="text-slate-900 font-extrabold flex items-center gap-1 truncate" title={indName}>
                         <Star className="w-3 h-3 text-amber-500 fill-amber-400 shrink-0" />
-                        <span className="truncate">{kpi}</span>
+                        <span className="truncate">{indName}</span>
                       </span>
                       <span className="font-black text-indigo-600 text-sm">{val}</span>
                     </div>
                     <input
-  aria-label="futsal evaluation grid val"
-  name="val"
-  id="futsal-evaluation-grid-val"
                       type="range"
                       min="0"
                       max="100"
                       step="5"
                       value={val}
-                      onChange={(e) => handleScoreChange(kpi, e.target.value)}
+                      onChange={(e) => handleScoreChange(indId, e.target.value)}
                       className="w-full accent-indigo-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
                     />
                   </div>
@@ -487,56 +471,8 @@ export default function FutsalEvaluationGrid({
               })}
             </div>
           </div>
-
-          {/* 5. Parameter Tambahan: Universal / Hybrid Player (Tampil jika Tier 3+ dan diaktifkan) */}
-          {futsalScores.isUniversal && (activeTier >= 3) && (
-            <div className="p-4 rounded-2xl border border-cyan-300 bg-cyan-50/40 space-y-3 shadow-xs">
-              <div className="flex items-center justify-between border-b border-cyan-200 pb-2">
-                <span className="text-xs font-black uppercase tracking-wider text-cyan-800 flex items-center gap-1.5">
-                  <Layers className="w-4 h-4 text-cyan-600" />
-                  <span>8. Atribut Universal / Hybrid Player (Fleksibilitas Posisi)</span>
-                </span>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-cyan-100 text-cyan-800 border border-cyan-300">
-                  Rata-rata: {futsalScores.universal}
-                </span>
-              </div>
-
-              <p className="text-[11px] text-cyan-900 leading-relaxed font-medium">
-                Metrik fleksibilitas taktikal, adaptabilitas peran saat rotasi cepat, dan konsistensi performa saat transisi posisi bermain.
-              </p>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {FUTSAL_UNIVERSAL_HYBRID_METRICS.map((kpi) => {
-                  const val = scores[kpi] !== undefined ? scores[kpi] : 75;
-                  return (
-                    <div key={kpi} className="p-3 bg-white border border-cyan-100 rounded-xl space-y-1.5 shadow-2xs">
-                      <div className="flex items-center justify-between text-xs font-bold">
-                        <span className="text-cyan-950 font-bold truncate" title={kpi}>{kpi}</span>
-                        <span className="font-black text-cyan-700 text-sm">{val}</span>
-                      </div>
-                      <input
-  aria-label="futsal evaluation grid val"
-  name="val"
-  id="futsal-evaluation-grid-val"
-                        type="range"
-                        min="0"
-                        max="100"
-                        step="5"
-                        value={val}
-                        onChange={(e) => handleScoreChange(kpi, e.target.value)}
-                        className="w-full accent-cyan-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
         </div>
-
       </div>
-
     </div>
   );
 }

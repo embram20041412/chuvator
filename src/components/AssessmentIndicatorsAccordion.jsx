@@ -326,18 +326,38 @@ export default function AssessmentIndicatorsAccordion({
                         </div>
                       ) : (
                         <div className="space-y-2">
-                          {indicators.map((indName) => (
-                            <AccordionIndicatorCard
-                              key={indName}
-                              title={indName}
-                              value={scores[indName] !== undefined ? scores[indName] : 0}
-                              isSpecial={cat.isSpecial}
-                              onScoreChange={(val) => onScoreChange(indName, val)}
-                              onAdjust={(delta) => onAdjustScore(indName, delta)}
-                              isArchived={isArchived}
-                              accentColor={theme.color}
-                            />
-                          ))}
+                          {indicators.map((ind) => {
+                            const indId = typeof ind === 'object' ? ind.id : ind;
+                            const indName = typeof ind === 'object' ? ind.name : ind;
+                            
+                            // Dual-key lookup with legacy support
+                            let value = scores[indId];
+                            if (value === undefined && typeof ind === 'object') {
+                              value = scores[ind.name];
+                              if (value === undefined && ind.legacy_keys) {
+                                for (const lk of ind.legacy_keys) {
+                                  if (scores[lk] !== undefined) {
+                                    value = scores[lk];
+                                    break;
+                                  }
+                                }
+                              }
+                            }
+                            const finalValue = value !== undefined ? value : 0;
+
+                            return (
+                              <AccordionIndicatorCard
+                                key={indId}
+                                title={indName}
+                                value={finalValue}
+                                isSpecial={cat.isSpecial}
+                                onScoreChange={(val) => onScoreChange(indId, val)}
+                                onAdjust={(delta) => onAdjustScore(indId, delta)}
+                                isArchived={isArchived}
+                                accentColor={theme.color}
+                              />
+                            );
+                          })}
                         </div>
                       )}
                     </motion.div>
@@ -514,18 +534,38 @@ export default function AssessmentIndicatorsAccordion({
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                        {indicators.map((indName) => (
-                          <AccordionIndicatorCard
-                            key={indName}
-                            title={indName}
-                            value={scores[indName] !== undefined ? scores[indName] : 0}
-                            isSpecial={cat.isSpecial}
-                            onScoreChange={(val) => onScoreChange(indName, val)}
-                            onAdjust={(delta) => onAdjustScore(indName, delta)}
-                            isArchived={isArchived}
-                            accentColor={theme.color}
-                          />
-                        ))}
+                        {indicators.map((ind) => {
+                          const indId = typeof ind === 'object' ? ind.id : ind;
+                          const indName = typeof ind === 'object' ? ind.name : ind;
+                          
+                          // Dual-key lookup with legacy support
+                          let value = scores[indId];
+                          if (value === undefined && typeof ind === 'object') {
+                            value = scores[ind.name];
+                            if (value === undefined && ind.legacy_keys) {
+                              for (const lk of ind.legacy_keys) {
+                                if (scores[lk] !== undefined) {
+                                  value = scores[lk];
+                                  break;
+                                }
+                              }
+                            }
+                          }
+                          const finalValue = value !== undefined ? value : 0;
+
+                          return (
+                            <AccordionIndicatorCard
+                              key={indId}
+                              title={indName}
+                              value={finalValue}
+                              isSpecial={cat.isSpecial}
+                              onScoreChange={(val) => onScoreChange(indId, val)}
+                              onAdjust={(delta) => onAdjustScore(indId, delta)}
+                              isArchived={isArchived}
+                              accentColor={theme.color}
+                            />
+                          );
+                        })}
                       </div>
                     )}
                   </motion.div>

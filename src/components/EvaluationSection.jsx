@@ -119,6 +119,30 @@ import {
   MobileEvaluationHistorySection
 } from '../mobile/components/evaluation/MobileEvaluationBlocks';
 
+/**
+ * Resolves a score from the scores object using an indicator object or string.
+ * Supports dual-key lookup (ID or Name) and legacy keys.
+ */
+function resolveIndicatorScore(scores, indicator) {
+  if (!scores) return 0;
+  if (typeof indicator === 'string') return scores[indicator] !== undefined ? scores[indicator] : 0;
+  
+  // 1. Try ID
+  if (indicator.id && scores[indicator.id] !== undefined) return scores[indicator.id];
+  
+  // 2. Try Name (String Key)
+  if (indicator.name && scores[indicator.name] !== undefined) return scores[indicator.name];
+  
+  // 3. Try Legacy Keys
+  if (indicator.legacy_keys) {
+    for (const lk of indicator.legacy_keys) {
+      if (scores[lk] !== undefined) return scores[lk];
+    }
+  }
+  
+  return 0;
+}
+
 // =====================================================================
 // RESTRUKTURISASI MATRIKS KPI 4-PILAR UNTUK CABANG OLAHRAGA LAIN
 // =====================================================================
@@ -461,7 +485,7 @@ function FutsalAssessmentView({
   }, [selectedClass?.id, selectedClass?.tierCode, selectedClass?.minAge, selectedClass?.maxAge]);
 
   const studentAge = useMemo(() => {
-    if (!selectedStudent) return 0;
+    if (!selectedStudent) return null;
     if (selectedStudent.birthDate) {
       const calculated = calculateAge(selectedStudent.birthDate);
       if (calculated !== '-') {
@@ -474,7 +498,7 @@ function FutsalAssessmentView({
       const num = parseInt(String(rawAge).replace(/\D/g, ''), 10);
       if (!isNaN(num) && num > 0) return num;
     }
-    return 10;
+    return null;
   }, [selectedStudent]);
 
   const detectedFutsalTier = useMemo(() => {
@@ -596,7 +620,7 @@ function FutsalAssessmentView({
     const calcCategoryAvg = (indicatorList) => {
       if (!indicatorList || indicatorList.length === 0) return 0;
       const total = indicatorList.reduce((sum, ind) => {
-        const val = scores[ind] !== undefined ? scores[ind] : 0;
+        const val = resolveIndicatorScore(scores, ind);
         return sum + val;
       }, 0);
       return Math.round(total / indicatorList.length);
@@ -642,7 +666,8 @@ function FutsalAssessmentView({
     setScores((prev) => {
       const updated = { ...prev };
       catObj.indicators.forEach((ind) => {
-        updated[ind] = presetScore;
+        const key = typeof ind === 'object' ? ind.id : ind;
+        updated[key] = presetScore;
       });
       return updated;
     });
@@ -770,7 +795,8 @@ function FutsalAssessmentView({
 
     const finalScores = {};
     activeIndicators.forEach((ind) => {
-      finalScores[ind] = scores[ind] !== undefined ? scores[ind] : 0;
+      const indId = typeof ind === 'object' ? ind.id : ind;
+      finalScores[indId] = resolveIndicatorScore(scores, ind);
     });
 
     const styleObj = getFutsalStyleConfig(selectedStyleCode);
@@ -1385,7 +1411,7 @@ function BadmintonAssessmentView({
   }, [selectedClass?.id, selectedClass?.tierCode, selectedClass?.minAge, selectedClass?.maxAge]);
 
   const studentAge = useMemo(() => {
-    if (!selectedStudent) return 0;
+    if (!selectedStudent) return null;
     if (selectedStudent.birthDate) {
       const calculated = calculateAge(selectedStudent.birthDate);
       if (calculated !== '-') {
@@ -1398,7 +1424,7 @@ function BadmintonAssessmentView({
       const num = parseInt(String(rawAge).replace(/\D/g, ''), 10);
       if (!isNaN(num) && num > 0) return num;
     }
-    return 10;
+    return null;
   }, [selectedStudent]);
 
   const detectedBadmintonTier = useMemo(() => {
@@ -1550,7 +1576,7 @@ function BadmintonAssessmentView({
     const calcCategoryAvg = (indicatorList) => {
       if (!indicatorList || indicatorList.length === 0) return 0;
       const total = indicatorList.reduce((sum, ind) => {
-        const val = scores[ind] !== undefined ? scores[ind] : 0;
+        const val = resolveIndicatorScore(scores, ind);
         return sum + val;
       }, 0);
       return Math.round(total / indicatorList.length);
@@ -1619,7 +1645,8 @@ function BadmintonAssessmentView({
     setScores((prev) => {
       const updated = { ...prev };
       catObj.indicators.forEach((ind) => {
-        updated[ind] = presetScore;
+        const key = typeof ind === 'object' ? ind.id : ind;
+        updated[key] = presetScore;
       });
       return updated;
     });
@@ -1641,18 +1668,18 @@ function BadmintonAssessmentView({
     return list;
   }, [axisScores, isDoubles, activeBadmintonTier]);
 
-  const handleAdjustScore = (indicatorName, delta) => {
+  const handleAdjustScore = (indId, delta) => {
     setScores((prev) => {
-      const curr = prev[indicatorName] !== undefined ? prev[indicatorName] : 0;
+      const curr = prev[indId] !== undefined ? prev[indId] : 0;
       const nextVal = Math.min(100, Math.max(0, curr + delta));
-      return { ...prev, [indicatorName]: nextVal };
+      return { ...prev, [indId]: nextVal };
     });
   };
 
-  const handleScoreChange = (indicatorName, value) => {
+  const handleScoreChange = (indId, value) => {
     setScores((prev) => ({
       ...prev,
-      [indicatorName]: Math.min(100, Math.max(0, Number(value) || 0))
+      [indId]: Math.min(100, Math.max(0, Number(value) || 0))
     }));
   };
 
@@ -1664,7 +1691,8 @@ function BadmintonAssessmentView({
 
     const nextState = { ...scores };
     activeIndicators.forEach((ind) => {
-      nextState[ind] = val;
+      const indId = typeof ind === 'object' ? ind.id : ind;
+      nextState[indId] = val;
     });
     setScores(nextState);
 
@@ -1768,6 +1796,17 @@ function BadmintonAssessmentView({
     setSuccessMsg(null);
 
     try {
+      const activeIndicators = [];
+      Object.values(filteredCategoryIndicators).forEach((arr) => {
+        activeIndicators.push(...arr);
+      });
+
+      const finalScores = {};
+      activeIndicators.forEach((ind) => {
+        const indId = typeof ind === 'object' ? ind.id : ind;
+        finalScores[indId] = resolveIndicatorScore(scores, ind);
+      });
+
       const payload = {
         tenantId,
         classId: selectedClass?.id || '',
@@ -1784,7 +1823,7 @@ function BadmintonAssessmentView({
         styleCode: isStyleUnlocked ? styleCode : 'N/A',
         doublesSpecCode: (isDoubles && isDoublesSpecUnlocked) ? doublesSpecCode : 'N/A',
         specialization: (isDoubles && isDoublesSpecUnlocked) ? doublesSpecConfig.name : 'N/A',
-        scores: scores,
+        scores: finalScores,
         healthPhysicalReadiness,
         healthInjuryNotes,
         healthRecoveryQuality,
@@ -2968,7 +3007,7 @@ function FootballAssessmentView({
   }, [selectedClass?.id, selectedClass?.tierCode, selectedClass?.minAge, selectedClass?.maxAge, selectedClass?.className, selectedClass?.name]);
 
   const studentAge = useMemo(() => {
-    if (!selectedStudent) return 0;
+    if (!selectedStudent) return null;
     if (selectedStudent.birthDate) {
       const calculated = calculateAge(selectedStudent.birthDate);
       if (calculated !== '-') {
@@ -2981,7 +3020,7 @@ function FootballAssessmentView({
       const num = parseInt(String(rawAge).replace(/\D/g, ''), 10);
       if (!isNaN(num) && num > 0) return num;
     }
-    return 10;
+    return null;
   }, [selectedStudent]);
 
   const detectedTier = useMemo(() => {
@@ -3164,7 +3203,7 @@ function FootballAssessmentView({
     const calcCategoryAvg = (indicatorList) => {
       if (!indicatorList || indicatorList.length === 0) return 0;
       const total = indicatorList.reduce((sum, ind) => {
-        const val = scores[ind] !== undefined ? scores[ind] : 0;
+        const val = resolveIndicatorScore(scores, ind);
         return sum + val;
       }, 0);
       return Math.round(total / indicatorList.length);
@@ -3210,7 +3249,8 @@ function FootballAssessmentView({
     setScores((prev) => {
       const updated = { ...prev };
       catObj.indicators.forEach((ind) => {
-        updated[ind] = presetScore;
+        const key = typeof ind === 'object' ? ind.id : ind;
+        updated[key] = presetScore;
       });
       return updated;
     });
@@ -3342,7 +3382,8 @@ function FootballAssessmentView({
 
     const finalScores = {};
     activeIndicators.forEach((ind) => {
-      finalScores[ind] = scores[ind] !== undefined ? scores[ind] : 0;
+      const indId = typeof ind === 'object' ? ind.id : ind;
+      finalScores[indId] = resolveIndicatorScore(scores, ind);
     });
 
     const styleObj = getStyleConfig(selectedStyleCode);
@@ -3987,7 +4028,7 @@ export function CategoryAssessmentModal({
     const total = indicators.length;
     if (total === 0) return { total: 0, rated: 0, percent: 100, isCompleted: true };
     const rated = indicators.filter((ind) => {
-      const s = scores[ind];
+      const s = resolveIndicatorScore(scores, ind);
       return s !== undefined && s !== null && s > 0;
     }).length;
     const percent = Math.round((rated / total) * 100);
@@ -4250,15 +4291,17 @@ export function CategoryAssessmentModal({
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {(activeCategory.indicators || []).map((ind) => {
-                      const val = scores[ind] !== undefined ? scores[ind] : 0;
+                      const val = resolveIndicatorScore(scores, ind);
+                      const indId = typeof ind === 'object' ? ind.id : ind;
+                      const indName = typeof ind === 'object' ? ind.name : ind;
                       return (
                         <IndicatorCard
-                          key={ind}
-                          title={ind}
+                          key={indId}
+                          title={indName}
                           value={val}
                           isSpecial={activeCategory.isSpecial}
-                          onScoreChange={(v) => onScoreChange(ind, v)}
-                          onAdjust={(delta) => onAdjustScore(ind, delta)}
+                          onScoreChange={(v) => onScoreChange(indId, v)}
+                          onAdjust={(delta) => onAdjustScore(indId, delta)}
                           isArchived={isArchived}
                         />
                       );
@@ -4460,7 +4503,7 @@ function Standard4PillarView({
   const pillarScores = useMemo(() => {
     const computeAvg = (kpiList) => {
       if (!kpiList || kpiList.length === 0) return 0;
-      const total = kpiList.reduce((sum, kpi) => sum + (scores[kpi] !== undefined ? scores[kpi] : 0), 0);
+      const total = kpiList.reduce((sum, kpi) => sum + resolveIndicatorScore(scores, kpi), 0);
       return Math.round(total / kpiList.length);
     };
 
@@ -4565,7 +4608,7 @@ function Standard4PillarView({
     setIsSaving(true);
     const finalScores = {};
     pillarScores.allActiveKPIs.forEach((kpi) => {
-      finalScores[kpi] = scores[kpi] !== undefined ? scores[kpi] : 0;
+      finalScores[kpi] = resolveIndicatorScore(scores, kpi);
     });
 
     try {
