@@ -55,34 +55,41 @@ export default function AnalyticsSection({
   students = [],
   tenantId,
   activeAcademy,
+  evaluations: externalEvaluations = null,
+  loading: externalLoading = null,
   isMobile = false
 }) {
-  const [evaluations, setEvaluations] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [internalEvaluations, setInternalEvaluations] = useState([]);
+  const [internalLoading, setInternalLoading] = useState(true);
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [comparisonStudentId, setComparisonStudentId] = useState('');
   const [activeModuleTab, setActiveModuleTab] = useState('performance'); // 'performance' | 'development' | 'comparison' | 'team' | 'reports' | 'quality'
 
-  // Fetch evaluations for current class
+  const hasSharedEvaluations = Array.isArray(externalEvaluations);
+  const evaluations = hasSharedEvaluations ? externalEvaluations : internalEvaluations;
+  const loading = hasSharedEvaluations ? Boolean(externalLoading) : internalLoading;
+
+  // Fetch evaluations for current class only when not provided by parent EvaluationSection
   useEffect(() => {
+    if (hasSharedEvaluations) return;
     async function fetchEvals() {
       if (!tenantId || !selectedClass?.id) {
-        setLoading(false);
+        setInternalLoading(false);
         return;
       }
-      setLoading(true);
+      setInternalLoading(true);
       try {
         const data = await supabaseAcademyService.getEvaluationsByClass(tenantId, selectedClass.id, 200);
-        setEvaluations(data || []);
+        setInternalEvaluations(data || []);
       } catch (err) {
         console.warn('[AnalyticsSection] Failed to load evaluations:', err);
-        setEvaluations([]);
+        setInternalEvaluations([]);
       } finally {
-        setLoading(false);
+        setInternalLoading(false);
       }
     }
     fetchEvals();
-  }, [tenantId, selectedClass?.id]);
+  }, [hasSharedEvaluations, tenantId, selectedClass?.id]);
 
   // Default selected student and context switch cleanup
   useEffect(() => {
@@ -186,6 +193,21 @@ export default function AnalyticsSection({
       sport: selectedClass?.sport || activeAcademy?.sport || 'football'
     });
   }, [evaluations, selectedClass, activeAcademy]);
+
+  // Structured Report Payload (Module 7)
+  const reportData = useMemo(() => {
+    if (!currentStudent || !performanceData) return null;
+    return generateAnalyticsReport({
+      type: 'INDIVIDUAL_ATHLETE',
+      athleteData: {
+        ...currentStudent,
+        className: selectedClass?.className || currentStudent.className || 'Umum',
+        sport: selectedClass?.sport || activeAcademy?.sport || 'Football'
+      },
+      analyticsResult: performanceData,
+      tenantName: activeAcademy?.name || selectedClass?.className || 'CHUVATOR Academy'
+    });
+  }, [currentStudent, performanceData, activeAcademy, selectedClass]);
 
   // Chart data for Radar Chart
   const radarChartData = useMemo(() => {
@@ -415,6 +437,40 @@ export default function AnalyticsSection({
                         ))}
                       </div>
                     </div>
+
+                    {/* MODULE 3: POSITION / EVENT SPECIFIC ANALYTICS */}
+                    {positionData && (
+                      <div className="bg-white dark:bg-[#162320] rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div>
+                            <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                              Modul 3: Analisis Spesifik Posisi / Nomor ({positionData.roleOrPosition || 'Umum'})
+                            </h3>
+                            <p className="text-[11px] text-slate-500">
+                              Indikator khusus posisi/nomor sesuai jenjang kurikulum ({positionData.evaluatedCount}/{positionData.totalCount} dinilai)
+                            </p>
+                          </div>
+                          <span className="px-2.5 py-1 rounded-full text-xs font-black bg-[#354944]/10 dark:bg-[#354944]/30 text-[#354944] dark:text-[#C89D32]">
+                            Skor Posisi: {positionData.positionAverage !== null ? `${positionData.positionAverage}/100` : 'UNTESTED'}
+                          </span>
+                        </div>
+                        {positionData.indicators.length > 0 && (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {positionData.indicators.map((ind) => (
+                              <div
+                                key={ind.id}
+                                className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800 flex items-center justify-between gap-2 text-xs"
+                              >
+                                <span className="font-medium text-slate-700 dark:text-slate-200 truncate">{ind.name}</span>
+                                <span className={`font-bold shrink-0 ${ind.status === 'EVALUATED' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
+                                  {ind.status === 'EVALUATED' ? ind.score : 'UNTESTED'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -605,22 +661,31 @@ export default function AnalyticsSection({
                 </button>
               </div>
 
-              {currentStudent && performanceData && (
+              {currentStudent && performanceData && reportData && (
                 <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-xl space-y-3 border border-slate-200 dark:border-slate-800">
                   <div className="flex justify-between items-start border-b border-slate-200 dark:border-slate-800 pb-2">
                     <div>
-                      <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100">{currentStudent.studentName || currentStudent.name}</h4>
-                      <p className="text-xs text-slate-500">Kelas: {selectedClass?.className || 'Umum'} | Posisi: {currentStudent.playerRole || 'N/A'}</p>
+                      <h4 className="font-bold text-sm text-slate-800 dark:text-slate-100">{reportData.athleteContext.name}</h4>
+                      <p className="text-xs text-slate-500">
+                        Akademi: {reportData.tenantName} | Kelas: {reportData.athleteContext.className} | Posisi: {reportData.athleteContext.playerRole}
+                      </p>
                     </div>
-                    <span className="text-xs text-slate-400 font-mono">{new Date().toLocaleDateString('id-ID')}</span>
+                    <span className="text-xs text-slate-400 font-mono">{new Date(reportData.generatedAt).toLocaleDateString('id-ID')}</span>
                   </div>
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                    <div><span className="text-slate-400">Skor Utama:</span> <strong className="text-slate-800 dark:text-slate-100">{performanceData.overallScore ?? 'N/A'}</strong></div>
-                    <div><span className="text-slate-400">Coverage:</span> <strong className="text-slate-800 dark:text-slate-100">{performanceData.evaluationCoverage}%</strong></div>
-                    <div><span className="text-slate-400">Ter-evaluasi:</span> <strong className="text-slate-800 dark:text-slate-100">{performanceData.totalEvaluatedCount}</strong></div>
-                    <div><span className="text-slate-400">Belum Dinilai:</span> <strong className="text-slate-800 dark:text-slate-100">{performanceData.totalUntestedCount}</strong></div>
+                    <div><span className="text-slate-400">Skor Utama:</span> <strong className="text-slate-800 dark:text-slate-100">{reportData.metricsSummary.overallScore}</strong></div>
+                    <div><span className="text-slate-400">Coverage:</span> <strong className="text-slate-800 dark:text-slate-100">{reportData.metricsSummary.evaluationCoverage}</strong></div>
+                    <div><span className="text-slate-400">Ter-evaluasi:</span> <strong className="text-slate-800 dark:text-slate-100">{reportData.metricsSummary.totalEvaluatedCount}</strong></div>
+                    <div><span className="text-slate-400">Belum Dinilai:</span> <strong className="text-slate-800 dark:text-slate-100">{reportData.metricsSummary.totalUntestedCount}</strong></div>
                   </div>
+
+                  {latestEval?.coachNote && (
+                    <div className="pt-2 border-t border-slate-200/70 dark:border-slate-800 text-xs text-slate-600 dark:text-slate-300">
+                      <span className="font-bold text-slate-700 dark:text-slate-200">Catatan Evaluasi Terakhir: </span>
+                      <span>{latestEval.coachNote}</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

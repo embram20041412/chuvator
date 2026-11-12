@@ -22,7 +22,6 @@ import IdCardGenerator from '../components/IdCardGenerator';
 import AttendanceSection from '../components/AttendanceSection';
 import EvaluationSection from '../components/EvaluationSection';
 import GrowthTrackerSection from '../components/GrowthTrackerSection';
-import AnalyticsSection from '../components/AnalyticsSection';
 import AcademyDashboard from '../components/AcademyDashboard';
 // import { Dashboard3DIcon, Akademi3DIcon } from '../components/icons/App3DIcons';
 import { 
@@ -238,9 +237,10 @@ export default function AcademyPage({ userProfile }) {
     }
   }, [isCoachOnly, coachProfile?.academy_id, activeAcademyId]);
 
-  // Sync activeAcademyTab when URL tab parameter changes
+  // Sync activeAcademyTab and attendanceSubTab when URL parameters change
   useEffect(() => {
     const currentTab = searchParams.get('tab');
+    const currentSubTab = searchParams.get('subtab');
     if (currentTab && validTabs.includes(currentTab)) {
       if (isCoachOnly && (currentTab === 'dasbor' || currentTab === 'siswa' || currentTab === 'pelatih')) {
         setActiveAcademyTab('kelas');
@@ -249,6 +249,16 @@ export default function AcademyPage({ userProfile }) {
       }
     } else if (!currentTab) {
       setActiveAcademyTab(isCoachOnly ? 'kelas' : 'dasbor');
+    }
+
+    if (currentSubTab) {
+      if (currentSubTab === 'evaluasi' || currentSubTab === 'analitik' || currentSubTab === 'analytics') {
+        setAttendanceSubTab('evaluasi');
+      } else if (currentSubTab === 'antropometri' || currentSubTab === 'growth') {
+        setAttendanceSubTab('antropometri');
+      } else if (currentSubTab === 'presensi') {
+        setAttendanceSubTab('presensi');
+      }
     }
   }, [searchParams, isCoachOnly]);
 
@@ -262,8 +272,13 @@ export default function AcademyPage({ userProfile }) {
   const [expandedStudentId, setExpandedStudentId] = useState(null);
 
   // Attendance & Evaluation State
+  const subTabParam = searchParams.get('subtab');
   const [selectedClassId, setSelectedClassId] = useState('');
-  const [attendanceSubTab, setAttendanceSubTab] = useState('presensi'); // 'presensi' | 'evaluasi'
+  const [attendanceSubTab, setAttendanceSubTab] = useState(() => {
+    if (subTabParam === 'evaluasi' || subTabParam === 'analitik' || subTabParam === 'analytics') return 'evaluasi';
+    if (subTabParam === 'antropometri' || subTabParam === 'growth') return 'antropometri';
+    return 'presensi';
+  }); // 'presensi' | 'evaluasi' | 'antropometri'
 
   // Real-Time States from Database
   const [students, setStudents] = useState([]);
@@ -2024,8 +2039,8 @@ export default function AcademyPage({ userProfile }) {
             {/* BARIS KONTROL ATAS: SEGMENTED NAVIGATION PILLS + FILTER DROPDOWN KELAS GLOBAL */}
             <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 p-1.5 sm:p-2 bg-white dark:bg-[#162320] rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs">
               
-              {/* 1. SEGMENTED CONTROL 4 TAB (1 BARIS PENUH TANPA SCROLL) */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 p-0.5 bg-slate-200/70 dark:bg-[#111C19] rounded-xl w-full">
+              {/* 1. SEGMENTED CONTROL 3 TAB (1 BARIS PENUH TANPA SCROLL) */}
+              <div className="grid grid-cols-3 gap-1 p-0.5 bg-slate-200/70 dark:bg-[#111C19] rounded-xl w-full">
                 <button
                   type="button"
                   onClick={() => setAttendanceSubTab('presensi')}
@@ -2060,18 +2075,6 @@ export default function AcademyPage({ userProfile }) {
                   }`}
                 >
                   Growth Tracker
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setAttendanceSubTab('analitik')}
-                  className={`text-xs font-bold py-1.5 text-center rounded-lg transition-all cursor-pointer ${
-                    attendanceSubTab === 'analitik'
-                      ? 'bg-[#354944] text-white shadow-xs border-b-2 border-[#C89D32]'
-                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
-                  }`}
-                >
-                  Analitik &amp; BI
                 </button>
               </div>
 
@@ -2204,6 +2207,8 @@ export default function AcademyPage({ userProfile }) {
                           students={filteredStudents.filter((s) => s.classId === currentClass.id || s.className === currentClass.className)}
                           tenantId={tenantId}
                           activeAcademy={activeAcademy}
+                          isMobile={false}
+                          initialAssessmentView={subTabParam === 'analitik' || subTabParam === 'analytics' ? 'analytics' : 'assessment'}
                         />
                       </div>
 
@@ -2217,15 +2222,6 @@ export default function AcademyPage({ userProfile }) {
                           onStudentUpdated={() => {
                             fetchAcademyData();
                           }}
-                        />
-                      </div>
-
-                      <div className={attendanceSubTab === 'analitik' ? 'block' : 'hidden'}>
-                        <AnalyticsSection
-                          selectedClass={currentClass}
-                          students={filteredStudents.filter((s) => (s.classId ? s.classId === currentClass.id : s.className === currentClass.className))}
-                          tenantId={tenantId}
-                          activeAcademy={activeAcademy}
                         />
                       </div>
                     </div>

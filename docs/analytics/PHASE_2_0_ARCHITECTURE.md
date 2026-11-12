@@ -36,10 +36,12 @@ Document ini menjelaskan arsitektur teknis dari **CHUVATOR Phase 2.0 — Advance
                                         v
 +-------------------------------------------------------------------------------+
 |                       PRESENTATION LAYER (UI Views)                           |
-|                    src/components/AnalyticsSection.jsx                        |
-|             (Mounted in Desktop & Mobile Hub Sub-Tabs)                         |
-|  - Desktop: src/pages/AcademyPage.jsx                                         |
-|  - Mobile: src/mobile/pages/academy/MobileAcademyHub.jsx                      |
+|       src/components/EvaluationSection.jsx (Athlete Development Assessment)   |
+|  - Internal Sub-View 1: Assessment & Profil Atlet (Scoring + Radar/Polar)     |
+|  - Internal Sub-View 2: Advanced Analytics & BI (AnalyticsSection.jsx)        |
+|  - Internal Sub-View 3: Riwayat Assessment (HistorySection)                   |
+|  - Desktop Host: src/pages/AcademyPage.jsx (Evaluasi Atlet)                   |
+|  - Mobile Host: src/mobile/pages/academy/MobileAcademyHub.jsx (Evaluasi)      |
 +-------------------------------------------------------------------------------+
 ```
 
@@ -74,9 +76,16 @@ Document ini menjelaskan arsitektur teknis dari **CHUVATOR Phase 2.0 — Advance
 
 ---
 
-## 5. UI Integration Contracts
+## 5. UI Integration Contracts (Phase 2.0.6 Unified Architecture)
 
-- **Desktop View (`src/pages/AcademyPage.jsx`)**:
-  - Ditempatkan sebagai sub-tab ke-4: `Presensi` \| `Evaluasi Atlet` \| `Growth Tracker` \| `Analitik & BI`.
-- **Mobile View (`src/mobile/pages/academy/MobileAcademyHub.jsx`)**:
-  - Ditempatkan pada sub-tab navigasi mobile `Analitik & BI` dengan dukungan *touch-friendly container* dan responsivitas penuh.
+- **Unified Athlete Development Assessment (`src/components/EvaluationSection.jsx`)**:
+  - Advanced Analytics & BI (`AnalyticsSection.jsx`) terintegrasi langsung sebagai sub-view internal di dalam **Athlete Development Assessment** (`EvaluationSection.jsx`), berbagi state `history` (`evaluations`) dan `classStudents` yang sama tanpa duplikasi pengambilan data.
+  - Menyediakan 3 sub-mode terpadu baik di Desktop maupun Mobile:
+    1. `Assessment & Profil Atlet` / `Penilaian`: Penilaian indikator, profil polar/radar, dan AI insight & catatan pelatih.
+    2. `Advanced Analytics & BI` / `Analitik & BI`: Seluruh 8 modul analitik Phase 2.0.
+    3. `Riwayat Assessment` / `Riwayat`: Daftar riwayat evaluasi kelas.
+- **Desktop Host (`src/pages/AcademyPage.jsx`)**:
+  - Sub-navigasi operasional tetap 3 menu bersih: `Presensi` \| `Evaluasi Atlet` \| `Growth Tracker`.
+- **Mobile Host (`src/mobile/pages/academy/MobileAcademyHub.jsx`)**:
+  - Sub-navigasi operasional tetap 3 menu bersih: `Presensi` \| `Evaluasi` \| `Growth`, dengan `<EvaluationSection isMobile={true} />` ter-import penuh dan bebas error runtime.
+

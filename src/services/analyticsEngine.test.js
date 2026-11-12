@@ -297,3 +297,141 @@ test('14. Strict Fail-Closed Tenant Isolation: null, undefined, empty, mixed, mi
   assert.equal(emptyDataRes.evaluatedStudentsCount, 0);
   assert.equal(emptyDataRes.teamOverallAverage, null);
 });
+
+// 15. Phase 2.0.6: Athlete Development Assessment Shared Data Contract Across All 8 Modules
+test('15. Athlete Development Assessment Integration: Shared history & classStudents across Modules 1-8', () => {
+  const tenantId = 'tenant-academy-1';
+  const classStudents = [
+    { id: 'ath-1', studentName: 'Rizky Pratama', playerRole: 'CM', tenantId },
+    { id: 'ath-2', studentName: 'Dimas Aditya', playerRole: 'CM', tenantId }
+  ];
+  const sharedHistory = [
+    {
+      id: 'ev-1',
+      studentId: 'ath-1',
+      studentName: 'Rizky Pratama',
+      tenantId,
+      classId: 'cls-u15',
+      sport: 'football',
+      activeTier: 2,
+      playerRole: 'CM',
+      date: '2026-01-10',
+      scores: { 'FTB-UNI-PHY-01': 72, 'FTB-UNI-TEC-01': 75, 'FTB-POS-CM-01': 78 },
+      coachNote: 'Evaluasi awal semester'
+    },
+    {
+      id: 'ev-2',
+      studentId: 'ath-1',
+      studentName: 'Rizky Pratama',
+      tenantId,
+      classId: 'cls-u15',
+      sport: 'football',
+      activeTier: 2,
+      playerRole: 'CM',
+      date: '2026-02-15',
+      scores: { 'FTB-UNI-PHY-01': 78, 'FTB-UNI-TEC-01': 80, 'FTB-POS-CM-01': 82 },
+      coachNote: 'Evaluasi tengah semester'
+    },
+    {
+      id: 'ev-3',
+      studentId: 'ath-1',
+      studentName: 'Rizky Pratama',
+      tenantId,
+      classId: 'cls-u15',
+      sport: 'football',
+      activeTier: 2,
+      playerRole: 'CM',
+      date: '2026-03-20',
+      scores: { 'FTB-UNI-PHY-01': 84, 'FTB-UNI-TEC-01': 88, 'FTB-POS-CM-01': 90 },
+      coachNote: 'Evaluasi akhir kuartal'
+    },
+    {
+      id: 'ev-4',
+      studentId: 'ath-2',
+      studentName: 'Dimas Aditya',
+      tenantId,
+      classId: 'cls-u15',
+      sport: 'football',
+      activeTier: 2,
+      playerRole: 'CM',
+      date: '2026-03-20',
+      scores: { 'FTB-UNI-PHY-01': 76, 'FTB-UNI-TEC-01': 82, 'FTB-POS-CM-01': 80 },
+      coachNote: 'Evaluasi kuartal Dimas'
+    }
+  ];
+
+  const ath1Evals = sharedHistory.filter((h) => h.studentId === 'ath-1');
+  const latestAth1 = ath1Evals[ath1Evals.length - 1];
+  const latestAth2 = sharedHistory.find((h) => h.studentId === 'ath-2');
+
+  // Module 1 & 2: Performance & Category Analytics
+  const perf = analyzeAthletePerformance({
+    scores: latestAth1.scores,
+    sport: 'football',
+    activeTier: latestAth1.activeTier,
+    playerRole: latestAth1.playerRole
+  });
+  assert.ok(perf.overallScore !== null);
+  assert.equal(perf.totalEvaluatedCount, 3);
+
+  // Module 3: Position Specific Analytics
+  const pos = analyzePositionEventPerformance({
+    scores: latestAth1.scores,
+    sport: 'football',
+    activeTier: latestAth1.activeTier,
+    roleOrPosition: 'CM'
+  });
+  assert.equal(pos.positionAverage, 90);
+  assert.equal(pos.evaluatedCount, 1);
+
+  // Module 4: Longitudinal Development Trend (3 sessions -> ESTABLISHED_TREND)
+  const dev = analyzeAthleteDevelopment({
+    evaluations: ath1Evals,
+    sport: 'football'
+  });
+  assert.equal(dev.hasHistory, true);
+  assert.equal(dev.timelineCount, 3);
+  assert.equal(dev.trendClassification, 'ESTABLISHED_TREND');
+  assert.equal(dev.trendDirection, 'IMPROVING');
+
+  // Module 5: Athlete Comparison
+  const comp = compareAthletes({
+    athleteA: { id: 'ath-1', name: 'Rizky Pratama', playerRole: 'CM', scores: latestAth1.scores },
+    athleteB: { id: 'ath-2', name: 'Dimas Aditya', playerRole: 'CM', scores: latestAth2.scores },
+    sport: 'football'
+  });
+  assert.equal(comp.isComparable, true);
+  assert.equal(comp.positionMismatch, false);
+  assert.ok(comp.overallDiff > 0);
+
+  // Module 6: Academy & Team Analytics (with strict tenantId)
+  const team = analyzeAcademyTeamPerformance({
+    evaluations: sharedHistory,
+    students: classStudents,
+    sport: 'football',
+    tenantId
+  });
+  assert.equal(team.error, undefined);
+  assert.equal(team.totalStudents, 2);
+  assert.equal(team.evaluatedStudentsCount, 2);
+  assert.equal(team.coverageRatePercent, 100);
+
+  // Module 7: Report Generation
+  const report = generateAnalyticsReport({
+    type: 'INDIVIDUAL_ATHLETE',
+    athleteData: classStudents[0],
+    analyticsResult: perf,
+    tenantName: 'Chua Football Academy'
+  });
+  assert.equal(report.athleteContext.name, 'Rizky Pratama');
+  assert.equal(report.metricsSummary.overallScore, perf.overallScore);
+
+  // Module 8: Data Quality
+  const quality = analyzeDataQuality({
+    evaluations: sharedHistory,
+    sport: 'football'
+  });
+  assert.equal(quality.totalEvaluations, 4);
+  assert.equal(quality.totalInvalidScores, 0);
+});
+

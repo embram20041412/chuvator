@@ -575,8 +575,12 @@ export function analyzeAcademyTeamPerformance({
 
   const cleanTenantId = tenantId.trim();
 
-  const filteredStudents = students.filter((s) => Boolean(s && s.tenantId === cleanTenantId));
-  const filteredEvals = evaluations.filter((e) => Boolean(e && e.tenantId === cleanTenantId));
+  const filteredStudents = students.filter(
+    (s) => Boolean(s && (s.tenantId || s.tenant_id) === cleanTenantId)
+  );
+  const filteredEvals = evaluations.filter(
+    (e) => Boolean(e && (e.tenantId || e.tenant_id) === cleanTenantId)
+  );
 
   const totalStudents = filteredStudents.length;
   const evaluatedStudentIds = new Set(filteredEvals.map((e) => e.studentId).filter(Boolean));

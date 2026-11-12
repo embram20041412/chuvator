@@ -115,6 +115,7 @@ import TennisAssessmentView from './TennisAssessmentView';
 import ScoutingPolarAreaPanel from './ScoutingPolarAreaPanel';
 import AssessmentIndicatorsAccordion from './AssessmentIndicatorsAccordion';
 import AthleteAssessmentEditView from './AthleteAssessmentEditView';
+import AnalyticsSection from './AnalyticsSection';
 import {
   MobileEvaluationContextBar,
   MobileScoreHeroCard,
@@ -243,17 +244,34 @@ function formatDateIndonesian(dateStr) {
 // =====================================================================
 // MAIN COMPONENT EXPORT
 // =====================================================================
-export default function EvaluationSection({ selectedClass, students = [], tenantId, activeAcademy, isMobile = false }) {
+export default function EvaluationSection({
+  selectedClass,
+  students = [],
+  tenantId,
+  activeAcademy,
+  isMobile = false,
+  initialAssessmentView = 'assessment'
+}) {
   const isArchived = Boolean(selectedClass?.isArchived === true);
+
+  // Internal Sub-Navigation within Athlete Development Assessment:
+  // 'assessment' (Penilaian & Profil Atlet) | 'analytics' (Advanced Analytics & BI) | 'history' (Riwayat Assessment)
+  const [assessmentView, setAssessmentView] = useState(() => initialAssessmentView || 'assessment');
+
+  useEffect(() => {
+    if (initialAssessmentView) {
+      setAssessmentView(initialAssessmentView);
+    }
+  }, [initialAssessmentView]);
 
   // Filter students in current active class
   const classStudents = useMemo(() => {
     return students.filter(
-      (s) => s.classId === selectedClass?.id || (!s.classId && selectedClass?.className && s.className === selectedClass.className)
+      (s) => s.classId === selectedClass?.id || (selectedClass?.className && s.className === selectedClass.className)
     );
   }, [students, selectedClass?.id, selectedClass?.className]);
 
-  // Firestore fetch-once evaluation history (limited to 100 docs)
+  // Evaluation history for the selected class (shared with AnalyticsSection & HistorySection)
   const [history, setHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [filterStudentId, setFilterStudentId] = useState('ALL');
@@ -327,89 +345,259 @@ export default function EvaluationSection({ selectedClass, students = [], tenant
   }, [selectedClass, isTennis]);
 
   return (
-    <>
+    <div className="space-y-3.5">
       {isArchived && (
-        <div className="mb-3.5 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs rounded-xl font-medium flex items-center gap-2.5 shadow-2xs">
+        <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs rounded-xl font-medium flex items-center gap-2.5 shadow-2xs">
           <Archive className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0" />
           <span>Kelas ini telah diarsipkan. Mode baca-saja aktif untuk peninjauan riwayat evaluasi.</span>
         </div>
       )}
-      {isTennis ? (
-        <TennisAssessmentView
+
+      {/* UNIFIED ATHLETE DEVELOPMENT ASSESSMENT SUB-NAVIGATION (DESKTOP & MOBILE) */}
+      {isMobile ? (
+        <div className="chua-m-eval-card !p-2 space-y-2">
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Award className="w-4 h-4 text-[#2455E8] shrink-0" />
+              <span className="text-[12px] font-extrabold text-[#17233D] truncate">
+                Athlete Development Assessment
+              </span>
+            </div>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F5F7FC] text-[#2455E8] border border-[#E7EBF2] shrink-0">
+              {effectiveSelectedClass?.sport || activeAcademy?.sport || ' Akademi'}
+            </span>
+          </div>
+
+          <div
+            className="grid grid-cols-3 gap-1 p-1 bg-[#F5F7FC] rounded-[12px] border border-[#E7EBF2]"
+            role="tablist"
+            aria-label="Mode Evaluasi Atlet"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={assessmentView === 'assessment'}
+              onClick={() => setAssessmentView('assessment')}
+              className={`min-h-[38px] px-2 py-1.5 rounded-[9px] text-[11px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                assessmentView === 'assessment'
+                  ? 'bg-[#2455E8] text-white shadow-xs'
+                  : 'text-[#68758B] hover:text-[#17233D]'
+              }`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Penilaian</span>
+            </button>
+
+            <button
+              type="button"
+              role="tab"
+              aria-selected={assessmentView === 'analytics'}
+              onClick={() => setAssessmentView('analytics')}
+              className={`min-h-[38px] px-2 py-1.5 rounded-[9px] text-[11px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                assessmentView === 'analytics'
+                  ? 'bg-[#2455E8] text-white shadow-xs'
+                  : 'text-[#68758B] hover:text-[#17233D]'
+              }`}
+            >
+              <BarChart2 className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Analitik &amp; BI</span>
+            </button>
+
+            <button
+              type="button"
+              role="tab"
+              aria-selected={assessmentView === 'history'}
+              onClick={() => setAssessmentView('history')}
+              className={`min-h-[38px] px-2 py-1.5 rounded-[9px] text-[11px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                assessmentView === 'history'
+                  ? 'bg-[#2455E8] text-white shadow-xs'
+                  : 'text-[#68758B] hover:text-[#17233D]'
+              }`}
+            >
+              <History className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Riwayat ({history.length})</span>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white dark:bg-[#162320] rounded-xl p-2.5 border border-slate-200/80 dark:border-slate-800 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2 px-1">
+            <div className="p-1.5 rounded-lg bg-[#354944]/10 dark:bg-[#354944]/30 text-[#354944] dark:text-[#C89D32]">
+              <Award className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 leading-tight">
+                Athlete Development Assessment
+              </h3>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Penilaian indikator performa, profil polar/radar, Advanced Analytics &amp; BI, serta riwayat evaluasi kelas.
+              </p>
+            </div>
+          </div>
+
+          <div
+            className="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-[#111C19] rounded-xl border border-slate-200/70 dark:border-slate-800 shrink-0"
+            role="tablist"
+            aria-label="Sub-menu Athlete Development Assessment"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={assessmentView === 'assessment'}
+              onClick={() => setAssessmentView('assessment')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                assessmentView === 'assessment'
+                  ? 'bg-[#354944] text-white shadow-2xs border-b-2 border-[#C89D32]'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+              }`}
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5" />
+              <span>Assessment &amp; Profil Atlet</span>
+            </button>
+
+            <button
+              type="button"
+              role="tab"
+              aria-selected={assessmentView === 'analytics'}
+              onClick={() => setAssessmentView('analytics')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                assessmentView === 'analytics'
+                  ? 'bg-[#354944] text-white shadow-2xs border-b-2 border-[#C89D32]'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+              }`}
+            >
+              <BarChart2 className="w-3.5 h-3.5" />
+              <span>Advanced Analytics &amp; BI</span>
+            </button>
+
+            <button
+              type="button"
+              role="tab"
+              aria-selected={assessmentView === 'history'}
+              onClick={() => setAssessmentView('history')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                assessmentView === 'history'
+                  ? 'bg-[#354944] text-white shadow-2xs border-b-2 border-[#C89D32]'
+                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+              }`}
+            >
+              <History className="w-3.5 h-3.5" />
+              <span>Riwayat ({history.length})</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* SUB-VIEW 1: ASSESSMENT & PROFIL ATLET */}
+      {assessmentView === 'assessment' && (
+        <>
+          {isTennis ? (
+            <TennisAssessmentView
+              selectedClass={effectiveSelectedClass}
+              students={classStudents}
+              tenantId={tenantId}
+              activeAcademy={activeAcademy}
+              history={history}
+              loadingHistory={loadingHistory}
+              filterStudentId={filterStudentId}
+              setFilterStudentId={setFilterStudentId}
+              onDeleteEvaluation={handleDeleteEvaluation}
+              onEvaluationSaved={handleEvaluationSaved}
+              isArchived={isArchived}
+              isMobile={isMobile}
+            />
+          ) : isBadminton ? (
+            <BadmintonAssessmentView
+              selectedClass={selectedClass}
+              students={classStudents}
+              tenantId={tenantId}
+              activeAcademy={activeAcademy}
+              history={history}
+              loadingHistory={loadingHistory}
+              filterStudentId={filterStudentId}
+              setFilterStudentId={setFilterStudentId}
+              onDeleteEvaluation={handleDeleteEvaluation}
+              onEvaluationSaved={handleEvaluationSaved}
+              isArchived={isArchived}
+              isMobile={isMobile}
+            />
+          ) : isFutsal ? (
+            <FutsalAssessmentView
+              selectedClass={selectedClass}
+              students={classStudents}
+              tenantId={tenantId}
+              activeAcademy={activeAcademy}
+              history={history}
+              loadingHistory={loadingHistory}
+              filterStudentId={filterStudentId}
+              setFilterStudentId={setFilterStudentId}
+              onDeleteEvaluation={handleDeleteEvaluation}
+              onEvaluationSaved={handleEvaluationSaved}
+              isArchived={isArchived}
+              isMobile={isMobile}
+            />
+          ) : isFootball ? (
+            <FootballAssessmentView
+              selectedClass={selectedClass}
+              students={classStudents}
+              tenantId={tenantId}
+              activeAcademy={activeAcademy}
+              history={history}
+              loadingHistory={loadingHistory}
+              filterStudentId={filterStudentId}
+              setFilterStudentId={setFilterStudentId}
+              onDeleteEvaluation={handleDeleteEvaluation}
+              onEvaluationSaved={handleEvaluationSaved}
+              isArchived={isArchived}
+              isMobile={isMobile}
+            />
+          ) : (
+            <Standard4PillarView
+              selectedClass={selectedClass}
+              classStudents={classStudents}
+              tenantId={tenantId}
+              activeAcademy={activeAcademy}
+              history={history}
+              loadingHistory={loadingHistory}
+              filterStudentId={filterStudentId}
+              setFilterStudentId={setFilterStudentId}
+              onDeleteEvaluation={handleDeleteEvaluation}
+              onEvaluationSaved={handleEvaluationSaved}
+              isArchived={isArchived}
+              isMobile={isMobile}
+            />
+          )}
+        </>
+      )}
+
+      {/* SUB-VIEW 2: ADVANCED ANALYTICS & BI (INTEGRATED PHASE 2.0 ENGINE) */}
+      {assessmentView === 'analytics' && (
+        <AnalyticsSection
           selectedClass={effectiveSelectedClass}
           students={classStudents}
           tenantId={tenantId}
           activeAcademy={activeAcademy}
-          history={history}
-          loadingHistory={loadingHistory}
-          filterStudentId={filterStudentId}
-          setFilterStudentId={setFilterStudentId}
-          onDeleteEvaluation={handleDeleteEvaluation}
-          onEvaluationSaved={handleEvaluationSaved}
-          isArchived={isArchived}
-        />
-      ) : isBadminton ? (
-        <BadmintonAssessmentView
-          selectedClass={selectedClass}
-          students={classStudents}
-          tenantId={tenantId}
-          activeAcademy={activeAcademy}
-          history={history}
-          loadingHistory={loadingHistory}
-          filterStudentId={filterStudentId}
-          setFilterStudentId={setFilterStudentId}
-          onDeleteEvaluation={handleDeleteEvaluation}
-          onEvaluationSaved={handleEvaluationSaved}
-          isArchived={isArchived}
-          isMobile={isMobile}
-        />
-      ) : isFutsal ? (
-        <FutsalAssessmentView
-          selectedClass={selectedClass}
-          students={classStudents}
-          tenantId={tenantId}
-          activeAcademy={activeAcademy}
-          history={history}
-          loadingHistory={loadingHistory}
-          filterStudentId={filterStudentId}
-          setFilterStudentId={setFilterStudentId}
-          onDeleteEvaluation={handleDeleteEvaluation}
-          onEvaluationSaved={handleEvaluationSaved}
-          isArchived={isArchived}
-          isMobile={isMobile}
-        />
-      ) : isFootball ? (
-        <FootballAssessmentView
-          selectedClass={selectedClass}
-          students={classStudents}
-          tenantId={tenantId}
-          activeAcademy={activeAcademy}
-          history={history}
-          loadingHistory={loadingHistory}
-          filterStudentId={filterStudentId}
-          setFilterStudentId={setFilterStudentId}
-          onDeleteEvaluation={handleDeleteEvaluation}
-          onEvaluationSaved={handleEvaluationSaved}
-          isArchived={isArchived}
-          isMobile={isMobile}
-        />
-      ) : (
-        <Standard4PillarView
-          selectedClass={selectedClass}
-          classStudents={classStudents}
-          tenantId={tenantId}
-          activeAcademy={activeAcademy}
-          history={history}
-          loadingHistory={loadingHistory}
-          filterStudentId={filterStudentId}
-          setFilterStudentId={setFilterStudentId}
-          onDeleteEvaluation={handleDeleteEvaluation}
-          onEvaluationSaved={handleEvaluationSaved}
-          isArchived={isArchived}
+          evaluations={history}
+          loading={loadingHistory}
           isMobile={isMobile}
         />
       )}
-    </>
+
+      {/* SUB-VIEW 3: DEDICATED ASSESSMENT HISTORY */}
+      {assessmentView === 'history' && (
+        <HistorySection
+          history={history}
+          loadingHistory={loadingHistory}
+          filterStudentId={filterStudentId}
+          setFilterStudentId={setFilterStudentId}
+          students={classStudents}
+          onDeleteEvaluation={handleDeleteEvaluation}
+          isArchived={isArchived}
+          isMobile={isMobile}
+          defaultOpen={true}
+        />
+      )}
+    </div>
   );
 }
 
@@ -5148,7 +5336,8 @@ export function HistorySection({
   students = [],
   onDeleteEvaluation,
   isArchived = false,
-  isMobile = false
+  isMobile = false,
+  defaultOpen = false
 }) {
   const [expandedIds, setExpandedIds] = useState({});
 
@@ -5163,6 +5352,7 @@ export function HistorySection({
         onDeleteEvaluation={onDeleteEvaluation}
         isArchived={isArchived}
         getScoreGradeFn={getScoreGrade}
+        defaultOpen={defaultOpen}
       />
     );
   }
