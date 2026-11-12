@@ -175,7 +175,8 @@ export default function ScoutingPolarAreaPanel({
   onSelectCategory,
   onOpenEdit,
   isArchived = false,
-  sportName = 'Sepakbola / Futsal'
+  sportName = 'Sepakbola / Futsal',
+  isMobile = false
 }) {
   const [hoveredKey, setHoveredKey] = useState(null);
   const [showMobileChart, setShowMobileChart] = useState(true);
@@ -216,7 +217,7 @@ export default function ScoutingPolarAreaPanel({
       const displayRadius = Math.max(innerRadius + 4, outerRadius);
 
       // Label coordinate outside the 100-mark circle
-      const labelRadius = maxOuterRadius + 28;
+      const labelRadius = isMobile ? maxOuterRadius + 24 : maxOuterRadius + 28;
       const labelPos = polarToCartesian(cx, cy, labelRadius, midAngle);
 
       return {
@@ -231,10 +232,337 @@ export default function ScoutingPolarAreaPanel({
         isHovered: (hoveredKey === cat.key) || (activeCategoryKey === cat.key)
       };
     });
-  }, [categoryList, numSlices, anglePerSlice, innerRadius, usableRadius, maxOuterRadius, cx, cy, hoveredKey, activeCategoryKey]);
+  }, [categoryList, numSlices, anglePerSlice, innerRadius, usableRadius, maxOuterRadius, cx, cy, hoveredKey, activeCategoryKey, isMobile]);
 
   // Concentric Scale Circles (25, 50, 75, 100)
   const scaleLevels = [25, 50, 75, 100];
+
+  if (isMobile) {
+    return (
+      <div className="chua-m-eval-card space-y-3 overflow-hidden">
+        {/* MOBILE HEADER */}
+        <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-[#E7EBF2]">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-[10px] bg-[#101D38] text-white flex items-center justify-center shrink-0">
+              <BarChart2 className="w-4 h-4 text-[#16A779]" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-bold text-[13px] text-[#17233D] leading-tight truncate my-0">
+                Scouting Polar-Area
+              </h3>
+              <p className="text-[11px] text-[#68758B] font-medium leading-tight truncate my-0 mt-0.5">
+                {categoryList.length} Kategori &bull; Skala 0–100
+              </p>
+            </div>
+          </div>
+
+          {onOpenEdit && !isArchived && (
+            <button
+              type="button"
+              onClick={() => onOpenEdit(currentFocalKey || undefined)}
+              className="chua-m-eval-secondary-btn shrink-0 !px-2.5"
+              title="Buka halaman Edit Evaluasi"
+            >
+              <Edit3 className="w-3.5 h-3.5 text-[#2455E8]" />
+              <span>Edit</span>
+            </button>
+          )}
+        </div>
+
+        {/* MOBILE POLAR-AREA CHART WORKSPACE */}
+        <div className="flex flex-col items-center justify-center w-full">
+          <div className="relative w-full max-w-[340px] aspect-[508/448] flex items-center justify-center mx-auto">
+            <svg
+              viewBox="-44 -14 508 448"
+              className="w-full h-full select-none"
+            >
+              <defs>
+                <filter id="opta-glow-mobile" x="-20%" y="-20%" width="140%" height="140%">
+                  <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.22" />
+                </filter>
+                <filter id="center-shadow-mobile" x="-30%" y="-30%" width="160%" height="160%">
+                  <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.1" />
+                </filter>
+              </defs>
+
+              {/* A. CONCENTRIC SCALE RINGS (25, 50, 75, 100) */}
+              <g className="concentric-rings">
+                {scaleLevels.map((lvl) => {
+                  const r = innerRadius + (lvl / 100) * usableRadius;
+                  return (
+                    <g key={`m-ring-${lvl}`}>
+                      <circle
+                        cx={cx}
+                        cy={cy}
+                        r={r}
+                        fill="none"
+                        stroke="#E2E8F0"
+                        strokeWidth={lvl === 100 ? '1.5' : '1'}
+                        strokeDasharray={lvl === 100 ? 'none' : '3 3'}
+                        opacity={lvl === 100 ? 0.9 : 0.65}
+                      />
+                      <text
+                        x={cx + 4}
+                        y={cy - r + 9}
+                        fontSize="8.5"
+                        fontWeight="700"
+                        fill="#68758B"
+                        className="font-mono"
+                      >
+                        {lvl}
+                      </text>
+                    </g>
+                  );
+                })}
+              </g>
+
+              {/* B. RADIAL SECTOR DIVIDERS */}
+              <g className="radial-dividers">
+                {sliceData.map((slice, idx) => {
+                  const dividerAngle = slice.startAngle;
+                  const pStart = polarToCartesian(cx, cy, innerRadius, dividerAngle);
+                  const pEnd = polarToCartesian(cx, cy, maxOuterRadius + 4, dividerAngle);
+                  return (
+                    <line
+                      key={`m-divider-${idx}`}
+                      x1={pStart.x}
+                      y1={pStart.y}
+                      x2={pEnd.x}
+                      y2={pEnd.y}
+                      stroke="#CBD5E1"
+                      strokeWidth="1"
+                      strokeDasharray="2 2"
+                      opacity="0.7"
+                    />
+                  );
+                })}
+              </g>
+
+              {/* C. OPTA ROSE WEDGES */}
+              <g className="rose-wedges">
+                {sliceData.map((slice) => {
+                  const isHovered = slice.isHovered;
+                  const slicePath = describeSectorPath(
+                    cx,
+                    cy,
+                    innerRadius,
+                    isHovered ? slice.outerRadius + 3 : slice.outerRadius,
+                    slice.startAngle,
+                    slice.endAngle
+                  );
+
+                  return (
+                    <path
+                      key={`m-sector-${slice.key}`}
+                      d={slicePath}
+                      fill={slice.theme.color}
+                      fillOpacity={isHovered ? 0.95 : 0.8}
+                      stroke="#FFFFFF"
+                      strokeWidth="2.5"
+                      strokeLinejoin="round"
+                      className="cursor-pointer transition-all duration-200"
+                      style={{
+                        filter: isHovered ? 'url(#opta-glow-mobile)' : 'none',
+                        transformOrigin: `${cx}px ${cy}px`
+                      }}
+                      onClick={() => {
+                        if (onSelectCategory) onSelectCategory(slice.key);
+                      }}
+                    >
+                      <title>{`${slice.label}: ${slice.score} / 100`}</title>
+                    </path>
+                  );
+                })}
+              </g>
+
+              {/* D. PERIPHERAL CATEGORY LABELS & SCORE PILLS (UNCLIPPED) */}
+              <g className="category-labels">
+                {sliceData.map((slice) => {
+                  const isHovered = slice.isHovered;
+                  const pos = slice.labelPos;
+                  const isRightSide = pos.x > cx + 15;
+                  const isLeftSide = pos.x < cx - 15;
+                  const textAnchor = isRightSide ? 'start' : isLeftSide ? 'end' : 'middle';
+                  const cleanShortLabel = slice.shortLabel || slice.theme?.shortLabel || slice.label;
+
+                  return (
+                    <g
+                      key={`m-label-${slice.key}`}
+                      className="cursor-pointer transition-opacity duration-200"
+                      opacity={isHovered ? 1 : 0.92}
+                      onClick={() => {
+                        if (onSelectCategory) onSelectCategory(slice.key);
+                      }}
+                    >
+                      <text
+                        x={pos.x}
+                        y={pos.y - 2}
+                        textAnchor={textAnchor}
+                        fontSize="10"
+                        fontWeight={isHovered ? '800' : '700'}
+                        fill={isHovered ? slice.theme.color : '#17233D'}
+                        className="tracking-tight select-none"
+                      >
+                        {cleanShortLabel}
+                      </text>
+                      <text
+                        x={pos.x}
+                        y={pos.y + 10}
+                        textAnchor={textAnchor}
+                        fontSize="9.5"
+                        fontWeight="800"
+                        fill={slice.theme.color}
+                        className="font-mono select-none"
+                      >
+                        {slice.score}
+                      </text>
+                    </g>
+                  );
+                })}
+              </g>
+
+              {/* E. CENTER HUB */}
+              <g
+                className="center-hub select-none cursor-pointer"
+                onClick={() => {
+                  if (onOpenEdit && !isArchived) onOpenEdit(currentFocalKey || undefined);
+                }}
+              >
+                <circle
+                  cx={cx}
+                  cy={cy}
+                  r={innerRadius - 2}
+                  fill="#FFFFFF"
+                  stroke={currentFocalCategory ? focalTheme.color : '#E7EBF2'}
+                  strokeWidth="3"
+                  filter="url(#center-shadow-mobile)"
+                />
+                <circle
+                  cx={cx}
+                  cy={cy}
+                  r={innerRadius - 6}
+                  fill={currentFocalCategory ? `${focalTheme.color}10` : '#F5F7FC'}
+                />
+                {currentFocalCategory ? (
+                  <g>
+                    <text
+                      x={cx}
+                      y={cy - 11}
+                      textAnchor="middle"
+                      fontSize="8"
+                      fontWeight="800"
+                      fill="#68758B"
+                      className="uppercase tracking-wider select-none"
+                    >
+                      {focalTheme.shortLabel}
+                    </text>
+                    <text
+                      x={cx}
+                      y={cy + 8}
+                      textAnchor="middle"
+                      fontSize="18"
+                      fontWeight="900"
+                      fill={focalTheme.color}
+                      className="font-mono select-none"
+                    >
+                      {currentFocalCategory.score || 0}
+                    </text>
+                    <text
+                      x={cx}
+                      y={cy + 20}
+                      textAnchor="middle"
+                      fontSize="7.5"
+                      fontWeight="700"
+                      fill="#2455E8"
+                      className="select-none"
+                    >
+                      Detail ▾
+                    </text>
+                  </g>
+                ) : (
+                  <g>
+                    <text
+                      x={cx}
+                      y={cy - 11}
+                      textAnchor="middle"
+                      fontSize="7.5"
+                      fontWeight="800"
+                      fill="#68758B"
+                      className="uppercase tracking-wider select-none"
+                    >
+                      SKOR
+                    </text>
+                    <text
+                      x={cx}
+                      y={cy + 7}
+                      textAnchor="middle"
+                      fontSize="19"
+                      fontWeight="900"
+                      fill="#101D38"
+                      className="font-mono select-none"
+                    >
+                      {overallScore}
+                    </text>
+                    <text
+                      x={cx}
+                      y={cy + 19}
+                      textAnchor="middle"
+                      fontSize="8"
+                      fontWeight="800"
+                      fill="#16A779"
+                      className="select-none"
+                    >
+                      {overallGrade.grade.split(' ')[0]}
+                    </text>
+                  </g>
+                )}
+              </g>
+            </svg>
+          </div>
+        </div>
+
+        {/* 7-CATEGORY QUICK SCORE STRIP (TAPPABLE TO FOCUS CATEGORY) */}
+        <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-[#E7EBF2]">
+          {sliceData.map((slice, idx) => {
+            const isSelected = activeCategoryKey === slice.key;
+            const isLastOdd = sliceData.length % 2 === 1 && idx === sliceData.length - 1;
+            return (
+              <button
+                key={`m-pill-${slice.key}`}
+                type="button"
+                onClick={() => {
+                  if (onSelectCategory) onSelectCategory(slice.key);
+                }}
+                className={`min-h-[44px] px-2.5 py-1.5 rounded-[10px] border text-left flex items-center justify-between gap-2 transition-all cursor-pointer ${
+                  isLastOdd ? 'col-span-2' : ''
+                } ${
+                  isSelected
+                    ? 'bg-[#F5F7FC] border-[#2455E8] shadow-[0_2px_6px_rgba(36,85,232,0.08)]'
+                    : 'bg-[#FFFFFF] border-[#E7EBF2]'
+                }`}
+              >
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <span
+                    className="w-2.5 h-2.5 rounded-full shrink-0"
+                    style={{ backgroundColor: slice.theme.color }}
+                  />
+                  <span className="text-[11px] font-bold text-[#17233D] truncate">
+                    {slice.shortLabel || slice.theme.shortLabel || slice.label}
+                  </span>
+                </div>
+                <span
+                  className="text-[12px] font-extrabold font-mono shrink-0"
+                  style={{ color: slice.score > 0 ? slice.theme.color : '#68758B' }}
+                >
+                  {slice.score}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-xs overflow-hidden transition-all">

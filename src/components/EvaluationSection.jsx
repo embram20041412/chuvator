@@ -112,6 +112,12 @@ import TennisAssessmentView from './TennisAssessmentView';
 import ScoutingPolarAreaPanel from './ScoutingPolarAreaPanel';
 import AssessmentIndicatorsAccordion from './AssessmentIndicatorsAccordion';
 import AthleteAssessmentEditView from './AthleteAssessmentEditView';
+import {
+  MobileEvaluationContextBar,
+  MobileScoreHeroCard,
+  MobileAiAndCoachNotesSection,
+  MobileEvaluationHistorySection
+} from '../mobile/components/evaluation/MobileEvaluationBlocks';
 
 // =====================================================================
 // RESTRUKTURISASI MATRIKS KPI 4-PILAR UNTUK CABANG OLAHRAGA LAIN
@@ -234,13 +240,15 @@ function formatDateIndonesian(dateStr) {
 // =====================================================================
 // MAIN COMPONENT EXPORT
 // =====================================================================
-export default function EvaluationSection({ selectedClass, students = [], tenantId, activeAcademy }) {
+export default function EvaluationSection({ selectedClass, students = [], tenantId, activeAcademy, isMobile = false }) {
   const isArchived = Boolean(selectedClass?.isArchived === true);
 
   // Filter students in current active class
   const classStudents = useMemo(() => {
-    return students.filter((s) => s.classId === selectedClass?.id);
-  }, [students, selectedClass?.id]);
+    return students.filter(
+      (s) => s.classId === selectedClass?.id || (!s.classId && selectedClass?.className && s.className === selectedClass.className)
+    );
+  }, [students, selectedClass?.id, selectedClass?.className]);
 
   // Firestore fetch-once evaluation history (limited to 100 docs)
   const [history, setHistory] = useState([]);
@@ -350,6 +358,7 @@ export default function EvaluationSection({ selectedClass, students = [], tenant
           onDeleteEvaluation={handleDeleteEvaluation}
           onEvaluationSaved={handleEvaluationSaved}
           isArchived={isArchived}
+          isMobile={isMobile}
         />
       ) : isFutsal ? (
         <FutsalAssessmentView
@@ -364,6 +373,7 @@ export default function EvaluationSection({ selectedClass, students = [], tenant
           onDeleteEvaluation={handleDeleteEvaluation}
           onEvaluationSaved={handleEvaluationSaved}
           isArchived={isArchived}
+          isMobile={isMobile}
         />
       ) : isFootball ? (
         <FootballAssessmentView
@@ -378,6 +388,7 @@ export default function EvaluationSection({ selectedClass, students = [], tenant
           onDeleteEvaluation={handleDeleteEvaluation}
           onEvaluationSaved={handleEvaluationSaved}
           isArchived={isArchived}
+          isMobile={isMobile}
         />
       ) : (
         <Standard4PillarView
@@ -392,6 +403,7 @@ export default function EvaluationSection({ selectedClass, students = [], tenant
           onDeleteEvaluation={handleDeleteEvaluation}
           onEvaluationSaved={handleEvaluationSaved}
           isArchived={isArchived}
+          isMobile={isMobile}
         />
       )}
     </>
@@ -412,7 +424,8 @@ function FutsalAssessmentView({
   setFilterStudentId,
   onDeleteEvaluation,
   onEvaluationSaved,
-  isArchived = false
+  isArchived = false,
+  isMobile = false
 }) {
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [evaluationDate, setEvaluationDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -725,6 +738,7 @@ function FutsalAssessmentView({
     }
 
     setCoachNote(draft);
+    return draft;
   };
 
   const handleSaveEvaluation = async (e) => {
@@ -816,6 +830,169 @@ function FutsalAssessmentView({
   );
 
   const overallGrade = getScoreGrade(axisScores.overall);
+
+  const hasUnsavedChanges = useMemo(() => {
+    const baseScores = latestEvalDoc?.scores || {};
+    const currentKeys = Object.keys(scores);
+    const scoreChanged = currentKeys.some((k) => (scores[k] || 0) !== (baseScores[k] || 0));
+    const noteChanged = coachNote.trim().length > 0 && coachNote.trim() !== String(latestEvalDoc?.coachNote || '').trim();
+    return scoreChanged || noteChanged;
+  }, [scores, latestEvalDoc, coachNote]);
+
+  if (isMobile) {
+    const futsalTierOptions = [
+      { value: 'AUTO', label: `Otomatis: Tier ${detectedFutsalTier} (${studentAge} Thn)` },
+      { value: '1', label: 'Tier 1 — Usia Dini (6–12 Thn)' },
+      { value: '2', label: 'Tier 2 — Youth (13–15 Thn)' },
+      { value: '3', label: 'Tier 3 — Junior (16–19 Thn)' },
+      { value: '4', label: 'Tier 4 — Profesional (>19 Thn)' }
+    ];
+
+    const styleObj = getFutsalStyleConfig(selectedStyleCode);
+
+    return (
+      <div className="space-y-3 text-left">
+        {students.length === 0 ? (
+          <div className="chua-m-eval-card py-6 text-center space-y-1.5">
+            <User className="w-8 h-8 text-[#68758B] mx-auto" />
+            <p className="text-[13px] font-bold text-[#17233D] my-0">
+              Belum ada atlet di kelas ini
+            </p>
+            <p className="text-[11px] text-[#68758B] my-0">
+              Tambahkan siswa ke kelas untuk mulai mencatat evaluasi.
+            </p>
+          </div>
+        ) : isEditingIndicators && selectedStudent ? (
+          <AthleteAssessmentEditView
+            studentName={selectedStudent.studentName}
+            sportLabel={`Futsal • ${futsalTierConfig.shortLabel}`}
+            sportType="futsal"
+            activeTier={activeFutsalTier}
+            categoryList={futsalCategoryList}
+            initialScores={scores}
+            activeCategoryKey={activeModalCategoryKey}
+            selectedPosition={selectedPosition}
+            selectedStyleCode={selectedStyleCode}
+            availablePositions={availablePositions}
+            playingStyles={FUTSAL_PLAYING_STYLES}
+            getStyleConfigFn={getFutsalStyleConfig}
+            resolvePositionIndicatorsFn={getFutsalPositionIndicatorsForTier}
+            onSave={(updatedScores, updatedConfig) => {
+              setScores(updatedScores);
+              if (updatedConfig) {
+                if (updatedConfig.selectedPosition) setSelectedPosition(updatedConfig.selectedPosition);
+                if (updatedConfig.selectedStyleCode) setSelectedStyleCode(updatedConfig.selectedStyleCode);
+              }
+              setIsEditingIndicators(false);
+            }}
+            onCancel={() => setIsEditingIndicators(false)}
+            isArchived={isArchived}
+            tierLabel={`Futsal ${futsalTierConfig.label}`}
+            isMobile={true}
+          />
+        ) : (
+          <>
+            {/* A & B. Konteks Evaluasi + Pemilih Atlet Ringkas */}
+            <MobileEvaluationContextBar
+              selectedClass={selectedClass}
+              students={students}
+              selectedStudent={selectedStudent}
+              onSelectStudentId={setSelectedStudentId}
+              evaluationDate={evaluationDate}
+              onChangeDate={setEvaluationDate}
+              tierValue={overrideFutsalTier}
+              onChangeTier={setOverrideFutsalTier}
+              tierOptions={futsalTierOptions}
+              evaluatedStudentIdsToday={evaluatedStudentIdsToday}
+              history={history}
+              isArchived={isArchived}
+              positionBadge={currentPosIndicatorsConfig.shortLabel || selectedPosition}
+              sportLabel="Futsal"
+            />
+
+            {selectedStudent && (
+              <form onSubmit={handleSaveEvaluation} className="space-y-3">
+                {/* C. Ringkasan Skor Utama */}
+                <MobileScoreHeroCard
+                  studentName={selectedStudent.studentName}
+                  overallScore={axisScores.overall}
+                  gradeText={overallGrade.grade}
+                  positionLabel={currentPosIndicatorsConfig.shortLabel || selectedPosition}
+                  tacticalRoleLabel={activeFutsalTier >= 3 && styleObj ? `${styleObj.code} • ${styleObj.name}` : ''}
+                  tierShortLabel={futsalTierConfig.shortLabel}
+                  latestEvalDate={latestEvalDoc?.date || null}
+                  evaluationDate={evaluationDate}
+                  onOpenEdit={() => {
+                    setActiveModalCategoryKey(null);
+                    setIsEditingIndicators(true);
+                  }}
+                  isArchived={isArchived}
+                />
+
+                {/* D. Scouting Polar-Area (Elemen Visual Utama) */}
+                <ScoutingPolarAreaPanel
+                  categoryList={futsalCategoryList}
+                  overallScore={axisScores.overall}
+                  overallGrade={overallGrade}
+                  activeCategoryKey={activeModalCategoryKey}
+                  onSelectCategory={(key) => setActiveModalCategoryKey(key)}
+                  onOpenEdit={(key) => {
+                    if (key) setActiveModalCategoryKey(key);
+                    setIsEditingIndicators(true);
+                  }}
+                  isArchived={isArchived}
+                  sportName="Futsal"
+                  isMobile={true}
+                />
+
+                {/* E. Tujuh Indikator Penilaian (Progressive Disclosure Accordion) */}
+                <AssessmentIndicatorsAccordion
+                  categoryList={futsalCategoryList}
+                  scores={scores}
+                  onScoreChange={handleScoreChange}
+                  onAdjustScore={handleAdjustScore}
+                  onSetCategoryPreset={handleSetCategoryPreset}
+                  activeCategoryKey={activeModalCategoryKey}
+                  isArchived={isArchived}
+                  tierLabel={`Futsal • ${futsalTierConfig.shortLabel}`}
+                  isMobile={true}
+                  defaultOpenFirst={false}
+                />
+
+                {/* F & G. Catatan Pelatih dan AI Insight + Simpan Evaluasi */}
+                <MobileAiAndCoachNotesSection
+                  studentId={selectedStudent.id}
+                  studentName={selectedStudent.studentName}
+                  coachNote={coachNote}
+                  onChangeCoachNote={setCoachNote}
+                  onGenerateAiDraft={handleGenerateDraft}
+                  isSaving={isSaving}
+                  isArchived={isArchived}
+                  hasUnsavedChanges={hasUnsavedChanges}
+                  latestEvalDate={latestEvalDoc?.date || null}
+                  errorMsg={errorMsg}
+                  successMsg={successMsg}
+                  saveButtonLabel="Simpan Evaluasi Futsal"
+                />
+              </form>
+            )}
+
+            {/* G. Riwayat Evaluasi (Collapsible Progressive Disclosure) */}
+            <HistorySection
+              history={history}
+              loadingHistory={loadingHistory}
+              filterStudentId={filterStudentId}
+              setFilterStudentId={setFilterStudentId}
+              students={students}
+              onDeleteEvaluation={onDeleteEvaluation}
+              isArchived={isArchived}
+              isMobile={true}
+            />
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3.5 text-left">
@@ -1171,7 +1348,8 @@ function BadmintonAssessmentView({
   setFilterStudentId,
   onDeleteEvaluation,
   onEvaluationSaved,
-  isArchived = false
+  isArchived = false,
+  isMobile = false
 }) {
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [evaluationDate, setEvaluationDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -1569,7 +1747,9 @@ function BadmintonAssessmentView({
       `- Kualitas Pemulihan: ${healthRecoveryQuality}\n` +
       `*(Catatan pendukung kesehatan tidak mempengaruhi skor performa angka)*`;
 
-    setCoachNote(draft + healthSection);
+    const fullDraft = draft + healthSection;
+    setCoachNote(fullDraft);
+    return fullDraft;
   };
 
   const handleSaveEvaluation = async (e) => {
@@ -1635,6 +1815,150 @@ function BadmintonAssessmentView({
   };
 
   const gradeInfo = getScoreGrade(axisScores.overall);
+
+  const hasUnsavedChanges = useMemo(() => {
+    const baseScores = latestEvalDoc?.scores || {};
+    const currentKeys = Object.keys(scores);
+    const scoreChanged = currentKeys.some((k) => (scores[k] || 0) !== (baseScores[k] || 0));
+    const noteChanged = coachNote.trim().length > 0 && coachNote.trim() !== String(latestEvalDoc?.coachNote || '').trim();
+    return scoreChanged || noteChanged;
+  }, [scores, latestEvalDoc, coachNote]);
+
+  if (isMobile) {
+    const badmintonTierOptions = [
+      { value: 'AUTO', label: `Otomatis: Tier ${detectedBadmintonTier} (${pbsiLevelInfo.name})` },
+      { value: '1', label: 'Tier 1 — Usia Dini (≤10 Thn)' },
+      { value: '2', label: 'Tier 2 — Anak-Anak (11–13 Thn)' },
+      { value: '3', label: 'Tier 3 — Pemula/Remaja (14–17 Thn)' },
+      { value: '4', label: 'Tier 4 — Taruna/Pro (≥18 Thn)' }
+    ];
+
+    const evaluatedIdsToday = new Set(
+      (history || []).filter((h) => h.date === evaluationDate).map((h) => h.studentId)
+    );
+
+    return (
+      <div className="space-y-3 text-left">
+        {students.length === 0 ? (
+          <div className="chua-m-eval-card py-6 text-center space-y-1.5">
+            <User className="w-8 h-8 text-[#68758B] mx-auto" />
+            <p className="text-[13px] font-bold text-[#17233D] my-0">
+              Belum ada atlet di kelas ini
+            </p>
+            <p className="text-[11px] text-[#68758B] my-0">
+              Tambahkan siswa ke kelas untuk mulai mencatat evaluasi.
+            </p>
+          </div>
+        ) : (
+          <>
+            <MobileEvaluationContextBar
+              selectedClass={selectedClass}
+              students={students}
+              selectedStudent={selectedStudent}
+              onSelectStudentId={setSelectedStudentId}
+              evaluationDate={evaluationDate}
+              onChangeDate={setEvaluationDate}
+              tierValue={overrideBadmintonTier}
+              onChangeTier={setOverrideBadmintonTier}
+              tierOptions={badmintonTierOptions}
+              evaluatedStudentIdsToday={evaluatedIdsToday}
+              history={history}
+              isArchived={isArchived}
+              positionBadge={eventConfig.shortLabel}
+              sportLabel="Badminton"
+            />
+
+            {selectedStudent && (
+              <form onSubmit={handleSaveEvaluation} className="space-y-3">
+                <MobileScoreHeroCard
+                  studentName={selectedStudent.studentName}
+                  overallScore={axisScores.overall}
+                  gradeText={gradeInfo.grade}
+                  positionLabel={eventConfig.shortLabel}
+                  tacticalRoleLabel={isStyleUnlocked ? `${styleConfig.code} • ${styleConfig.name}` : ''}
+                  tierShortLabel={pbsiLevelInfo.name}
+                  latestEvalDate={latestEvalDoc?.date || null}
+                  evaluationDate={evaluationDate}
+                  onOpenEdit={() => {
+                    setActiveModalCategoryKey(badmintonCategoryList[0]?.key);
+                    setIsModalOpen(true);
+                  }}
+                  isArchived={isArchived}
+                />
+
+                <ScoutingPolarAreaPanel
+                  categoryList={badmintonCategoryList}
+                  overallScore={axisScores.overall}
+                  overallGrade={gradeInfo}
+                  activeCategoryKey={activeModalCategoryKey}
+                  onSelectCategory={(key) => setActiveModalCategoryKey(key)}
+                  onOpenEdit={(key) => {
+                    setActiveModalCategoryKey(key || badmintonCategoryList[0]?.key);
+                    setIsModalOpen(true);
+                  }}
+                  isArchived={isArchived}
+                  sportName="Badminton"
+                  isMobile={true}
+                />
+
+                <AssessmentIndicatorsAccordion
+                  categoryList={badmintonCategoryList}
+                  scores={scores}
+                  onScoreChange={handleScoreChange}
+                  onAdjustScore={handleAdjustScore}
+                  onSetCategoryPreset={handleSetCategoryPreset}
+                  activeCategoryKey={activeModalCategoryKey}
+                  isArchived={isArchived}
+                  tierLabel={`Badminton • ${pbsiLevelInfo.name}`}
+                  isMobile={true}
+                  defaultOpenFirst={false}
+                />
+
+                <MobileAiAndCoachNotesSection
+                  studentId={selectedStudent.id}
+                  studentName={selectedStudent.studentName}
+                  coachNote={coachNote}
+                  onChangeCoachNote={setCoachNote}
+                  onGenerateAiDraft={handleGenerateDraft}
+                  isSaving={isSaving}
+                  isArchived={isArchived}
+                  hasUnsavedChanges={hasUnsavedChanges}
+                  latestEvalDate={latestEvalDoc?.date || null}
+                  errorMsg={errorMsg}
+                  successMsg={successMsg}
+                  saveButtonLabel="Simpan Evaluasi Badminton"
+                />
+
+                <CategoryAssessmentModal
+                  isOpen={isModalOpen}
+                  onClose={() => setIsModalOpen(false)}
+                  categoryList={badmintonCategoryList}
+                  activeCategoryKey={activeModalCategoryKey}
+                  setActiveCategoryKey={setActiveModalCategoryKey}
+                  scores={scores}
+                  onScoreChange={handleScoreChange}
+                  onAdjustScore={handleAdjustScore}
+                  onSetCategoryPreset={handleSetCategoryPreset}
+                  isArchived={isArchived}
+                />
+              </form>
+            )}
+
+            <HistorySection
+              history={history}
+              loadingHistory={loadingHistory}
+              filterStudentId={filterStudentId}
+              setFilterStudentId={setFilterStudentId}
+              students={students}
+              onDeleteEvaluation={onDeleteEvaluation}
+              isArchived={isArchived}
+              isMobile={true}
+            />
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 text-left">
@@ -2599,7 +2923,8 @@ function FootballAssessmentView({
   setFilterStudentId,
   onDeleteEvaluation,
   onEvaluationSaved,
-  isArchived = false
+  isArchived = false,
+  isMobile = false
 }) {
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [evaluationDate, setEvaluationDate] = useState(() => new Date().toISOString().split('T')[0]);
@@ -2984,6 +3309,7 @@ function FootballAssessmentView({
     }
 
     setCoachNote(draft);
+    return draft;
   };
 
   // Save evaluation to Firestore
@@ -3075,6 +3401,179 @@ function FootballAssessmentView({
   );
 
   const overallGrade = getScoreGrade(axisScores.overall);
+
+  const hasUnsavedChanges = useMemo(() => {
+    const baseScores = latestEvalDoc?.scores || {};
+    const currentKeys = Object.keys(scores);
+    const scoreChanged = currentKeys.some((k) => (scores[k] || 0) !== (baseScores[k] || 0));
+    const noteChanged = coachNote.trim().length > 0 && coachNote.trim() !== String(latestEvalDoc?.coachNote || '').trim();
+    return scoreChanged || noteChanged;
+  }, [scores, latestEvalDoc, coachNote]);
+
+  if (isMobile) {
+    const footballTierOptions = [
+      { value: 'AUTO', label: `Otomatis: ${detectedTierCode} (${studentAge} Thn)` },
+      { value: 'FILANESIA_F1', label: 'Fase 1: U-8 & U-10 (Joy Phase)' },
+      { value: 'FILANESIA_F2', label: 'Fase 2: U-10 & U-12 (Skill Phase)' },
+      { value: 'FILANESIA_F3', label: 'Fase 3: U-14 & U-16 (Tactical Phase)' },
+      { value: 'FILANESIA_F4', label: 'Fase 4: U-18 / Senior (Performance)' }
+    ];
+
+    const styleObj = getStyleConfig(selectedStyleCode);
+    const positionText = `${selectedPosition}${activeTier >= 3 && secondaryPosition && secondaryPosition !== 'NONE' ? ` / ${secondaryPosition}` : ''}`;
+    const tacticalRoleText = activeTier >= 3
+      ? [selectedSpecialization, styleObj ? `${styleObj.code} ${styleObj.name}` : ''].filter(Boolean).join(' • ')
+      : (currentPosIndicatorsConfig.shortLabel || '');
+
+    return (
+      <div className="space-y-3 text-left">
+        {students.length === 0 ? (
+          <div className="chua-m-eval-card py-6 text-center space-y-1.5">
+            <User className="w-8 h-8 text-[#68758B] mx-auto" />
+            <p className="text-[13px] font-bold text-[#17233D] my-0">
+              Belum ada atlet di kelas ini
+            </p>
+            <p className="text-[11px] text-[#68758B] my-0">
+              Tambahkan siswa ke kelas untuk mulai mencatat evaluasi.
+            </p>
+          </div>
+        ) : isEditingIndicators && selectedStudent ? (
+          <AthleteAssessmentEditView
+            studentName={selectedStudent.studentName}
+            sportLabel={`${detectedSport || 'Sepakbola'} • ${tierConfig.shortLabel}`}
+            sportType="football"
+            activeTier={activeTier}
+            categoryList={footballCategoryList}
+            initialScores={scores}
+            activeCategoryKey={activeModalCategoryKey}
+            selectedPosition={selectedPosition}
+            secondaryPosition={secondaryPosition}
+            selectedSpecialization={selectedSpecialization}
+            selectedStyleCode={selectedStyleCode}
+            availablePositions={availablePositions}
+            secondaryPositions={SECONDARY_FOOTBALL_POSITIONS}
+            playingStyles={FOOTBALL_PLAYING_STYLES}
+            getPositionConfigFn={getPositionConfig}
+            getStyleConfigFn={getStyleConfig}
+            resolvePositionIndicatorsFn={getPositionIndicatorsForTier}
+            onSave={(updatedScores, updatedConfig) => {
+              setScores(updatedScores);
+              if (updatedConfig) {
+                if (updatedConfig.selectedPosition) setSelectedPosition(updatedConfig.selectedPosition);
+                if (updatedConfig.secondaryPosition !== undefined) setSecondaryPosition(updatedConfig.secondaryPosition);
+                if (updatedConfig.selectedSpecialization) setSelectedSpecialization(updatedConfig.selectedSpecialization);
+                if (updatedConfig.selectedStyleCode) setSelectedStyleCode(updatedConfig.selectedStyleCode);
+              }
+              setIsEditingIndicators(false);
+            }}
+            onCancel={() => setIsEditingIndicators(false)}
+            isArchived={isArchived}
+            tierLabel={`${detectedSport} ${tierConfig.label}`}
+            isMobile={true}
+          />
+        ) : (
+          <>
+            {/* A & B. Konteks Evaluasi + Pemilih Atlet Ringkas */}
+            <MobileEvaluationContextBar
+              selectedClass={selectedClass}
+              students={students}
+              selectedStudent={selectedStudent}
+              onSelectStudentId={setSelectedStudentId}
+              evaluationDate={evaluationDate}
+              onChangeDate={setEvaluationDate}
+              tierValue={overrideTier}
+              onChangeTier={setOverrideTier}
+              tierOptions={footballTierOptions}
+              evaluatedStudentIdsToday={evaluatedStudentIdsToday}
+              history={history}
+              isArchived={isArchived}
+              positionBadge={positionText}
+              sportLabel={detectedSport || 'Sepakbola'}
+            />
+
+            {selectedStudent && (
+              <form onSubmit={handleSaveEvaluation} className="space-y-3">
+                {/* C. Ringkasan Skor Utama */}
+                <MobileScoreHeroCard
+                  studentName={selectedStudent.studentName}
+                  overallScore={axisScores.overall}
+                  gradeText={overallGrade.grade}
+                  positionLabel={positionText}
+                  tacticalRoleLabel={tacticalRoleText}
+                  tierShortLabel={tierConfig.shortLabel}
+                  latestEvalDate={latestEvalDoc?.date || null}
+                  evaluationDate={evaluationDate}
+                  onOpenEdit={() => {
+                    setActiveModalCategoryKey(null);
+                    setIsEditingIndicators(true);
+                  }}
+                  isArchived={isArchived}
+                />
+
+                {/* D. Scouting Polar-Area (Elemen Visual Utama) */}
+                <ScoutingPolarAreaPanel
+                  categoryList={footballCategoryList}
+                  overallScore={axisScores.overall}
+                  overallGrade={overallGrade}
+                  activeCategoryKey={activeModalCategoryKey}
+                  onSelectCategory={(key) => setActiveModalCategoryKey(key)}
+                  onOpenEdit={(key) => {
+                    if (key) setActiveModalCategoryKey(key);
+                    setIsEditingIndicators(true);
+                  }}
+                  isArchived={isArchived}
+                  sportName={detectedSport || 'Sepakbola'}
+                  isMobile={true}
+                />
+
+                {/* E. Tujuh Indikator Penilaian (Progressive Disclosure Accordion) */}
+                <AssessmentIndicatorsAccordion
+                  categoryList={footballCategoryList}
+                  scores={scores}
+                  onScoreChange={handleScoreChange}
+                  onAdjustScore={handleAdjustScore}
+                  onSetCategoryPreset={handleSetCategoryPreset}
+                  activeCategoryKey={activeModalCategoryKey}
+                  isArchived={isArchived}
+                  tierLabel={`${detectedSport || 'Sepakbola'} • ${tierConfig.shortLabel}`}
+                  isMobile={true}
+                  defaultOpenFirst={false}
+                />
+
+                {/* F & G. Catatan Pelatih dan AI Insight + Simpan Evaluasi */}
+                <MobileAiAndCoachNotesSection
+                  studentId={selectedStudent.id}
+                  studentName={selectedStudent.studentName}
+                  coachNote={coachNote}
+                  onChangeCoachNote={setCoachNote}
+                  onGenerateAiDraft={handleGenerateDraft}
+                  isSaving={isSaving}
+                  isArchived={isArchived}
+                  hasUnsavedChanges={hasUnsavedChanges}
+                  latestEvalDate={latestEvalDoc?.date || null}
+                  errorMsg={errorMsg}
+                  successMsg={successMsg}
+                  saveButtonLabel="Simpan Evaluasi Atlet"
+                />
+              </form>
+            )}
+
+            {/* G. Riwayat Evaluasi (Collapsible Progressive Disclosure) */}
+            <HistorySection
+              history={history}
+              loadingHistory={loadingHistory}
+              filterStudentId={filterStudentId}
+              setFilterStudentId={setFilterStudentId}
+              students={students}
+              onDeleteEvaluation={onDeleteEvaluation}
+              isArchived={isArchived}
+              isMobile={true}
+            />
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3.5 text-left">
@@ -3901,7 +4400,8 @@ function Standard4PillarView({
   setFilterStudentId,
   onDeleteEvaluation,
   onEvaluationSaved,
-  isArchived = false
+  isArchived = false,
+  isMobile = false
 }) {
   const [selectedStudentId, setSelectedStudentId] = useState('');
 
@@ -4050,7 +4550,9 @@ function Standard4PillarView({
       { name: `Spesifik Posisi (${playerRole || 'Peran'})`, score: pillarScores.position }
     ];
     const sorted = [...items].sort((a, b) => b.score - a.score);
-    setCoachNote(`Atlet ${selectedStudent.studentName} (${playerRole || 'Umum'}) tertinggi pada ${sorted[0].name} (Skor: ${sorted[0].score}/100) dan perlu pengembangan pada ${sorted[sorted.length - 1].name} (Skor: ${sorted[sorted.length - 1].score}/100).`);
+    const draft = `Atlet ${selectedStudent.studentName} (${playerRole || 'Umum'}) tertinggi pada ${sorted[0].name} (Skor: ${sorted[0].score}/100) dan perlu pengembangan pada ${sorted[sorted.length - 1].name} (Skor: ${sorted[sorted.length - 1].score}/100).`;
+    setCoachNote(draft);
+    return draft;
   };
 
   const handleSaveEvaluation = async (e) => {
@@ -4106,6 +4608,153 @@ function Standard4PillarView({
   const evaluatedStudentIdsToday = new Set(
     history.filter((h) => h.date === evaluationDate).map((h) => h.studentId)
   );
+
+  const overallGrade = getScoreGrade(pillarScores.overall);
+
+  const hasUnsavedChanges = useMemo(() => {
+    const baseScores = latestEvalDoc?.scores || {};
+    const currentKeys = Object.keys(scores);
+    const scoreChanged = currentKeys.some((k) => (scores[k] || 0) !== (baseScores[k] || 0));
+    const noteChanged = coachNote.trim().length > 0 && coachNote.trim() !== String(latestEvalDoc?.coachNote || '').trim();
+    return scoreChanged || noteChanged;
+  }, [scores, latestEvalDoc, coachNote]);
+
+  if (isMobile) {
+    return (
+      <div className="space-y-3 text-left">
+        {classStudents.length === 0 ? (
+          <div className="chua-m-eval-card py-6 text-center space-y-1.5">
+            <User className="w-8 h-8 text-[#68758B] mx-auto" />
+            <p className="text-[13px] font-bold text-[#17233D] my-0">
+              Belum ada atlet di kelas ini
+            </p>
+            <p className="text-[11px] text-[#68758B] my-0">
+              Tambahkan siswa ke kelas untuk mulai mencatat evaluasi.
+            </p>
+          </div>
+        ) : (
+          <>
+            <MobileEvaluationContextBar
+              selectedClass={selectedClass}
+              students={classStudents}
+              selectedStudent={selectedStudent}
+              onSelectStudentId={setSelectedStudentId}
+              evaluationDate={evaluationDate}
+              onChangeDate={setEvaluationDate}
+              tierOptions={[]}
+              evaluatedStudentIdsToday={evaluatedStudentIdsToday}
+              history={history}
+              isArchived={isArchived}
+              positionBadge={playerRole || 'Umum'}
+              sportLabel={sportName}
+            />
+
+            {selectedStudent && (
+              <form onSubmit={handleSaveEvaluation} className="space-y-3">
+                <MobileScoreHeroCard
+                  studentName={selectedStudent.studentName}
+                  overallScore={pillarScores.overall}
+                  gradeText={overallGrade.grade}
+                  positionLabel={playerRole || 'Umum'}
+                  tacticalRoleLabel={categoryConfig.label}
+                  tierShortLabel={sportName}
+                  latestEvalDate={latestEvalDoc?.date || null}
+                  evaluationDate={evaluationDate}
+                  onOpenEdit={() => {
+                    setActiveModalCategoryKey(standardCategoryList[0]?.key);
+                    setIsModalOpen(true);
+                  }}
+                  isArchived={isArchived}
+                />
+
+                <ScoutingPolarAreaPanel
+                  categoryList={standardCategoryList}
+                  overallScore={pillarScores.overall}
+                  overallGrade={overallGrade}
+                  activeCategoryKey={activeModalCategoryKey}
+                  onSelectCategory={(key) => setActiveModalCategoryKey(key)}
+                  onOpenEdit={(key) => {
+                    setActiveModalCategoryKey(key || standardCategoryList[0]?.key);
+                    setIsModalOpen(true);
+                  }}
+                  isArchived={isArchived}
+                  sportName={sportName}
+                  isMobile={true}
+                />
+
+                <AssessmentIndicatorsAccordion
+                  categoryList={standardCategoryList}
+                  scores={scores}
+                  onScoreChange={handleScoreChange}
+                  onAdjustScore={(ind, delta) => {
+                    if (isArchived) return;
+                    setScores((prev) => {
+                      const curr = prev[ind] !== undefined ? prev[ind] : 0;
+                      return { ...prev, [ind]: Math.min(100, Math.max(0, curr + delta)) };
+                    });
+                  }}
+                  onSetCategoryPreset={handleSetCategoryPreset}
+                  activeCategoryKey={activeModalCategoryKey}
+                  isArchived={isArchived}
+                  tierLabel={categoryConfig.label}
+                  isMobile={true}
+                  defaultOpenFirst={false}
+                />
+
+                <MobileAiAndCoachNotesSection
+                  studentId={selectedStudent.id}
+                  studentName={selectedStudent.studentName}
+                  coachNote={coachNote}
+                  onChangeCoachNote={setCoachNote}
+                  onGenerateAiDraft={handleGenerateDraft}
+                  isSaving={isSaving}
+                  isArchived={isArchived}
+                  hasUnsavedChanges={hasUnsavedChanges}
+                  latestEvalDate={latestEvalDoc?.date || null}
+                  errorMsg={errorMsg}
+                  successMsg={successMsg}
+                  saveButtonLabel="Simpan Evaluasi Atlet"
+                />
+
+                <CategoryAssessmentModal
+                  isOpen={isModalOpen}
+                  onClose={() => setIsModalOpen(false)}
+                  categoryList={standardCategoryList}
+                  activeCategoryKey={activeModalCategoryKey}
+                  setActiveCategoryKey={setActiveModalCategoryKey}
+                  scores={scores}
+                  onScoreChange={handleScoreChange}
+                  onAdjustScore={(ind, delta) => {
+                    if (isArchived) return;
+                    setScores((prev) => {
+                      const curr = prev[ind] !== undefined ? prev[ind] : 0;
+                      return { ...prev, [ind]: Math.min(100, Math.max(0, curr + delta)) };
+                    });
+                  }}
+                  onSetCategoryPreset={(catKey, val) => {
+                    if (isArchived) return;
+                    handleSetCategoryPreset(catKey, val);
+                  }}
+                  isArchived={isArchived}
+                />
+              </form>
+            )}
+
+            <HistorySection
+              history={history}
+              loadingHistory={loadingHistory}
+              filterStudentId={filterStudentId}
+              setFilterStudentId={setFilterStudentId}
+              students={classStudents}
+              onDeleteEvaluation={onDeleteEvaluation}
+              isArchived={isArchived}
+              isMobile={true}
+            />
+          </>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 text-left">
@@ -4391,9 +5040,25 @@ export function HistorySection({
   setFilterStudentId,
   students = [],
   onDeleteEvaluation,
-  isArchived = false
+  isArchived = false,
+  isMobile = false
 }) {
   const [expandedIds, setExpandedIds] = useState({});
+
+  if (isMobile) {
+    return (
+      <MobileEvaluationHistorySection
+        history={history}
+        loadingHistory={loadingHistory}
+        filterStudentId={filterStudentId}
+        setFilterStudentId={setFilterStudentId}
+        students={students}
+        onDeleteEvaluation={onDeleteEvaluation}
+        isArchived={isArchived}
+        getScoreGradeFn={getScoreGrade}
+      />
+    );
+  }
 
   const toggleDetail = (id) => {
     setExpandedIds((prev) => ({

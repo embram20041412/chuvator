@@ -810,3 +810,220 @@
   cursor: not-allowed;
 }
 
+/* ========================================================================= */
+/* PHASE C — MOBILE EVALUATION EXPERIENCE                                    */
+/* ========================================================================= */
+
+.chua-mobile-app .chua-m-eval-card {
+  background-color: #FFFFFF;
+  border: 1px solid #E7EBF2;
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 2px 8px rgba(16, 29, 56, 0.04);
+}
+
+.chua-mobile-app .chua-m-eval-athlete-trigger {
+  width: 100%;
+  min-height: 52px;
+  background-color: #F5F7FC;
+  border: 1px solid #E7EBF2;
+  border-radius: 14px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.chua-mobile-app .chua-m-eval-athlete-trigger:active {
+  background-color: #EDF2FA;
+  border-color: #2455E8;
+}
+
+.chua-mobile-app .chua-m-eval-nav-icon-btn {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 12px;
+  border: 1px solid #E7EBF2;
+  background-color: #F5F7FC;
+  color: #17233D;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.chua-mobile-app .chua-m-eval-nav-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.chua-mobile-app .chua-m-eval-control-pill {
+  min-height: 44px;
+  background-color: #F5F7FC;
+  border: 1px solid #E7EBF2;
+  border-radius: 12px;
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.chua-mobile-app .chua-m-eval-score-hero {
+  background: linear-gradient(135deg, #101D38 0%, #172B52 100%);
+  border: 1px solid rgba(36, 85, 232, 0.35);
+  border-radius: 16px;
+  padding: 16px;
+  color: #FFFFFF;
+  box-shadow: 0 6px 18px rgba(16, 29, 56, 0.12);
+}
+
+.chua-mobile-app .chua-m-eval-score-badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.chua-mobile-app .chua-m-eval-accordion-item {
+  background-color: #FFFFFF;
+  border: 1px solid #E7EBF2;
+  border-radius: 14px;
+  overflow: hidden;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.chua-mobile-app .chua-m-eval-accordion-item-open {
+  border-color: #2455E8;
+  box-shadow: 0 4px 14px rgba(36, 85, 232, 0.08);
+}
+
+.chua-mobile-app .chua-m-eval-accordion-header {
+  width: 100%;
+  min-height: 54px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  background-color: #FFFFFF;
+  border: none;
+  text-align: left;
+  cursor: pointer;
+}
+
+.chua-mobile-app .chua-m-eval-accordion-item-open .chua-m-eval-accordion-header {
+  background-color: #F5F7FC;
+  border-bottom: 1px solid #E7EBF2;
+}
+
+.chua-mobile-app .chua-m-eval-step-btn {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 10px;
+  border: 1px solid #E7EBF2;
+  background-color: #F5F7FC;
+  color: #17233D;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  user-select: none;
+}
+
+.chua-mobile-app .chua-m-eval-step-btn:active:not(:disabled) {
+  background-color: #2455E8;
+  border-color: #2455E8;
+  color: #FFFFFF;
+}
+
+.chua-mobile-app .chua-m-eval-step-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.chua-mobile-app .chua-m-eval-preset-btn {
+  min-height: 44px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: transform 0.1s ease, opacity 0.15s ease;
+}
+
+.chua-mobile-app .chua-m-eval-preset-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.chua-mobile-app .chua-m-eval-primary-btn {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 12px;
+  background-color: #2455E8;
+  color: #FFFFFF;
+  font-size: 13px;
+  font-weight: 700;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 16px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.chua-mobile-app .chua-m-eval-primary-btn:active:not(:disabled) {
+  background-color: #1D46C7;
+}
+
+.chua-mobile-app .chua-m-eval-primary-btn:disabled {
+  background-color: #E7EBF2;
+  color: #68758B;
+  cursor: not-allowed;
+}
+
+.chua-mobile-app .chua-m-eval-secondary-btn {
+  min-height: 44px;
+  border-radius: 12px;
+  background-color: #F5F7FC;
+  border: 1px solid #E7EBF2;
+  color: #17233D;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 14px;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.chua-mobile-app .chua-m-eval-secondary-btn:active:not(:disabled) {
+  background-color: #E7EBF2;
+}
+
+

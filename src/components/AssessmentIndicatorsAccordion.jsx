@@ -108,14 +108,16 @@ export default function AssessmentIndicatorsAccordion({
   onSetCategoryPreset,
   activeCategoryKey = null,
   isArchived = false,
-  tierLabel = ''
+  tierLabel = '',
+  isMobile = false,
+  defaultOpenFirst = true
 }) {
   // Open only the focused category or the first category by default (avoid opening all at once)
   const [openKeys, setOpenKeys] = useState(() => {
     const initial = {};
     if (activeCategoryKey) {
       initial[activeCategoryKey] = true;
-    } else if (categoryList.length > 0) {
+    } else if (defaultOpenFirst && categoryList.length > 0) {
       initial[categoryList[0].key] = true;
     }
     return initial;
@@ -162,6 +164,192 @@ export default function AssessmentIndicatorsAccordion({
       isCompleted: rated === total && total > 0
     };
   };
+
+  if (isMobile) {
+    return (
+      <div className="chua-m-eval-card space-y-3">
+        {/* MOBILE HEADER & TOGGLE ALL */}
+        <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-[#E7EBF2]">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-8 h-8 rounded-[10px] bg-[#101D38] text-white flex items-center justify-center shrink-0">
+              <SlidersHorizontal className="w-4 h-4 text-[#16A779]" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="font-bold text-[13px] text-[#17233D] leading-tight truncate my-0">
+                7 Indikator Penilaian
+              </h3>
+              <p className="text-[11px] text-[#68758B] font-medium leading-tight truncate my-0 mt-0.5">
+                {tierLabel || 'Ketuk kategori untuk membuka rincian indikator'}
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleToggleAll}
+            className="chua-m-eval-secondary-btn shrink-0"
+          >
+            <LayoutGrid className="w-3.5 h-3.5 text-[#2455E8]" />
+            <span>{isAllOpen ? 'Tutup Semua' : 'Buka Semua'}</span>
+          </button>
+        </div>
+
+        {/* MOBILE PROGRESSIVE DISCLOSURE ACCORDION LIST */}
+        <div className="space-y-2">
+          {categoryList.map((cat, idx) => {
+            const theme = getCategoryTheme(cat.key);
+            const IconComp = theme.icon || Target;
+            const isOpen = Boolean(openKeys[cat.key]);
+            const indicators = cat.indicators || [];
+            const stats = getCategoryStats(indicators);
+            const score = Math.max(0, Math.min(100, Number(cat.score) || 0));
+            const displayLabel = /^\d+\./.test(String(cat.label).trim())
+              ? cat.label
+              : `${idx + 1}. ${cat.label}`;
+
+            return (
+              <div
+                key={cat.key}
+                className={`chua-m-eval-accordion-item ${
+                  isOpen ? 'chua-m-eval-accordion-item-open' : ''
+                }`}
+              >
+                {/* ACCORDION HEADER BUTTON */}
+                <button
+                  type="button"
+                  onClick={() => toggleCategory(cat.key)}
+                  className="chua-m-eval-accordion-header"
+                  aria-expanded={isOpen}
+                >
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div
+                      className="w-8 h-8 rounded-[10px] flex items-center justify-center shrink-0 text-white font-bold"
+                      style={{ backgroundColor: isOpen ? '#2455E8' : theme.color }}
+                    >
+                      <IconComp className="w-4 h-4" />
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold text-[13px] text-[#17233D] truncate leading-snug">
+                          {displayLabel}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        <span className="text-[11px] font-medium text-[#68758B] whitespace-nowrap">
+                          {stats.rated}/{stats.total} Indikator
+                        </span>
+                        {stats.isCompleted && (
+                          <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-[#16A779] whitespace-nowrap">
+                            <CheckCircle2 className="w-3 h-3 shrink-0" />
+                            <span>Lengkap</span>
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right: Category Score + Chevron */}
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-baseline gap-0.5 bg-[#F5F7FC] px-2.5 py-1 rounded-[10px] border border-[#E7EBF2]">
+                      <span
+                        className="font-mono text-[13px] font-extrabold tabular-nums"
+                        style={{ color: score > 0 ? theme.color : '#17233D' }}
+                      >
+                        {score}
+                      </span>
+                      <span className="text-[10px] font-bold text-[#68758B]">/100</span>
+                    </div>
+
+                    <span className="w-7 h-7 rounded-[8px] flex items-center justify-center text-[#68758B]">
+                      {isOpen ? (
+                        <ChevronUp className="w-4 h-4 text-[#2455E8]" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4" />
+                      )}
+                    </span>
+                  </div>
+                </button>
+
+                {/* ACCORDION BODY */}
+                <AnimatePresence initial={false}>
+                  {isOpen && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{ duration: 0.16 }}
+                      className="p-3 bg-[#FFFFFF] space-y-2.5"
+                    >
+                      {/* Category Quick Presets inside open body */}
+                      {!isArchived && onSetCategoryPreset && (
+                        <div className="bg-[#F5F7FC] p-2 rounded-[12px] border border-[#E7EBF2] space-y-1.5">
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#68758B] block">
+                            Preset Cepat Kategori Ini:
+                          </span>
+                          <div className="grid grid-cols-4 gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => onSetCategoryPreset(cat.key, 0)}
+                              className="chua-m-eval-preset-btn bg-rose-50 text-rose-700 border border-rose-200"
+                            >
+                              Reset
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onSetCategoryPreset(cat.key, 50)}
+                              className="chua-m-eval-preset-btn bg-white text-[#17233D] border border-[#E7EBF2]"
+                            >
+                              50
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onSetCategoryPreset(cat.key, 75)}
+                              className="chua-m-eval-preset-btn bg-blue-50 text-[#2455E8] border border-blue-200"
+                            >
+                              75
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => onSetCategoryPreset(cat.key, 90)}
+                              className="chua-m-eval-preset-btn bg-emerald-50 text-[#16A779] border border-emerald-200"
+                            >
+                              90
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {indicators.length === 0 ? (
+                        <div className="p-3 text-center text-xs text-[#68758B]">
+                          Tidak ada indikator aktif pada jenjang ini.
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          {indicators.map((indName) => (
+                            <AccordionIndicatorCard
+                              key={indName}
+                              title={indName}
+                              value={scores[indName] !== undefined ? scores[indName] : 0}
+                              isSpecial={cat.isSpecial}
+                              onScoreChange={(val) => onScoreChange(indName, val)}
+                              onAdjust={(delta) => onAdjustScore(indName, delta)}
+                              isArchived={isArchived}
+                              accentColor={theme.color}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 p-3.5 sm:p-5 space-y-3 shadow-xs">

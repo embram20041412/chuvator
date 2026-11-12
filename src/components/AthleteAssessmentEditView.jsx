@@ -72,7 +72,8 @@ export default function AthleteAssessmentEditView({
   onSave,
   onCancel,
   isArchived = false,
-  tierLabel = ''
+  tierLabel = '',
+  isMobile = false
 }) {
   // Draft state for indicator scores
   const [draftScores, setDraftScores] = useState(() => ({ ...initialScores }));
@@ -218,6 +219,309 @@ export default function AthleteAssessmentEditView({
   const currentPositionSpecs = (sportType === 'football' && getPositionConfigFn)
     ? (getPositionConfigFn(draftPosition)?.specializations || [])
     : [];
+
+  if (isMobile) {
+    return (
+      <div className="space-y-3 animate-in fade-in duration-150 pb-4">
+        {/* 1. MOBILE EDIT HEADER + LIVE SCORE PREVIEW */}
+        <div className="chua-m-eval-card flex items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="chua-m-eval-nav-icon-btn"
+              title="Kembali"
+              aria-label="Kembali"
+            >
+              <ArrowLeft className="w-4 h-4 text-[#17233D]" />
+            </button>
+
+            <div className="min-w-0">
+              <h2 className="font-bold text-[14px] text-[#17233D] leading-tight truncate my-0">
+                Edit Evaluasi Atlet
+              </h2>
+              <p className="text-[11px] font-medium text-[#68758B] truncate my-0 mt-0.5">
+                {studentName} {sportLabel ? `• ${sportLabel}` : ''}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-[#101D38] text-white rounded-[10px] shrink-0">
+            <span className="font-mono text-[13px] font-extrabold tabular-nums">
+              {draftOverallScore}
+            </span>
+            <span className="text-[10px] text-slate-300 font-semibold">/100</span>
+            <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#16A779] text-white">
+              {draftGrade.grade.split(' ')[0]}
+            </span>
+          </div>
+        </div>
+
+        {/* 2. COMPACT POSITION & TACTICAL ROLE CARD */}
+        {availablePositions.length > 0 && (
+          <div className="chua-m-eval-card !p-0 overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setShowConfigSection(!showConfigSection)}
+              className="w-full min-h-[48px] px-3.5 py-2.5 flex items-center justify-between gap-2 text-left bg-white cursor-pointer"
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <Target className="w-4 h-4 text-[#2455E8] shrink-0" />
+                <span className="text-[13px] font-bold text-[#17233D] truncate">
+                  Posisi &amp; Peran Taktis
+                </span>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-[#F5F7FC] text-[#2455E8] border border-[#E7EBF2]">
+                  {draftPosition}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 text-[11px] font-bold text-[#68758B] shrink-0">
+                <span>{showConfigSection ? 'Tutup' : 'Ubah'}</span>
+                {showConfigSection ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+              </div>
+            </button>
+
+            {showConfigSection && (
+              <div className="p-3.5 pt-2.5 border-t border-[#E7EBF2] bg-[#F5F7FC]/60 space-y-2.5">
+                {sportType === 'futsal' ? (
+                  <div className="space-y-2.5">
+                    <div>
+                      <label htmlFor="m-edit-futsal-position" className="block text-[11px] font-bold text-[#68758B] uppercase tracking-wider mb-1">
+                        Posisi Pemain Futsal
+                      </label>
+                      <select
+                        id="m-edit-futsal-position"
+                        disabled={isArchived}
+                        value={draftPosition}
+                        onChange={(e) => handleDraftPositionChange(e.target.value)}
+                        className="w-full min-h-[44px] px-3 py-2 text-[12px] bg-white border border-[#E7EBF2] rounded-[10px] font-bold text-[#17233D]"
+                      >
+                        {availablePositions.map((p) => (
+                          <option key={p.code} value={p.code}>
+                            {p.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {activeTier >= 3 && (
+                      <div>
+                        <label htmlFor="m-edit-futsal-style" className="block text-[11px] font-bold text-[#68758B] uppercase tracking-wider mb-1">
+                          Gaya Bermain Taktis (STY)
+                        </label>
+                        <select
+                          id="m-edit-futsal-style"
+                          disabled={isArchived}
+                          value={draftStyleCode}
+                          onChange={(e) => {
+                            setDraftStyleCode(e.target.value);
+                            setHasChanges(true);
+                          }}
+                          className="w-full min-h-[44px] px-3 py-2 text-[12px] bg-white border border-[#E7EBF2] rounded-[10px] font-bold text-[#17233D]"
+                        >
+                          {playingStyles.map((st) => (
+                            <option key={st.code} value={st.code}>
+                              {st.code} — {st.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-2.5">
+                    <div>
+                      <label htmlFor="m-edit-football-position" className="block text-[11px] font-bold text-[#68758B] uppercase tracking-wider mb-1">
+                        Posisi Utama
+                      </label>
+                      <select
+                        id="m-edit-football-position"
+                        disabled={isArchived}
+                        value={draftPosition}
+                        onChange={(e) => handleDraftPositionChange(e.target.value)}
+                        className="w-full min-h-[44px] px-3 py-2 text-[12px] bg-white border border-[#E7EBF2] rounded-[10px] font-bold text-[#17233D]"
+                      >
+                        {availablePositions.map((p) => (
+                          <option key={p.code} value={p.code}>
+                            {p.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {activeTier >= 3 && secondaryPositions.length > 0 && (
+                      <div>
+                        <label htmlFor="m-edit-football-sec-pos" className="block text-[11px] font-bold text-[#68758B] uppercase tracking-wider mb-1">
+                          Posisi Alternatif
+                        </label>
+                        <select
+                          id="m-edit-football-sec-pos"
+                          disabled={isArchived}
+                          value={draftSecondaryPosition}
+                          onChange={(e) => {
+                            setDraftSecondaryPosition(e.target.value);
+                            setHasChanges(true);
+                          }}
+                          className="w-full min-h-[44px] px-3 py-2 text-[12px] bg-white border border-[#E7EBF2] rounded-[10px] font-bold text-[#17233D]"
+                        >
+                          {secondaryPositions.map((sp) => (
+                            <option key={sp.code} value={sp.code}>
+                              {sp.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {activeTier >= 3 && currentPositionSpecs.length > 0 && (
+                      <div>
+                        <label htmlFor="m-edit-football-spec" className="block text-[11px] font-bold text-[#68758B] uppercase tracking-wider mb-1">
+                          Peran Taktis / Spesialisasi
+                        </label>
+                        <select
+                          id="m-edit-football-spec"
+                          disabled={isArchived}
+                          value={draftSpecialization}
+                          onChange={(e) => {
+                            setDraftSpecialization(e.target.value);
+                            setHasChanges(true);
+                          }}
+                          className="w-full min-h-[44px] px-3 py-2 text-[12px] bg-white border border-[#E7EBF2] rounded-[10px] font-bold text-[#17233D]"
+                        >
+                          {currentPositionSpecs.map((spec) => (
+                            <option key={spec} value={spec}>
+                              {spec}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
+                    {activeTier >= 3 && playingStyles.length > 0 && (
+                      <div>
+                        <label htmlFor="m-edit-football-style" className="block text-[11px] font-bold text-[#68758B] uppercase tracking-wider mb-1">
+                          Gaya Bermain (STY)
+                        </label>
+                        <select
+                          id="m-edit-football-style"
+                          disabled={isArchived}
+                          value={draftStyleCode}
+                          onChange={(e) => {
+                            setDraftStyleCode(e.target.value);
+                            setHasChanges(true);
+                          }}
+                          className="w-full min-h-[44px] px-3 py-2 text-[12px] bg-white border border-[#E7EBF2] rounded-[10px] font-bold text-[#17233D]"
+                        >
+                          {playingStyles.map((st) => (
+                            <option key={st.code} value={st.code}>
+                              {st.code} — {st.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* 3. COMPACT GLOBAL PRESET BAR */}
+        <div className="chua-m-eval-card space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[12px] font-bold text-[#17233D] flex items-center gap-1.5">
+              <Sliders className="w-3.5 h-3.5 text-[#2455E8]" />
+              <span>Preset Cepat (Semua Kategori)</span>
+            </span>
+            <span className="text-[11px] font-medium text-[#68758B]">
+              {evaluatedCount}/{totalIndicators} terisi
+            </span>
+          </div>
+
+          <div className="grid grid-cols-4 gap-1.5">
+            <button
+              type="button"
+              disabled={isArchived}
+              onClick={() => handleDraftGlobalPreset(0)}
+              className="chua-m-eval-preset-btn bg-rose-50 text-rose-700 border border-rose-200 disabled:opacity-50"
+            >
+              Reset
+            </button>
+            <button
+              type="button"
+              disabled={isArchived}
+              onClick={() => handleDraftGlobalPreset(50)}
+              className="chua-m-eval-preset-btn bg-[#F5F7FC] text-[#17233D] border border-[#E7EBF2] disabled:opacity-50"
+            >
+              Standard
+            </button>
+            <button
+              type="button"
+              disabled={isArchived}
+              onClick={() => handleDraftGlobalPreset(75)}
+              className="chua-m-eval-preset-btn bg-blue-50 text-[#2455E8] border border-blue-200 disabled:opacity-50"
+            >
+              Good
+            </button>
+            <button
+              type="button"
+              disabled={isArchived}
+              onClick={() => handleDraftGlobalPreset(90)}
+              className="chua-m-eval-preset-btn bg-emerald-50 text-[#16A779] border border-emerald-200 disabled:opacity-50"
+            >
+              Elite
+            </button>
+          </div>
+        </div>
+
+        {/* 4. 7-CATEGORY PROGRESSIVE DISCLOSURE ACCORDION */}
+        <AssessmentIndicatorsAccordion
+          categoryList={draftCategoryList}
+          scores={draftScores}
+          onScoreChange={handleDraftScoreChange}
+          onAdjustScore={handleDraftAdjustScore}
+          onSetCategoryPreset={handleDraftCategoryPreset}
+          activeCategoryKey={activeCategoryKey}
+          isArchived={isArchived}
+          tierLabel={tierLabel}
+          isMobile={true}
+        />
+
+        {/* 5. STICKY BOTTOM ACTION BAR: BATAL & SIMPAN PERUBAHAN */}
+        <div className="sticky bottom-[76px] z-30 bg-white/95 backdrop-blur-md p-3 rounded-[16px] border border-[#E7EBF2] shadow-[0_8px_24px_rgba(16,29,56,0.12)] space-y-2">
+          <div className="flex items-center justify-between text-[11px] px-0.5">
+            <span className="font-semibold text-[#68758B]">
+              {hasChanges ? 'Perubahan belum diterapkan' : 'Nilai siap diterapkan'}
+            </span>
+            <span className="font-bold text-[#17233D] font-mono">
+              Preview Skor: {draftOverallScore}/100 ({draftGrade.grade.split(' ')[0]})
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="min-h-[48px] px-3 py-2 text-[13px] font-bold text-[#17233D] bg-[#F5F7FC] rounded-[12px] border border-[#E7EBF2] flex items-center justify-center gap-1.5 cursor-pointer"
+            >
+              <X className="w-4 h-4 text-[#68758B]" />
+              <span>Batal</span>
+            </button>
+
+            <button
+              type="button"
+              disabled={isArchived}
+              onClick={handleSaveClick}
+              className="min-h-[48px] px-3 py-2 text-[13px] font-bold text-white bg-[#2455E8] rounded-[12px] flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              <Check className="w-4 h-4 text-white" />
+              <span>Simpan Nilai</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3.5 animate-in fade-in duration-150">
