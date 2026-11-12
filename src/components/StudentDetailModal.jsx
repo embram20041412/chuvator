@@ -22,9 +22,11 @@ import {
   Check,
   Loader2,
   TrendingUp,
-  IdCard
+  IdCard,
+  Timer
 } from 'lucide-react';
 import GrowthTrackerSection from './GrowthTrackerSection';
+import AssessmentBatterySection from './AssessmentBatterySection';
 import { calculateAge, sortClassesByAgeGroup } from '../utils/helpers';
 
 export default function StudentDetailModal({
@@ -286,6 +288,19 @@ export default function StudentDetailModal({
           >
             <Trophy className="w-4 h-4" />
             <span>Prestasi</span>
+          </button>
+
+          <button
+            data-testid="student-modal-tab-test-battery"
+            onClick={() => setActiveTab('tes_lapangan')}
+            className={`py-3 px-4 font-bold text-xs border-b-2 flex items-center space-x-2 transition-all cursor-pointer ${
+              activeTab === 'tes_lapangan'
+                ? 'border-emerald-700 text-emerald-800 bg-white'
+                : 'border-transparent text-emerald-700 hover:text-emerald-900'
+            }`}
+          >
+            <Timer className="w-4 h-4" />
+            <span>Tes Lapangan (Combine)</span>
           </button>
         </div>
 
@@ -684,6 +699,22 @@ export default function StudentDetailModal({
                 )}
               </div>
 
+            </div>
+          )}
+
+          {/* TAB 5: TES LAPANGAN OBJEKTIF (SCOUTING COMBINE / ASSESSMENT BATTERY) */}
+          {activeTab === 'tes_lapangan' && (
+            <div className="animate-fade-in">
+              <AssessmentBatterySection
+                userProfile={{
+                  ...(userProfile || {}),
+                  tenantId: tenantId || currentStudent.tenantId || currentStudent.tenant_id
+                }}
+                selectedClass={classesList.find((c) => c.id === currentStudent.classId) || null}
+                students={[currentStudent]}
+                initialStudent={currentStudent}
+                singleStudentMode={true}
+              />
             </div>
           )}
 

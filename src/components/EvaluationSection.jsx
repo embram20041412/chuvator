@@ -44,7 +44,8 @@ import {
   Edit3,
   Check,
   X,
-  Archive
+  Archive,
+  Timer
 } from 'lucide-react';
 
 import {
@@ -116,6 +117,7 @@ import ScoutingPolarAreaPanel from './ScoutingPolarAreaPanel';
 import AssessmentIndicatorsAccordion from './AssessmentIndicatorsAccordion';
 import AthleteAssessmentEditView from './AthleteAssessmentEditView';
 import AnalyticsSection from './AnalyticsSection';
+import AssessmentBatterySection from './AssessmentBatterySection';
 import {
   MobileEvaluationContextBar,
   MobileScoreHeroCard,
@@ -369,7 +371,7 @@ export default function EvaluationSection({
           </div>
 
           <div
-            className="grid grid-cols-3 gap-1 p-1 bg-[#F5F7FC] rounded-[12px] border border-[#E7EBF2]"
+            className={`grid ${isFootball ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'} gap-1 p-1 bg-[#F5F7FC] rounded-[12px] border border-[#E7EBF2]`}
             role="tablist"
             aria-label="Mode Evaluasi Atlet"
           >
@@ -387,6 +389,24 @@ export default function EvaluationSection({
               <SlidersHorizontal className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate">Penilaian</span>
             </button>
+
+            {isFootball && (
+              <button
+                type="button"
+                role="tab"
+                data-testid="tab-test-battery-mobile"
+                aria-selected={assessmentView === 'test_battery'}
+                onClick={() => setAssessmentView('test_battery')}
+                className={`min-h-[38px] px-2 py-1.5 rounded-[9px] text-[11px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
+                  assessmentView === 'test_battery'
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'text-emerald-800 hover:text-emerald-950'
+                }`}
+              >
+                <Timer className="w-3.5 h-3.5 shrink-0" />
+                <span className="truncate">Tes Lapangan (18)</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -430,13 +450,13 @@ export default function EvaluationSection({
                 Athlete Development Assessment
               </h3>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Penilaian indikator performa, profil polar/radar, Advanced Analytics &amp; BI, serta riwayat evaluasi kelas.
+                Penilaian indikator performa, Tes Lapangan Objektif (Combine), Advanced Analytics &amp; BI, serta riwayat evaluasi kelas.
               </p>
             </div>
           </div>
 
           <div
-            className="inline-flex items-center gap-1 p-1 bg-slate-100 dark:bg-[#111C19] rounded-xl border border-slate-200/70 dark:border-slate-800 shrink-0"
+            className="inline-flex flex-wrap items-center gap-1 p-1 bg-slate-100 dark:bg-[#111C19] rounded-xl border border-slate-200/70 dark:border-slate-800 shrink-0"
             role="tablist"
             aria-label="Sub-menu Athlete Development Assessment"
           >
@@ -454,6 +474,24 @@ export default function EvaluationSection({
               <SlidersHorizontal className="w-3.5 h-3.5" />
               <span>Assessment &amp; Profil Atlet</span>
             </button>
+
+            {isFootball && (
+              <button
+                type="button"
+                role="tab"
+                data-testid="tab-test-battery-desktop"
+                aria-selected={assessmentView === 'test_battery'}
+                onClick={() => setAssessmentView('test_battery')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  assessmentView === 'test_battery'
+                    ? 'bg-emerald-700 text-white shadow-2xs border-b-2 border-[#C89D32]'
+                    : 'text-emerald-800 dark:text-emerald-300 hover:bg-emerald-50/70'
+                }`}
+              >
+                <Timer className="w-3.5 h-3.5" />
+                <span>Tes Lapangan (18 Tes Objektif)</span>
+              </button>
+            )}
 
             <button
               type="button"
@@ -568,6 +606,16 @@ export default function EvaluationSection({
             />
           )}
         </>
+      )}
+
+      {/* SUB-VIEW 1B: FIELD TEST BATTERY / SCOUTING COMBINE (18 OBJECTIVE TESTS) */}
+      {assessmentView === 'test_battery' && (
+        <AssessmentBatterySection
+          userProfile={{ tenantId }}
+          activeAcademy={activeAcademy}
+          selectedClass={effectiveSelectedClass}
+          students={classStudents}
+        />
       )}
 
       {/* SUB-VIEW 2: ADVANCED ANALYTICS & BI (INTEGRATED PHASE 2.0 ENGINE) */}
