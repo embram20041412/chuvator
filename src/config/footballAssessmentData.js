@@ -631,9 +631,28 @@ export function getFilteredIndicatorsForCategory(categoryKey, activeTier) {
  * Filter position indicators based on activeTier and position code
  */
 export function getPositionIndicatorsForTier(code, activeTier) {
+  if (!code || code === 'POSITION_UNVERIFIED' || typeof code !== 'string') {
+    return {
+      code: 'POSITION_UNVERIFIED',
+      label: 'Posisi Belum Terverifikasi',
+      shortLabel: 'Unverified',
+      tabTitle: 'Khusus Posisi (0)',
+      indicators: []
+    };
+  }
+
   const safeTier = typeof activeTier === 'number' && activeTier >= 1 ? activeTier : 1;
   if (safeTier === 1) {
-    const ssbPos = TIER_1_POSITIONS.find((p) => p.code === code) || TIER_1_POSITIONS[0];
+    const ssbPos = TIER_1_POSITIONS.find((p) => p.code === code);
+    if (!ssbPos) {
+      return {
+        code: 'POSITION_UNVERIFIED',
+        label: 'Posisi Belum Terverifikasi',
+        shortLabel: 'Unverified',
+        tabTitle: 'Khusus Posisi (0)',
+        indicators: []
+      };
+    }
     return {
       code: ssbPos.code,
       label: ssbPos.label,
@@ -643,7 +662,17 @@ export function getPositionIndicatorsForTier(code, activeTier) {
     };
   }
 
-  const posCfg = getPositionConfig(code);
+  const posCfg = FOOTBALL_POSITIONS.find((p) => p.code === code);
+  if (!posCfg) {
+    return {
+      code: 'POSITION_UNVERIFIED',
+      label: 'Posisi Belum Terverifikasi',
+      shortLabel: 'Unverified',
+      tabTitle: 'Khusus Posisi (0)',
+      indicators: []
+    };
+  }
+
   let sliced = posCfg.indicators;
 
   if (safeTier === 2) {
@@ -684,7 +713,26 @@ export function isFootballOrMinisoccer(selectedClass, activeAcademy) {
  * Get position object by code
  */
 export function getPositionConfig(code) {
-  return FOOTBALL_POSITIONS.find((p) => p.code === code) || FOOTBALL_POSITIONS[10];
+  if (!code || code === 'POSITION_UNVERIFIED' || typeof code !== 'string') {
+    return {
+      code: 'POSITION_UNVERIFIED',
+      label: 'Posisi Belum Terverifikasi',
+      shortLabel: 'Unverified',
+      category: 'Unverified',
+      specializations: [],
+      indicators: []
+    };
+  }
+  const found = FOOTBALL_POSITIONS.find((p) => p.code === code);
+  if (found) return found;
+  return {
+    code: 'POSITION_UNVERIFIED',
+    label: 'Posisi Belum Terverifikasi',
+    shortLabel: 'Unverified',
+    category: 'Unverified',
+    specializations: [],
+    indicators: []
+  };
 }
 
 /**

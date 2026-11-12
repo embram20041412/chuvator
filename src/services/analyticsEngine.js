@@ -37,12 +37,22 @@ import {
 // Helper to convert tier strings or numbers to 1-4 numeric tier
 export function toNumericTier(tierInput) {
   if (typeof tierInput === 'number' && tierInput >= 1 && tierInput <= 4) return tierInput;
-  const str = String(tierInput || '').toUpperCase();
-  if (str.includes('TIER_1') || str.includes('FASE 1') || str.includes('U6_U9')) return 1;
-  if (str.includes('TIER_2') || str.includes('FASE 2') || str.includes('U10_U12')) return 2;
-  if (str.includes('TIER_3') || str.includes('FASE 3') || str.includes('U13_U15')) return 3;
-  if (str.includes('TIER_4') || str.includes('FASE 4') || str.includes('U16_U18')) return 4;
+  const str = String(tierInput || '').trim().toUpperCase();
+  if (str === '1' || str === 'TIER 1' || str.includes('TIER_1') || str.includes('FASE 1') || str.includes('FASE_1') || str.includes('FILANESIA_F1') || str.includes('F1') || str.includes('U6_U9') || str.includes('U-6') || str.includes('U-9')) return 1;
+  if (str === '2' || str === 'TIER 2' || str.includes('TIER_2') || str.includes('FASE 2') || str.includes('FASE_2') || str.includes('FILANESIA_F2') || str.includes('F2') || str.includes('U10_U12') || str.includes('U10_U13') || str.includes('U-10') || str.includes('U-12') || str.includes('U-13')) return 2;
+  if (str === '3' || str === 'TIER 3' || str.includes('TIER_3') || str.includes('FASE 3') || str.includes('FASE_3') || str.includes('FILANESIA_F3') || str.includes('F3') || str.includes('U13_U15') || str.includes('U14_U17') || str.includes('U-13') || str.includes('U-15') || str.includes('U-17')) return 3;
+  if (str === '4' || str === 'TIER 4' || str.includes('TIER_4') || str.includes('FASE 4') || str.includes('FASE_4') || str.includes('FILANESIA_F4') || str.includes('F4') || str.includes('U16_U18') || str.includes('U18_UP') || str.includes('U-18') || str.includes('SENIOR')) return 4;
   return 1;
+}
+
+// Helper to standardize category display label (DISC-02)
+export function getCategoryDisplayLabel(categoryKey, { uppercase = false } = {}) {
+  if (categoryKey === 'spesifik_posisi') {
+    return uppercase ? 'KHUSUS POSISI' : 'Khusus Posisi';
+  }
+  const formatted = String(categoryKey || '').replace(/_/g, ' ');
+  if (uppercase) return formatted.toUpperCase();
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 }
 
 // Helper to get all indicators for a specific sport, tier, and role/position
@@ -53,20 +63,27 @@ export function getSportIndicatorsRegistry(sport = 'football', activeTier = 'TIE
   let categoriesMap = {};
   let positionIndicators = [];
 
+  const isValidRole = roleOrPosition &&
+    roleOrPosition !== 'POSITION_UNVERIFIED' &&
+    typeof roleOrPosition === 'string' &&
+    roleOrPosition.trim() !== '';
+
+  const cleanRole = isValidRole ? roleOrPosition.trim() : null;
+
   if (normalizedSport.includes('futsal')) {
     Object.keys(FUTSAL_CORE_CATEGORIES).forEach((k) => {
       categoriesMap[k] = getFilteredFutsalIndicatorsForCategory(k, numTier);
     });
-    if (roleOrPosition) {
-      const res = getFutsalPositionIndicatorsForTier(roleOrPosition, numTier);
+    if (cleanRole) {
+      const res = getFutsalPositionIndicatorsForTier(cleanRole, numTier);
       positionIndicators = res?.indicators || (Array.isArray(res) ? res : []);
     }
   } else if (normalizedSport.includes('badminton') || normalizedSport.includes('bulutangkis')) {
     Object.keys(BADMINTON_CORE_CATEGORIES).forEach((k) => {
       categoriesMap[k] = getFilteredBadmintonIndicatorsForCategory(k, numTier);
     });
-    if (roleOrPosition && BADMINTON_EVENT_INDICATORS[roleOrPosition]) {
-      const eventConfig = getBadmintonEventSpecificConfigForTier(roleOrPosition, numTier);
+    if (cleanRole && BADMINTON_EVENT_INDICATORS[cleanRole]) {
+      const eventConfig = getBadmintonEventSpecificConfigForTier(cleanRole, numTier);
       positionIndicators = eventConfig?.indicators || (Array.isArray(eventConfig) ? eventConfig : []);
     }
   } else {
@@ -74,8 +91,8 @@ export function getSportIndicatorsRegistry(sport = 'football', activeTier = 'TIE
     Object.keys(FOOTBALL_CORE_CATEGORIES).forEach((k) => {
       categoriesMap[k] = getFilteredIndicatorsForCategory(k, numTier);
     });
-    if (roleOrPosition) {
-      const res = getPositionIndicatorsForTier(roleOrPosition, numTier);
+    if (cleanRole) {
+      const res = getPositionIndicatorsForTier(cleanRole, numTier);
       positionIndicators = res?.indicators || (Array.isArray(res) ? res : []);
     }
   }
@@ -160,6 +177,8 @@ export function analyzeAthletePerformance({
 
     categoryAnalysis[catKey] = {
       categoryKey: catKey,
+      displayName: getCategoryDisplayLabel(catKey, { uppercase: false }),
+      label: getCategoryDisplayLabel(catKey, { uppercase: true }),
       categoryAverage,
       totalCount: rawList.length,
       evaluatedCount: catEvaluated,
@@ -216,6 +235,8 @@ export function analyzeAthletePerformance({
 
     categoryAnalysis.spesifik_posisi = {
       categoryKey: 'spesifik_posisi',
+      displayName: 'Khusus Posisi',
+      label: 'KHUSUS POSISI',
       categoryAverage: posAverage,
       totalCount: registry.positionIndicators.length,
       evaluatedCount: posEvaluated,
@@ -266,10 +287,44 @@ export function analyzePositionEventPerformance({
   scores = {},
   sport = 'football',
   activeTier = 'TIER_1_U6_U9',
-  roleOrPosition = 'CB'
+  roleOrPosition = null
 }) {
-  const registry = getSportIndicatorsRegistry(sport, activeTier, roleOrPosition);
-  const indicators = registry.positionIndicators;
+  const isUnverified = !roleOrPosition ||
+    roleOrPosition === 'POSITION_UNVERIFIED' ||
+    typeof roleOrPosition !== 'string' ||
+    roleOrPosition.trim() === '';
+
+  if (isUnverified) {
+    return {
+      roleOrPosition: 'POSITION_UNVERIFIED',
+      isVerified: false,
+      warning: 'Posisi atlet belum terverifikasi pada sesi evaluasi maupun profil.',
+      positionAverage: null,
+      totalCount: 0,
+      evaluatedCount: 0,
+      untestedCount: 0,
+      coveragePercent: 0,
+      indicators: []
+    };
+  }
+
+  const cleanRole = roleOrPosition.trim();
+  const registry = getSportIndicatorsRegistry(sport, activeTier, cleanRole);
+  const indicators = registry.positionIndicators || [];
+
+  if (indicators.length === 0) {
+    return {
+      roleOrPosition: cleanRole,
+      isVerified: false,
+      warning: `Tidak ditemukan indikator spesifik untuk posisi ${cleanRole} pada tier yang dipilih.`,
+      positionAverage: null,
+      totalCount: 0,
+      evaluatedCount: 0,
+      untestedCount: 0,
+      coveragePercent: 0,
+      indicators: []
+    };
+  }
 
   let evaluatedCount = 0;
   let untestedCount = 0;
@@ -292,7 +347,9 @@ export function analyzePositionEventPerformance({
   const coveragePercent = indicators.length > 0 ? Math.round((evaluatedCount / indicators.length) * 100) : 0;
 
   return {
-    roleOrPosition,
+    roleOrPosition: cleanRole,
+    isVerified: true,
+    warning: null,
     positionAverage,
     totalCount: indicators.length,
     evaluatedCount,
@@ -337,24 +394,30 @@ export function analyzeAthleteDevelopment({
 
   const initialSport = sortedEvals[0]?.sport || sport;
   const initialTier = sortedEvals[0]?.activeTier || activeTier;
-  const initialRole = sortedEvals[0]?.playerRole || playerRole;
+  const initialRole = sortedEvals[0]?.playerRole || sortedEvals[0]?.position || playerRole;
 
   const timeline = sortedEvals.map((ev, index) => {
-    if (ev.sport && String(ev.sport).toLowerCase() !== String(initialSport).toLowerCase()) {
+    const evSport = ev.sport || sport;
+    const evTier = ev.activeTier || activeTier;
+    const evRole = ev.playerRole || ev.position || playerRole || 'POSITION_UNVERIFIED';
+
+    if (evSport && String(evSport).toLowerCase() !== String(initialSport).toLowerCase()) {
       sportChanged = true;
     }
-    if (ev.activeTier && String(ev.activeTier) !== String(initialTier)) {
+    if (evTier && toNumericTier(evTier) !== toNumericTier(initialTier)) {
       tierChanged = true;
     }
-    if (ev.playerRole && String(ev.playerRole).toLowerCase() !== String(initialRole).toLowerCase()) {
+    const safeInitialRole = (initialRole && typeof initialRole === 'string' && initialRole.trim() !== '') ? initialRole.trim() : 'POSITION_UNVERIFIED';
+    const safeEvRole = (evRole && typeof evRole === 'string' && evRole.trim() !== '') ? evRole.trim() : 'POSITION_UNVERIFIED';
+    if (safeEvRole.toUpperCase() !== safeInitialRole.toUpperCase()) {
       positionChanged = true;
     }
 
     const perf = analyzeAthletePerformance({
       scores: ev.scores || {},
-      sport: ev.sport || sport,
-      activeTier: ev.activeTier || activeTier,
-      playerRole: ev.playerRole || playerRole
+      sport: evSport,
+      activeTier: evTier,
+      playerRole: safeEvRole !== 'POSITION_UNVERIFIED' ? safeEvRole : null
     });
 
     return {
@@ -365,9 +428,9 @@ export function analyzeAthleteDevelopment({
       evaluationCoverage: perf.evaluationCoverage,
       categoryAnalysis: perf.categoryAnalysis,
       coachNote: ev.coachNote || ev.notes || '',
-      sport: ev.sport || sport,
-      activeTier: ev.activeTier || activeTier,
-      playerRole: ev.playerRole || playerRole
+      sport: evSport,
+      activeTier: evTier,
+      playerRole: safeEvRole
     };
   });
 
@@ -507,6 +570,8 @@ export function compareAthletes({
     if (positionMismatch && catKey === 'spesifik_posisi') {
       categoryComparison[catKey] = {
         categoryKey: catKey,
+        displayName: getCategoryDisplayLabel(catKey, { uppercase: false }),
+        label: getCategoryDisplayLabel(catKey, { uppercase: true }),
         avgA: perfA.categoryAnalysis[catKey]?.categoryAverage ?? null,
         avgB: perfB.categoryAnalysis[catKey]?.categoryAverage ?? null,
         diff: null,
@@ -525,6 +590,8 @@ export function compareAthletes({
 
     categoryComparison[catKey] = {
       categoryKey: catKey,
+      displayName: getCategoryDisplayLabel(catKey, { uppercase: false }),
+      label: getCategoryDisplayLabel(catKey, { uppercase: true }),
       avgA,
       avgB,
       diff

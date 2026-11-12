@@ -8,7 +8,10 @@ import {
   compareAthletes,
   analyzeAcademyTeamPerformance,
   generateAnalyticsReport,
-  analyzeDataQuality
+  analyzeDataQuality,
+  toNumericTier,
+  getCategoryDisplayLabel,
+  getSportIndicatorsRegistry
 } from './analyticsEngine.js';
 
 // TEST 1: Missing score versus valid zero
@@ -433,5 +436,317 @@ test('15. Athlete Development Assessment Integration: Shared history & classStud
   });
   assert.equal(quality.totalEvaluations, 4);
   assert.equal(quality.totalInvalidScores, 0);
+});
+
+// =========================================================================
+// PHASE 2.0.8 MANDATORY REGRESSION TEST SUITE (10 SCENARIOS)
+// =========================================================================
+
+// SCENARIO 1: Evaluation record has position, profile has different position -> Evaluation record position wins
+test('16. (Phase 2.0.8) DISC-01: Evaluation record position wins over profile position', () => {
+  const athleteProfile = { id: 'ath-st', name: 'Striker Boy', playerRole: 'CB', position: 'CB' };
+  const evalSnapshot = {
+    id: 'eval-snap-1',
+    studentId: 'ath-st',
+    playerRole: 'ST',
+    activeTier: 3,
+    scores: { 'FTB-POS-ST-01': 92, 'FTB-POS-ST-02': 88 }
+  };
+
+  // Determine effectiveRole as in AnalyticsSection
+  const effectiveRole = evalSnapshot.playerRole || athleteProfile.playerRole;
+  assert.equal(effectiveRole, 'ST');
+
+  const posAnalysis = analyzePositionEventPerformance({
+    scores: evalSnapshot.scores,
+    sport: 'football',
+    activeTier: evalSnapshot.activeTier,
+    roleOrPosition: effectiveRole
+  });
+
+  assert.equal(posAnalysis.roleOrPosition, 'ST');
+  assert.equal(posAnalysis.isVerified, true);
+  assert.equal(posAnalysis.warning, null);
+  assert.ok(posAnalysis.indicators.some(i => i.id === 'FTB-POS-ST-01'));
+  // Negative assertion: CB indicator must NOT be loaded
+  assert.ok(!posAnalysis.indicators.some(i => i.id === 'FTB-POS-CB-01'));
+});
+
+// SCENARIO 2: Evaluation record has no position, profile has valid position -> Profile position used
+test('17. (Phase 2.0.8) DISC-01: Profile position fallback when evaluation has no position', () => {
+  const athleteProfile = { id: 'ath-cm', name: 'Midfielder', playerRole: 'CM' };
+  const evalSnapshot = {
+    id: 'eval-snap-2',
+    studentId: 'ath-cm',
+    playerRole: null,
+    position: null,
+    activeTier: 2,
+    scores: { 'FTB-POS-CM-01': 80 }
+  };
+
+  const evalRole = evalSnapshot.playerRole || evalSnapshot.position;
+  const effectiveRole = (evalRole && typeof evalRole === 'string' && evalRole.trim() !== '' && evalRole.trim() !== 'POSITION_UNVERIFIED')
+    ? evalRole.trim()
+    : (athleteProfile.playerRole || athleteProfile.position || 'POSITION_UNVERIFIED');
+
+  assert.equal(effectiveRole, 'CM');
+
+  const posAnalysis = analyzePositionEventPerformance({
+    scores: evalSnapshot.scores,
+    sport: 'football',
+    activeTier: evalSnapshot.activeTier,
+    roleOrPosition: effectiveRole
+  });
+
+  assert.equal(posAnalysis.roleOrPosition, 'CM');
+  assert.equal(posAnalysis.isVerified, true);
+  assert.equal(posAnalysis.warning, null);
+  assert.ok(posAnalysis.indicators.some(i => i.id === 'FTB-POS-CM-01'));
+});
+
+// SCENARIO 3: Neither has position -> Status POSITION_UNVERIFIED, no hardcoded 'CB' fallback
+test('18. (Phase 2.0.8) DISC-01: Neither has position -> POSITION_UNVERIFIED (No CB fallback)', () => {
+  const athleteProfile = { id: 'ath-unverified', name: 'No Role Athlete', playerRole: null };
+  const evalSnapshot = {
+    id: 'eval-snap-3',
+    studentId: 'ath-unverified',
+    playerRole: null,
+    position: null,
+    activeTier: 2,
+    scores: {}
+  };
+
+  const evalRole = evalSnapshot.playerRole || evalSnapshot.position;
+  const profileRole = athleteProfile.playerRole || athleteProfile.position;
+  const effectiveRole = (evalRole && typeof evalRole === 'string' && evalRole.trim() !== '' && evalRole.trim() !== 'POSITION_UNVERIFIED')
+    ? evalRole.trim()
+    : ((profileRole && typeof profileRole === 'string' && profileRole.trim() !== '' && profileRole.trim() !== 'POSITION_UNVERIFIED') ? profileRole.trim() : 'POSITION_UNVERIFIED');
+
+  assert.equal(effectiveRole, 'POSITION_UNVERIFIED');
+
+  const posAnalysis = analyzePositionEventPerformance({
+    scores: evalSnapshot.scores,
+    sport: 'football',
+    activeTier: evalSnapshot.activeTier,
+    roleOrPosition: effectiveRole
+  });
+
+  // Strict verification: Must NOT fall back to 'CB'
+  assert.equal(posAnalysis.roleOrPosition, 'POSITION_UNVERIFIED');
+  assert.equal(posAnalysis.isVerified, false);
+  assert.equal(posAnalysis.positionAverage, null);
+  assert.equal(posAnalysis.indicators.length, 0);
+  assert.ok(posAnalysis.warning.includes('Posisi atlet belum terverifikasi'));
+});
+
+// SCENARIO 4: Evaluation record tier differs from profile tier -> Evaluation tier wins
+test('19. (Phase 2.0.8) Snapshot Tier Priority & String Tier Parsing (FILANESIA_F1 vs Tier 3)', () => {
+  const profileTier = 3;
+  const evalSnapshotTier = 'FILANESIA_F1'; // Legacy string format
+
+  // Numeric tier parsing must correctly recognize FILANESIA_F1 as Tier 1
+  assert.equal(toNumericTier(evalSnapshotTier), 1);
+  assert.equal(toNumericTier('FILANESIA_F2'), 2);
+  assert.equal(toNumericTier('FILANESIA_F3'), 3);
+  assert.equal(toNumericTier('FILANESIA_F4'), 4);
+
+  // Evaluation snapshot tier takes precedence over current profile tier
+  const activeTier = evalSnapshotTier || profileTier;
+  const registry = getSportIndicatorsRegistry('football', activeTier, 'OUTFIELD_SSB');
+
+  // Tier 1 universal physical indicators = 5 (minTier <= 1)
+  assert.equal(registry.categoriesMap.fisik.length, 5);
+  // Negative check: Tier 3 has 13 physical indicators, must not be used
+  assert.notEqual(registry.categoriesMap.fisik.length, 13);
+});
+
+// SCENARIO 5: Athlete changes position between evaluation sessions -> Longitudinal analysis flags positionChanged
+test('20. (Phase 2.0.8) Position change between evaluations: positionChanged flag & skipped delta', () => {
+  const evaluations = [
+    {
+      id: 'ev-session-1',
+      date: '2025-01-10',
+      activeTier: 2,
+      playerRole: 'CB',
+      scores: { 'FTB-POS-CB-01': 70 }
+    },
+    {
+      id: 'ev-session-2',
+      date: '2025-02-15',
+      activeTier: 2,
+      playerRole: 'ST',
+      scores: { 'FTB-POS-ST-01': 85 }
+    }
+  ];
+
+  const dev = analyzeAthleteDevelopment({
+    evaluations,
+    sport: 'football'
+  });
+
+  assert.equal(dev.positionChanged, true);
+  assert.equal(dev.contextMismatch, true);
+  // Position category delta must be skipped with clear mismatchNote
+  const posDelta = dev.categoryDeltas.spesifik_posisi;
+  assert.ok(posDelta);
+  assert.equal(posDelta.delta, null);
+  assert.ok(posDelta.mismatchNote.includes('Posisi atlet berubah'));
+});
+
+// SCENARIO 6: Evaluation records from athlete A never pollute athlete B
+test('21. (Phase 2.0.8) Record Isolation: Athlete A vs Athlete B evaluation isolation', () => {
+  const studentA = { id: 'ath-alpha', name: 'Alpha Player', playerRole: 'GK' };
+  const studentB = { id: 'ath-beta', name: 'Beta Player', playerRole: 'ST' };
+
+  const allEvals = [
+    { id: 'ev-a', studentId: 'ath-alpha', playerRole: 'GK', scores: { 'FTB-POS-GK-01': 95 } },
+    { id: 'ev-b', studentId: 'ath-beta', playerRole: 'ST', scores: { 'FTB-POS-ST-01': 55 } }
+  ];
+
+  // Filtering for athlete A
+  const evalsA = allEvals.filter(e => e.studentId === studentA.id);
+  const evalsB = allEvals.filter(e => e.studentId === studentB.id);
+
+  assert.equal(evalsA.length, 1);
+  assert.equal(evalsB.length, 1);
+
+  const perfA = analyzeAthletePerformance({
+    scores: evalsA[0].scores,
+    sport: 'football',
+    activeTier: 2,
+    playerRole: evalsA[0].playerRole
+  });
+
+  const perfB = analyzeAthletePerformance({
+    scores: evalsB[0].scores,
+    sport: 'football',
+    activeTier: 2,
+    playerRole: evalsB[0].playerRole
+  });
+
+  // Strict isolation: A has GK indicators, B has ST indicators
+  assert.ok(perfA.categoryAnalysis.spesifik_posisi.indicators.some(i => i.id === 'FTB-POS-GK-01'));
+  assert.ok(!perfA.categoryAnalysis.spesifik_posisi.indicators.some(i => i.id === 'FTB-POS-ST-01'));
+
+  assert.ok(perfB.categoryAnalysis.spesifik_posisi.indicators.some(i => i.id === 'FTB-POS-ST-01'));
+  assert.ok(!perfB.categoryAnalysis.spesifik_posisi.indicators.some(i => i.id === 'FTB-POS-GK-01'));
+});
+
+// SCENARIO 7: Historical evaluation retains its own snapshot context
+test('22. (Phase 2.0.8) Historical Snapshot Context Immutability (Profile update does not mutate historical eval)', () => {
+  // Historical eval took place when athlete was Tier 1 and role was OUTFIELD_SSB
+  const historicalEval = {
+    id: 'hist-eval-01',
+    studentId: 'ath-evolving',
+    date: '2024-06-01',
+    activeTier: 1,
+    playerRole: 'OUTFIELD_SSB',
+    scores: { 'FTB-SSB-OUT-01': 80 }
+  };
+
+  // Athlete profile has since evolved to Tier 4 Striker (ST)
+  const currentProfile = {
+    id: 'ath-evolving',
+    name: 'Evolving Talent',
+    activeTier: 4,
+    playerRole: 'ST'
+  };
+
+  // When analyzing the historical evaluation, snapshot context must govern
+  const historicalPerf = analyzeAthletePerformance({
+    scores: historicalEval.scores,
+    sport: 'football',
+    activeTier: historicalEval.activeTier,
+    playerRole: historicalEval.playerRole
+  });
+
+  assert.equal(historicalPerf.totalRegistryIndicators, 27); // Tier 1 total indicators (22 universal + 5 SSB)
+  assert.equal(historicalPerf.categoryAnalysis.spesifik_posisi.totalCount, 5); // 5 SSB indicators
+  assert.equal(historicalPerf.categoryAnalysis.spesifik_posisi.indicators[0].id, 'FTB-SSB-OUT-01');
+});
+
+// SCENARIO 8: Numeric 0 remains valid, null remains untested
+test('23. (Phase 2.0.8) Absolute Metric Fidelity: Score 0 is valid EVALUATED, null is UNTESTED', () => {
+  const scores = {
+    'FTB-UNI-PHY-01': 0,     // Valid 0 score
+    'FTB-UNI-PHY-02': null,  // Untested
+    'FTB-UNI-PHY-03': undefined // Untested
+  };
+
+  const perf = analyzeAthletePerformance({
+    scores,
+    sport: 'football',
+    activeTier: 1
+  });
+
+  const phy = perf.categoryAnalysis.fisik;
+  const ind0 = phy.indicators.find(i => i.id === 'FTB-UNI-PHY-01');
+  const indNull = phy.indicators.find(i => i.id === 'FTB-UNI-PHY-02');
+  const indUndef = phy.indicators.find(i => i.id === 'FTB-UNI-PHY-03');
+
+  assert.equal(ind0.status, 'EVALUATED');
+  assert.equal(ind0.score, 0);
+
+  assert.equal(indNull.status, 'UNTESTED');
+  assert.equal(indNull.score, null);
+
+  assert.equal(indUndef.status, 'UNTESTED');
+  assert.equal(indUndef.score, null);
+
+  // Category average must include the 0 score in its calculation
+  assert.equal(phy.evaluatedCount, 1);
+  assert.equal(phy.categoryAverage, 0);
+});
+
+// SCENARIO 9: 7th pillar label consistency: 'KHUSUS POSISI' (uppercase) and 'Khusus Posisi' (titlecase)
+test('24. (Phase 2.0.8) DISC-02: 7th pillar label consistency (KHUSUS POSISI / Khusus Posisi)', () => {
+  // Check helper directly
+  assert.equal(getCategoryDisplayLabel('spesifik_posisi', { uppercase: true }), 'KHUSUS POSISI');
+  assert.equal(getCategoryDisplayLabel('spesifik_posisi', { uppercase: false }), 'Khusus Posisi');
+
+  // Check analyzeAthletePerformance categoryAnalysis output
+  const perf = analyzeAthletePerformance({
+    scores: { 'FTB-POS-CB-01': 88 },
+    sport: 'football',
+    activeTier: 2,
+    playerRole: 'CB'
+  });
+
+  const posCat = perf.categoryAnalysis.spesifik_posisi;
+  assert.ok(posCat);
+  assert.equal(posCat.label, 'KHUSUS POSISI');
+  assert.equal(posCat.displayName, 'Khusus Posisi');
+
+  // Universal category check
+  assert.equal(getCategoryDisplayLabel('fisik', { uppercase: true }), 'FISIK');
+  assert.equal(getCategoryDisplayLabel('fisik', { uppercase: false }), 'Fisik');
+});
+
+// SCENARIO 10: Fail-closed tenant isolation & cross-sport rejection remain PASS
+test('25. (Phase 2.0.8) Negative Security & Tenant Isolation: Strict fail-closed & cross-sport checks', () => {
+  // 1. Fail-closed on missing/null/empty tenantId
+  const teamNoTenant = analyzeAcademyTeamPerformance({
+    evaluations: [{ id: 'e1', tenantId: 't1' }],
+    students: [{ id: 's1', tenantId: 't1' }],
+    sport: 'football',
+    tenantId: null
+  });
+  assert.equal(teamNoTenant.error, 'INVALID_TENANT_ID');
+
+  const teamEmptyTenant = analyzeAcademyTeamPerformance({
+    evaluations: [{ id: 'e1', tenantId: 't1' }],
+    students: [{ id: 's1', tenantId: 't1' }],
+    sport: 'football',
+    tenantId: ''
+  });
+  assert.equal(teamEmptyTenant.error, 'INVALID_TENANT_ID');
+
+  // 2. Cross-sport comparison rejection
+  const compMismatch = compareAthletes({
+    athleteA: { name: 'Player A', sport: 'futsal' },
+    athleteB: { name: 'Player B', sport: 'football' }
+  });
+  assert.equal(compMismatch.isComparable, false);
+  assert.equal(compMismatch.errorReason, 'CROSS_SPORT_MISMATCH');
 });
 

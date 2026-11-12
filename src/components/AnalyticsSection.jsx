@@ -45,7 +45,8 @@ import {
   compareAthletes,
   analyzeAcademyTeamPerformance,
   generateAnalyticsReport,
-  analyzeDataQuality
+  analyzeDataQuality,
+  getCategoryDisplayLabel
 } from '../services/analyticsEngine';
 
 import supabaseAcademyService from '../services/supabaseAcademyService';
@@ -119,27 +120,60 @@ export default function AnalyticsSection({
     return [...currentStudentEvals].sort((a, b) => new Date(b.createdAt || b.date) - new Date(a.createdAt || a.date))[0];
   }, [currentStudentEvals]);
 
+  // Context snapshot: athlete role/position determination (DISC-01)
+  // Priority 1: Position on the evaluation record snapshot being analyzed
+  // Priority 2: Position from athlete profile, ONLY if valid non-empty string
+  // Priority 3: Fallback 'POSITION_UNVERIFIED'
+  const effectiveRole = useMemo(() => {
+    const evalRole = latestEval?.playerRole || latestEval?.position;
+    if (evalRole && typeof evalRole === 'string' && evalRole.trim() !== '' && evalRole.trim() !== 'POSITION_UNVERIFIED') {
+      return evalRole.trim();
+    }
+    const profileRole = currentStudent?.playerRole || currentStudent?.position;
+    if (profileRole && typeof profileRole === 'string' && profileRole.trim() !== '' && profileRole.trim() !== 'POSITION_UNVERIFIED') {
+      return profileRole.trim();
+    }
+    return 'POSITION_UNVERIFIED';
+  }, [latestEval, currentStudent]);
+
+  const positionMismatch = useMemo(() => {
+    const evalRole = latestEval?.playerRole || latestEval?.position;
+    const profileRole = currentStudent?.playerRole || currentStudent?.position;
+    if (
+      evalRole && profileRole &&
+      typeof evalRole === 'string' && typeof profileRole === 'string' &&
+      evalRole.trim() !== '' && profileRole.trim() !== '' &&
+      evalRole.trim() !== profileRole.trim()
+    ) {
+      return {
+        evalRole: evalRole.trim(),
+        profileRole: profileRole.trim()
+      };
+    }
+    return null;
+  }, [latestEval, currentStudent]);
+
   // Performance Analysis for selected athlete (Module 1 & 2)
   const performanceData = useMemo(() => {
     if (!currentStudent || !latestEval) return null;
     return analyzeAthletePerformance({
       scores: latestEval.scores || {},
-      sport: selectedClass?.sport || activeAcademy?.sport || 'football',
-      activeTier: latestEval.activeTier || 1,
-      playerRole: currentStudent.playerRole || currentStudent.position
+      sport: latestEval.sport || selectedClass?.sport || activeAcademy?.sport || 'football',
+      activeTier: latestEval.activeTier || currentStudent.activeTier || 1,
+      playerRole: effectiveRole
     });
-  }, [currentStudent, latestEval, selectedClass, activeAcademy]);
+  }, [currentStudent, latestEval, selectedClass, activeAcademy, effectiveRole]);
 
   // Position / Event Analysis (Module 3)
   const positionData = useMemo(() => {
     if (!currentStudent || !latestEval) return null;
     return analyzePositionEventPerformance({
       scores: latestEval.scores || {},
-      sport: selectedClass?.sport || activeAcademy?.sport || 'football',
-      activeTier: latestEval.activeTier || 1,
-      roleOrPosition: currentStudent.playerRole || currentStudent.position || 'CB'
+      sport: latestEval.sport || selectedClass?.sport || activeAcademy?.sport || 'football',
+      activeTier: latestEval.activeTier || currentStudent.activeTier || 1,
+      roleOrPosition: effectiveRole
     });
-  }, [currentStudent, latestEval, selectedClass, activeAcademy]);
+  }, [currentStudent, latestEval, selectedClass, activeAcademy, effectiveRole]);
 
   // Development Analysis (Module 4)
   const developmentData = useMemo(() => {
@@ -209,11 +243,11 @@ export default function AnalyticsSection({
     });
   }, [currentStudent, performanceData, activeAcademy, selectedClass]);
 
-  // Chart data for Radar Chart
+  // Chart data for Radar Chart (DISC-02 standardized)
   const radarChartData = useMemo(() => {
     if (!performanceData) return [];
     return Object.entries(performanceData.categoryAnalysis).map(([catKey, data]) => ({
-      category: catKey.toUpperCase(),
+      category: getCategoryDisplayLabel(catKey, { uppercase: true }),
       score: data.categoryAverage ?? 0,
       fullMark: 100
     }));
@@ -416,8 +450,8 @@ export default function AnalyticsSection({
                         {Object.entries(performanceData.categoryAnalysis).map(([catKey, cData]) => (
                           <div key={catKey} className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-lg border border-slate-200/60 dark:border-slate-800">
                             <div className="flex justify-between items-center mb-1">
-                              <span className="text-xs font-bold text-slate-700 dark:text-slate-200 capitalize">
-                                {catKey.replace('_', ' ')}
+                              <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
+                                {getCategoryDisplayLabel(catKey, { uppercase: false })}
                               </span>
                               <span className="text-xs font-black text-[#354944] dark:text-[#C89D32]">
                                 {cData.categoryAverage !== null ? cData.categoryAverage : '—'}
@@ -441,33 +475,54 @@ export default function AnalyticsSection({
                     {/* MODULE 3: POSITION / EVENT SPECIFIC ANALYTICS */}
                     {positionData && (
                       <div className="bg-white dark:bg-[#162320] rounded-xl p-4 border border-slate-200 dark:border-slate-800 shadow-2xs space-y-3">
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div>
-                            <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                              Modul 3: Analisis Spesifik Posisi / Nomor ({positionData.roleOrPosition || 'Umum'})
-                            </h3>
-                            <p className="text-[11px] text-slate-500">
-                              Indikator khusus posisi/nomor sesuai jenjang kurikulum ({positionData.evaluatedCount}/{positionData.totalCount} dinilai)
+                        {!positionData.isVerified || positionData.roleOrPosition === 'POSITION_UNVERIFIED' ? (
+                          <div className="p-3.5 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg space-y-1.5">
+                            <div className="flex items-center gap-2">
+                              <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                              <h4 className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                                Posisi Atlet Belum Terverifikasi (POSITION_UNVERIFIED)
+                              </h4>
+                            </div>
+                            <p className="text-xs text-amber-800 dark:text-amber-300">
+                              Posisi atlet pada evaluasi ini maupun profil belum ditentukan. Analisis indikator khusus posisi tidak dapat disajikan sampai posisi atlet ditentukan pada sesi evaluasi atau profil.
                             </p>
                           </div>
-                          <span className="px-2.5 py-1 rounded-full text-xs font-black bg-[#354944]/10 dark:bg-[#354944]/30 text-[#354944] dark:text-[#C89D32]">
-                            Skor Posisi: {positionData.positionAverage !== null ? `${positionData.positionAverage}/100` : 'UNTESTED'}
-                          </span>
-                        </div>
-                        {positionData.indicators.length > 0 && (
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                            {positionData.indicators.map((ind) => (
-                              <div
-                                key={ind.id}
-                                className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800 flex items-center justify-between gap-2 text-xs"
-                              >
-                                <span className="font-medium text-slate-700 dark:text-slate-200 truncate">{ind.name}</span>
-                                <span className={`font-bold shrink-0 ${ind.status === 'EVALUATED' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
-                                  {ind.status === 'EVALUATED' ? ind.score : 'UNTESTED'}
-                                </span>
+                        ) : (
+                          <>
+                            {positionMismatch && (
+                              <div className="p-2.5 rounded-lg bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800 text-[11px] text-sky-800 dark:text-sky-300">
+                                Konteks Snapshot: Menggunakan posisi sesi evaluasi <strong>{positionMismatch.evalRole}</strong> (posisi profil atlet: {positionMismatch.profileRole}).
                               </div>
-                            ))}
-                          </div>
+                            )}
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <div>
+                                <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                                  Modul 3: Analisis Spesifik Posisi / Nomor ({positionData.roleOrPosition})
+                                </h3>
+                                <p className="text-[11px] text-slate-500">
+                                  Indikator khusus posisi/nomor sesuai jenjang kurikulum ({positionData.evaluatedCount}/{positionData.totalCount} dinilai)
+                                </p>
+                              </div>
+                              <span className="px-2.5 py-1 rounded-full text-xs font-black bg-[#354944]/10 dark:bg-[#354944]/30 text-[#354944] dark:text-[#C89D32]">
+                                Skor Posisi: {positionData.positionAverage !== null ? `${positionData.positionAverage}/100` : 'UNTESTED'}
+                              </span>
+                            </div>
+                            {positionData.indicators.length > 0 && (
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {positionData.indicators.map((ind) => (
+                                  <div
+                                    key={ind.id}
+                                    className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-900/60 border border-slate-200/60 dark:border-slate-800 flex items-center justify-between gap-2 text-xs"
+                                  >
+                                    <span className="font-medium text-slate-700 dark:text-slate-200 truncate">{ind.name}</span>
+                                    <span className={`font-bold shrink-0 ${ind.status === 'EVALUATED' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400'}`}>
+                                      {ind.status === 'EVALUATED' ? ind.score : 'UNTESTED'}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </>
                         )}
                       </div>
                     )}
@@ -590,7 +645,7 @@ export default function AnalyticsSection({
                   <div className="space-y-2">
                     {Object.entries(comparisonData.categoryComparison).map(([catKey, cComp]) => (
                       <div key={catKey} className="p-3 bg-slate-50 dark:bg-slate-900 rounded-lg flex items-center justify-between text-xs">
-                        <span className="font-bold text-slate-700 dark:text-slate-200 capitalize">{catKey.replace('_', ' ')}</span>
+                        <span className="font-bold text-slate-700 dark:text-slate-200">{getCategoryDisplayLabel(catKey, { uppercase: false })}</span>
                         <div className="flex items-center gap-4">
                           <span className="font-bold text-slate-800 dark:text-slate-100">{cComp.avgA ?? '—'}</span>
                           <span className="text-slate-400">vs</span>
@@ -636,7 +691,7 @@ export default function AnalyticsSection({
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
                   {Object.entries(teamData.teamCategoryAverages).map(([catKey, avg]) => (
                     <div key={catKey} className="p-3 bg-slate-50 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800">
-                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-300 capitalize">{catKey.replace('_', ' ')}</span>
+                      <span className="text-xs font-semibold text-slate-600 dark:text-slate-300">{getCategoryDisplayLabel(catKey, { uppercase: false })}</span>
                       <p className="text-lg font-bold text-slate-800 dark:text-slate-100 mt-1">{avg}</p>
                     </div>
                   ))}
