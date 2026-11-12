@@ -1,62 +1,18 @@
 /**
- * Calculates the exact age of a person in years based on birthDate string (YYYY-MM-DD, DD/MM/YYYY, or ISO string)
+ * Calculates the exact age of a person in years based on birthDate string (YYYY-MM-DD or ISO string)
  */
 export const calculateAge = (birthDate) => {
-  if (birthDate === undefined || birthDate === null || birthDate === '') return '-';
-  const raw = String(birthDate).trim();
-  if (!raw || raw === '-') return '-';
-
+  if (!birthDate) return '-';
   const today = new Date();
-  let birth = null;
-
-  // 1. Check DD/MM/YYYY or DD-MM-YYYY
-  const dmyMatch = raw.match(/^(0?[1-9]|[12]\d|3[01])[\/\-](0?[1-9]|1[0-2])[\/\-](\d{4})$/);
-  if (dmyMatch) {
-    const day = parseInt(dmyMatch[1], 10);
-    const month = parseInt(dmyMatch[2], 10);
-    const year = parseInt(dmyMatch[3], 10);
-    const candidate = new Date(year, month - 1, day);
-    if (
-      candidate.getFullYear() === year &&
-      candidate.getMonth() === month - 1 &&
-      candidate.getDate() === day
-    ) {
-      birth = candidate;
-    } else {
-      return '-';
-    }
-  } else {
-    // 2. Check YYYY-MM-DD or YYYY/MM/DD (with optional ISO time suffix)
-    const ymdMatch = raw.match(/^(\d{4})[\/\-](0?[1-9]|1[0-2])[\/\-](0?[1-9]|[12]\d|3[01])(?:T.*|\s.*)?$/);
-    if (ymdMatch) {
-      const year = parseInt(ymdMatch[1], 10);
-      const month = parseInt(ymdMatch[2], 10);
-      const day = parseInt(ymdMatch[3], 10);
-      const candidate = new Date(year, month - 1, day);
-      if (
-        candidate.getFullYear() === year &&
-        candidate.getMonth() === month - 1 &&
-        candidate.getDate() === day
-      ) {
-        birth = candidate;
-      } else {
-        return '-';
-      }
-    } else {
-      return '-';
-    }
-  }
-
-  if (!birth || isNaN(birth.getTime()) || birth.getTime() > today.getTime()) return '-';
-
+  const birth = new Date(birthDate);
+  if (isNaN(birth.getTime())) return '-';
   let age = today.getFullYear() - birth.getFullYear();
   const m = today.getMonth() - birth.getMonth();
   if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
     age--;
   }
-  return age > 0 && age <= 100 ? age : '-';
+  return age >= 0 ? age : '-';
 };
-
 
 /**
  * Returns initials (1-2 uppercase characters) from a full name

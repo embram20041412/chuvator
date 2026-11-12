@@ -33,173 +33,55 @@ export const TIER_CONFIGS = {
   }
 };
 
-export function parseValidAgeInput(ageInput) {
-  if (ageInput === undefined || ageInput === null || ageInput === '') return null;
-  if (typeof ageInput === 'boolean') return null;
-
-  const today = new Date();
-  const currentYear = today.getFullYear();
-
+export function detectTierFromAge(ageInput) {
+  if (ageInput === undefined || ageInput === null || ageInput === '') return 1;
+  
+  let parsed = 0;
   if (typeof ageInput === 'number') {
-    if (!Number.isFinite(ageInput)) return null;
-    const intVal = Math.floor(ageInput);
-    if (intVal > 0 && intVal <= 100) return intVal;
-    if (intVal >= 1900 && intVal < currentYear) {
-      const derived = currentYear - intVal;
-      return derived > 0 && derived <= 100 ? derived : null;
-    }
-    return null;
-  }
-
-  const raw = String(ageInput).trim();
-  if (!raw || raw === '-') return null;
-
-  // 1. Pure integer string (age or 4-digit birth year)
-  if (/^\d+$/.test(raw)) {
-    const intVal = parseInt(raw, 10);
-    if (intVal > 0 && intVal <= 100) return intVal;
-    if (intVal >= 1900 && intVal < currentYear) {
-      const derived = currentYear - intVal;
-      return derived > 0 && derived <= 100 ? derived : null;
-    }
-    return null;
-  }
-
-  // 2. Explicit age label e.g. "12 Tahun", "U-14"
-  const ageLabelMatch = raw.match(/^(?:u-?\s*)?(\d{1,2})(?:\s*(?:tahun|thn|yo|y\.o\.))?$/i);
-  if (ageLabelMatch) {
-    const intVal = parseInt(ageLabelMatch[1], 10);
-    return intVal > 0 && intVal <= 100 ? intVal : null;
-  }
-
-  // 3. Date format DD/MM/YYYY or DD-MM-YYYY
-  let birth = null;
-  const dmyMatch = raw.match(/^(0?[1-9]|[12]\d|3[01])[\/\-](0?[1-9]|1[0-2])[\/\-](\d{4})$/);
-  if (dmyMatch) {
-    const day = parseInt(dmyMatch[1], 10);
-    const month = parseInt(dmyMatch[2], 10);
-    const year = parseInt(dmyMatch[3], 10);
-    const candidate = new Date(year, month - 1, day);
-    if (
-      candidate.getFullYear() === year &&
-      candidate.getMonth() === month - 1 &&
-      candidate.getDate() === day
-    ) {
-      birth = candidate;
-    } else {
-      return null;
-    }
+    parsed = ageInput;
   } else {
-    // 4. Date format YYYY-MM-DD or YYYY/MM/DD (with optional ISO timestamp)
-    const ymdMatch = raw.match(/^(\d{4})[\/\-](0?[1-9]|1[0-2])[\/\-](0?[1-9]|[12]\d|3[01])(?:T.*|\s.*)?$/);
-    if (ymdMatch) {
-      const year = parseInt(ymdMatch[1], 10);
-      const month = parseInt(ymdMatch[2], 10);
-      const day = parseInt(ymdMatch[3], 10);
-      const candidate = new Date(year, month - 1, day);
-      if (
-        candidate.getFullYear() === year &&
-        candidate.getMonth() === month - 1 &&
-        candidate.getDate() === day
-      ) {
-        birth = candidate;
-      } else {
-        return null;
+    const ageStr = String(ageInput);
+    // If it looks like a date (ISO 2010-01-01 or DD/MM/YYYY)
+    if (ageStr.includes('-') || ageStr.includes('/')) {
+      try {
+        const birthDate = new Date(ageStr);
+        if (!isNaN(birthDate.getTime())) {
+          const today = new Date();
+          let age = today.getFullYear() - birthDate.getFullYear();
+          const m = today.getMonth() - birthDate.getMonth();
+          if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
+            age--;
+          }
+          parsed = age;
+        } else {
+          parsed = parseInt(ageStr.replace(/\D/g, ''), 10) || 0;
+        }
+      } catch (e) {
+        parsed = parseInt(ageStr.replace(/\D/g, ''), 10) || 0;
       }
     } else {
-      return null;
+      const digits = ageStr.replace(/\D/g, '');
+      parsed = parseInt(digits, 10) || 0;
     }
   }
 
-  if (!birth || isNaN(birth.getTime()) || birth.getTime() > today.getTime()) return null;
-
-  let age = today.getFullYear() - birth.getFullYear();
-  const m = today.getMonth() - birth.getMonth();
-  if (m < 0 || (m === 0 && today.getDate() < birth.getDate())) {
-    age--;
+  // Safety: if parsed looks like a year (e.g. 2010) or mangled date value > 100
+  if (parsed > 100) {
+    // If it's a year like 2010, calculate age from current year
+    const currentYear = new Date().getFullYear();
+    if (parsed >= 1900 && parsed <= currentYear) {
+      parsed = currentYear - parsed;
+    } else {
+      parsed = 10; // Default fallback to reasonable age
+    }
   }
-  return age > 0 && age <= 100 ? age : null;
-}
 
-export function detectTierFromAge(ageInput) {
-  const parsed = parseValidAgeInput(ageInput);
-  if (parsed === null || parsed <= 0) return 'AGE_UNVERIFIED';
+  if (parsed <= 0) return 1;
   if (parsed <= 9) return 1;  // Fase 1: Joy Phase (Usia 6-9 Thn)
   if (parsed <= 12) return 2; // Fase 2: Skill Phase (Usia 10-12 Thn)
   if (parsed <= 16) return 3; // Fase 3: Tactical Phase (Usia 13-16 Thn)
   return 4;                   // Fase 4: Performance Phase (Usia 17+ Thn)
 }
-
-/**
- * Resolves an indicator score with strict priority:
- * 1. Canonical ID (indicator.id)
- * 2. Current Name (indicator.name)
- * 3. Historical Legacy Keys (indicator.legacy_keys)
- * 4. Returns null (UNTESTED) if no score is recorded.
- * Explicit numeric 0 is preserved as valid score 0.
- */
-export function resolveIndicatorScore(scores, indicator) {
-  if (!scores || typeof scores !== 'object' || !indicator) return null;
-
-  const isValidNumericScore = (val) =>
-    val !== undefined &&
-    val !== null &&
-    val !== '' &&
-    typeof val !== 'boolean' &&
-    !Number.isNaN(Number(val));
-
-  if (typeof indicator === 'string') {
-    return isValidNumericScore(scores[indicator]) ? Number(scores[indicator]) : null;
-  }
-
-  if (indicator.id && isValidNumericScore(scores[indicator.id])) {
-    return Number(scores[indicator.id]);
-  }
-  if (indicator.name && isValidNumericScore(scores[indicator.name])) {
-    return Number(scores[indicator.name]);
-  }
-  if (Array.isArray(indicator.legacy_keys)) {
-    for (const key of indicator.legacy_keys) {
-      if (key && isValidNumericScore(scores[key])) {
-        return Number(scores[key]);
-      }
-    }
-  }
-  return null;
-}
-
-/**
- * Calculates the average score of a category using ONLY evaluated indicators (score !== null).
- * Returns null if no indicators in the category have been evaluated.
- */
-export function calculateCategoryAverage(scores, indicatorList) {
-  if (!Array.isArray(indicatorList) || indicatorList.length === 0) return null;
-  const ratedValues = [];
-  for (const ind of indicatorList) {
-    const val = resolveIndicatorScore(scores, ind);
-    if (val !== null && val !== undefined) {
-      ratedValues.push(val);
-    }
-  }
-  if (ratedValues.length === 0) return null;
-  const total = ratedValues.reduce((sum, v) => sum + v, 0);
-  return Math.round(total / ratedValues.length);
-}
-
-/**
- * Calculates overall score across category averages, ignoring categories with null (UNTESTED) averages.
- * Returns null if no categories have been evaluated.
- */
-export function calculateOverallScore(categoryAverages) {
-  if (!Array.isArray(categoryAverages) || categoryAverages.length === 0) return null;
-  const validCategories = categoryAverages.filter(
-    (v) => v !== null && v !== undefined && typeof v !== 'boolean' && !Number.isNaN(Number(v))
-  );
-  if (validCategories.length === 0) return null;
-  const total = validCategories.reduce((sum, v) => sum + Number(v), 0);
-  return Math.round(total / validCategories.length);
-}
-
 
 export const FOOTBALL_POSITIONS = [
   {
@@ -335,7 +217,6 @@ export const FOOTBALL_POSITIONS = [
       { id: 'FTB-POS-AM-06', name: 'Dribbling Ofensif', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Dribbling Ofensif'] },
       { id: 'FTB-POS-AM-07', name: 'Finishing', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Finishing'] },
       { id: 'FTB-POS-AM-08', name: 'Gerak Antarlini', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Gerak Antarlini'] },
-      { id: 'FTB-POS-AM-09', name: 'Interaksi Satu-Dua', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Interaksi Satu-Dua'] },
       { id: 'FTB-POS-AM-10', name: 'Pressing Depan', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Pressing Depan'] },
       { id: 'FTB-POS-AM-11', name: 'Keputusan Final', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Keputusan Final'] },
       { id: 'FTB-POS-AM-12', name: 'Kontribusi Gol', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Kontribusi Gol'] }
@@ -622,37 +503,16 @@ export const FOOTBALL_CORE_CATEGORIES = {
 export function getFilteredIndicatorsForCategory(categoryKey, activeTier) {
   const cat = FOOTBALL_CORE_CATEGORIES[categoryKey];
   if (!cat) return [];
-  const safeTier = typeof activeTier === 'number' && activeTier >= 1 ? activeTier : 1;
   return cat.indicators
-    .filter((ind) => ind.minTier <= safeTier);
+    .filter((ind) => ind.minTier <= activeTier);
 }
 
 /**
  * Filter position indicators based on activeTier and position code
  */
 export function getPositionIndicatorsForTier(code, activeTier) {
-  if (!code || code === 'POSITION_UNVERIFIED' || typeof code !== 'string') {
-    return {
-      code: 'POSITION_UNVERIFIED',
-      label: 'Posisi Belum Terverifikasi',
-      shortLabel: 'Unverified',
-      tabTitle: 'Khusus Posisi (0)',
-      indicators: []
-    };
-  }
-
-  const safeTier = typeof activeTier === 'number' && activeTier >= 1 ? activeTier : 1;
-  if (safeTier === 1) {
-    const ssbPos = TIER_1_POSITIONS.find((p) => p.code === code);
-    if (!ssbPos) {
-      return {
-        code: 'POSITION_UNVERIFIED',
-        label: 'Posisi Belum Terverifikasi',
-        shortLabel: 'Unverified',
-        tabTitle: 'Khusus Posisi (0)',
-        indicators: []
-      };
-    }
+  if (activeTier === 1) {
+    const ssbPos = TIER_1_POSITIONS.find((p) => p.code === code) || TIER_1_POSITIONS[0];
     return {
       code: ssbPos.code,
       label: ssbPos.label,
@@ -662,22 +522,12 @@ export function getPositionIndicatorsForTier(code, activeTier) {
     };
   }
 
-  const posCfg = FOOTBALL_POSITIONS.find((p) => p.code === code);
-  if (!posCfg) {
-    return {
-      code: 'POSITION_UNVERIFIED',
-      label: 'Posisi Belum Terverifikasi',
-      shortLabel: 'Unverified',
-      tabTitle: 'Khusus Posisi (0)',
-      indicators: []
-    };
-  }
-
+  const posCfg = getPositionConfig(code);
   let sliced = posCfg.indicators;
 
-  if (safeTier === 2) {
+  if (activeTier === 2) {
     sliced = posCfg.indicators.slice(0, 6);
-  } else if (safeTier === 3) {
+  } else if (activeTier === 3) {
     sliced = posCfg.indicators.slice(0, 8);
   }
 
@@ -694,9 +544,8 @@ export function getPositionIndicatorsForTier(code, activeTier) {
  * Get available position list depending on activeTier
  */
 export function getAvailablePositionsForTier(activeTier) {
-  const safeTier = typeof activeTier === 'number' && activeTier >= 1 ? activeTier : 1;
-  if (safeTier === 1) return TIER_1_POSITIONS;
-  if (safeTier === 2) return TIER_2_POSITIONS;
+  if (activeTier === 1) return TIER_1_POSITIONS;
+  if (activeTier === 2) return TIER_2_POSITIONS;
   return FOOTBALL_POSITIONS;
 }
 
@@ -713,26 +562,7 @@ export function isFootballOrMinisoccer(selectedClass, activeAcademy) {
  * Get position object by code
  */
 export function getPositionConfig(code) {
-  if (!code || code === 'POSITION_UNVERIFIED' || typeof code !== 'string') {
-    return {
-      code: 'POSITION_UNVERIFIED',
-      label: 'Posisi Belum Terverifikasi',
-      shortLabel: 'Unverified',
-      category: 'Unverified',
-      specializations: [],
-      indicators: []
-    };
-  }
-  const found = FOOTBALL_POSITIONS.find((p) => p.code === code);
-  if (found) return found;
-  return {
-    code: 'POSITION_UNVERIFIED',
-    label: 'Posisi Belum Terverifikasi',
-    shortLabel: 'Unverified',
-    category: 'Unverified',
-    specializations: [],
-    indicators: []
-  };
+  return FOOTBALL_POSITIONS.find((p) => p.code === code) || FOOTBALL_POSITIONS[10];
 }
 
 /**

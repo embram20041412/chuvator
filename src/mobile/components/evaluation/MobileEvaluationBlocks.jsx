@@ -595,10 +595,9 @@ export function MobileEvaluationHistorySection({
   students = [],
   onDeleteEvaluation,
   isArchived = false,
-  getScoreGradeFn,
-  defaultOpen = false
+  getScoreGradeFn
 }) {
-  const [isSectionOpen, setIsSectionOpen] = useState(() => Boolean(defaultOpen));
+  const [isSectionOpen, setIsSectionOpen] = useState(false);
   const [expandedIds, setExpandedIds] = useState({});
 
   const toggleDetail = (id) => {

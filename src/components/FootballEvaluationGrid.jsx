@@ -28,13 +28,24 @@ import {
   FOOTBALL_CORE_CATEGORIES,
   getPositionConfig,
   getAvailablePositionsForTier,
-  getFilteredIndicatorsForCategory,
-  resolveIndicatorScore
+  getFilteredIndicatorsForCategory
 } from '../config/footballAssessmentData';
 
-// Helper for dual-key resolution (ID -> Name -> Legacy Keys -> null)
+// Helper for dual-key resolution (ID or Name)
 function resolveScore(scores, indicator) {
-  return resolveIndicatorScore(scores, indicator);
+  if (!scores || !indicator) return 0;
+  const id = typeof indicator === 'object' ? indicator.id : indicator;
+  const name = typeof indicator === 'object' ? indicator.name : indicator;
+  const legacyKeys = typeof indicator === 'object' ? indicator.legacy_keys : [];
+
+  if (scores[id] !== undefined) return Number(scores[id]);
+  if (scores[name] !== undefined) return Number(scores[name]);
+  if (legacyKeys) {
+    for (const lk of legacyKeys) {
+      if (scores[lk] !== undefined) return Number(scores[lk]);
+    }
+  }
+  return 0;
 }
 
 export default function FootballEvaluationGrid({
@@ -216,14 +227,14 @@ export default function FootballEvaluationGrid({
                   <div key={ind.id} className="p-3 bg-white border border-rose-100 rounded-xl space-y-1.5 shadow-2xs">
                     <div className="flex items-center justify-between text-xs font-bold">
                       <span className="text-slate-800 truncate" title={ind.name}>{ind.name}</span>
-                      <span className="font-black text-rose-600 text-sm" title={val === null ? 'UNTESTED' : String(val)}>{val !== null ? val : '—'}</span>
+                      <span className="font-black text-rose-600 text-sm">{val}</span>
                     </div>
                     <input
                       type="range"
                       min="0"
                       max="100"
                       step="5"
-                      value={val ?? 0}
+                      value={val}
                       onChange={(e) => handleScoreChange(ind.id, e.target.value)}
                       className="w-full accent-rose-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
                     />
@@ -251,14 +262,14 @@ export default function FootballEvaluationGrid({
                   <div key={ind.id} className="p-3 bg-white border border-blue-100 rounded-xl space-y-1.5 shadow-2xs">
                     <div className="flex items-center justify-between text-xs font-bold">
                       <span className="text-slate-800 truncate" title={ind.name}>{ind.name}</span>
-                      <span className="font-black text-blue-600 text-sm" title={val === null ? 'UNTESTED' : String(val)}>{val !== null ? val : '—'}</span>
+                      <span className="font-black text-blue-600 text-sm">{val}</span>
                     </div>
                     <input
                       type="range"
                       min="0"
                       max="100"
                       step="5"
-                      value={val ?? 0}
+                      value={val}
                       onChange={(e) => handleScoreChange(ind.id, e.target.value)}
                       className="w-full accent-blue-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
                     />
@@ -286,14 +297,14 @@ export default function FootballEvaluationGrid({
                   <div key={ind.id} className="p-3 bg-white border border-teal-100 rounded-xl space-y-1.5 shadow-2xs">
                     <div className="flex items-center justify-between text-xs font-bold">
                       <span className="text-slate-800 truncate" title={ind.name}>{ind.name}</span>
-                      <span className="font-black text-teal-600 text-sm" title={val === null ? 'UNTESTED' : String(val)}>{val !== null ? val : '—'}</span>
+                      <span className="font-black text-teal-600 text-sm">{val}</span>
                     </div>
                     <input
                       type="range"
                       min="0"
                       max="100"
                       step="5"
-                      value={val ?? 0}
+                      value={val}
                       onChange={(e) => handleScoreChange(ind.id, e.target.value)}
                       className="w-full accent-teal-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
                     />
@@ -323,14 +334,14 @@ export default function FootballEvaluationGrid({
                   <div key={ind.id} className="p-3 bg-white border border-purple-100 rounded-xl space-y-1.5 shadow-2xs">
                     <div className="flex items-center justify-between text-xs font-bold">
                       <span className="text-slate-800 truncate" title={ind.name}>{ind.name}</span>
-                      <span className="font-black text-purple-600 text-sm" title={val === null ? 'UNTESTED' : String(val)}>{val !== null ? val : '—'}</span>
+                      <span className="font-black text-purple-600 text-sm">{val}</span>
                     </div>
                     <input
                       type="range"
                       min="0"
                       max="100"
                       step="5"
-                      value={val ?? 0}
+                      value={val}
                       onChange={(e) => handleScoreChange(ind.id, e.target.value)}
                       className="w-full accent-purple-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
                     />
@@ -358,14 +369,14 @@ export default function FootballEvaluationGrid({
                   <div key={ind.id} className="p-3 bg-white border border-emerald-100 rounded-xl space-y-1.5 shadow-2xs">
                     <div className="flex items-center justify-between text-xs font-bold">
                       <span className="text-slate-800 truncate" title={ind.name}>{ind.name}</span>
-                      <span className="font-black text-emerald-600 text-sm" title={val === null ? 'UNTESTED' : String(val)}>{val !== null ? val : '—'}</span>
+                      <span className="font-black text-emerald-600 text-sm">{val}</span>
                     </div>
                     <input
                       type="range"
                       min="0"
                       max="100"
                       step="5"
-                      value={val ?? 0}
+                      value={val}
                       onChange={(e) => handleScoreChange(ind.id, e.target.value)}
                       className="w-full accent-emerald-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
                     />
@@ -393,14 +404,14 @@ export default function FootballEvaluationGrid({
                   <div key={ind.id} className="p-3 bg-white border border-amber-100 rounded-xl space-y-1.5 shadow-2xs">
                     <div className="flex items-center justify-between text-xs font-bold">
                       <span className="text-slate-800 truncate" title={ind.name}>{ind.name}</span>
-                      <span className="font-black text-amber-600 text-sm" title={val === null ? 'UNTESTED' : String(val)}>{val !== null ? val : '—'}</span>
+                      <span className="font-black text-amber-600 text-sm">{val}</span>
                     </div>
                     <input
                       type="range"
                       min="0"
                       max="100"
                       step="5"
-                      value={val ?? 0}
+                      value={val}
                       onChange={(e) => handleScoreChange(ind.id, e.target.value)}
                       className="w-full accent-amber-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
                     />
@@ -434,14 +445,14 @@ export default function FootballEvaluationGrid({
                         <Star className="w-3 h-3 text-amber-500 fill-amber-400 shrink-0" />
                         <span className="truncate">{indName}</span>
                       </span>
-                      <span className="font-black text-indigo-600 text-sm" title={val === null ? 'UNTESTED' : String(val)}>{val !== null ? val : '—'}</span>
+                      <span className="font-black text-indigo-600 text-sm">{val}</span>
                     </div>
                     <input
                       type="range"
                       min="0"
                       max="100"
                       step="5"
-                      value={val ?? 0}
+                      value={val}
                       onChange={(e) => handleScoreChange(indId, e.target.value)}
                       className="w-full accent-indigo-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
                     />
