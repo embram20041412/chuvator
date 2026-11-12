@@ -831,6 +831,7 @@ export default function MobileAcademyHub({ userProfile }) {
               activeAcademy={activeAcademy}
               userProfile={userProfile}
               onStudentUpdated={() => fetchAllData()}
+              isMobile={true}
             />
           )}
         </div>

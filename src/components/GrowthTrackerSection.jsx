@@ -31,6 +31,14 @@ import {
   Legend,
   ResponsiveContainer
 } from 'recharts';
+import {
+  MobileGrowthContextBar,
+  MobileGrowthHeroCard,
+  MobileGrowthInputForm,
+  MobileGrowthChartContainer,
+  MobileGrowthAiInsight,
+  MobileGrowthHistorySection
+} from '../mobile/components/growth/MobileGrowthBlocks';
 
 /**
  * Calculates BMI (Body Mass Index) = weight (kg) / (height (m) ^ 2)
@@ -144,7 +152,8 @@ export default function GrowthTrackerSection({
   selectedClass,
   tenantId,
   activeAcademy,
-  isArchived = false
+  isArchived = false,
+  isMobile = false
 }) {
   const effectiveIsArchived = isArchived || selectedClass?.isArchived === true;
   const isSingleStudentMode = Boolean(selectedStudent?.id);
@@ -397,6 +406,120 @@ export default function GrowthTrackerSection({
 
   const studentAge = currentStudent ? calculateAge(currentStudent.birthDate) : '-';
   const recordedBMI = currentStudent ? calculateBMI(currentStudent.height, currentStudent.weight) : 0;
+  const recordedStatus = getBMIStatus(recordedBMI);
+
+  if (isMobile) {
+    return (
+      <div className="space-y-3 text-left">
+        {!isSingleStudentMode && (
+          <MobileGrowthContextBar
+            selectedClass={selectedClass}
+            students={classStudents}
+            selectedStudent={currentStudent}
+            onSelectStudentId={setSelectedStudentId}
+            isArchived={effectiveIsArchived}
+          />
+        )}
+
+        {currentStudent ? (
+          <div className="space-y-3">
+            {/* Summary Hero */}
+            <MobileGrowthHeroCard
+              height={currentStudent.height}
+              weight={currentStudent.weight}
+              bmi={recordedBMI}
+              bmiStatus={recordedStatus}
+              lastMeasuredDate={historyList.length > 0 ? historyList[historyList.length - 1].date : null}
+            />
+
+            {/* Input Form */}
+            <MobileGrowthInputForm
+              newHeight={newHeight}
+              setNewHeight={setNewHeight}
+              newWeight={newWeight}
+              setNewWeight={setNewWeight}
+              recordDate={recordDate}
+              setRecordDate={setRecordDate}
+              liveBMI={liveBMI}
+              liveStatus={liveStatus}
+              onSave={handleSaveGrowthRecord}
+              isSaving={isSaving}
+              isArchived={effectiveIsArchived}
+              successMsg={successMsg}
+              errorMsg={errorMsg}
+            />
+
+            {/* Growth Curve */}
+            <MobileGrowthChartContainer historyCount={historyList.length}>
+              {chartData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={240}>
+                  <LineChart data={chartData} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                    <XAxis 
+                      dataKey="dateFormatted" 
+                      stroke="#94a3b8" 
+                      tick={{ fill: '#cbd5e1', fontSize: 10 }} 
+                      tickLine={false}
+                      axisLine={false}
+                      minTickGap={20}
+                    />
+                    <YAxis 
+                      yAxisId="left" 
+                      orientation="left" 
+                      width={40}
+                      stroke="#38bdf8" 
+                      tick={{ fill: '#38bdf8', fontSize: 10 }} 
+                      domain={['dataMin - 5', 'dataMax + 5']}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <YAxis 
+                      yAxisId="right" 
+                      orientation="right" 
+                      width={40}
+                      stroke="#fb7185" 
+                      tick={{ fill: '#fb7185', fontSize: 10 }} 
+                      domain={['dataMin - 5', 'dataMax + 5']}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <Tooltip 
+                      contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', borderRadius: '12px', fontSize: '11px', color: '#f8fafc' }}
+                      itemStyle={{ padding: '2px 0' }}
+                    />
+                    <Legend iconType="circle" wrapperStyle={{ paddingTop: '10px', fontSize: '11px' }} />
+                    <Line yAxisId="left" type="monotone" dataKey="height" name="TB (cm)" stroke="#0ea5e9" strokeWidth={3} dot={{ r: 4, fill: '#0ea5e9', strokeWidth: 2, stroke: '#101D38' }} activeDot={{ r: 6 }} />
+                    <Line yAxisId="right" type="monotone" dataKey="weight" name="BB (kg)" stroke="#f43f5e" strokeWidth={3} dot={{ r: 4, fill: '#f43f5e', strokeWidth: 2, stroke: '#101D38' }} activeDot={{ r: 6 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-center p-6">
+                  <p className="text-slate-400 text-[12px]">Belum ada data riwayat untuk menampilkan grafik pertumbuhan.</p>
+                </div>
+              )}
+            </MobileGrowthChartContainer>
+
+            {/* AI Insight */}
+            <MobileGrowthAiInsight
+              aiInsight={aiInsight}
+              onGenerate={handleGenerateAIInsight}
+              isGenerating={isGeneratingAI}
+              isArchived={effectiveIsArchived}
+            />
+
+            {/* History */}
+            <MobileGrowthHistorySection history={historyList} />
+          </div>
+        ) : (
+          <div className="chua-m-growth-card py-10 text-center space-y-2">
+            <User className="w-10 h-10 text-slate-300 mx-auto" />
+            <p className="text-[13px] font-bold text-[#17233D]">Pilih atlet terlebih dahulu</p>
+            <p className="text-[11px] text-[#68758B]">Gunakan menu pilihan di atas untuk memuat data antropometri atlet.</p>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3 text-left">
