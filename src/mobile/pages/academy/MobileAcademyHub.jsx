@@ -28,8 +28,8 @@ import { updateCoachPassword } from '../../../services/coachAuthService';
 import AcademyDashboard from '../../../components/AcademyDashboard';
 import AcademyClasses from '../../../components/AcademyClasses';
 import AttendanceSection from '../../../components/AttendanceSection';
-import EvaluationSection from '../../../components/EvaluationSection';
 import GrowthTrackerSection from '../../../components/GrowthTrackerSection';
+import AnalyticsSection from '../../../components/AnalyticsSection';
 import CoachModal from '../../../components/CoachModal';
 import ClassModal from '../../../components/ClassModal';
 import CreateAcademyModal from '../../../components/CreateAcademyModal';
@@ -823,7 +823,7 @@ export default function MobileAcademyHub({ userProfile }) {
             />
           )}
 
-          {attendanceSubTab === 'antropometri' && (
+          {(attendanceSubTab === 'antropometri' || attendanceSubTab === 'perkembangan') && (
             <GrowthTrackerSection
               selectedClass={selectedClass}
               students={activeStudents}
@@ -831,6 +831,16 @@ export default function MobileAcademyHub({ userProfile }) {
               activeAcademy={activeAcademy}
               userProfile={userProfile}
               onStudentUpdated={() => fetchAllData()}
+              isMobile={true}
+            />
+          )}
+
+          {attendanceSubTab === 'analitik' && (
+            <AnalyticsSection
+              selectedClass={selectedClass}
+              students={activeStudents}
+              tenantId={tenantId}
+              activeAcademy={activeAcademy}
               isMobile={true}
             />
           )}

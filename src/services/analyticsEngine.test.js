@@ -1,0 +1,242 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import {
+  analyzeAthletePerformance,
+  analyzePositionEventPerformance,
+  analyzeAthleteDevelopment,
+  compareAthletes,
+  analyzeAcademyTeamPerformance,
+  generateAnalyticsReport,
+  analyzeDataQuality
+} from './analyticsEngine.js';
+
+// TEST 1: Missing score versus valid zero
+test('1. Missing score (null) === UNTESTED vs Valid 0 score', () => {
+  const mockScores = {
+    'FTB-UNI-PHY-01': 85,
+    'FTB-UNI-PHY-02': 0 // Explicit 0
+  };
+
+  const result = analyzeAthletePerformance({
+    scores: mockScores,
+    sport: 'football',
+    activeTier: 1,
+    playerRole: 'CB'
+  });
+
+  const phyCat = result.categoryAnalysis.fisik;
+  assert.equal(phyCat.evaluatedCount, 2);
+  assert.equal(phyCat.categoryAverage, 43); // Math.round((85 + 0) / 2) = 43
+  assert.equal(phyCat.indicators.find(i => i.id === 'FTB-UNI-PHY-02').score, 0);
+  assert.equal(phyCat.indicators.find(i => i.id === 'FTB-UNI-PHY-03').score, null);
+});
+
+// TEST 2: Partial versus complete evaluation
+test('2. Partial vs Complete evaluation coverage', () => {
+  const partialScores = { 'FTB-UNI-PHY-01': 90 };
+  const completeScores = {};
+  for (let i = 1; i <= 5; i++) {
+    completeScores[`FTB-UNI-PHY-0${i}`] = 80;
+  }
+
+  const partialRes = analyzeAthletePerformance({ scores: partialScores, sport: 'football', activeTier: 1 });
+  const completeRes = analyzeAthletePerformance({ scores: completeScores, sport: 'football', activeTier: 1 });
+
+  assert.ok(partialRes.evaluationCoverage < completeRes.evaluationCoverage);
+  assert.equal(partialRes.categoryAnalysis.fisik.completenessPercent, 20); // 1 / 5 = 20%
+  assert.equal(completeRes.categoryAnalysis.fisik.completenessPercent, 100); // 5 / 5 = 100%
+});
+
+// TEST 3: Tenant A versus Tenant B isolation (Negative Test)
+test('3. Tenant Isolation Negative Test (Tenant A vs Tenant B)', () => {
+  const students = [
+    { id: 's1', name: 'Student Tenant A', tenantId: 'tenant-a' },
+    { id: 's2', name: 'Student Tenant B', tenantId: 'tenant-b' }
+  ];
+
+  const evaluations = [
+    { id: 'e1', studentId: 's1', tenantId: 'tenant-a', activeTier: 1, scores: { 'FTB-UNI-PHY-01': 95 } },
+    { id: 'e2', studentId: 's2', tenantId: 'tenant-b', activeTier: 1, scores: { 'FTB-UNI-PHY-01': 40 } }
+  ];
+
+  const teamA = analyzeAcademyTeamPerformance({ evaluations, students, sport: 'football', tenantId: 'tenant-a' });
+  const teamB = analyzeAcademyTeamPerformance({ evaluations, students, sport: 'football', tenantId: 'tenant-b' });
+
+  assert.equal(teamA.totalStudents, 1);
+  assert.equal(teamA.teamCategoryAverages.fisik, 95);
+
+  assert.equal(teamB.totalStudents, 1);
+  assert.equal(teamB.teamCategoryAverages.fisik, 40);
+
+  // Negative assertion: Tenant B data must NOT leak into Tenant A result
+  assert.equal(teamA.evaluatedStudentsCount, 1);
+  assert.notEqual(teamA.teamCategoryAverages.fisik, 40);
+});
+
+// TEST 4: Cross-sport comparison rejection
+test('4. Cross-sport comparison rejection', () => {
+  const athleteA = { name: 'Footballer', sport: 'football', scores: { 'FTB-UNI-PHY-01': 80 } };
+  const athleteB = { name: 'Badminton Player', sport: 'badminton', scores: { 'BDM-UNI-PHY-01': 80 } };
+
+  const comp = compareAthletes({
+    athleteA,
+    athleteB,
+    sportA: 'football',
+    sportB: 'badminton'
+  });
+
+  assert.equal(comp.isComparable, false);
+  assert.equal(comp.errorReason, 'CROSS_SPORT_MISMATCH');
+});
+
+// TEST 5: Position/event mismatch handling
+test('5. Position/event mismatch handling', () => {
+  const athleteA = { name: 'Defender', playerRole: 'CB', scores: { 'FTB-UNI-PHY-01': 80, 'FTB-POS-CB-01': 90 } };
+  const athleteB = { name: 'Striker', playerRole: 'ST', scores: { 'FTB-UNI-PHY-01': 85, 'FTB-POS-ST-01': 88 } };
+
+  const comp = compareAthletes({
+    athleteA,
+    athleteB,
+    sport: 'football',
+    activeTier: 2
+  });
+
+  assert.equal(comp.isComparable, true);
+  assert.equal(comp.positionMismatch, true);
+  assert.equal(comp.categoryComparison.spesifik_posisi.diff, null);
+  assert.ok(comp.categoryComparison.spesifik_posisi.mismatchNote);
+});
+
+// TEST 6: Insufficient longitudinal data handling
+test('6. Insufficient longitudinal data handling', () => {
+  const singleEval = [{ id: 'e1', date: '2026-01-01', scores: { 'FTB-UNI-PHY-01': 80 } }];
+  const devResult = analyzeAthleteDevelopment({ evaluations: singleEval, sport: 'football' });
+
+  assert.equal(devResult.hasHistory, false);
+  assert.equal(devResult.trendDirection, 'INSUFFICIENT_DATA');
+  assert.equal(devResult.trendClassification, 'INSUFFICIENT_DATA');
+});
+
+// TEST 7: Chronological ordering
+test('7. Chronological ordering of evaluations', () => {
+  const evaluationsOut = [
+    { id: 'e2', date: '2026-06-01', scores: { 'FTB-UNI-PHY-01': 90 } },
+    { id: 'e1', date: '2026-01-01', scores: { 'FTB-UNI-PHY-01': 70 } }
+  ];
+
+  const devResult = analyzeAthleteDevelopment({ evaluations: evaluationsOut, sport: 'football', activeTier: 1 });
+
+  assert.equal(devResult.evaluationTimeline[0].id, 'e1'); // Oldest first
+  assert.equal(devResult.evaluationTimeline[1].id, 'e2'); // Newest second
+  assert.equal(devResult.overallDelta, 20); // 90 - 70 = +20
+  assert.equal(devResult.trendClassification, 'PRELIMINARY_TREND'); // 2 sessions = PRELIMINARY
+});
+
+// TEST 8: Invalid score detection
+test('8. Invalid score detection (>100 or <0 or NaN)', () => {
+  const invalidEvals = [
+    { id: 'e1', activeTier: 1, scores: { 'FTB-UNI-PHY-01': 150, 'FTB-UNI-PHY-02': -10, 'FTB-UNI-PHY-03': 'abc' } }
+  ];
+
+  const dq = analyzeDataQuality({ evaluations: invalidEvals, sport: 'football' });
+
+  assert.equal(dq.totalInvalidScores, 3);
+  assert.ok(dq.dataQualityScore < 100);
+});
+
+// TEST 9: Empty dataset handling
+test('9. Empty dataset handling', () => {
+  const emptyPerf = analyzeAthletePerformance({ scores: {}, sport: 'football' });
+  const emptyTeam = analyzeAcademyTeamPerformance({ evaluations: [], students: [], sport: 'football' });
+  const emptyDev = analyzeAthleteDevelopment({ evaluations: [], sport: 'football' });
+
+  assert.equal(emptyPerf.overallScore, null);
+  assert.equal(emptyPerf.evaluationCoverage, 0);
+  assert.equal(emptyTeam.totalStudents, 0);
+  assert.equal(emptyTeam.teamOverallAverage, null);
+  assert.equal(emptyDev.hasHistory, false);
+});
+
+// TEST 10: Historical legacy score resolution
+test('10. Historical legacy score resolution', () => {
+  const legacyScores = {
+    'Akselerasi': 88, // Legacy name key for FTB-UNI-PHY-01
+    'Kelincahan': 92  // Legacy name key for FTB-UNI-PHY-02
+  };
+
+  const perf = analyzeAthletePerformance({ scores: legacyScores, sport: 'football', activeTier: 1 });
+  const phy = perf.categoryAnalysis.fisik;
+
+  assert.equal(phy.evaluatedCount, 2);
+  assert.equal(phy.categoryAverage, 90); // Math.round((88 + 92) / 2)
+});
+
+// TEST 11: Desktop and Mobile Integration Contract
+test('11. Integration Contract for Desktop and Mobile components', () => {
+  const sampleEvals = [{ id: 'e1', activeTier: 1, scores: { 'FTB-UNI-PHY-01': 80 } }];
+  const sampleStudents = [{ id: 's1', studentName: 'Test Student', playerRole: 'CB' }];
+
+  const report = generateAnalyticsReport({
+    type: 'INDIVIDUAL_ATHLETE',
+    athleteData: sampleStudents[0],
+    analyticsResult: analyzeAthletePerformance({ scores: sampleEvals[0].scores, sport: 'football', activeTier: 1 }),
+    tenantName: 'CHUVATOR Main'
+  });
+
+  assert.equal(report.athleteContext.name, 'Test Student');
+  assert.ok(report.metricsSummary.overallScore);
+});
+
+// TEST 12: Report Payload Completeness
+test('12. Report payload completeness', () => {
+  const perf = analyzeAthletePerformance({
+    scores: { 'FTB-UNI-PHY-01': 85, 'FTB-UNI-TEC-01': 95 },
+    sport: 'football',
+    activeTier: 1
+  });
+
+  const report = generateAnalyticsReport({
+    type: 'INDIVIDUAL_ATHLETE',
+    athleteData: { id: 's1', studentName: 'Budi', className: 'U-10', sport: 'football', playerRole: 'CB' },
+    analyticsResult: perf,
+    tenantName: 'Akademi Utama'
+  });
+
+  assert.ok(report.generatedAt);
+  assert.equal(report.reportType, 'INDIVIDUAL_ATHLETE');
+  assert.equal(report.athleteContext.name, 'Budi');
+  assert.ok(report.categoryAnalysis.fisik);
+  assert.ok(report.categoryAnalysis.teknik);
+});
+
+// TEST 13: Longitudinal Integrity (Position change, tier change, coverage shift, 3-session trend)
+test('13. Longitudinal Integrity: Position change, tier change, coverage shift, and robust trend rules', () => {
+  const longitudinalEvals = [
+    { id: 'e1', date: '2026-01-01', activeTier: 1, playerRole: 'CB', scores: { 'FTB-UNI-PHY-01': 60 } },
+    { id: 'e2', date: '2026-03-01', activeTier: 1, playerRole: 'ST', scores: { 'FTB-UNI-PHY-01': 70, 'FTB-UNI-PHY-02': 75 } },
+    { id: 'e3', date: '2026-06-01', activeTier: 2, playerRole: 'ST', scores: {
+      'FTB-UNI-PHY-01': 85, 'FTB-UNI-PHY-02': 88, 'FTB-UNI-PHY-03': 90, 'FTB-UNI-PHY-04': 92, 'FTB-UNI-PHY-05': 95,
+      'FTB-UNI-PHY-06': 90, 'FTB-UNI-PHY-07': 90, 'FTB-UNI-PHY-08': 90, 'FTB-UNI-PHY-09': 90, 'FTB-UNI-TEC-01': 90,
+      'FTB-UNI-TEC-02': 90, 'FTB-UNI-TEC-03': 90, 'FTB-UNI-TEC-04': 90, 'FTB-UNI-TEC-05': 90, 'FTB-UNI-TEC-06': 90,
+      'FTB-UNI-TEC-07': 90, 'FTB-UNI-TEC-08': 90, 'FTB-UNI-TEC-09': 90, 'FTB-UNI-TEC-10': 90, 'FTB-UNI-TAC-01': 90,
+      'FTB-UNI-TAC-02': 90, 'FTB-UNI-TAC-03': 90, 'FTB-UNI-TAC-04': 90, 'FTB-UNI-MEN-01': 90, 'FTB-UNI-MEN-02': 90
+    } }
+  ];
+
+  const dev = analyzeAthleteDevelopment({
+    evaluations: longitudinalEvals,
+    sport: 'football',
+    activeTier: 1,
+    playerRole: 'CB'
+  });
+
+  assert.equal(dev.hasHistory, true);
+  assert.equal(dev.timelineCount, 3);
+  assert.equal(dev.positionChanged, true); // CB -> ST
+  assert.equal(dev.tierChanged, true); // Tier 1 -> Tier 2
+  assert.equal(dev.contextMismatch, true);
+  assert.equal(dev.significantCoverageShift, true); // Shift in evaluated indicators >= 25%
+  assert.equal(dev.trendClassification, 'ESTABLISHED_TREND'); // >= 3 sessions = ESTABLISHED_TREND
+  assert.equal(dev.trendDirection, 'IMPROVING');
+});

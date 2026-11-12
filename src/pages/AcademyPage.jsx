@@ -22,6 +22,7 @@ import IdCardGenerator from '../components/IdCardGenerator';
 import AttendanceSection from '../components/AttendanceSection';
 import EvaluationSection from '../components/EvaluationSection';
 import GrowthTrackerSection from '../components/GrowthTrackerSection';
+import AnalyticsSection from '../components/AnalyticsSection';
 import AcademyDashboard from '../components/AcademyDashboard';
 // import { Dashboard3DIcon, Akademi3DIcon } from '../components/icons/App3DIcons';
 import { 
@@ -2023,8 +2024,8 @@ export default function AcademyPage({ userProfile }) {
             {/* BARIS KONTROL ATAS: SEGMENTED NAVIGATION PILLS + FILTER DROPDOWN KELAS GLOBAL */}
             <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-2.5 p-1.5 sm:p-2 bg-white dark:bg-[#162320] rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs">
               
-              {/* 1. SEGMENTED CONTROL 3 TAB (1 BARIS PENUH TANPA SCROLL) */}
-              <div className="grid grid-cols-3 gap-1 p-0.5 bg-slate-200/70 dark:bg-[#111C19] rounded-xl w-full">
+              {/* 1. SEGMENTED CONTROL 4 TAB (1 BARIS PENUH TANPA SCROLL) */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1 p-0.5 bg-slate-200/70 dark:bg-[#111C19] rounded-xl w-full">
                 <button
                   type="button"
                   onClick={() => setAttendanceSubTab('presensi')}
@@ -2059,6 +2060,18 @@ export default function AcademyPage({ userProfile }) {
                   }`}
                 >
                   Growth Tracker
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setAttendanceSubTab('analitik')}
+                  className={`text-xs font-bold py-1.5 text-center rounded-lg transition-all cursor-pointer ${
+                    attendanceSubTab === 'analitik'
+                      ? 'bg-[#354944] text-white shadow-xs border-b-2 border-[#C89D32]'
+                      : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+                  }`}
+                >
+                  Analitik &amp; BI
                 </button>
               </div>
 
@@ -2194,7 +2207,7 @@ export default function AcademyPage({ userProfile }) {
                         />
                       </div>
 
-                      <div className={attendanceSubTab === 'perkembangan' || (attendanceSubTab !== 'presensi' && attendanceSubTab !== 'evaluasi') ? 'block' : 'hidden'}>
+                      <div className={attendanceSubTab === 'antropometri' || attendanceSubTab === 'perkembangan' ? 'block' : 'hidden'}>
                         <GrowthTrackerSection
                           selectedClass={currentClass}
                           isArchived={currentClass?.isArchived === true}
@@ -2204,6 +2217,15 @@ export default function AcademyPage({ userProfile }) {
                           onStudentUpdated={() => {
                             fetchAcademyData();
                           }}
+                        />
+                      </div>
+
+                      <div className={attendanceSubTab === 'analitik' ? 'block' : 'hidden'}>
+                        <AnalyticsSection
+                          selectedClass={currentClass}
+                          students={filteredStudents.filter((s) => (s.classId ? s.classId === currentClass.id : s.className === currentClass.className))}
+                          tenantId={tenantId}
+                          activeAcademy={activeAcademy}
                         />
                       </div>
                     </div>
