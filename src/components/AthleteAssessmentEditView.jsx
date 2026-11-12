@@ -13,30 +13,17 @@ import {
   Radio
 } from 'lucide-react';
 import AssessmentIndicatorsAccordion from './AssessmentIndicatorsAccordion';
+import {
+  resolveIndicatorScore,
+  calculateCategoryAverage,
+  calculateOverallScore
+} from '../config/footballAssessmentData';
 
 export function getScoreGrade(score) {
   if (score >= 85) return { grade: 'A (Sangat Baik)', badge: 'bg-emerald-100 text-emerald-800 border-emerald-300' };
   if (score >= 75) return { grade: 'B (Baik)', badge: 'bg-[#354944]/10 text-[#354944] border-[#354944]/30' };
   if (score >= 60) return { grade: 'C (Cukup)', badge: 'bg-amber-100 text-amber-800 border-amber-300' };
   return { grade: 'D (Perlu Bimbingan)', badge: 'bg-rose-100 text-rose-800 border-rose-300' };
-}
-
-/**
- * Resolves a score from the scores object using an indicator object or string.
- * Supports dual-key lookup (ID or Name) and legacy keys.
- */
-function resolveIndicatorScore(scores, indicator) {
-  if (!scores) return 0;
-  if (typeof indicator === 'string') return scores[indicator] !== undefined ? scores[indicator] : 0;
-  
-  if (indicator.id && scores[indicator.id] !== undefined) return scores[indicator.id];
-  if (indicator.name && scores[indicator.name] !== undefined) return scores[indicator.name];
-  if (indicator.legacy_keys) {
-    for (const lk of indicator.legacy_keys) {
-      if (scores[lk] !== undefined) return scores[lk];
-    }
-  }
-  return 0;
 }
 
 /**
@@ -127,16 +114,6 @@ export default function AthleteAssessmentEditView({
     setHasChanges(true);
   };
 
-  // Adjust score with +/- delta
-  const handleDraftAdjustScore = (indicatorName, delta) => {
-    setDraftScores((prev) => {
-      const curr = prev[indicatorName] !== undefined ? prev[indicatorName] : 0;
-      const nextVal = Math.min(100, Math.max(0, curr + delta));
-      return { ...prev, [indicatorName]: nextVal };
-    });
-    setHasChanges(true);
-  };
-
   // Resolve dynamic category list (updating category 7 'posisi' if draftPosition changed)
   const effectiveCategoryList = useMemo(() => {
     if (!resolvePositionIndicatorsFn) return categoryList;
@@ -155,6 +132,27 @@ export default function AthleteAssessmentEditView({
       return cat;
     });
   }, [categoryList, draftPosition, activeTier, resolvePositionIndicatorsFn]);
+
+  // Adjust score with +/- delta (preserving legacy key values if present)
+  const handleDraftAdjustScore = (indicatorName, delta) => {
+    setDraftScores((prev) => {
+      let matchedInd = indicatorName;
+      for (const cat of effectiveCategoryList) {
+        const found = (cat.indicators || []).find((ind) =>
+          typeof ind === 'object' ? ind.id === indicatorName || ind.name === indicatorName : ind === indicatorName
+        );
+        if (found) {
+          matchedInd = found;
+          break;
+        }
+      }
+      const resolved = resolveIndicatorScore(prev, matchedInd);
+      const curr = resolved !== null ? resolved : 0;
+      const nextVal = Math.min(100, Math.max(0, curr + delta));
+      return { ...prev, [indicatorName]: nextVal };
+    });
+    setHasChanges(true);
+  };
 
   // Set preset score for all indicators in a specific category
   const handleDraftCategoryPreset = (catKey, presetScore) => {
@@ -191,27 +189,31 @@ export default function AthleteAssessmentEditView({
   const { draftCategoryList, draftOverallScore, draftGrade, totalIndicators, evaluatedCount } = useMemo(() => {
     let allIndicatorsCount = 0;
     let ratedCount = 0;
+    const rawCategoryAverages = [];
 
     const updatedCategories = effectiveCategoryList.map((cat) => {
       const inds = cat.indicators || [];
       allIndicatorsCount += inds.length;
 
-      let catTotal = 0;
       inds.forEach((ind) => {
         const val = resolveIndicatorScore(draftScores, ind);
-        if (val > 0) ratedCount++;
-        catTotal += val;
+        if (val !== null && val !== undefined) {
+          ratedCount++;
+        }
       });
 
-      const catScore = inds.length > 0 ? Math.round(catTotal / inds.length) : (cat.score || 0);
+      const catAvg = calculateCategoryAverage(draftScores, inds);
+      rawCategoryAverages.push(catAvg);
+
       return {
         ...cat,
-        score: catScore
+        rawScore: catAvg,
+        score: catAvg !== null ? catAvg : 0
       };
     });
 
-    const sumCatScores = updatedCategories.reduce((sum, c) => sum + (c.score || 0), 0);
-    const overall = updatedCategories.length > 0 ? Math.round(sumCatScores / updatedCategories.length) : 0;
+    const overallRaw = calculateOverallScore(rawCategoryAverages);
+    const overall = overallRaw !== null ? overallRaw : 0;
     const grade = getScoreGrade(overall);
 
     return {

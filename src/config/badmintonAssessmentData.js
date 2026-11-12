@@ -2,6 +2,20 @@
 // KAMUS DATA "ATHLETE DEVELOPMENT ASSESSMENT" (4-TIER LTAD BADMINTON)
 // =====================================================================
 
+import {
+  parseValidAgeInput,
+  resolveIndicatorScore,
+  calculateCategoryAverage,
+  calculateOverallScore
+} from './footballAssessmentData';
+
+export {
+  parseValidAgeInput,
+  resolveIndicatorScore,
+  calculateCategoryAverage,
+  calculateOverallScore
+};
+
 export function isBadmintonSport(selectedClass, activeAcademy) {
   const isTableTennis = (str) => str.includes('meja') || str.includes('table');
 
@@ -121,46 +135,8 @@ export const PBSI_AGE_LEVELS = [
 ];
 
 export function detectBadmintonTierFromAge(ageInput) {
-  if (ageInput === undefined || ageInput === null || ageInput === '') return 'AGE_UNVERIFIED';
-  
-  let parsed = 0;
-  if (typeof ageInput === 'number') {
-    parsed = ageInput;
-  } else {
-    const ageStr = String(ageInput);
-    if (ageStr.includes('-') || ageStr.includes('/')) {
-      try {
-        const birthDate = new Date(ageStr);
-        if (!isNaN(birthDate.getTime())) {
-          const today = new Date();
-          let age = today.getFullYear() - birthDate.getFullYear();
-          const m = today.getMonth() - birthDate.getMonth();
-          if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) {
-            age--;
-          }
-          parsed = age;
-        } else {
-          parsed = parseInt(ageStr.replace(/\D/g, ''), 10) || 0;
-        }
-      } catch (e) {
-        parsed = parseInt(ageStr.replace(/\D/g, ''), 10) || 0;
-      }
-    } else {
-      const digits = ageStr.replace(/\D/g, '');
-      parsed = parseInt(digits, 10) || 0;
-    }
-  }
-
-  if (parsed > 100) {
-    const currentYear = new Date().getFullYear();
-    if (parsed >= 1900 && parsed <= currentYear) {
-      parsed = currentYear - parsed;
-    } else {
-      return 'AGE_UNVERIFIED';
-    }
-  }
-
-  if (parsed <= 0) return 'AGE_UNVERIFIED';
+  const parsed = parseValidAgeInput(ageInput);
+  if (parsed === null || parsed <= 0) return 'AGE_UNVERIFIED';
   if (parsed <= 10) return 1; // Pra-Usia Dini & Usia Dini (<=10)
   if (parsed >= 11 && parsed <= 13) return 2; // Anak-Anak (11-13)
   if (parsed >= 14 && parsed <= 17) return 3; // Pemula & Remaja (14-17)
@@ -168,28 +144,9 @@ export function detectBadmintonTierFromAge(ageInput) {
 }
 
 export function detectPbsiLevelFromAge(ageInput) {
-  const tierResult = detectBadmintonTierFromAge(ageInput);
-  if (tierResult === 'AGE_UNVERIFIED') return { ...PBSI_AGE_LEVELS[0], status: 'AGE_UNVERIFIED' };
-
-  // Re-detect actual age for finer pbsi level
-  let age = 10;
-  if (typeof ageInput === 'number') age = ageInput;
-  else if (String(ageInput).includes('-') || String(ageInput).includes('/')) {
-     const birthDate = new Date(ageInput);
-     if (!isNaN(birthDate.getTime())) {
-       const today = new Date();
-       age = today.getFullYear() - birthDate.getFullYear();
-       const m = today.getMonth() - birthDate.getMonth();
-       if (m < 0 || (m === 0 && today.getDate() < birthDate.getDate())) age--;
-     }
-  } else {
-     age = parseInt(String(ageInput).replace(/\D/g, ''), 10) || 10;
-  }
-  
-  if (age > 100) {
-    const cy = new Date().getFullYear();
-    if (age >= 1900 && age <= cy) age = cy - age;
-    else age = 10;
+  const age = parseValidAgeInput(ageInput);
+  if (age === null || age <= 0) {
+    return { ...PBSI_AGE_LEVELS[0], status: 'AGE_UNVERIFIED' };
   }
 
   if (age <= 8) return PBSI_AGE_LEVELS[0]; // Pra-Usia Dini
@@ -479,16 +436,17 @@ export const BADMINTON_CORE_CATEGORIES = {
 export function getFilteredBadmintonIndicatorsForCategory(catKey, activeTier, isDoubles) {
   const cat = BADMINTON_CORE_CATEGORIES[catKey];
   if (!cat) return [];
+  const safeTier = typeof activeTier === 'number' && activeTier >= 1 ? activeTier : 1;
 
   if (catKey === 'komunikasi') {
-    if (!isDoubles || activeTier < 2) return [];
+    if (!isDoubles || safeTier < 2) return [];
     return cat.indicators
-      .filter((ind) => ind.minTier <= activeTier);
+      .filter((ind) => ind.minTier <= safeTier);
   }
 
   return cat.indicators
     .filter((ind) => {
-      if (ind.minTier > activeTier) return false;
+      if (ind.minTier > safeTier) return false;
       if (ind.isDoublesOnly && !isDoubles) return false;
       return true;
     });
@@ -591,13 +549,14 @@ export const BADMINTON_EVENT_INDICATORS = {
 };
 
 export function getBadmintonEventSpecificConfigForTier(eventCode, activeTier) {
-  if (activeTier === 1) {
+  const safeTier = typeof activeTier === 'number' && activeTier >= 1 ? activeTier : 1;
+  if (safeTier === 1) {
     return BADMINTON_EVENT_INDICATORS.BASIC_SINGLE;
   }
 
   const baseConfig = BADMINTON_EVENT_INDICATORS[eventCode] || BADMINTON_EVENT_INDICATORS.MS;
 
-  if (activeTier === 2) {
+  if (safeTier === 2) {
     // Tier 2: First 5 fundamental indicators
     return {
       ...baseConfig,
@@ -605,7 +564,7 @@ export function getBadmintonEventSpecificConfigForTier(eventCode, activeTier) {
     };
   }
 
-  if (activeTier === 3) {
+  if (safeTier === 3) {
     // Tier 3: First 6 indicators
     return {
       ...baseConfig,
