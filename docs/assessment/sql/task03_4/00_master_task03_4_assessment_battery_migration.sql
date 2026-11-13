@@ -453,6 +453,7 @@ BEGIN
         NEW.test_period := to_char(NEW.test_date, 'YYYY-MM');
     END IF;
 
+    -- Sinkronkan measurement_method secara non-destruktif dari derived_metrics / auxiliary_inputs
     IF NEW.measurement_method IS NULL OR trim(NEW.measurement_method) = '' THEN
         v_ctx_method := COALESCE(
             NULLIF(trim(NEW.derived_metrics->>'measurementMethod'), ''),
@@ -460,12 +461,19 @@ BEGIN
             NULLIF(trim(NEW.auxiliary_inputs->>'measurementMethod'), '')
         );
         IF v_ctx_method IS NOT NULL THEN
-            NEW.measurement_method := UPPER(v_ctx_method);
+            IF NEW.test_id = 'TST-SPR-10M' THEN
+                IF UPPER(v_ctx_method) IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO') THEN
+                    NEW.measurement_method := UPPER(v_ctx_method);
+                END IF;
+            ELSE
+                NEW.measurement_method := UPPER(v_ctx_method);
+            END IF;
         END IF;
     ELSE
         NEW.measurement_method := UPPER(trim(NEW.measurement_method));
     END IF;
 
+    -- Sinkronkan age_group secara non-destruktif dari derived_metrics->'athleteTestContext'
     IF NEW.age_group IS NULL OR trim(NEW.age_group) = '' THEN
         v_ctx_age_group := NULLIF(trim(NEW.derived_metrics->'athleteTestContext'->>'ageGroup'), '');
         IF v_ctx_age_group IS NOT NULL THEN
@@ -473,6 +481,7 @@ BEGIN
         END IF;
     END IF;
 
+    -- Sinkronkan age_years_at_test secara non-destruktif bila tersedia integer valid (3..65)
     IF NEW.age_years_at_test IS NULL THEN
         v_ctx_age_text := NULLIF(trim(NEW.derived_metrics->'athleteTestContext'->>'ageYearsAtTest'), '');
         IF v_ctx_age_text IS NOT NULL AND v_ctx_age_text ~ '^\d{1,2}$' THEN
@@ -510,9 +519,24 @@ SET
     test_period = COALESCE(test_period, to_char(test_date, 'YYYY-MM')),
     measurement_method = COALESCE(
         measurement_method,
-        UPPER(NULLIF(trim(derived_metrics->>'measurementMethod'), '')),
-        UPPER(NULLIF(trim(derived_metrics->'athleteTestContext'->>'measurementMethod'), '')),
-        UPPER(NULLIF(trim(auxiliary_inputs->>'measurementMethod'), ''))
+        CASE
+            WHEN test_id = 'TST-SPR-10M' THEN
+                CASE
+                    WHEN UPPER(NULLIF(trim(derived_metrics->>'measurementMethod'), '')) IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO')
+                    THEN UPPER(NULLIF(trim(derived_metrics->>'measurementMethod'), ''))
+                    WHEN UPPER(NULLIF(trim(derived_metrics->'athleteTestContext'->>'measurementMethod'), '')) IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO')
+                    THEN UPPER(NULLIF(trim(derived_metrics->'athleteTestContext'->>'measurementMethod'), ''))
+                    WHEN UPPER(NULLIF(trim(auxiliary_inputs->>'measurementMethod'), '')) IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO')
+                    THEN UPPER(NULLIF(trim(auxiliary_inputs->>'measurementMethod'), ''))
+                    ELSE NULL
+                END
+            ELSE
+                COALESCE(
+                    UPPER(NULLIF(trim(derived_metrics->>'measurementMethod'), '')),
+                    UPPER(NULLIF(trim(derived_metrics->'athleteTestContext'->>'measurementMethod'), '')),
+                    UPPER(NULLIF(trim(auxiliary_inputs->>'measurementMethod'), ''))
+                )
+        END
     ),
     age_group = COALESCE(
         age_group,

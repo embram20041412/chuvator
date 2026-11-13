@@ -329,7 +329,13 @@ BEGIN
             NULLIF(trim(NEW.auxiliary_inputs->>'measurementMethod'), '')
         );
         IF v_ctx_method IS NOT NULL THEN
-            NEW.measurement_method := UPPER(v_ctx_method);
+            IF NEW.test_id = 'TST-SPR-10M' THEN
+                IF UPPER(v_ctx_method) IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO') THEN
+                    NEW.measurement_method := UPPER(v_ctx_method);
+                END IF;
+            ELSE
+                NEW.measurement_method := UPPER(v_ctx_method);
+            END IF;
         END IF;
     ELSE
         NEW.measurement_method := UPPER(trim(NEW.measurement_method));
@@ -382,9 +388,24 @@ SET
     test_period = COALESCE(test_period, to_char(test_date, 'YYYY-MM')),
     measurement_method = COALESCE(
         measurement_method,
-        UPPER(NULLIF(trim(derived_metrics->>'measurementMethod'), '')),
-        UPPER(NULLIF(trim(derived_metrics->'athleteTestContext'->>'measurementMethod'), '')),
-        UPPER(NULLIF(trim(auxiliary_inputs->>'measurementMethod'), ''))
+        CASE
+            WHEN test_id = 'TST-SPR-10M' THEN
+                CASE
+                    WHEN UPPER(NULLIF(trim(derived_metrics->>'measurementMethod'), '')) IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO')
+                    THEN UPPER(NULLIF(trim(derived_metrics->>'measurementMethod'), ''))
+                    WHEN UPPER(NULLIF(trim(derived_metrics->'athleteTestContext'->>'measurementMethod'), '')) IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO')
+                    THEN UPPER(NULLIF(trim(derived_metrics->'athleteTestContext'->>'measurementMethod'), ''))
+                    WHEN UPPER(NULLIF(trim(auxiliary_inputs->>'measurementMethod'), '')) IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO')
+                    THEN UPPER(NULLIF(trim(auxiliary_inputs->>'measurementMethod'), ''))
+                    ELSE NULL
+                END
+            ELSE
+                COALESCE(
+                    UPPER(NULLIF(trim(derived_metrics->>'measurementMethod'), '')),
+                    UPPER(NULLIF(trim(derived_metrics->'athleteTestContext'->>'measurementMethod'), '')),
+                    UPPER(NULLIF(trim(auxiliary_inputs->>'measurementMethod'), ''))
+                )
+        END
     ),
     age_group = COALESCE(
         age_group,
