@@ -93,7 +93,8 @@ export default function FootballAssessmentHub({
   onSelectTier = null,
   selectedPosition = null,
   existingIndicatorScores = {},
-  onSyncedToReport = null
+  onSyncedToReport = null,
+  isArchived = false
 }) {
   const [internalAthleteId, setInternalAthleteId] = useState(selectedAthleteId || athletes[0]?.id || '');
   const [internalTier, setInternalTier] = useState(Number(selectedTier) || 2);
@@ -674,40 +675,49 @@ export default function FootballAssessmentHub({
                         {[1, 2, 3, 4, 5].map((lv) => {
                           const anchoredScore = RUBRIC_ANCHORED_SCORES[lv];
                           const isSelected = selectedRubricLevel === lv;
+                          const anchorMeta = rubricAnchors?.[lv];
                           return (
                             <button
                               key={lv}
                               type="button"
+                              disabled={isArchived}
                               onClick={() => updateTestInput(test, 'raw_value_1', String(lv))}
                               data-testid={`master-rubric-btn-${test.test_code}-${lv}`}
-                              className={`min-h-[44px] py-1.5 px-1 rounded-lg border text-center transition-all cursor-pointer flex flex-col items-center justify-center ${
+                              className={`min-h-[52px] py-1.5 px-1 rounded-lg border text-center transition-all cursor-pointer flex flex-col items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed ${
                                 isSelected
                                   ? 'bg-emerald-700 text-white border-emerald-700 dark:bg-emerald-600 dark:border-emerald-500 shadow-xs'
                                   : 'bg-slate-50 dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
                               }`}
                             >
-                              <span className="text-xs font-extrabold">Lv.{lv}</span>
-                              <span
-                                className={`text-[10px] font-bold ${
-                                  isSelected ? 'text-emerald-100' : 'text-slate-400 dark:text-slate-400'
-                                }`}
-                              >
-                                {anchoredScore} pts
-                              </span>
+                              <span className="text-xs font-extrabold">Lv.{lv} ({anchoredScore})</span>
+                              {anchorMeta?.label && (
+                                <span
+                                  className={`text-[10px] font-semibold leading-tight line-clamp-1 mt-0.5 ${
+                                    isSelected ? 'text-emerald-100' : 'text-slate-500 dark:text-slate-400'
+                                  }`}
+                                >
+                                  {anchorMeta.label}
+                                </span>
+                              )}
                             </button>
                           );
                         })}
                       </div>
-                      {selectedRubricLevel && rubricAnchors?.[selectedRubricLevel] && (
+                      {selectedRubricLevel && rubricAnchors?.[selectedRubricLevel] ? (
                         <div className="px-3 py-2 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/70 text-xs">
                           <span className="font-bold text-emerald-900 dark:text-emerald-300">
-                            Lv.{selectedRubricLevel} — {rubricAnchors[selectedRubricLevel].label}:
+                            Lv.{selectedRubricLevel} ({RUBRIC_ANCHORED_SCORES[selectedRubricLevel]} pts) — {rubricAnchors[selectedRubricLevel].label}:
                           </span>{' '}
                           <span className="text-slate-700 dark:text-slate-300">
                             {rubricAnchors[selectedRubricLevel].desc}
                           </span>
                         </div>
-                      )}
+                      ) : rubricAnchors ? (
+                        <div className="px-2.5 py-1.5 rounded-lg bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400">
+                          <span className="font-semibold text-slate-700 dark:text-slate-300">Panduan Rubrik:</span>{' '}
+                          Lv.1 ({rubricAnchors[1]?.label}: 35) • Lv.3 ({rubricAnchors[3]?.label}: 70) • Lv.5 ({rubricAnchors[5]?.label}: 95)
+                        </div>
+                      ) : null}
                     </div>
                   ) : test.measurement_type === 'ACCURACY' ? (
                     <div className="grid grid-cols-2 gap-2.5 pt-1">
@@ -719,11 +729,12 @@ export default function FootballAssessmentHub({
                           type="number"
                           min="0"
                           step="1"
+                          disabled={isArchived}
                           placeholder="cth: 8"
                           value={raw.raw_value_1}
                           onChange={(e) => updateTestInput(test, 'raw_value_1', e.target.value)}
                           data-testid={`master-input-1-${test.test_code}`}
-                          className="w-full min-h-[44px] px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:bg-white"
+                          className="w-full min-h-[44px] px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:bg-white disabled:opacity-50"
                         />
                       </div>
                       <div>
@@ -734,11 +745,12 @@ export default function FootballAssessmentHub({
                           type="number"
                           min="1"
                           step="1"
+                          disabled={isArchived}
                           placeholder={String(test.defaultTotal || 10)}
                           value={raw.raw_value_2}
                           onChange={(e) => updateTestInput(test, 'raw_value_2', e.target.value)}
                           data-testid={`master-input-2-${test.test_code}`}
-                          className="w-full min-h-[44px] px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:bg-white"
+                          className="w-full min-h-[44px] px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-semibold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:bg-white disabled:opacity-50"
                         />
                       </div>
                     </div>
@@ -752,11 +764,12 @@ export default function FootballAssessmentHub({
                           type="number"
                           min="0"
                           step={test.measurement_type === 'TIME' ? '0.01' : '1'}
+                          disabled={isArchived}
                           placeholder={test.measurement_type === 'TIME' ? '0.00' : '0'}
                           value={raw.raw_value_1}
                           onChange={(e) => updateTestInput(test, 'raw_value_1', e.target.value)}
                           data-testid={`master-input-1-${test.test_code}`}
-                          className="w-full min-h-[44px] px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:bg-white"
+                          className="w-full min-h-[44px] px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:bg-white disabled:opacity-50"
                         />
                       </div>
                       <div>
@@ -767,11 +780,12 @@ export default function FootballAssessmentHub({
                           type="number"
                           min="0"
                           step={test.measurement_type === 'TIME' ? '0.01' : '1'}
+                          disabled={isArchived}
                           placeholder="Opsional"
                           value={raw.raw_value_2}
                           onChange={(e) => updateTestInput(test, 'raw_value_2', e.target.value)}
                           data-testid={`master-input-2-${test.test_code}`}
-                          className="w-full min-h-[44px] px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:bg-white"
+                          className="w-full min-h-[44px] px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:bg-white disabled:opacity-50"
                         />
                       </div>
                       <div>
@@ -782,11 +796,12 @@ export default function FootballAssessmentHub({
                           type="number"
                           min="0"
                           step="1"
+                          disabled={isArchived}
                           placeholder="0"
                           value={raw.errors_count}
                           onChange={(e) => updateTestInput(test, 'errors_count', e.target.value)}
                           data-testid={`master-errors-${test.test_code}`}
-                          className="w-full min-h-[44px] px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:bg-white"
+                          className="w-full min-h-[44px] px-2.5 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600 focus:bg-white disabled:opacity-50"
                         />
                       </div>
                     </div>
@@ -814,7 +829,7 @@ export default function FootballAssessmentHub({
         <button
           type="button"
           onClick={handleSaveAndSync}
-          disabled={isSaving || readySessionEntries.length === 0}
+          disabled={isSaving || isArchived || readySessionEntries.length === 0}
           data-testid="master-hub-sync-button"
           className="min-h-[44px] inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-lg text-xs sm:text-sm font-bold text-white bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-xs cursor-pointer"
         >

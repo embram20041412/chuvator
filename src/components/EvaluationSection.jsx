@@ -113,15 +113,11 @@ import TennisAssessmentView from './TennisAssessmentView';
 import ScoutingPolarAreaPanel from './ScoutingPolarAreaPanel';
 import AssessmentIndicatorsAccordion from './AssessmentIndicatorsAccordion';
 import AthleteAssessmentEditView from './AthleteAssessmentEditView';
-import ScoutingCombineHub from './ScoutingCombineHub';
-import RubricAssessmentSheet from './RubricAssessmentSheet';
 import FootballAssessmentHub from './FootballAssessmentHub';
 import scoutingCombineService from '../services/scoutingCombineService';
-import { INDICATOR_KEY_TO_LABEL } from '../utils/combineScoringEngine';
 import { MASTER_INDICATOR_KEY_TO_LABEL } from '../utils/footballAssessmentEngine';
 
 const ALL_FOOTBALL_INDICATOR_LABELS = {
-  ...INDICATOR_KEY_TO_LABEL,
   ...MASTER_INDICATOR_KEY_TO_LABEL
 };
 import {
@@ -3052,7 +3048,7 @@ function FootballAssessmentView({
 
   // Scores state: { [indicatorName]: number }
   const [scores, setScores] = useState({});
-  const [footballMode, setFootballMode] = useState('report'); // 'report' | 'master' | 'combine' | 'rubric'
+  const [footballMode, setFootballMode] = useState('report'); // 'report' | 'master'
   const [athleteIndicatorRecords, setAthleteIndicatorRecords] = useState({});
   const [coachNote, setCoachNote] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -3583,55 +3579,31 @@ function FootballAssessmentView({
 
             {selectedStudent && (
               <>
-                {/* Mode Switcher (Rapor Polar Area / Master Library / Scouting Combine / Rubrik) */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 bg-white rounded-2xl border border-[#E7EBF2] shadow-2xs">
+                {/* Mode Switcher (Rapor & Polar Area vs Master Test Library Terintegrasi Penuh) */}
+                <div className="grid grid-cols-2 gap-1.5 p-1 bg-white rounded-2xl border border-[#E7EBF2] shadow-2xs">
                   <button
                     type="button"
                     data-testid="football-mode-report"
                     onClick={() => setFootballMode('report')}
-                    className={`min-h-[44px] px-2 py-1.5 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer ${
+                    className={`min-h-[44px] px-2.5 py-1.5 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer ${
                       footballMode === 'report'
                         ? 'bg-[#354944] text-white border-b-2 border-[#C89D32] shadow-2xs'
                         : 'text-[#68758B]'
                     }`}
                   >
-                    Rapor Polar
+                    Rapor &amp; Polar Area
                   </button>
                   <button
                     type="button"
                     data-testid="football-mode-master"
                     onClick={() => setFootballMode('master')}
-                    className={`min-h-[44px] px-2 py-1.5 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer ${
+                    className={`min-h-[44px] px-2.5 py-1.5 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer ${
                       footballMode === 'master'
                         ? 'bg-[#354944] text-white border-b-2 border-[#C89D32] shadow-2xs'
                         : 'text-[#68758B]'
                     }`}
                   >
-                    Master Library
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="football-mode-combine"
-                    onClick={() => setFootballMode('combine')}
-                    className={`min-h-[44px] px-2 py-1.5 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer ${
-                      footballMode === 'combine'
-                        ? 'bg-[#354944] text-white border-b-2 border-[#C89D32] shadow-2xs'
-                        : 'text-[#68758B]'
-                    }`}
-                  >
-                    Combine Tes
-                  </button>
-                  <button
-                    type="button"
-                    data-testid="football-mode-rubric"
-                    onClick={() => setFootballMode('rubric')}
-                    className={`min-h-[44px] px-2 py-1.5 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer ${
-                      footballMode === 'rubric'
-                        ? 'bg-[#354944] text-white border-b-2 border-[#C89D32] shadow-2xs'
-                        : 'text-[#68758B]'
-                    }`}
-                  >
-                    Rubrik 1–5
+                    Master Test Library (Terintegrasi Penuh)
                   </button>
                 </div>
 
@@ -3651,38 +3623,7 @@ function FootballAssessmentView({
                     onSyncedToReport={(map) => {
                       handleCombineOrRubricSynced(map);
                     }}
-                  />
-                ) : footballMode === 'combine' ? (
-                  <ScoutingCombineHub
-                    students={students}
-                    selectedStudentId={selectedStudent.id}
-                    onSelectStudentId={setSelectedStudentId}
-                    activeTier={activeTier}
-                    onChangeTier={handleSelectTierFromCombine}
-                    tenantId={tenantId}
-                    evaluatorId={selectedClass?.coachId || null}
-                    existingIndicatorScores={athleteIndicatorRecords}
-                    onSyncedToReport={(map) => {
-                      handleCombineOrRubricSynced(map);
-                    }}
                     isArchived={isArchived}
-                    isMobile={true}
-                  />
-                ) : footballMode === 'rubric' ? (
-                  <RubricAssessmentSheet
-                    students={students}
-                    selectedStudentId={selectedStudent.id}
-                    onSelectStudentId={setSelectedStudentId}
-                    activeTier={activeTier}
-                    onChangeTier={handleSelectTierFromCombine}
-                    tenantId={tenantId}
-                    evaluatorId={selectedClass?.coachId || null}
-                    existingIndicatorScores={athleteIndicatorRecords}
-                    onSyncedToReport={(map) => {
-                      handleCombineOrRubricSynced(map);
-                    }}
-                    isArchived={isArchived}
-                    isMobile={true}
                   />
                 ) : (
                   <form onSubmit={handleSaveEvaluation} className="space-y-3">
@@ -3976,9 +3917,9 @@ function FootballAssessmentView({
         )}
       </div>
 
-      {/* MODE SWITCHER: RAPOR POLAR AREA vs MASTER TEST LIBRARY vs SCOUTING COMBINE vs RUBRIK 1-5 */}
+      {/* MODE SWITCHER: RAPOR & POLAR AREA vs MASTER TEST LIBRARY (TERINTEGRASI PENUH) */}
       {selectedStudent && (
-        <div className="bg-white rounded-2xl p-1.5 border border-slate-200/90 shadow-2xs grid grid-cols-2 lg:grid-cols-4 gap-1.5">
+        <div className="bg-white rounded-2xl p-1.5 border border-slate-200/90 shadow-2xs grid grid-cols-2 gap-1.5">
           <button
             type="button"
             data-testid="football-mode-report"
@@ -4004,40 +3945,12 @@ function FootballAssessmentView({
             }`}
           >
             <Sparkles className="w-4 h-4 shrink-0" />
-            <span>Master Test Library</span>
-          </button>
-
-          <button
-            type="button"
-            data-testid="football-mode-combine"
-            onClick={() => setFootballMode('combine')}
-            className={`min-h-[44px] px-3 py-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-              footballMode === 'combine'
-                ? 'bg-[#354944] text-white border-b-2 border-[#C89D32] shadow-xs'
-                : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            <Timer className="w-4 h-4 shrink-0" />
-            <span>Scouting Combine</span>
-          </button>
-
-          <button
-            type="button"
-            data-testid="football-mode-rubric"
-            onClick={() => setFootballMode('rubric')}
-            className={`min-h-[44px] px-3 py-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-              footballMode === 'rubric'
-                ? 'bg-[#354944] text-white border-b-2 border-[#C89D32] shadow-xs'
-                : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            <Brain className="w-4 h-4 shrink-0" />
-            <span>Rubrik (Taktik &amp; Mental)</span>
+            <span>Master Test Library (Terintegrasi Penuh)</span>
           </button>
         </div>
       )}
 
-      {/* 2. FORM PENILAIAN ATHLETE ASSESSMENT WORKSPACE / MASTER TEST LIBRARY / SCOUTING COMBINE / RUBRIK */}
+      {/* 2. FORM PENILAIAN ATHLETE ASSESSMENT WORKSPACE / MASTER TEST LIBRARY */}
       {selectedStudent && footballMode === 'master' && (
         <FootballAssessmentHub
           tenantId={tenantId}
@@ -4054,42 +3967,7 @@ function FootballAssessmentView({
           onSyncedToReport={(map) => {
             handleCombineOrRubricSynced(map);
           }}
-        />
-      )}
-
-      {selectedStudent && footballMode === 'combine' && (
-        <ScoutingCombineHub
-          students={students}
-          selectedStudentId={selectedStudent.id}
-          onSelectStudentId={setSelectedStudentId}
-          activeTier={activeTier}
-          onChangeTier={handleSelectTierFromCombine}
-          tenantId={tenantId}
-          evaluatorId={selectedClass?.coachId || null}
-          existingIndicatorScores={athleteIndicatorRecords}
-          onSyncedToReport={(map) => {
-            handleCombineOrRubricSynced(map);
-          }}
           isArchived={isArchived}
-          isMobile={false}
-        />
-      )}
-
-      {selectedStudent && footballMode === 'rubric' && (
-        <RubricAssessmentSheet
-          students={students}
-          selectedStudentId={selectedStudent.id}
-          onSelectStudentId={setSelectedStudentId}
-          activeTier={activeTier}
-          onChangeTier={handleSelectTierFromCombine}
-          tenantId={tenantId}
-          evaluatorId={selectedClass?.coachId || null}
-          existingIndicatorScores={athleteIndicatorRecords}
-          onSyncedToReport={(map) => {
-            handleCombineOrRubricSynced(map);
-          }}
-          isArchived={isArchived}
-          isMobile={false}
         />
       )}
 

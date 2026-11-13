@@ -1,14 +1,12 @@
 import React from 'react';
 import EvaluationSection from './EvaluationSection';
-import ScoutingCombineHub from './ScoutingCombineHub';
-import RubricAssessmentSheet from './RubricAssessmentSheet';
 import ScoutingPolarAreaPanel from './ScoutingPolarAreaPanel';
 import FootballAssessmentHub from './FootballAssessmentHub';
 
 /**
  * EvaluationHub
  * Unified Football & Multi-Sport Evaluation Hub wrapping EvaluationSection,
- * ScoutingPolarAreaPanel, FootballAssessmentHub, ScoutingCombineHub, and RubricAssessmentSheet.
+ * ScoutingPolarAreaPanel, and FootballAssessmentHub (Master Test Library).
  */
 export default function EvaluationHub(props) {
   return <EvaluationSection {...props} />;
@@ -17,8 +15,5 @@ export default function EvaluationHub(props) {
 export {
   EvaluationSection,
   FootballAssessmentHub,
-  ScoutingCombineHub,
-  RubricAssessmentSheet,
   ScoutingPolarAreaPanel
 };
-
