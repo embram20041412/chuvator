@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -871,15 +872,18 @@ test('Task 03.5.3 (Final Critical Gap Closure): Konsistensi UPDATE kolom-JSONB 3
   assert.ok(mig035.includes("has_function_privilege('anon', p.oid, 'EXECUTE')"));
   assert.ok(mig035.includes("has_function_privilege('authenticated', p.oid, 'EXECUTE')"));
 
-  // 3. Rollback fail-closed & jujur (tidak mengarang fungsi baseline Task 03.4)
+  // 3. Rollback fail-closed & verifikasi hash baseline (diselesaikan pada Task 03.5.5 dengan baseline Production aktual)
   const rollbackNoComments = stripSqlComments(rollback035);
-  assert.ok(rollback035.includes('BELUM AMAN / BELUM LENGKAP'));
-  assert.ok(rollbackNoComments.includes('REPLACE_WITH_PRE_TASK03_5_PRODUCTION_MD5'));
-  assert.ok(rollbackNoComments.includes('md5(v_actual_def)'));
   assert.equal(
-    /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.validate_and_protect_athlete_test_results/i.test(rollbackNoComments),
+    rollbackNoComments.includes('REPLACE_WITH_PRE_TASK03_5_PRODUCTION_MD5'),
     false,
-    '03_task03_5_rollback.sql dilarang mengarang/menulis ulang definisi fungsi baseline berdasarkan perkiraan'
+    '03_task03_5_rollback.sql tidak boleh lagi menyisakan placeholder MD5 setelah baseline Production tersedia'
+  );
+  assert.ok(rollbackNoComments.includes('c4f37f81c56d05486bfde58fd645971f'));
+  assert.ok(rollbackNoComments.includes('md5(v_actual_def)'));
+  assert.ok(
+    /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.validate_and_protect_athlete_test_results/i.test(rollbackNoComments),
+    '03_task03_5_rollback.sql wajib memulihkan definisi baseline verbatim dari pg_get_functiondef() Production'
   );
 
   // 4. Cakupan verifikasi 02_task03_5_verification.sql (5 skenario UPDATE kolom-JSONB, role anon/kasir/coach full CRUD, 3-jalur JSONB, ownership & rollback jujur)
@@ -893,6 +897,186 @@ test('Task 03.5.3 (Final Critical Gap Closure): Konsistensi UPDATE kolom-JSONB 3
   assert.ok(verify035.includes('v_res_a2_id'), 'Wajib menguji Coach out-of-class UPDATE/DELETE');
   assert.ok(verify035.includes('BELUM AMAN / BELUM TERVERIFIKASI'), 'Wajib menyatakan status konsistensi fungsi baseline rollback secara jujur');
 });
+
+test('Task 03.5.5 (Baseline Rollback Audit): MD5 c4f37f81c56d05486bfde58fd645971f, CRLF pg_get_functiondef reproduksibel, ACL eksak, & urutan atomik non-destruktif', () => {
+  const expectedBaselineMd5 = 'c4f37f81c56d05486bfde58fd645971f';
+  const expectedRawAcl = '{postgres=X/postgres,service_role=X/postgres}';
+
+  const rollbackPath = path.resolve(
+    process.cwd(),
+    'docs/assessment/sql/task03_5/03_task03_5_rollback.sql'
+  );
+  const rollbackSql = fs.readFileSync(rollbackPath, 'utf8');
+  const stripSqlComments = (sql) =>
+    sql.replace(/\/\*[\s\S]*?\*\//g, '').replace(/--.*$/gm, '');
+  const rollbackNoComments = stripSqlComments(rollbackSql);
+
+  // 1. Bebas placeholder
+  assert.equal(rollbackSql.includes('REPLACE_WITH_PRE_TASK03_5_PRODUCTION_MD5'), false);
+  assert.equal(rollbackSql.includes('BELUM AMAN / BELUM LENGKAP'), false);
+
+  // 2. Ekstraksi [A] preflight baseline body vs [B] CREATE OR REPLACE FUNCTION verbatim
+  const preflightBodyMatch = rollbackSql.match(/\$baseline_body\$([\s\S]*?)\$baseline_body\$;/);
+  assert.ok(preflightBodyMatch, 'Bagian [A] wajib menyertakan $baseline_body$ untuk pre-mutation hash gate');
+
+  const sectionBMatch = rollbackSql.match(
+    /-- \[B\][^\n]*\n(CREATE OR REPLACE FUNCTION public\.validate_and_protect_athlete_test_results\(\)[\s\S]*?AS \$function\$)([\s\S]*?)(\$function\$);/
+  );
+  assert.ok(sectionBMatch, 'Bagian [B] wajib berisi CREATE OR REPLACE FUNCTION ... AS $function$...$function$;');
+
+  const [, fnHeader, fnBodyLf] = sectionBMatch;
+  assert.equal(
+    preflightBodyMatch[1],
+    fnBodyLf,
+    'Body fungsi pada gerbang pra-mutasi [A] harus 100% identik dengan fungsi pada bagian [B]'
+  );
+
+  // 3. Reproduksi persis MD5 pg_get_functiondef() Production (LF header + CRLF prosrc + LF penutup)
+  const canonicalPgGetFunctiondef =
+    fnHeader.replace(/\r\n/g, '\n') +
+    fnBodyLf.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n') +
+    '$function$\n';
+  const computedMd5 = crypto.createHash('md5').update(canonicalPgGetFunctiondef, 'utf8').digest('hex');
+  assert.equal(
+    computedMd5,
+    expectedBaselineMd5,
+    `MD5 kanonik pg_get_functiondef() harus cocok persis dengan baseline Production ${expectedBaselineMd5}`
+  );
+
+  // Pastikan normalisasi CRLF di pg_proc.prosrc tetap ditangani bila SQL Editor menormalisasi LF
+  assert.ok(
+    rollbackNoComments.includes("replace(v_prosrc, E'\\n', E'\\r\\n')"),
+    'Bagian [B] wajib menormalisasi CRLF pada pg_proc.prosrc bila editor mengubah line ending ke LF'
+  );
+
+  // 4. Pastikan definisi baseline pada [B] tidak menyisipkan fungsi/logika baru di luar baseline asli
+  const fullFnB = `${fnHeader}${fnBodyLf}$function$`;
+  assert.equal(
+    fullFnB.includes('coach_can_manage_student'),
+    false,
+    'Definisi baseline Production pada [B] tidak boleh memasukkan coach_can_manage_student'
+  );
+  assert.equal(
+    fullFnB.includes('v_dm_method') || fullFnB.includes('v_conflict_method'),
+    false,
+    'Definisi baseline Production pada [B] tidak boleh memuat logika Task 03.5'
+  );
+  assert.ok(fullFnB.includes('public.athlete_belongs_to_tenant('));
+  assert.ok(fullFnB.includes('public.get_strict_tenant_member_role('));
+  assert.ok(fullFnB.includes("IF NEW.test_id = 'TST-SPR-10M' THEN"));
+
+  // 5. Atribut keamanan fungsi: Owner, SECURITY DEFINER, search_path, Raw ACL, & EXECUTE privileges
+  assert.ok(fnHeader.includes('SECURITY DEFINER'));
+  assert.ok(fnHeader.includes("SET search_path TO 'public', 'extensions', 'pg_temp'"));
+  assert.ok(rollbackNoComments.includes('ALTER FUNCTION public.validate_and_protect_athlete_test_results() OWNER TO postgres;'));
+  assert.ok(rollbackNoComments.includes('ALTER FUNCTION public.validate_and_protect_athlete_test_results() SECURITY DEFINER;'));
+  assert.ok(
+    rollbackNoComments.includes(
+      "ALTER FUNCTION public.validate_and_protect_athlete_test_results() SET search_path TO 'public', 'extensions', 'pg_temp';"
+    )
+  );
+  assert.ok(
+    rollbackNoComments.includes(
+      'REVOKE ALL ON FUNCTION public.validate_and_protect_athlete_test_results() FROM PUBLIC, anon, authenticated, service_role, postgres;'
+    )
+  );
+  assert.ok(rollbackNoComments.includes('GRANT EXECUTE ON FUNCTION public.validate_and_protect_athlete_test_results() TO postgres;'));
+  assert.ok(rollbackNoComments.includes('GRANT EXECUTE ON FUNCTION public.validate_and_protect_athlete_test_results() TO service_role;'));
+  assert.equal(/\bWITH\s+GRANT\s+OPTION\b/i.test(rollbackNoComments), false, 'ACL baseline semua NOT GRANTABLE');
+  assert.equal(
+    /\bGRANT\s+EXECUTE\s+ON\s+FUNCTION\s+public\.validate_and_protect_athlete_test_results\(\)\s+TO\s+(PUBLIC|anon|authenticated)\b/i.test(
+      rollbackNoComments
+    ),
+    false,
+    'PUBLIC, anon, dan authenticated dilarang diberi EXECUTE'
+  );
+  assert.ok(rollbackNoComments.includes(`v_expected_raw_acl CONSTANT TEXT := '${expectedRawAcl}';`));
+  assert.ok(rollbackNoComments.includes("NOT has_function_privilege('postgres', v_fn_oid, 'EXECUTE')"));
+  assert.ok(rollbackNoComments.includes("NOT has_function_privilege('service_role', v_fn_oid, 'EXECUTE')"));
+  assert.ok(rollbackNoComments.includes("has_function_privilege('public', v_fn_oid, 'EXECUTE')"));
+  assert.ok(rollbackNoComments.includes("has_function_privilege('anon', v_fn_oid, 'EXECUTE')"));
+  assert.ok(rollbackNoComments.includes("has_function_privilege('authenticated', v_fn_oid, 'EXECUTE')"));
+
+  // 6. Trigger definition & enabled state
+  assert.ok(rollbackNoComments.includes('DROP TRIGGER IF EXISTS trg_validate_and_protect_athlete_test_results ON public.athlete_test_results;'));
+  assert.ok(
+    /CREATE TRIGGER trg_validate_and_protect_athlete_test_results\s+BEFORE INSERT OR UPDATE ON public\.athlete_test_results\s+FOR EACH ROW\s+EXECUTE FUNCTION public\.validate_and_protect_athlete_test_results\(\);/i.test(
+      rollbackNoComments
+    )
+  );
+  assert.ok(rollbackNoComments.includes("t.tgname = 'trg_validate_and_protect_athlete_test_results'"));
+  assert.ok(rollbackNoComments.includes('t.tgfoid = v_fn_oid'));
+  assert.ok(rollbackNoComments.includes("t.tgenabled <> 'D'"));
+
+  // 7. Constraint baseline Task 03.4 & penghapusan hanya objek khusus Task 03.5
+  assert.ok(rollbackNoComments.includes('ADD CONSTRAINT chk_athlete_test_results_spr10m_method'));
+  assert.ok(
+    rollbackNoComments.includes(
+      'DROP CONSTRAINT IF EXISTS chk_athlete_test_results_measurement_method_compatibility;'
+    )
+  );
+  const dropConstraintMatches = rollbackNoComments.match(/\bDROP\s+CONSTRAINT\b/gi) || [];
+  assert.equal(dropConstraintMatches.length, 1, 'Rollback hanya boleh menghapus satu constraint khusus Task 03.5');
+
+  // 8. Proteksi data, tabel, RLS, policy, dan helper functions Task 03.4
+  assert.equal(/\bDELETE\s+FROM\b/i.test(rollbackNoComments), false);
+  assert.equal(/\bTRUNCATE\b/i.test(rollbackNoComments), false);
+  assert.equal(/\bDROP\s+TABLE\b/i.test(rollbackNoComments), false);
+  assert.equal(/\bDROP\s+COLUMN\b/i.test(rollbackNoComments), false);
+  assert.equal(/\bUPDATE\s+public\.athlete_test_results\b/i.test(rollbackNoComments), false);
+  assert.equal(/\bDROP\s+POLICY\b/i.test(rollbackNoComments), false);
+  assert.equal(/\bALTER\s+POLICY\b/i.test(rollbackNoComments), false);
+  assert.equal(/\bCREATE\s+POLICY\b/i.test(rollbackNoComments), false);
+  assert.equal(/\bDISABLE\s+ROW\s+LEVEL\s+SECURITY\b/i.test(rollbackNoComments), false);
+  assert.equal(
+    /\b(GRANT|REVOKE)\b[^;]*\bON\s+(TABLE\s+)?public\.athlete_test_results\b/i.test(rollbackNoComments),
+    false
+  );
+  assert.equal(
+    /\b(CREATE|ALTER|DROP)\s+FUNCTION\s+public\.(get_strict_tenant_member_role|athlete_belongs_to_tenant|coach_can_manage_student)\b/i.test(
+      rollbackNoComments
+    ),
+    false,
+    'Rollback dilarang mengubah atau menghapus helper functions Task 03.4'
+  );
+  assert.ok(rollbackNoComments.includes("to_regprocedure('public.get_strict_tenant_member_role(text)')"));
+  assert.ok(rollbackNoComments.includes("to_regprocedure('public.athlete_belongs_to_tenant(uuid,text,uuid,uuid)')"));
+  assert.ok(rollbackNoComments.includes("to_regprocedure('public.coach_can_manage_student(text,uuid,uuid)')"));
+
+  // 9. Fail-closed pra-mutasi, fail-closed pasca-restorasi, urutan ketat, & atomisitas transaksi
+  const beginPos = rollbackNoComments.search(/^\s*BEGIN\s*;/m);
+  const preMutationCheckPos = rollbackNoComments.indexOf('ROLLBACK DIBATALKAN SEBELUM MUTASI SKEMA');
+  const createFnPos = rollbackNoComments.search(
+    /^CREATE OR REPLACE FUNCTION public\.validate_and_protect_athlete_test_results\(\)/m
+  );
+  const addSprPos = rollbackNoComments.indexOf('ADD CONSTRAINT chk_athlete_test_results_spr10m_method');
+  const dropTask035Pos = rollbackNoComments.indexOf('DROP CONSTRAINT IF EXISTS chk_athlete_test_results_measurement_method_compatibility');
+  const ownerAlterPos = rollbackNoComments.indexOf('ALTER FUNCTION public.validate_and_protect_athlete_test_results() OWNER TO postgres;');
+  const postMd5CheckPos = rollbackNoComments.indexOf('IF v_actual_md5 IS DISTINCT FROM v_expected_baseline_md5 THEN');
+  const postConstraintCheckPos = rollbackNoComments.indexOf('IF NOT v_spr10m_chk_exists OR v_task035_chk_exists THEN');
+  const commitPos = rollbackNoComments.lastIndexOf('COMMIT;');
+
+  assert.ok(
+    beginPos >= 0 &&
+      beginPos < preMutationCheckPos &&
+      preMutationCheckPos < createFnPos &&
+      createFnPos < addSprPos &&
+      addSprPos < dropTask035Pos &&
+      dropTask035Pos < ownerAlterPos &&
+      ownerAlterPos < postMd5CheckPos &&
+      postMd5CheckPos < postConstraintCheckPos &&
+      postConstraintCheckPos < commitPos,
+    'Urutan operasi rollback wajib: BEGIN -> pre-mutation check -> restore function -> restore constraint & drop Task 03.5 constraint -> restore owner/security/ACL/trigger -> post-restoration fail-closed verification -> COMMIT'
+  );
+
+  // Atomisitas: hanya 1 top-level BEGIN; dan 1 COMMIT; serta tidak ada blok EXCEPTION yang menelan kegagalan
+  assert.equal((rollbackNoComments.match(/^\s*BEGIN\s*;/gm) || []).length, 1);
+  assert.equal((rollbackNoComments.match(/^\s*COMMIT\s*;/gm) || []).length, 1);
+  assert.equal(/\bEXCEPTION\s+WHEN\b/i.test(rollbackNoComments), false, 'Kegagalan tidak boleh ditelan EXCEPTION; transaksi wajib abort otomatis');
+  assert.ok(rollbackNoComments.includes('v_actual_def := pg_get_functiondef(v_fn_oid);'));
+  assert.ok(rollbackNoComments.includes('v_actual_md5 := md5(v_actual_def);'));
+});
+
 
 
 
