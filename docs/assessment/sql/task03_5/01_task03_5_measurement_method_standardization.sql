@@ -1,33 +1,47 @@
 -- =============================================================================
--- CHUVATOR — TASK 03.5: MEASUREMENT METHOD STANDARDIZATION (ADDITIVE MIGRATION)
+-- CHUVATOR — TASK 03.5.2: MEASUREMENT METHOD STANDARDIZATION (PRODUCTION RECONCILED)
 -- 01_task03_5_measurement_method_standardization.sql
 -- =============================================================================
 -- TARGET        : Supabase PostgreSQL CHUVATOR (`public.athlete_test_results`)
 -- STATUS        : READY FOR ADMIN REVIEW & EXECUTION (JANGAN DIEKSEKUSI OTOMATIS)
 -- SIFAT         : Transaksional (BEGIN ... COMMIT), Idempoten, Non-Destruktif.
+-- ACUAN PRODUKSI:
+--   Mempertahankan utuh seluruh proteksi fungsi & trigger produksi CHUVATOR:
+--     - public.get_strict_tenant_member_role(TEXT)
+--     - public.athlete_belongs_to_tenant(UUID, TEXT, UUID, UUID)
+--     - public.coach_can_manage_student(TEXT, UUID, UUID)
+--     - public.validate_and_protect_athlete_test_results()
+--     - Trigger BEFORE INSERT OR UPDATE: trg_validate_and_protect_athlete_test_results
 -- JAMINAN DATA  :
---   1. TIDAK mengubah, menimpa, atau menghapus 5 record eksisting (13 Nov 2026)
+--   1. TIDAK mengubah, menimpa, atau backfill 5 record eksisting (13 Nov 2026)
 --      maupun baris historis lain yang memiliki `measurement_method IS NULL`.
---   2. TIDAK mengasumsikan atau melakukan backfill diam-diam dari NULL ke
---      STOPWATCH_MANUAL pada baris historis.
---   3. Menambahkan constraint kompatibilitas metode per tes untuk seluruh 18 tes
---      Assessment Battery dengan 4 kategori standar:
---        - STOPWATCH_MANUAL
---        - SMARTPHONE_VIDEO
---        - PHYSICAL_MEASURING_TOOL
---        - MANUAL_COUNT
---   4. Memperbarui trigger `validate_and_protect_athlete_test_results()` agar
---      INSERT baru menegakkan standarisasi metode sesuai protokol masing-masing tes.
+--   2. Menambahkan constraint kompatibilitas metode 18 tes
+--      (`chk_athlete_test_results_measurement_method_compatibility`) dan
+--      menangani constraint lama `chk_athlete_test_results_spr10m_method` secara
+--      aman (dicabut setelah constraint 18 tes aktif dalam 1 transaksi agar tidak
+--      terjadi konflik/duplikasi aturan).
+--   3. Menegakkan 8 aturan trigger (INSERT wajib metode valid 18 tes, dual-method
+--      eksplisit, single-method auto-default, tolak 23514 metode invalid/salah,
+--      UPDATE kolom lain menjaga legacy NULL, larang kosongkan non-null -> NULL,
+--      cegah bypass/kontradiksi via JSONB derived_metrics & auxiliary_inputs,
+--      serta menjaga SECURITY DEFINER, search_path, OWNER TO postgres, RLS & GRANTS).
 -- =============================================================================
 
 BEGIN;
 
--- 1. Pastikan tabel target sudah tersedia sebelum menerapkan penguatan Task 03.5
+-- 1. Pastikan tabel target dan fungsi keamanan inti produksi tersedia sebelum menerapkan Task 03.5
 DO $$
 BEGIN
     IF to_regclass('public.athlete_test_results') IS NULL THEN
         RAISE EXCEPTION 'MIGRASI TASK 03.5 DIHENTIKAN: Tabel public.athlete_test_results belum tersedia. Jalankan paket migrasi TASK 03.4 terlebih dahulu.'
             USING ERRCODE = '42P01';
+    END IF;
+
+    IF to_regprocedure('public.get_strict_tenant_member_role(text)') IS NULL
+       OR to_regprocedure('public.athlete_belongs_to_tenant(uuid,text,uuid,uuid)') IS NULL
+       OR to_regprocedure('public.coach_can_manage_student(text,uuid,uuid)') IS NULL THEN
+        RAISE EXCEPTION 'MIGRASI TASK 03.5 DIHENTIKAN: Fungsi keamanan produksi (get_strict_tenant_member_role / athlete_belongs_to_tenant / coach_can_manage_student) belum lengkap.'
+            USING ERRCODE = '42883';
     END IF;
 END $$;
 
@@ -36,7 +50,7 @@ ALTER TABLE public.athlete_test_results
     ADD COLUMN IF NOT EXISTS measurement_method TEXT NULL;
 
 -- 3. Validasi Non-Destruktif Data Eksisting Sebelum Menambah Constraint
---    (Memastikan tidak ada nilai non-null tidak kompatibel; baris NULL dibiarkan NULL)
+--    (Memastikan tidak ada nilai non-null tidak kompatibel; baris NULL tetap dibiarkan NULL)
 DO $$
 DECLARE
     v_incompatible_count INTEGER := 0;
@@ -99,7 +113,15 @@ BEGIN
     END IF;
 END $$;
 
--- 5. Perbarui Fungsi Trigger `validate_and_protect_athlete_test_results()` untuk Standarisasi 18 Tes
+-- 5. Penanganan Aman Constraint Lama `chk_athlete_test_results_spr10m_method`
+--    Dicabut SETELAH `chk_athlete_test_results_measurement_method_compatibility` aktif
+--    di dalam transaksi yang sama agar aturan TST-SPR-10M tetap terlindungi penuh
+--    tanpa potensi konflik definisi constraint lama di database produksi.
+ALTER TABLE public.athlete_test_results
+    DROP CONSTRAINT IF EXISTS chk_athlete_test_results_spr10m_method;
+
+-- 6. Rekonsiliasi Fungsi Trigger `validate_and_protect_athlete_test_results()`
+--    Mempertahankan seluruh proteksi produksi + mengintegrasikan standarisasi 18 tes & anti-bypass JSONB.
 CREATE OR REPLACE FUNCTION public.validate_and_protect_athlete_test_results()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -115,10 +137,20 @@ DECLARE
     v_ctx_age_text TEXT;
     v_parsed_age INTEGER;
     v_raw_top_method TEXT;
+    v_old_top_method TEXT;
+    v_dm_method TEXT;
+    v_ctx_nested_method TEXT;
+    v_aux_method TEXT;
+    v_old_dm_method TEXT;
+    v_old_ctx_nested_method TEXT;
+    v_old_aux_method TEXT;
     v_ctx_method TEXT;
     v_default_single_method TEXT;
     v_raw_age_group TEXT;
     v_ctx_age_group TEXT;
+    v_dm_changed BOOLEAN;
+    v_ctx_nested_changed BOOLEAN;
+    v_aux_changed BOOLEAN;
     v_method_json_changed BOOLEAN;
     v_age_group_json_changed BOOLEAN;
     v_age_years_json_changed BOOLEAN;
@@ -235,22 +267,23 @@ BEGIN
         ELSE NULL
     END;
 
-    -- Normalisasi & Sinkronisasi measurement_method:
-    --   * INSERT baru wajib memiliki metode standar kompatibel dengan test_id (tidak boleh NULL atau tidak dikenal).
-    --   * UPDATE pada record legacy NULL tetap menjaga NULL selama tidak diubah, dan melarang pengosongan nilai non-null ke NULL.
+    -- Ekstraksi & Normalisasi measurement_method kolom + seluruh jalur JSONB
     v_raw_top_method := NULLIF(UPPER(trim(COALESCE(NEW.measurement_method, ''))), '');
-    v_ctx_method := COALESCE(
-        NULLIF(UPPER(trim(COALESCE(NEW.derived_metrics->>'measurementMethod', ''))), ''),
-        NULLIF(UPPER(trim(COALESCE(NEW.derived_metrics->'athleteTestContext'->>'measurementMethod', ''))), ''),
-        NULLIF(UPPER(trim(COALESCE(NEW.auxiliary_inputs->>'measurementMethod', ''))), '')
-    );
-    v_method_json_changed := (TG_OP = 'UPDATE') AND (
-        NULLIF(UPPER(trim(COALESCE(OLD.derived_metrics->>'measurementMethod', ''))), '') IS DISTINCT FROM NULLIF(UPPER(trim(COALESCE(NEW.derived_metrics->>'measurementMethod', ''))), '')
-        OR NULLIF(UPPER(trim(COALESCE(OLD.derived_metrics->'athleteTestContext'->>'measurementMethod', ''))), '') IS DISTINCT FROM NULLIF(UPPER(trim(COALESCE(NEW.derived_metrics->'athleteTestContext'->>'measurementMethod', ''))), '')
-        OR NULLIF(UPPER(trim(COALESCE(OLD.auxiliary_inputs->>'measurementMethod', ''))), '') IS DISTINCT FROM NULLIF(UPPER(trim(COALESCE(NEW.auxiliary_inputs->>'measurementMethod', ''))), '')
-    );
+    v_dm_method := NULLIF(UPPER(trim(COALESCE(NEW.derived_metrics->>'measurementMethod', ''))), '');
+    v_ctx_nested_method := NULLIF(UPPER(trim(COALESCE(NEW.derived_metrics->'athleteTestContext'->>'measurementMethod', ''))), '');
+    v_aux_method := NULLIF(UPPER(trim(COALESCE(NEW.auxiliary_inputs->>'measurementMethod', ''))), '');
+    v_ctx_method := COALESCE(v_dm_method, v_ctx_nested_method, v_aux_method);
 
     IF TG_OP = 'INSERT' THEN
+        -- Cegah kontradiksi/bypass antar key JSONB (derived_metrics, athleteTestContext, auxiliary_inputs)
+        IF (v_dm_method IS NOT NULL AND v_ctx_nested_method IS NOT NULL AND v_dm_method IS DISTINCT FROM v_ctx_nested_method)
+           OR (v_dm_method IS NOT NULL AND v_aux_method IS NOT NULL AND v_dm_method IS DISTINCT FROM v_aux_method)
+           OR (v_ctx_nested_method IS NOT NULL AND v_aux_method IS NOT NULL AND v_ctx_nested_method IS DISTINCT FROM v_aux_method) THEN
+            RAISE EXCEPTION 'Inkonsistensi measurement_method antar metadata JSONB untuk test_id %.',
+                NEW.test_id
+                USING ERRCODE = '23514';
+        END IF;
+
         IF v_raw_top_method IS NOT NULL THEN
             IF v_ctx_method IS NOT NULL AND v_ctx_method IS DISTINCT FROM v_raw_top_method THEN
                 RAISE EXCEPTION 'Inkonsistensi measurement_method kolom (%) dengan JSONB (%) untuk test_id %.',
@@ -268,15 +301,41 @@ BEGIN
                 USING ERRCODE = '23514';
         END IF;
     ELSE
+        v_old_top_method := NULLIF(UPPER(trim(COALESCE(OLD.measurement_method, ''))), '');
+        v_old_dm_method := NULLIF(UPPER(trim(COALESCE(OLD.derived_metrics->>'measurementMethod', ''))), '');
+        v_old_ctx_nested_method := NULLIF(UPPER(trim(COALESCE(OLD.derived_metrics->'athleteTestContext'->>'measurementMethod', ''))), '');
+        v_old_aux_method := NULLIF(UPPER(trim(COALESCE(OLD.auxiliary_inputs->>'measurementMethod', ''))), '');
+
+        v_dm_changed := v_old_dm_method IS DISTINCT FROM v_dm_method;
+        v_ctx_nested_changed := v_old_ctx_nested_method IS DISTINCT FROM v_ctx_nested_method;
+        v_aux_changed := v_old_aux_method IS DISTINCT FROM v_aux_method;
+        v_method_json_changed := v_dm_changed OR v_ctx_nested_changed OR v_aux_changed;
+
+        -- Jika ada mutasi pada jalur JSONB mana pun, seluruh key JSONB non-null harus saling konsisten
+        IF v_method_json_changed THEN
+            IF (v_dm_method IS NOT NULL AND v_ctx_nested_method IS NOT NULL AND v_dm_method IS DISTINCT FROM v_ctx_nested_method)
+               OR (v_dm_method IS NOT NULL AND v_aux_method IS NOT NULL AND v_dm_method IS DISTINCT FROM v_aux_method)
+               OR (v_ctx_nested_method IS NOT NULL AND v_aux_method IS NOT NULL AND v_ctx_nested_method IS DISTINCT FROM v_aux_method) THEN
+                RAISE EXCEPTION 'Inkonsistensi measurement_method antar metadata JSONB pada UPDATE untuk test_id %.',
+                    NEW.test_id
+                    USING ERRCODE = '23514';
+            END IF;
+        END IF;
+
         IF NEW.measurement_method IS DISTINCT FROM OLD.measurement_method THEN
             IF v_raw_top_method IS NULL THEN
                 RAISE EXCEPTION 'measurement_method yang sudah tercatat tidak boleh dikosongkan menjadi NULL.'
                     USING ERRCODE = '23514';
             END IF;
+            IF v_method_json_changed AND v_ctx_method IS NOT NULL AND v_ctx_method IS DISTINCT FROM v_raw_top_method THEN
+                RAISE EXCEPTION 'Inkonsistensi measurement_method kolom (%) dengan JSONB (%) saat UPDATE untuk test_id %.',
+                    v_raw_top_method, v_ctx_method, NEW.test_id
+                    USING ERRCODE = '23514';
+            END IF;
             NEW.measurement_method := v_raw_top_method;
         ELSIF v_method_json_changed THEN
             IF v_ctx_method IS NULL THEN
-                IF OLD.measurement_method IS NOT NULL THEN
+                IF v_old_top_method IS NOT NULL THEN
                     RAISE EXCEPTION 'measurement_method yang sudah tercatat tidak boleh dikosongkan menjadi NULL melalui metadata JSONB.'
                         USING ERRCODE = '23514';
                 END IF;
@@ -285,7 +344,22 @@ BEGIN
                 NEW.measurement_method := v_ctx_method;
             END IF;
         ELSE
-            NEW.measurement_method := NULLIF(UPPER(trim(COALESCE(OLD.measurement_method, ''))), '');
+            NEW.measurement_method := v_old_top_method;
+        END IF;
+    END IF;
+
+    -- Penegakan kompatibilitas di level trigger untuk setiap nilai non-NULL
+    -- (Record legacy dengan measurement_method NULL pada UPDATE kolom lain tetap diizinkan)
+    IF NEW.measurement_method IS NOT NULL THEN
+        IF NEW.measurement_method NOT IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO', 'PHYSICAL_MEASURING_TOOL', 'MANUAL_COUNT')
+           OR (NEW.test_id IN ('TST-SPR-10M', 'TST-SPR-30M') AND NEW.measurement_method NOT IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO'))
+           OR (NEW.test_id IN ('TST-AGL-ARW', 'TST-BAL-STK', 'TST-COD-505', 'TST-COR-PLK', 'TST-RSA-630', 'TST-SSB-GK-03', 'TST-WF-TLA') AND NEW.measurement_method <> 'STOPWATCH_MANUAL')
+           OR (NEW.test_id IN ('TST-MOB-SAR', 'TST-RXN-RLR', 'TST-JMP-VER', 'TST-PWR-SBJ', 'TST-SHT-DST') AND NEW.measurement_method <> 'PHYSICAL_MEASURING_TOOL')
+           OR (NEW.test_id IN ('TST-END-BLP', 'TST-STR-PU1', 'TST-SSB-WAP', 'TST-SSB-GK-02') AND NEW.measurement_method <> 'MANUAL_COUNT')
+        THEN
+            RAISE EXCEPTION 'measurement_method (%) tidak dikenal atau tidak kompatibel untuk test_id %.',
+                NEW.measurement_method, NEW.test_id
+                USING ERRCODE = '23514';
         END IF;
     END IF;
 
@@ -351,7 +425,15 @@ BEGIN
 END;
 $$;
 
--- 6. Pastikan Kepemilikan & Least-Privilege Function Grants Tetap Terjaga
+-- 7. Pastikan Trigger Aktif `trg_validate_and_protect_athlete_test_results` Terpasang
+--    sebagai BEFORE INSERT OR UPDATE tanpa mengubah baris data eksisting.
+DROP TRIGGER IF EXISTS trg_validate_and_protect_athlete_test_results ON public.athlete_test_results;
+CREATE TRIGGER trg_validate_and_protect_athlete_test_results
+    BEFORE INSERT OR UPDATE ON public.athlete_test_results
+    FOR EACH ROW
+    EXECUTE FUNCTION public.validate_and_protect_athlete_test_results();
+
+-- 8. Pastikan Kepemilikan `postgres` & Least-Privilege Function Grants Tetap Terjaga
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'postgres') THEN

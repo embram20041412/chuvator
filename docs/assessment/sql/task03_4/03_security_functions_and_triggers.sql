@@ -344,10 +344,20 @@ DECLARE
     v_ctx_age_text TEXT;
     v_parsed_age INTEGER;
     v_raw_top_method TEXT;
+    v_old_top_method TEXT;
+    v_dm_method TEXT;
+    v_ctx_nested_method TEXT;
+    v_aux_method TEXT;
+    v_old_dm_method TEXT;
+    v_old_ctx_nested_method TEXT;
+    v_old_aux_method TEXT;
     v_ctx_method TEXT;
     v_default_single_method TEXT;
     v_raw_age_group TEXT;
     v_ctx_age_group TEXT;
+    v_dm_changed BOOLEAN;
+    v_ctx_nested_changed BOOLEAN;
+    v_aux_changed BOOLEAN;
     v_method_json_changed BOOLEAN;
     v_age_group_json_changed BOOLEAN;
     v_age_years_json_changed BOOLEAN;
@@ -464,22 +474,24 @@ BEGIN
         ELSE NULL
     END;
 
-    -- Normalisasi & Sinkronisasi measurement_method:
+    -- Normalisasi & Sinkronisasi measurement_method + seluruh jalur JSONB:
     --   * INSERT baru wajib memiliki metode standar kompatibel dengan test_id (tidak boleh NULL atau tidak dikenal).
     --   * UPDATE pada record legacy NULL tetap menjaga NULL selama tidak diubah, dan melarang pengosongan nilai non-null ke NULL.
     v_raw_top_method := NULLIF(UPPER(trim(COALESCE(NEW.measurement_method, ''))), '');
-    v_ctx_method := COALESCE(
-        NULLIF(UPPER(trim(COALESCE(NEW.derived_metrics->>'measurementMethod', ''))), ''),
-        NULLIF(UPPER(trim(COALESCE(NEW.derived_metrics->'athleteTestContext'->>'measurementMethod', ''))), ''),
-        NULLIF(UPPER(trim(COALESCE(NEW.auxiliary_inputs->>'measurementMethod', ''))), '')
-    );
-    v_method_json_changed := (TG_OP = 'UPDATE') AND (
-        NULLIF(UPPER(trim(COALESCE(OLD.derived_metrics->>'measurementMethod', ''))), '') IS DISTINCT FROM NULLIF(UPPER(trim(COALESCE(NEW.derived_metrics->>'measurementMethod', ''))), '')
-        OR NULLIF(UPPER(trim(COALESCE(OLD.derived_metrics->'athleteTestContext'->>'measurementMethod', ''))), '') IS DISTINCT FROM NULLIF(UPPER(trim(COALESCE(NEW.derived_metrics->'athleteTestContext'->>'measurementMethod', ''))), '')
-        OR NULLIF(UPPER(trim(COALESCE(OLD.auxiliary_inputs->>'measurementMethod', ''))), '') IS DISTINCT FROM NULLIF(UPPER(trim(COALESCE(NEW.auxiliary_inputs->>'measurementMethod', ''))), '')
-    );
+    v_dm_method := NULLIF(UPPER(trim(COALESCE(NEW.derived_metrics->>'measurementMethod', ''))), '');
+    v_ctx_nested_method := NULLIF(UPPER(trim(COALESCE(NEW.derived_metrics->'athleteTestContext'->>'measurementMethod', ''))), '');
+    v_aux_method := NULLIF(UPPER(trim(COALESCE(NEW.auxiliary_inputs->>'measurementMethod', ''))), '');
+    v_ctx_method := COALESCE(v_dm_method, v_ctx_nested_method, v_aux_method);
 
     IF TG_OP = 'INSERT' THEN
+        IF (v_dm_method IS NOT NULL AND v_ctx_nested_method IS NOT NULL AND v_dm_method IS DISTINCT FROM v_ctx_nested_method)
+           OR (v_dm_method IS NOT NULL AND v_aux_method IS NOT NULL AND v_dm_method IS DISTINCT FROM v_aux_method)
+           OR (v_ctx_nested_method IS NOT NULL AND v_aux_method IS NOT NULL AND v_ctx_nested_method IS DISTINCT FROM v_aux_method) THEN
+            RAISE EXCEPTION 'Inkonsistensi measurement_method antar metadata JSONB untuk test_id %.',
+                NEW.test_id
+                USING ERRCODE = '23514';
+        END IF;
+
         IF v_raw_top_method IS NOT NULL THEN
             IF v_ctx_method IS NOT NULL AND v_ctx_method IS DISTINCT FROM v_raw_top_method THEN
                 RAISE EXCEPTION 'Inkonsistensi measurement_method kolom (%) dengan JSONB (%) untuk test_id %.',
@@ -497,15 +509,40 @@ BEGIN
                 USING ERRCODE = '23514';
         END IF;
     ELSE
+        v_old_top_method := NULLIF(UPPER(trim(COALESCE(OLD.measurement_method, ''))), '');
+        v_old_dm_method := NULLIF(UPPER(trim(COALESCE(OLD.derived_metrics->>'measurementMethod', ''))), '');
+        v_old_ctx_nested_method := NULLIF(UPPER(trim(COALESCE(OLD.derived_metrics->'athleteTestContext'->>'measurementMethod', ''))), '');
+        v_old_aux_method := NULLIF(UPPER(trim(COALESCE(OLD.auxiliary_inputs->>'measurementMethod', ''))), '');
+
+        v_dm_changed := v_old_dm_method IS DISTINCT FROM v_dm_method;
+        v_ctx_nested_changed := v_old_ctx_nested_method IS DISTINCT FROM v_ctx_nested_method;
+        v_aux_changed := v_old_aux_method IS DISTINCT FROM v_aux_method;
+        v_method_json_changed := v_dm_changed OR v_ctx_nested_changed OR v_aux_changed;
+
+        IF v_method_json_changed THEN
+            IF (v_dm_method IS NOT NULL AND v_ctx_nested_method IS NOT NULL AND v_dm_method IS DISTINCT FROM v_ctx_nested_method)
+               OR (v_dm_method IS NOT NULL AND v_aux_method IS NOT NULL AND v_dm_method IS DISTINCT FROM v_aux_method)
+               OR (v_ctx_nested_method IS NOT NULL AND v_aux_method IS NOT NULL AND v_ctx_nested_method IS DISTINCT FROM v_aux_method) THEN
+                RAISE EXCEPTION 'Inkonsistensi measurement_method antar metadata JSONB pada UPDATE untuk test_id %.',
+                    NEW.test_id
+                    USING ERRCODE = '23514';
+            END IF;
+        END IF;
+
         IF NEW.measurement_method IS DISTINCT FROM OLD.measurement_method THEN
             IF v_raw_top_method IS NULL THEN
                 RAISE EXCEPTION 'measurement_method yang sudah tercatat tidak boleh dikosongkan menjadi NULL.'
                     USING ERRCODE = '23514';
             END IF;
+            IF v_method_json_changed AND v_ctx_method IS NOT NULL AND v_ctx_method IS DISTINCT FROM v_raw_top_method THEN
+                RAISE EXCEPTION 'Inkonsistensi measurement_method kolom (%) dengan JSONB (%) saat UPDATE untuk test_id %.',
+                    v_raw_top_method, v_ctx_method, NEW.test_id
+                    USING ERRCODE = '23514';
+            END IF;
             NEW.measurement_method := v_raw_top_method;
         ELSIF v_method_json_changed THEN
             IF v_ctx_method IS NULL THEN
-                IF OLD.measurement_method IS NOT NULL THEN
+                IF v_old_top_method IS NOT NULL THEN
                     RAISE EXCEPTION 'measurement_method yang sudah tercatat tidak boleh dikosongkan menjadi NULL melalui metadata JSONB.'
                         USING ERRCODE = '23514';
                 END IF;
@@ -514,7 +551,20 @@ BEGIN
                 NEW.measurement_method := v_ctx_method;
             END IF;
         ELSE
-            NEW.measurement_method := NULLIF(UPPER(trim(COALESCE(OLD.measurement_method, ''))), '');
+            NEW.measurement_method := v_old_top_method;
+        END IF;
+    END IF;
+
+    IF NEW.measurement_method IS NOT NULL THEN
+        IF NEW.measurement_method NOT IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO', 'PHYSICAL_MEASURING_TOOL', 'MANUAL_COUNT')
+           OR (NEW.test_id IN ('TST-SPR-10M', 'TST-SPR-30M') AND NEW.measurement_method NOT IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO'))
+           OR (NEW.test_id IN ('TST-AGL-ARW', 'TST-BAL-STK', 'TST-COD-505', 'TST-COR-PLK', 'TST-RSA-630', 'TST-SSB-GK-03', 'TST-WF-TLA') AND NEW.measurement_method <> 'STOPWATCH_MANUAL')
+           OR (NEW.test_id IN ('TST-MOB-SAR', 'TST-RXN-RLR', 'TST-JMP-VER', 'TST-PWR-SBJ', 'TST-SHT-DST') AND NEW.measurement_method <> 'PHYSICAL_MEASURING_TOOL')
+           OR (NEW.test_id IN ('TST-END-BLP', 'TST-STR-PU1', 'TST-SSB-WAP', 'TST-SSB-GK-02') AND NEW.measurement_method <> 'MANUAL_COUNT')
+        THEN
+            RAISE EXCEPTION 'measurement_method (%) tidak dikenal atau tidak kompatibel untuk test_id %.',
+                NEW.measurement_method, NEW.test_id
+                USING ERRCODE = '23514';
         END IF;
     END IF;
 

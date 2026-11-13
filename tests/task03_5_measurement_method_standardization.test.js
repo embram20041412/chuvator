@@ -695,3 +695,95 @@ test('Task 03.5.1 (Audit): Metode tidak dikenal tidak pernah lolos ke model/reka
   );
 });
 
+test('Task 03.5.2 (Reconciliation): Integrasi trigger produksi, anti-bypass 3 jalur JSONB, penanganan aman spr10m constraint & skrip verifikasi 11 skenario', () => {
+  const sql035Dir = path.resolve(process.cwd(), 'docs/assessment/sql/task03_5');
+  const sql034Dir = path.resolve(process.cwd(), 'docs/assessment/sql/task03_4');
+
+  const mig035 = fs.readFileSync(
+    path.join(sql035Dir, '01_task03_5_measurement_method_standardization.sql'),
+    'utf8'
+  );
+  const verify035 = fs.readFileSync(
+    path.join(sql035Dir, '02_task03_5_verification.sql'),
+    'utf8'
+  );
+  const rollback035 = fs.readFileSync(
+    path.join(sql035Dir, '03_task03_5_rollback.sql'),
+    'utf8'
+  );
+  const trigger034 = fs.readFileSync(
+    path.join(sql034Dir, '03_security_functions_and_triggers.sql'),
+    'utf8'
+  );
+  const master034 = fs.readFileSync(
+    path.join(sql034Dir, '00_master_task03_4_assessment_battery_migration.sql'),
+    'utf8'
+  );
+
+  // 1. Prasyarat fungsi keamanan produksi & pemasangan trigger aktif BEFORE INSERT OR UPDATE
+  assert.ok(mig035.includes("to_regprocedure('public.get_strict_tenant_member_role(text)')"));
+  assert.ok(mig035.includes("to_regprocedure('public.athlete_belongs_to_tenant(uuid,text,uuid,uuid)')"));
+  assert.ok(mig035.includes("to_regprocedure('public.coach_can_manage_student(text,uuid,uuid)')"));
+  assert.ok(
+    /CREATE TRIGGER trg_validate_and_protect_athlete_test_results\s+BEFORE INSERT OR UPDATE ON public\.athlete_test_results/i.test(mig035),
+    '01_task03_5 wajib memastikan trigger trg_validate_and_protect_athlete_test_results aktif sebagai BEFORE INSERT OR UPDATE'
+  );
+
+  // 2. Penanganan aman constraint lama chk_athlete_test_results_spr10m_method (dicabut setelah constraint 18 tes aktif, dipulihkan saat rollback)
+  const addCompatPos = mig035.indexOf('ADD CONSTRAINT chk_athlete_test_results_measurement_method_compatibility');
+  const dropOldSprPos = mig035.indexOf('DROP CONSTRAINT IF EXISTS chk_athlete_test_results_spr10m_method;');
+  assert.ok(addCompatPos > 0 && dropOldSprPos > addCompatPos, '01_task03_5 wajib memasang constraint 18 tes terlebih dahulu sebelum mencabut chk_athlete_test_results_spr10m_method');
+  assert.ok(rollback035.includes('chk_athlete_test_results_spr10m_method'), '03_task03_5_rollback wajib memulihkan chk_athlete_test_results_spr10m_method');
+
+  // 3. Anti-bypass 3 jalur JSONB + kompatibilitas level trigger tersinkron di 01_task03_5, 03_security, dan 00_master
+  for (const [label, sql] of [
+    ['01_task03_5', mig035],
+    ['03_security_functions_and_triggers', trigger034],
+    ['00_master', master034]
+  ]) {
+    assert.ok(sql.includes('v_dm_method'), `${label}: wajib mengekstrak derived_metrics->>'measurementMethod'`);
+    assert.ok(sql.includes('v_ctx_nested_method'), `${label}: wajib mengekstrak derived_metrics->'athleteTestContext'->>'measurementMethod'`);
+    assert.ok(sql.includes('v_aux_method'), `${label}: wajib mengekstrak auxiliary_inputs->>'measurementMethod'`);
+    assert.ok(
+      sql.includes('Inkonsistensi measurement_method antar metadata JSONB pada UPDATE'),
+      `${label}: wajib menolak kontradiksi JSONB antar key pada UPDATE`
+    );
+    assert.ok(
+      sql.includes('Inkonsistensi measurement_method kolom (%) dengan JSONB (%) saat UPDATE'),
+      `${label}: wajib menolak mutasi campuran kolom valid + JSONB kontradiktif pada UPDATE`
+    );
+    assert.ok(
+      sql.includes('measurement_method (%) tidak dikenal atau tidak kompatibel untuk test_id %'),
+      `${label}: wajib menolak nilai tidak dikenal atau tidak kompatibel di level trigger`
+    );
+    assert.ok(
+      sql.includes('NEW.coach_id IS DISTINCT FROM OLD.coach_id') &&
+        sql.includes('NEW.recorded_by_user_id IS DISTINCT FROM OLD.recorded_by_user_id') &&
+        sql.includes('NEW.recorded_by_name IS DISTINCT FROM OLD.recorded_by_name'),
+      `${label}: perlindungan coach_id dan imutabilitas audit wajib utuh`
+    );
+  }
+
+  // 4. Verifikasi 02_task03_5_verification.sql kompatibel skema aktual & mencakup 18 tes + 11 skenario wajib
+  assert.ok(verify035.includes('INSERT INTO public.academy_classes (id, tenant_id, academy_id, class_name, coach_id)'));
+  assert.ok(verify035.includes('INSERT INTO public.students (id, tenant_id, academy_id, class_id, student_name, birth_date)'));
+  assert.ok(verify035.includes('INSERT INTO auth.users (id, email, email_confirmed_at, aud, role)'));
+  assert.ok(verify035.includes('INSERT INTO public.coaches (id, tenant_id, academy_id, name, status, auth_uid)'));
+  assert.equal(/\bINSERT INTO public\.academy_classes\s*\([^)]*\bname\b/i.test(verify035), false, 'academy_classes memakai class_name, bukan name');
+  assert.equal(/\bINSERT INTO public\.students\s*\([^)]*\bname\b/i.test(verify035), false, 'students memakai student_name, bukan name');
+
+  for (const testDef of FOOTBALL_TEST_BATTERY_CATALOG) {
+    assert.ok(
+      verify035.includes(`'${testDef.testId}'`),
+      `02_task03_5_verification.sql wajib menguji test_id ${testDef.testId}`
+    );
+  }
+  assert.ok(verify035.includes('LASER_GATE'), 'Wajib menguji metode tidak dikenal');
+  assert.ok(verify035.includes('athleteTestContext'), 'Wajib menguji bypass JSONB bersarang');
+  assert.ok(verify035.includes('auxiliary_inputs'), 'Wajib menguji bypass auxiliary_inputs');
+  assert.ok(verify035.includes('recorded_by_user_id'), 'Wajib menguji imutabilitas kolom audit');
+  assert.ok(verify035.includes('v_coach_a2_id'), 'Wajib menguji otorisasi/anti-spoofing coach');
+  assert.ok(verify035.includes('v_tenant_b'), 'Wajib menguji isolasi tenant');
+});
+
+
