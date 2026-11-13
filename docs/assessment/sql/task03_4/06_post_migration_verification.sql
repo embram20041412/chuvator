@@ -108,6 +108,78 @@ WHERE table_schema = 'public'
   AND grantee IN ('PUBLIC', 'anon', 'authenticated')
 ORDER BY grantee, privilege_type;
 
+-- A7. Inspeksi Foreign Key coaches.auth_uid_fkey & Struktur Aktual auth.users (Kolom, Constraint, Trigger, Dependency)
+SELECT
+    con.conname AS constraint_name,
+    ns_src.nspname AS source_schema,
+    rel_src.relname AS source_table,
+    att_src.attname AS source_column,
+    ns_ref.nspname AS target_schema,
+    rel_ref.relname AS target_table,
+    att_ref.attname AS target_column,
+    pg_catalog.format_type(att_ref.atttypid, att_ref.atttypmod) AS target_column_type,
+    pg_catalog.pg_get_constraintdef(con.oid) AS constraint_definition
+FROM pg_catalog.pg_constraint con
+JOIN pg_catalog.pg_class rel_src ON rel_src.oid = con.conrelid
+JOIN pg_catalog.pg_namespace ns_src ON ns_src.oid = rel_src.relnamespace
+JOIN pg_catalog.pg_attribute att_src ON att_src.attrelid = con.conrelid AND att_src.attnum = con.conkey[1]
+JOIN pg_catalog.pg_class rel_ref ON rel_ref.oid = con.confrelid
+JOIN pg_catalog.pg_namespace ns_ref ON ns_ref.oid = rel_ref.relnamespace
+JOIN pg_catalog.pg_attribute att_ref ON att_ref.attrelid = con.confrelid AND att_ref.attnum = con.confkey[1]
+WHERE ns_src.nspname = 'public'
+  AND rel_src.relname = 'coaches'
+  AND con.contype = 'f'
+ORDER BY con.conname;
+
+SELECT
+    ordinal_position,
+    column_name,
+    data_type,
+    is_nullable,
+    column_default
+FROM information_schema.columns
+WHERE table_schema = 'auth'
+  AND table_name = 'users'
+ORDER BY ordinal_position;
+
+SELECT
+    con.conname AS constraint_name,
+    con.contype AS constraint_type,
+    pg_catalog.pg_get_constraintdef(con.oid) AS constraint_definition
+FROM pg_catalog.pg_constraint con
+JOIN pg_catalog.pg_class c ON c.oid = con.conrelid
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'auth'
+  AND c.relname = 'users'
+ORDER BY con.conname;
+
+SELECT
+    t.tgname AS trigger_name,
+    t.tgenabled AS enabled_mode,
+    pg_catalog.pg_get_triggerdef(t.oid) AS trigger_definition
+FROM pg_catalog.pg_trigger t
+JOIN pg_catalog.pg_class c ON c.oid = t.tgrelid
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'auth'
+  AND c.relname = 'users'
+  AND NOT t.tgisinternal
+ORDER BY t.tgname;
+
+SELECT
+    ns_src.nspname AS dependent_schema,
+    rel_src.relname AS dependent_table,
+    con.conname AS fk_constraint_name,
+    pg_catalog.pg_get_constraintdef(con.oid) AS fk_definition
+FROM pg_catalog.pg_constraint con
+JOIN pg_catalog.pg_class rel_src ON rel_src.oid = con.conrelid
+JOIN pg_catalog.pg_namespace ns_src ON ns_src.oid = rel_src.relnamespace
+JOIN pg_catalog.pg_class rel_ref ON rel_ref.oid = con.confrelid
+JOIN pg_catalog.pg_namespace ns_ref ON ns_ref.oid = rel_ref.relnamespace
+WHERE ns_ref.nspname = 'auth'
+  AND rel_ref.relname = 'users'
+  AND con.contype = 'f'
+ORDER BY ns_src.nspname, rel_src.relname, con.conname;
+
 -- =============================================================================
 -- BAGIAN B: NON-DESTRUCTIVE 19-SCENARIO VERIFICATION SUITE (BEGIN ... ROLLBACK)
 -- =============================================================================
@@ -138,6 +210,7 @@ DECLARE
     v_coach_unlinked_uid UUID := '34000000-0000-4000-8000-000000000111';
     v_owner_c_uid        TEXT := '34000000-0000-4000-8000-000000000112';
     v_coach_b1_uid       UUID := '34000000-0000-4000-8000-000000000198';
+    v_owner_b_uid        TEXT := '34000000-0000-4000-8000-000000000199';
 
     -- Domain Fixtures
     v_acad_a         UUID := '34000000-0000-4000-8000-000000000201';
@@ -180,9 +253,16 @@ DECLARE
     v_has_tenants_tenant_id BOOLEAN;
     v_has_tenants_is_active BOOLEAN;
     v_has_staff_is_active BOOLEAN;
+    v_has_auth_users BOOLEAN;
+    v_fk_name TEXT;
+    v_fk_target_schema TEXT;
+    v_fk_target_table TEXT;
+    v_fk_target_col TEXT;
+    v_fk_target_col_type TEXT;
+    v_auth_missing_req_cols TEXT;
     v_passed_scenarios INT := 0;
 BEGIN
-    -- 0. Pra-syarat Skema Fixture
+    -- 0. Pra-syarat Skema Fixture & Validasi FK coaches_auth_uid_fkey -> auth.users(id)
     SELECT EXISTS (
         SELECT 1 FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = 'coaches' AND column_name = 'auth_uid'
@@ -203,24 +283,137 @@ BEGIN
         WHERE table_schema = 'public' AND table_name = 'users_staff' AND column_name = 'is_active'
     ) INTO v_has_staff_is_active;
 
-    IF NOT v_has_coaches_auth_uid OR NOT v_has_tenants_tenant_id THEN
-        RAISE EXCEPTION 'PRASYARAT SIMULASI BELUM TERPENUHI: Kolom coaches.auth_uid (%) atau tenants.tenant_id (%) belum tersedia pada skema target.',
-            v_has_coaches_auth_uid, v_has_tenants_tenant_id;
+    SELECT EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'auth' AND table_name = 'users'
+    ) INTO v_has_auth_users;
+
+    IF NOT v_has_coaches_auth_uid OR NOT v_has_tenants_tenant_id OR NOT v_has_auth_users THEN
+        RAISE EXCEPTION 'PRASYARAT SIMULASI BELUM TERPENUHI: coaches.auth_uid (%), tenants.tenant_id (%), atau auth.users (%) belum tersedia.',
+            v_has_coaches_auth_uid, v_has_tenants_tenant_id, v_has_auth_users;
     END IF;
 
-    -- 1. Pastikan tidak ada collision fixture pada tenants
+    SELECT
+        con.conname,
+        ns_ref.nspname,
+        rel_ref.relname,
+        att_ref.attname,
+        pg_catalog.format_type(att_ref.atttypid, att_ref.atttypmod)
+    INTO
+        v_fk_name,
+        v_fk_target_schema,
+        v_fk_target_table,
+        v_fk_target_col,
+        v_fk_target_col_type
+    FROM pg_catalog.pg_constraint con
+    JOIN pg_catalog.pg_class rel_src ON rel_src.oid = con.conrelid
+    JOIN pg_catalog.pg_namespace ns_src ON ns_src.oid = rel_src.relnamespace
+    JOIN pg_catalog.pg_attribute att_src ON att_src.attrelid = con.conrelid AND att_src.attnum = con.conkey[1]
+    JOIN pg_catalog.pg_class rel_ref ON rel_ref.oid = con.confrelid
+    JOIN pg_catalog.pg_namespace ns_ref ON ns_ref.oid = rel_ref.relnamespace
+    JOIN pg_catalog.pg_attribute att_ref ON att_ref.attrelid = con.confrelid AND att_ref.attnum = con.confkey[1]
+    WHERE ns_src.nspname = 'public'
+      AND rel_src.relname = 'coaches'
+      AND con.contype = 'f'
+      AND (con.conname = 'coaches_auth_uid_fkey' OR att_src.attname = 'auth_uid')
+    ORDER BY (con.conname = 'coaches_auth_uid_fkey') DESC
+    LIMIT 1;
+
+    IF v_fk_name IS NOT NULL AND (
+        v_fk_target_schema IS DISTINCT FROM 'auth'
+        OR v_fk_target_table IS DISTINCT FROM 'users'
+        OR v_fk_target_col IS DISTINCT FROM 'id'
+    ) THEN
+        RAISE EXCEPTION 'KETIDAKSESUAIAN SKEMA FK %: Target aktual adalah %.%(%), bukan auth.users(id).',
+            v_fk_name, v_fk_target_schema, v_fk_target_table, v_fk_target_col;
+    END IF;
+
+    -- Pastikan auth.users tidak memiliki kolom NOT NULL tanpa default di luar (id, email, email_confirmed_at, aud, role)
+    SELECT COALESCE(string_agg(column_name || ' (' || data_type || ')', ', ' ORDER BY ordinal_position), '')
+    INTO v_auth_missing_req_cols
+    FROM information_schema.columns
+    WHERE table_schema = 'auth'
+      AND table_name = 'users'
+      AND is_nullable = 'NO'
+      AND column_default IS NULL
+      AND is_identity = 'NO'
+      AND is_generated = 'NEVER'
+      AND column_name NOT IN ('id', 'email', 'email_confirmed_at', 'aud', 'role');
+
+    IF v_auth_missing_req_cols <> '' THEN
+        RAISE EXCEPTION 'PRASYARAT FIXTURE auth.users: Kolom NOT NULL tanpa default terdeteksi (%). Sesuaikan daftar kolom INSERT auth.users sebelum eksekusi.',
+            v_auth_missing_req_cols;
+    END IF;
+
+    -- 1. Pastikan tidak ada collision fixture pada auth.users, tenants, users_staff, platform_superadmins, & coaches
     IF EXISTS (SELECT 1 FROM public.tenants WHERE id IN (v_tenant_a_uuid, v_tenant_b_uuid, v_tenant_c_uuid)) THEN
         RAISE EXCEPTION 'FIXTURE COLLISION: Tenant fixture UUID sudah ada di database.';
     END IF;
 
-    -- 2. Siapkan fixture dalam peran postgres (kolom inti yang terjamin ada pada CHUVATOR)
+    IF EXISTS (
+        SELECT 1 FROM auth.users
+        WHERE id IN (
+            v_superadmin_uid::uuid, v_owner_a_uid::uuid, v_owner_b_uid::uuid, v_owner_c_uid::uuid,
+            v_admin_a_uid::uuid, v_coach_a1_uid, v_coach_a2_uid, v_coach_noclass_uid,
+            v_coach_unlinked_uid, v_coach_b1_uid, v_kasir_a_uid::uuid, v_staff_a_uid::uuid,
+            v_inactive_staff_uid::uuid, v_outsider_uid::uuid
+        )
+           OR LOWER(email) IN (
+            'verify-superadmin-t034@chuvator.test', 'owner-a-t034@chuvator.test',
+            'owner-b-t034@chuvator.test', 'owner-c-t034@chuvator.test',
+            'admin-a@chuvator.test', 'coach-a1@chuvator.test',
+            'coach-a2@chuvator.test', 'coach-noclass@chuvator.test',
+            'coach-unlinked@chuvator.test', 'coach-b1@chuvator.test',
+            'kasir-a@chuvator.test', 'staff-a@chuvator.test',
+            'inactive-a@chuvator.test', 'outsider-t034@chuvator.test'
+        )
+    ) THEN
+        RAISE EXCEPTION 'FIXTURE COLLISION: UID atau email fixture sudah terdaftar di auth.users.';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1 FROM public.coaches
+        WHERE id IN (v_coach_a1_id, v_coach_a2_id, v_coach_noclass_id, v_coach_b1_id)
+           OR auth_uid IN (v_coach_a1_uid, v_coach_a2_uid, v_coach_noclass_uid, v_coach_b1_uid)
+    ) THEN
+        RAISE EXCEPTION 'FIXTURE COLLISION: Coach fixture ID/auth_uid sudah ada di public.coaches.';
+    END IF;
+
+    IF EXISTS (
+        SELECT 1 FROM public.users_staff
+        WHERE uid IN (
+            v_admin_a_uid, v_coach_a1_uid::text, v_coach_a2_uid::text, v_coach_noclass_uid::text,
+            v_coach_unlinked_uid::text, v_kasir_a_uid, v_staff_a_uid, v_inactive_staff_uid
+        )
+    ) THEN
+        RAISE EXCEPTION 'FIXTURE COLLISION: UID fixture staf sudah ada di public.users_staff.';
+    END IF;
+
+    -- 2. Siapkan fixture auth.users (pola resmi tests/test_rls_security_scenarios.sql dalam BEGIN..ROLLBACK) sebelum INSERT public.coaches
+    INSERT INTO auth.users (id, email, email_confirmed_at, aud, role)
+    VALUES
+        (v_superadmin_uid::uuid,     'verify-superadmin-t034@chuvator.test', now(), 'authenticated', 'authenticated'),
+        (v_owner_a_uid::uuid,        'owner-a-t034@chuvator.test',           now(), 'authenticated', 'authenticated'),
+        (v_owner_b_uid::uuid,        'owner-b-t034@chuvator.test',           now(), 'authenticated', 'authenticated'),
+        (v_owner_c_uid::uuid,        'owner-c-t034@chuvator.test',           now(), 'authenticated', 'authenticated'),
+        (v_admin_a_uid::uuid,        'admin-a@chuvator.test',                now(), 'authenticated', 'authenticated'),
+        (v_coach_a1_uid,             'coach-a1@chuvator.test',               now(), 'authenticated', 'authenticated'),
+        (v_coach_a2_uid,             'coach-a2@chuvator.test',               now(), 'authenticated', 'authenticated'),
+        (v_coach_noclass_uid,        'coach-noclass@chuvator.test',          now(), 'authenticated', 'authenticated'),
+        (v_coach_unlinked_uid,       'coach-unlinked@chuvator.test',         now(), 'authenticated', 'authenticated'),
+        (v_coach_b1_uid,             'coach-b1@chuvator.test',               now(), 'authenticated', 'authenticated'),
+        (v_kasir_a_uid::uuid,        'kasir-a@chuvator.test',                now(), 'authenticated', 'authenticated'),
+        (v_staff_a_uid::uuid,        'staff-a@chuvator.test',                now(), 'authenticated', 'authenticated'),
+        (v_inactive_staff_uid::uuid, 'inactive-a@chuvator.test',             now(), 'authenticated', 'authenticated'),
+        (v_outsider_uid::uuid,       'outsider-t034@chuvator.test',          now(), 'authenticated', 'authenticated');
+
     INSERT INTO public.platform_superadmins (auth_uid, email)
     VALUES (v_superadmin_uid, 'verify-superadmin-t034@chuvator.test');
 
     INSERT INTO public.tenants (id, tenant_id, name, owner_uid, status)
     VALUES
         (v_tenant_a_uuid, v_tenant_a, 'SSB Verify Tenant A', v_owner_a_uid, 'active'),
-        (v_tenant_b_uuid, v_tenant_b, 'SSB Verify Tenant B', '34000000-0000-4000-8000-000000000199', 'active'),
+        (v_tenant_b_uuid, v_tenant_b, 'SSB Verify Tenant B', v_owner_b_uid, 'active'),
         (v_tenant_c_uuid, v_tenant_c, 'SSB Verify Tenant C Inactive', v_owner_c_uid, 'inactive');
 
     IF v_has_tenants_is_active THEN
@@ -251,6 +444,15 @@ BEGIN
         (v_acad_a_other, v_tenant_a, 'Akademi A Cabang', 'Akademi A Cabang'),
         (v_acad_b,       v_tenant_b, 'Akademi B', 'Akademi B'),
         (v_acad_c,       v_tenant_c, 'Akademi C', 'Akademi C');
+
+    -- Pastikan seluruh parent coach auth_uid tersedia pada auth.users(id) sebelum INSERT public.coaches
+    SELECT COUNT(*) INTO v_count
+    FROM auth.users
+    WHERE id IN (v_coach_a1_uid, v_coach_a2_uid, v_coach_noclass_uid, v_coach_b1_uid);
+
+    IF v_count <> 4 THEN
+        RAISE EXCEPTION 'PRASYARAT FIXTURE FK coaches_auth_uid_fkey: Hanya % dari 4 parent user coach yang tersedia di auth.users.', v_count;
+    END IF;
 
     INSERT INTO public.coaches (id, tenant_id, academy_id, name, status, auth_uid)
     VALUES

@@ -261,3 +261,76 @@ test('Task 03.4.3.1: 06_post_migration_verification.sql konsisten UUID pada v_co
   );
 });
 
+test('Task 03.4.3.2 & 03.4.3.3: Fixture auth.users.id dibuat sebelum INSERT public.coaches dengan validasi FK, anti-collision & isolasi BEGIN..ROLLBACK', () => {
+  const verifySql = readSql('06_post_migration_verification.sql');
+  const beginPos = verifySql.indexOf('BEGIN;');
+  const authInsertPos = verifySql.indexOf('INSERT INTO auth.users (id, email, email_confirmed_at, aud, role)');
+  const authPreCountPos = verifySql.indexOf('FROM auth.users\n    WHERE id IN (v_coach_a1_uid, v_coach_a2_uid, v_coach_noclass_uid, v_coach_b1_uid)');
+  const coachesInsertPos = verifySql.indexOf('INSERT INTO public.coaches (id, tenant_id, academy_id, name, status, auth_uid)');
+  const rollbackPos = verifySql.lastIndexOf('ROLLBACK;');
+
+  assert.ok(beginPos > 0, '06_post_migration_verification.sql wajib memiliki BEGIN;');
+  assert.ok(rollbackPos > coachesInsertPos, '06_post_migration_verification.sql wajib diakhiri ROLLBACK;');
+  assert.ok(authInsertPos > beginPos && authInsertPos < coachesInsertPos, 'INSERT INTO auth.users wajib berada di dalam transaksi dan sebelum INSERT INTO public.coaches');
+  assert.ok(authPreCountPos > authInsertPos && authPreCountPos < coachesInsertPos, 'Validasi ketersediaan 4 parent coach di auth.users wajib dijalankan sebelum INSERT INTO public.coaches');
+
+  // Pastikan Bagian A7 dan DO $$ memverifikasi target FK aktual adalah auth.users(id)
+  assert.ok(verifySql.includes("v_fk_target_schema IS DISTINCT FROM 'auth'"), 'Blok verifikasi wajib memastikan target FK adalah schema auth');
+  assert.ok(verifySql.includes("v_fk_target_table IS DISTINCT FROM 'users'"), 'Blok verifikasi wajib memastikan target FK adalah tabel users');
+  assert.ok(verifySql.includes("v_fk_target_col IS DISTINCT FROM 'id'"), 'Blok verifikasi wajib memastikan kolom target FK adalah id');
+  assert.ok(verifySql.includes('v_auth_missing_req_cols'), 'Blok verifikasi wajib memeriksa kolom NOT NULL tanpa default pada auth.users');
+  assert.ok(verifySql.includes("WHERE ns_ref.nspname = 'auth'\n  AND rel_ref.relname = 'users'"), 'Bagian A7 wajib menginspeksi dependency FK terhadap auth.users');
+  assert.equal(/v_pu_insert_cols|v_fk_target_schema = 'public'/i.test(verifySql), false, 'Workaround spekulatif public.users harus dihapus setelah auth.users.id terkonfirmasi');
+
+  // Pastikan seluruh aktor & coach auth_uid fixture disisipkan ke parent auth.users dan dicek collision-nya
+  const authUsersBlock = extractBodyBetween(verifySql, 'INSERT INTO auth.users (id, email, email_confirmed_at, aud, role)', ';');
+  for (const actorVar of [
+    'v_superadmin_uid::uuid',
+    'v_owner_a_uid::uuid',
+    'v_owner_b_uid::uuid',
+    'v_owner_c_uid::uuid',
+    'v_admin_a_uid::uuid',
+    'v_coach_a1_uid',
+    'v_coach_a2_uid',
+    'v_coach_noclass_uid',
+    'v_coach_unlinked_uid',
+    'v_coach_b1_uid',
+    'v_kasir_a_uid::uuid',
+    'v_staff_a_uid::uuid',
+    'v_inactive_staff_uid::uuid',
+    'v_outsider_uid::uuid'
+  ]) {
+    assert.ok(authUsersBlock.includes(actorVar), `INSERT INTO auth.users wajib menyertakan ${actorVar}`);
+  }
+  assert.ok(verifySql.includes('FIXTURE COLLISION: UID atau email fixture sudah terdaftar di auth.users.'), 'Wajib ada pengecekan collision auth.users sebelum INSERT');
+  assert.ok(verifySql.includes('FIXTURE COLLISION: Coach fixture ID/auth_uid sudah ada di public.coaches.'), 'Wajib ada pengecekan collision public.coaches sebelum INSERT');
+  assert.ok(verifySql.includes('FIXTURE COLLISION: UID fixture staf sudah ada di public.users_staff.'), 'Wajib ada pengecekan collision public.users_staff sebelum INSERT');
+
+  // Pastikan seluruh UUID fixture valid format UUID v4 dan memakai namespace uji sementara 34000000-0000-4000-8000-*
+  const declareBlock = extractBodyBetween(verifySql, 'DECLARE', 'BEGIN');
+  const declaredUuids = [...declareBlock.matchAll(/'([0-9a-f-]{36})'/gi)].map((m) => m[1]);
+  assert.ok(declaredUuids.length >= 20);
+  const uuidV4Regex = /^34000000-0000-4000-8000-[0-9a-f]{12}$/i;
+  for (const uuid of declaredUuids) {
+    assert.ok(uuidV4Regex.test(uuid), `Seluruh fixture UUID harus valid & menggunakan prefix uji sementara, ditemukan: ${uuid}`);
+  }
+
+  // Pastikan tidak ada COMMIT di 06_post_migration_verification.sql dan tidak ada DDL/DML permanen di luar BEGIN..ROLLBACK
+  assert.equal(/\bCOMMIT\s*;/i.test(verifySql), false, '06_post_migration_verification.sql dilarang berisi COMMIT;');
+  const beforeBegin = verifySql.slice(0, beginPos);
+  const afterRollback = verifySql.slice(rollbackPos + 'ROLLBACK;'.length).trim();
+  assert.equal(/\b(INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|TRUNCATE)\b/i.test(beforeBegin.replace(/--[^\n]*/g, '')), false, 'Bagian A sebelum BEGIN wajib 100% read-only');
+  assert.equal(afterRollback, '', 'Tidak boleh ada statement setelah ROLLBACK;');
+
+  // Pastikan seluruh 19 skenario tetap ada
+  for (let i = 1; i <= 19; i += 1) {
+    assert.ok(verifySql.includes(`TEST ${i}:`), `Skenario TEST ${i} wajib dipertahankan`);
+  }
+
+  // Pastikan master migration tidak diubah untuk menyentuh coaches_auth_uid_fkey / auth.users / public.users
+  const masterSql = readSql('00_master_task03_4_assessment_battery_migration.sql');
+  assert.equal(/coaches_auth_uid_fkey|INSERT\s+INTO\s+(?:auth|public)\.users/i.test(masterSql), false, 'Master migration dilarang menyentuh coaches_auth_uid_fkey atau tabel users');
+});
+
+
+
