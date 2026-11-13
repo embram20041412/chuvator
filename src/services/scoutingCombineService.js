@@ -6,9 +6,23 @@ import {
   calculateTestScore,
   resolveCombineTest
 } from '../utils/combineScoringEngine';
+import {
+  MASTER_FOOTBALL_TESTS_CATALOG,
+  MASTER_INDICATOR_KEY_TO_LABEL,
+  calculateAssessmentScore,
+  aggregateIndicatorScores,
+  resolveMasterFootballTest,
+  getMasterTestsForContext
+} from '../utils/footballAssessmentEngine';
 
 const DEMO_INDICATOR_STORAGE_PREFIX = 'chuvator_demo_combine_indicators_';
 const DEMO_RESULTS_STORAGE_PREFIX = 'chuvator_demo_combine_results_';
+const DEMO_SESSIONS_STORAGE_PREFIX = 'chuvator_demo_master_sessions_';
+
+const UNIFIED_INDICATOR_LABELS = {
+  ...INDICATOR_KEY_TO_LABEL,
+  ...MASTER_INDICATOR_KEY_TO_LABEL
+};
 
 function isDemoCombineContext(tenantId, athleteId) {
   if (!tenantId) return true;
@@ -45,7 +59,26 @@ function enrichCatalogRow(row) {
     indicator_label:
       row.indicator_label ||
       localMeta.indicator_label ||
-      INDICATOR_KEY_TO_LABEL[row.indicator_key] ||
+      UNIFIED_INDICATOR_LABELS[row.indicator_key] ||
+      row.test_name
+  };
+}
+
+function enrichMasterCatalogRow(row) {
+  const localMeta =
+    resolveMasterFootballTest(row.test_code) ||
+    resolveMasterFootballTest(row.id) ||
+    resolveMasterFootballTest(row.indicator_key) ||
+    {};
+  return {
+    ...localMeta,
+    ...row,
+    test_code: row.test_code || localMeta.test_code,
+    indicator_key: row.indicator_key || localMeta.indicator_key || '',
+    indicator_label:
+      row.indicator_label ||
+      localMeta.indicator_label ||
+      UNIFIED_INDICATOR_LABELS[row.indicator_key || localMeta.indicator_key] ||
       row.test_name
   };
 }
@@ -95,6 +128,53 @@ export async function getTestsCatalog({ tenantId = null, sportType = 'football',
 }
 
 /**
+ * Fetch Master Football Tests Catalog from `public.master_football_tests_catalog`
+ * with fallback to `MASTER_FOOTBALL_TESTS_CATALOG`.
+ */
+export async function getMasterFootballCatalog({
+  tenantId = null,
+  category = 'ALL',
+  tier = 4,
+  positionCode = null
+} = {}) {
+  const normalizedTier = Math.max(1, Math.min(4, Number(tier) || 4));
+  const fallbackList = getMasterTestsForContext({
+    tier: normalizedTier,
+    category,
+    positionCode
+  });
+
+  if (tenantId === 'demo-tenant-1' || (tenantId && !toUuidOrNull(tenantId))) {
+    return fallbackList;
+  }
+
+  try {
+    let query = supabase
+      .from('master_football_tests_catalog')
+      .select('*')
+      .lte('min_tier', normalizedTier)
+      .order('test_code', { ascending: true });
+
+    if (category && category !== 'ALL') {
+      if (Array.isArray(category)) {
+        query = query.in('category', category);
+      } else {
+        query = query.eq('category', category);
+      }
+    }
+
+    const { data, error } = await query;
+    if (error || !Array.isArray(data) || data.length === 0) {
+      return fallbackList;
+    }
+
+    return data.map(enrichMasterCatalogRow);
+  } catch {
+    return fallbackList;
+  }
+}
+
+/**
  * Fetch latest indicator scores from `athlete_indicator_scores`.
  * Returns map keyed by `indicator_key`: { [key]: { indicator_key, indicator_label, score, source, updated_at } }
  */
@@ -122,7 +202,7 @@ export async function getAthleteIndicatorScores(tenantId, athleteId) {
     map[row.indicator_key] = {
       id: row.id,
       indicator_key: row.indicator_key,
-      indicator_label: INDICATOR_KEY_TO_LABEL[row.indicator_key] || row.indicator_key,
+      indicator_label: UNIFIED_INDICATOR_LABELS[row.indicator_key] || row.indicator_key,
       score: Math.max(1, Math.min(100, Number(row.score) || 1)),
       source: row.source || 'coach_manual',
       updated_at: row.updated_at
@@ -154,6 +234,35 @@ export async function getAthleteTestResults(tenantId, athleteId, limitCount = 50
 
   if (error) {
     console.warn('[scoutingCombineService] getAthleteTestResults error:', error);
+    return [];
+  }
+
+  return data || [];
+}
+
+/**
+ * Fetch recent raw master test sessions from `athlete_test_sessions`.
+ */
+export async function getAthleteTestSessions(tenantId, athleteId, limitCount = 60) {
+  if (!tenantId || !athleteId) return [];
+
+  if (isDemoCombineContext(tenantId, athleteId)) {
+    const key = `${DEMO_SESSIONS_STORAGE_PREFIX}${tenantId}_${athleteId}`;
+    const list = readLocalJson(key, []);
+    return Array.isArray(list) ? list.slice(0, limitCount) : [];
+  }
+
+  const { data, error } = await supabase
+    .from('athlete_test_sessions')
+    .select('*')
+    .eq('tenant_id', tenantId)
+    .eq('athlete_id', athleteId)
+    .order('testing_date', { ascending: false })
+    .order('created_at', { ascending: false })
+    .limit(limitCount);
+
+  if (error) {
+    console.warn('[scoutingCombineService] getAthleteTestSessions error:', error);
     return [];
   }
 
@@ -208,7 +317,7 @@ export async function saveCombineResultsAndSync({
     return {
       test_id: testMeta?.id || item.testId || item.test_id,
       indicator_key: indicatorKey,
-      indicator_label: item.indicatorLabel || testMeta?.indicator_label || INDICATOR_KEY_TO_LABEL[indicatorKey] || indicatorKey,
+      indicator_label: item.indicatorLabel || testMeta?.indicator_label || UNIFIED_INDICATOR_LABELS[indicatorKey] || indicatorKey,
       raw_value_1: Number.isFinite(raw1) ? raw1 : 0,
       raw_value_2: raw2 !== null && Number.isFinite(raw2) ? raw2 : null,
       errors_count: errs,
@@ -310,7 +419,7 @@ export async function saveCombineResultsAndSync({
     latestMap[row.indicator_key] = {
       id: row.id,
       indicator_key: row.indicator_key,
-      indicator_label: INDICATOR_KEY_TO_LABEL[row.indicator_key] || row.indicator_key,
+      indicator_label: UNIFIED_INDICATOR_LABELS[row.indicator_key] || row.indicator_key,
       score: row.score,
       source: row.source || 'battery_test',
       updated_at: row.updated_at
@@ -323,11 +432,205 @@ export async function saveCombineResultsAndSync({
   };
 }
 
+/**
+ * Persist Master Test Library session entries to `public.athlete_test_sessions`
+ * and atomically aggregate + upsert `public.athlete_indicator_scores` (source = 'battery_test')
+ * so the Athlete Polar Area Chart updates in real time.
+ */
+export async function saveMasterAssessmentSessionAndSync({
+  tenantId,
+  athleteId,
+  evaluatorId = null,
+  testingDate = null,
+  tier = 2,
+  sessionEntries = []
+}) {
+  if (!tenantId || !athleteId) {
+    throw new Error('Tenant ID dan Atlet wajib dipilih sebelum menyimpan sesi penilaian.');
+  }
+  if (!Array.isArray(sessionEntries) || sessionEntries.length === 0) {
+    throw new Error('Minimal satu hasil tes pada Master Library harus diisi sebelum sinkronisasi.');
+  }
+
+  const finalDate = toDateOrNull(testingDate) || new Date().toISOString().split('T')[0];
+  const nowIso = new Date().toISOString();
+
+  const normalizedSessions = sessionEntries.map((item) => {
+    const code = item.test_code || item.testCode || item.testId;
+    const testMeta = resolveMasterFootballTest(code);
+    const calculated =
+      item.calculated_score !== undefined && item.calculated_score !== null
+        ? Math.max(1, Math.min(100, Math.round(Number(item.calculated_score))))
+        : calculateAssessmentScore({
+            testCode: code,
+            tier,
+            rawValues: item,
+            testMeta
+          });
+
+    if (calculated === null || !Number.isFinite(calculated)) {
+      throw new Error(`Skor tes "${testMeta?.test_name || code}" belum valid.`);
+    }
+
+    const indicatorKey = item.indicator_key || item.indicatorKey || testMeta?.indicator_key;
+    if (!indicatorKey) {
+      throw new Error(`Indikator tidak ditemukan untuk kode tes ${code}.`);
+    }
+
+    const raw1 = Number(item.raw_value_1);
+    const raw2 =
+      item.raw_value_2 !== '' && item.raw_value_2 !== null && item.raw_value_2 !== undefined
+        ? Number(item.raw_value_2)
+        : null;
+    const errs = Math.max(0, parseInt(item.errors_count ?? 0, 10) || 0);
+
+    return {
+      test_code: testMeta?.test_code || code,
+      test_name: testMeta?.test_name || code,
+      indicator_key: indicatorKey,
+      indicator_label:
+        item.indicator_label ||
+        testMeta?.indicator_label ||
+        UNIFIED_INDICATOR_LABELS[indicatorKey] ||
+        indicatorKey,
+      weight: Number(testMeta?.weight) > 0 ? Number(testMeta.weight) : 1.0,
+      raw_value_1: Number.isFinite(raw1) ? raw1 : 0,
+      raw_value_2: raw2 !== null && Number.isFinite(raw2) ? raw2 : null,
+      errors_count: errs,
+      calculated_score: calculated,
+      testing_date: finalDate
+    };
+  });
+
+  // Aggregate multi-test indicators (e.g., TEC05 + TEC06 -> 'dribbling', TEC07 + TEC08 -> 'finishing')
+  const aggregatedIndicatorsMap = aggregateIndicatorScores(normalizedSessions);
+  const aggregatedList = Object.values(aggregatedIndicatorsMap);
+
+  // Demo mode persistence
+  if (isDemoCombineContext(tenantId, athleteId)) {
+    const sessionsKey = `${DEMO_SESSIONS_STORAGE_PREFIX}${tenantId}_${athleteId}`;
+    const indicatorsKey = `${DEMO_INDICATOR_STORAGE_PREFIX}${tenantId}_${athleteId}`;
+
+    const existingSessions = readLocalJson(sessionsKey, []);
+    const newSessionRows = normalizedSessions.map((entry, idx) => ({
+      id: `demo-sess-${Date.now()}-${idx}`,
+      tenant_id: tenantId,
+      athlete_id: athleteId,
+      evaluator_id: evaluatorId || 'demo-coach',
+      test_code: entry.test_code,
+      raw_value_1: entry.raw_value_1,
+      raw_value_2: entry.raw_value_2,
+      errors_count: entry.errors_count,
+      calculated_score: entry.calculated_score,
+      testing_date: entry.testing_date,
+      created_at: nowIso
+    }));
+    writeLocalJson(sessionsKey, [...newSessionRows, ...existingSessions].slice(0, 150));
+
+    const existingIndicators = readLocalJson(indicatorsKey, {});
+    const updatedIndicators = { ...existingIndicators };
+    aggregatedList.forEach((agg) => {
+      updatedIndicators[agg.indicator_key] = {
+        id: updatedIndicators[agg.indicator_key]?.id || `demo-ind-${agg.indicator_key}`,
+        tenant_id: tenantId,
+        athlete_id: athleteId,
+        indicator_key: agg.indicator_key,
+        indicator_label: agg.indicator_label,
+        score: agg.score,
+        test_codes: agg.test_codes,
+        tests_count: agg.tests_count,
+        source: 'battery_test',
+        updated_at: nowIso
+      };
+    });
+    writeLocalJson(indicatorsKey, updatedIndicators);
+
+    return {
+      savedSessions: newSessionRows,
+      aggregatedIndicators: aggregatedIndicatorsMap,
+      indicatorScoresMap: updatedIndicators
+    };
+  }
+
+  // Real Supabase persistence
+  const safeEvaluatorId = toUuidOrNull(evaluatorId);
+  const sessionPayload = normalizedSessions.map((entry) => ({
+    tenant_id: tenantId,
+    athlete_id: athleteId,
+    evaluator_id: safeEvaluatorId,
+    test_code: entry.test_code,
+    raw_value_1: entry.raw_value_1,
+    raw_value_2: entry.raw_value_2,
+    errors_count: entry.errors_count,
+    calculated_score: entry.calculated_score,
+    testing_date: entry.testing_date
+  }));
+
+  const { data: insertedSessions, error: insertError } = await supabase
+    .from('athlete_test_sessions')
+    .insert(sessionPayload)
+    .select();
+
+  if (insertError) {
+    console.error('[scoutingCombineService] athlete_test_sessions insert error:', insertError);
+    throw insertError;
+  }
+
+  const indicatorPayload = aggregatedList.map((agg) => ({
+    tenant_id: tenantId,
+    athlete_id: athleteId,
+    indicator_key: agg.indicator_key,
+    score: agg.score,
+    source: 'battery_test',
+    updated_at: nowIso
+  }));
+
+  const { data: upsertedIndicators, error: upsertError } = await supabase
+    .from('athlete_indicator_scores')
+    .upsert(indicatorPayload, {
+      onConflict: 'tenant_id,athlete_id,indicator_key'
+    })
+    .select();
+
+  if (upsertError) {
+    console.error('[scoutingCombineService] athlete_indicator_scores upsert error:', upsertError);
+    throw upsertError;
+  }
+
+  const latestMap = await getAthleteIndicatorScores(tenantId, athleteId);
+  (upsertedIndicators || []).forEach((row) => {
+    const aggMeta = aggregatedIndicatorsMap[row.indicator_key];
+    latestMap[row.indicator_key] = {
+      id: row.id,
+      indicator_key: row.indicator_key,
+      indicator_label:
+        aggMeta?.indicator_label ||
+        UNIFIED_INDICATOR_LABELS[row.indicator_key] ||
+        row.indicator_key,
+      score: row.score,
+      test_codes: aggMeta?.test_codes || [],
+      tests_count: aggMeta?.tests_count || 1,
+      source: row.source || 'battery_test',
+      updated_at: row.updated_at
+    };
+  });
+
+  return {
+    savedSessions: insertedSessions || [],
+    aggregatedIndicators: aggregatedIndicatorsMap,
+    indicatorScoresMap: latestMap
+  };
+}
+
 const scoutingCombineService = {
   getTestsCatalog,
+  getMasterFootballCatalog,
   getAthleteIndicatorScores,
   getAthleteTestResults,
-  saveCombineResultsAndSync
+  getAthleteTestSessions,
+  saveCombineResultsAndSync,
+  saveMasterAssessmentSessionAndSync
 };
 
 export default scoutingCombineService;
+

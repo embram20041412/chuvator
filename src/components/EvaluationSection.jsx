@@ -115,8 +115,15 @@ import AssessmentIndicatorsAccordion from './AssessmentIndicatorsAccordion';
 import AthleteAssessmentEditView from './AthleteAssessmentEditView';
 import ScoutingCombineHub from './ScoutingCombineHub';
 import RubricAssessmentSheet from './RubricAssessmentSheet';
+import FootballAssessmentHub from './FootballAssessmentHub';
 import scoutingCombineService from '../services/scoutingCombineService';
 import { INDICATOR_KEY_TO_LABEL } from '../utils/combineScoringEngine';
+import { MASTER_INDICATOR_KEY_TO_LABEL } from '../utils/footballAssessmentEngine';
+
+const ALL_FOOTBALL_INDICATOR_LABELS = {
+  ...INDICATOR_KEY_TO_LABEL,
+  ...MASTER_INDICATOR_KEY_TO_LABEL
+};
 import {
   MobileEvaluationContextBar,
   MobileScoreHeroCard,
@@ -3045,7 +3052,7 @@ function FootballAssessmentView({
 
   // Scores state: { [indicatorName]: number }
   const [scores, setScores] = useState({});
-  const [footballMode, setFootballMode] = useState('report'); // 'report' | 'combine' | 'rubric'
+  const [footballMode, setFootballMode] = useState('report'); // 'report' | 'master' | 'combine' | 'rubric'
   const [athleteIndicatorRecords, setAthleteIndicatorRecords] = useState({});
   const [coachNote, setCoachNote] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -3057,7 +3064,7 @@ function FootballAssessmentView({
     const mapped = {};
     Object.entries(athleteIndicatorRecords || {}).forEach(([key, rec]) => {
       if (!rec) return;
-      const label = rec.indicator_label || INDICATOR_KEY_TO_LABEL[key] || key;
+      const label = rec.indicator_label || ALL_FOOTBALL_INDICATOR_LABELS[key] || key;
       mapped[label] = {
         ...rec,
         indicator_key: key,
@@ -3089,7 +3096,7 @@ function FootballAssessmentView({
       const merged = { ...prev };
       Object.entries(nextMap).forEach(([key, rec]) => {
         if (!rec) return;
-        const label = rec.indicator_label || INDICATOR_KEY_TO_LABEL[key];
+        const label = rec.indicator_label || ALL_FOOTBALL_INDICATOR_LABELS[key];
         if (label && Number.isFinite(Number(rec.score))) {
           merged[label] = Math.max(1, Math.min(100, Math.round(Number(rec.score))));
         }
@@ -3202,7 +3209,7 @@ function FootballAssessmentView({
             const merged = { ...prev };
             Object.entries(indicatorMap).forEach(([key, rec]) => {
               if (!rec) return;
-              const label = rec.indicator_label || INDICATOR_KEY_TO_LABEL[key];
+              const label = rec.indicator_label || ALL_FOOTBALL_INDICATOR_LABELS[key];
               if (label && Number.isFinite(Number(rec.score))) {
                 merged[label] = Math.max(1, Math.min(100, Math.round(Number(rec.score))));
               }
@@ -3576,8 +3583,8 @@ function FootballAssessmentView({
 
             {selectedStudent && (
               <>
-                {/* Mode Switcher (Rapor Polar Area / Scouting Combine / Rubrik) */}
-                <div className="grid grid-cols-3 gap-1.5 p-1 bg-white rounded-2xl border border-[#E7EBF2] shadow-2xs">
+                {/* Mode Switcher (Rapor Polar Area / Master Library / Scouting Combine / Rubrik) */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 p-1 bg-white rounded-2xl border border-[#E7EBF2] shadow-2xs">
                   <button
                     type="button"
                     data-testid="football-mode-report"
@@ -3589,6 +3596,18 @@ function FootballAssessmentView({
                     }`}
                   >
                     Rapor Polar
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="football-mode-master"
+                    onClick={() => setFootballMode('master')}
+                    className={`min-h-[44px] px-2 py-1.5 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer ${
+                      footballMode === 'master'
+                        ? 'bg-[#354944] text-white border-b-2 border-[#C89D32] shadow-2xs'
+                        : 'text-[#68758B]'
+                    }`}
+                  >
+                    Master Library
                   </button>
                   <button
                     type="button"
@@ -3616,7 +3635,24 @@ function FootballAssessmentView({
                   </button>
                 </div>
 
-                {footballMode === 'combine' ? (
+                {footballMode === 'master' ? (
+                  <FootballAssessmentHub
+                    tenantId={tenantId}
+                    evaluatorId={selectedClass?.coachId || null}
+                    athletes={students.map((s) => ({
+                      ...s,
+                      name: s.studentName || s.name
+                    }))}
+                    selectedAthleteId={selectedStudent.id}
+                    selectedTier={activeTier}
+                    onSelectTier={handleSelectTierFromCombine}
+                    selectedPosition={selectedPosition}
+                    existingIndicatorScores={athleteIndicatorRecords}
+                    onSyncedToReport={(map) => {
+                      handleCombineOrRubricSynced(map);
+                    }}
+                  />
+                ) : footballMode === 'combine' ? (
                   <ScoutingCombineHub
                     students={students}
                     selectedStudentId={selectedStudent.id}
@@ -3940,9 +3976,9 @@ function FootballAssessmentView({
         )}
       </div>
 
-      {/* MODE SWITCHER: RAPOR POLAR AREA vs SCOUTING COMBINE vs RUBRIK 1-5 */}
+      {/* MODE SWITCHER: RAPOR POLAR AREA vs MASTER TEST LIBRARY vs SCOUTING COMBINE vs RUBRIK 1-5 */}
       {selectedStudent && (
-        <div className="bg-white rounded-2xl p-1.5 border border-slate-200/90 shadow-2xs grid grid-cols-3 gap-1.5">
+        <div className="bg-white rounded-2xl p-1.5 border border-slate-200/90 shadow-2xs grid grid-cols-2 lg:grid-cols-4 gap-1.5">
           <button
             type="button"
             data-testid="football-mode-report"
@@ -3959,6 +3995,20 @@ function FootballAssessmentView({
 
           <button
             type="button"
+            data-testid="football-mode-master"
+            onClick={() => setFootballMode('master')}
+            className={`min-h-[44px] px-3 py-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              footballMode === 'master'
+                ? 'bg-[#354944] text-white border-b-2 border-[#C89D32] shadow-xs'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <Sparkles className="w-4 h-4 shrink-0" />
+            <span>Master Test Library</span>
+          </button>
+
+          <button
+            type="button"
             data-testid="football-mode-combine"
             onClick={() => setFootballMode('combine')}
             className={`min-h-[44px] px-3 py-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
@@ -3968,7 +4018,7 @@ function FootballAssessmentView({
             }`}
           >
             <Timer className="w-4 h-4 shrink-0" />
-            <span>Scouting Combine (Teknik &amp; Fisik)</span>
+            <span>Scouting Combine</span>
           </button>
 
           <button
@@ -3987,7 +4037,26 @@ function FootballAssessmentView({
         </div>
       )}
 
-      {/* 2. FORM PENILAIAN ATHLETE ASSESSMENT WORKSPACE / SCOUTING COMBINE / RUBRIK */}
+      {/* 2. FORM PENILAIAN ATHLETE ASSESSMENT WORKSPACE / MASTER TEST LIBRARY / SCOUTING COMBINE / RUBRIK */}
+      {selectedStudent && footballMode === 'master' && (
+        <FootballAssessmentHub
+          tenantId={tenantId}
+          evaluatorId={selectedClass?.coachId || null}
+          athletes={students.map((s) => ({
+            ...s,
+            name: s.studentName || s.name
+          }))}
+          selectedAthleteId={selectedStudent.id}
+          selectedTier={activeTier}
+          onSelectTier={handleSelectTierFromCombine}
+          selectedPosition={selectedPosition}
+          existingIndicatorScores={athleteIndicatorRecords}
+          onSyncedToReport={(map) => {
+            handleCombineOrRubricSynced(map);
+          }}
+        />
+      )}
+
       {selectedStudent && footballMode === 'combine' && (
         <ScoutingCombineHub
           students={students}
