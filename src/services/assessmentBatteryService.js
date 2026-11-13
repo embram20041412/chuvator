@@ -27,6 +27,11 @@
 import { supabase } from '../config/supabase.js';
 import { validateAndComputeTestBatteryEntry } from '../utils/testBatteryValidator.js';
 import { getTestDefinitionById } from '../config/footballTestBatteryCatalog.js';
+import {
+  convertTestResultToIndicatorScore,
+  recalculateRecordScoreWithCalibration,
+  SCORE_CALIBRATION_STATUS
+} from './assessmentScoreConverter.js';
 
 export const EXPLICIT_DEMO_TENANT_ID = 'demo-tenant-1';
 const DEMO_LOCAL_STORE_KEY = 'chuvator_demo_only_test_results_v1::demo-tenant-1';
@@ -329,11 +334,13 @@ export function formatDatabasePersistenceError(error, actionLabel = 'memproses d
 /**
  * Memetakan baris database/store (`snake_case`) menjadi objek aplikasi (`camelCase`)
  */
-export function mapTestResultRowToModel(row, persistenceSource = 'SUPABASE_DB') {
+export function mapTestResultRowToModel(row, persistenceSource = 'SUPABASE_DB', options = {}) {
   if (!row) return null;
   const testDef = getTestDefinitionById(row.test_id);
+  const rawDerivedMetrics =
+    row.derived_metrics && typeof row.derived_metrics === 'object' ? row.derived_metrics : {};
 
-  return {
+  const mappedModel = {
     id: row.id,
     tenantId: row.tenant_id,
     academyId: row.academy_id || null,
@@ -354,19 +361,29 @@ export function mapTestResultRowToModel(row, persistenceSource = 'SUPABASE_DB') 
 
     testDate: row.test_date,
     inputSchemaType: row.input_schema_type,
-    trials: Array.isArray(row.trials) ? row.trials : [],
-    auxiliaryInputs: row.auxiliary_inputs && typeof row.auxiliary_inputs === 'object' ? row.auxiliary_inputs : {},
+    trials: Array.isArray(row.trials) ? row.trials.map((t) => ({ ...t })) : [],
+    auxiliaryInputs:
+      row.auxiliary_inputs && typeof row.auxiliary_inputs === 'object'
+        ? { ...row.auxiliary_inputs }
+        : {},
 
-    finalRawValue: row.final_raw_value !== null && row.final_raw_value !== undefined ? Number(row.final_raw_value) : null,
+    finalRawValue:
+      row.final_raw_value !== null && row.final_raw_value !== undefined
+        ? Number(row.final_raw_value)
+        : null,
     finalUnit: row.final_unit,
     finalDisplayValue: row.final_display_value,
     aggregationMethod: row.aggregation_method,
-    derivedMetrics: row.derived_metrics && typeof row.derived_metrics === 'object' ? row.derived_metrics : {},
+    derivedMetrics: rawDerivedMetrics,
+    scoreConversion: rawDerivedMetrics.scoreConversion || null,
 
     attemptStatus: row.attempt_status || 'VALID',
-    calibrationStatus: row.calibration_status || 'PENDING_CALIBRATION',
+    calibrationStatus: row.calibration_status || SCORE_CALIBRATION_STATUS.PENDING_CALIBRATION,
     mappingReadiness: testDef?.mappingReadiness || 'READY_FOR_CALIBRATION',
-    convertedScore: row.converted_score !== null && row.converted_score !== undefined ? Number(row.converted_score) : null,
+    convertedScore:
+      row.converted_score !== null && row.converted_score !== undefined
+        ? Number(row.converted_score)
+        : null,
 
     notes: row.notes || '',
     surfaceCondition: row.surface_condition || 'Rumput Alami Standar',
@@ -375,6 +392,20 @@ export function mapTestResultRowToModel(row, persistenceSource = 'SUPABASE_DB') 
     updatedAt: row.updated_at,
     persistenceSource
   };
+
+  if (options?.calibrationConfig) {
+    const recalculated = recalculateRecordScoreWithCalibration(
+      mappedModel,
+      options.calibrationConfig,
+      options.calibrationContext || {}
+    );
+    return {
+      ...recalculated,
+      scoreConversion: recalculated.derivedMetrics?.scoreConversion || null
+    };
+  }
+
+  return mappedModel;
 }
 
 /**
@@ -415,6 +446,40 @@ export async function saveAthleteTestResult(authContext, entryPayload, options =
   }
 
   const norm = validation.normalizedRecord;
+
+  // 4B. Jalankan Score Conversion Engine (Task 03.2: TST-SPR-10M -> Skor 1–100 jika kalibrasi tersedia)
+  // Fakta pengukuran mentah (`norm.finalRawValue` & `norm.trials`) TIDAK diubah.
+  const conversionResult = convertTestResultToIndicatorScore(
+    {
+      testId: norm.testId,
+      indicatorId: norm.indicatorId,
+      finalRawValue: norm.finalRawValue,
+      finalUnit: norm.finalUnit,
+      developmentTier: entryPayload.developmentTier || null,
+      ageGroup: entryPayload.ageGroup || null
+    },
+    {
+      calibrationConfig: options.calibrationConfig,
+      directCalibrationParams: options.directCalibrationParams
+    }
+  );
+
+  const enrichedDerivedMetrics = {
+    ...(norm.derivedMetrics || {}),
+    scoreConversion: {
+      isSupportedTest: Boolean(conversionResult.isSupportedTest),
+      isCalibrated: Boolean(conversionResult.isCalibrated),
+      calibrationStatus:
+        conversionResult.calibrationStatus || SCORE_CALIBRATION_STATUS.PENDING_CALIBRATION,
+      convertedScore: conversionResult.convertedScore ?? null,
+      unroundedScore: conversionResult.unroundedScore ?? null,
+      matchedScopeType: conversionResult.matchedScopeType || null,
+      matchedScopeKey: conversionResult.matchedScopeKey || null,
+      calibrationParameters: conversionResult.calibrationParameters || null,
+      formulaExpression: conversionResult.formulaExpression || null
+    }
+  };
+
   const nowIso = new Date().toISOString();
   const generatedId =
     typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
@@ -445,18 +510,20 @@ export async function saveAthleteTestResult(authContext, entryPayload, options =
 
     test_date: norm.testDate,
     input_schema_type: norm.inputSchemaType,
-    trials: norm.trials,
-    auxiliary_inputs: norm.auxiliaryInputs,
+    trials: norm.trials.map((t) => ({ ...t })),
+    auxiliary_inputs: { ...(norm.auxiliaryInputs || {}) },
 
     final_raw_value: norm.finalRawValue,
     final_unit: norm.finalUnit,
     final_display_value: norm.finalDisplayValue,
     aggregation_method: norm.aggregationMethod,
-    derived_metrics: norm.derivedMetrics,
+    derived_metrics: enrichedDerivedMetrics,
 
     attempt_status: norm.attemptStatus,
-    calibration_status: 'PENDING_CALIBRATION',
-    converted_score: null,
+    calibration_status:
+      conversionResult.calibrationStatus || SCORE_CALIBRATION_STATUS.PENDING_CALIBRATION,
+    converted_score:
+      conversionResult.convertedScore !== undefined ? conversionResult.convertedScore : null,
 
     notes: typeof entryPayload.notes === 'string' ? entryPayload.notes.trim() : '',
     surface_condition:
@@ -555,7 +622,7 @@ export async function getAthleteTestResults(authContext, studentId, options = {}
       return String(b.created_at || '').localeCompare(String(a.created_at || ''));
     });
 
-    return sortedDemo.map((r) => mapTestResultRowToModel(r, 'DEMO_LOCAL_STORAGE'));
+    return sortedDemo.map((r) => mapTestResultRowToModel(r, 'DEMO_LOCAL_STORAGE', options));
   }
 
   // MODE TENANT RIIL: HANYA BACA DARI SUPABASE
@@ -591,7 +658,7 @@ export async function getAthleteTestResults(authContext, studentId, options = {}
     (row) => row && String(row.tenant_id).trim() === verifiedTenantId && String(row.student_id).trim() === cleanStudentId
   );
 
-  return safeRows.map((r) => mapTestResultRowToModel(r, 'SUPABASE_DB'));
+  return safeRows.map((r) => mapTestResultRowToModel(r, 'SUPABASE_DB', options));
 }
 
 /**

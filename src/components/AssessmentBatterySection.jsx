@@ -46,6 +46,11 @@ import {
   isExplicitDemoSession
 } from '../services/assessmentBatteryService.js';
 
+import {
+  convertTestResultToIndicatorScore,
+  SUPPORTED_CONVERTER_TESTS
+} from '../services/assessmentScoreConverter.js';
+
 /**
  * Menentukan Development Tier atlet dari kelas aktif atau usia atlet
  */
@@ -112,7 +117,8 @@ export default function AssessmentBatterySection({
   initialStudent = null,
   initialTestId = null,
   singleStudentMode = false,
-  onSavedResult = null
+  onSavedResult = null,
+  calibrationConfig = null
 }) {
   const tenantId = userProfile?.tenantId || userProfile?.tenant_id || '';
   const isSuperAdminAccount =
@@ -288,6 +294,24 @@ export default function AssessmentBatterySection({
     return validateAndComputeTestBatteryEntry(entryDraft);
   }, [entryDraft]);
 
+  // Pratinjau konversi skor 1–100 (Task 03.2: TST-SPR-10M -> FTB-UNI-PHY-01)
+  const liveScoreConversionPreview = useMemo(() => {
+    if (!livePreviewValidation?.isValid || !livePreviewValidation?.normalizedRecord) {
+      return null;
+    }
+    const norm = livePreviewValidation.normalizedRecord;
+    return convertTestResultToIndicatorScore(
+      {
+        testId: norm.testId,
+        indicatorId: norm.indicatorId,
+        finalRawValue: norm.finalRawValue,
+        finalUnit: norm.finalUnit,
+        developmentTier: activeTierKey
+      },
+      { calibrationConfig: calibrationConfig || undefined }
+    );
+  }, [livePreviewValidation, activeTierKey, calibrationConfig]);
+
   // Pratinjau khusus Bleep Test saat Level & Shuttle diisi
   const liveBleepPreview = useMemo(() => {
     if (activeTestDef?.inputSchemaType !== TEST_INPUT_SCHEMA_TYPES.BLEEP_SHUTTLE_LEVEL) return null;
@@ -376,24 +400,33 @@ export default function AssessmentBatterySection({
 
     setIsSaving(true);
     try {
-      const saved = await saveAthleteTestResult(userProfile, {
-        ...entryDraft,
-        academyId: activeAcademy?.id || activeStudent?.academyId || null,
-        classId: selectedClass?.id || activeStudent?.classId || null,
-        studentId: activeStudent.id,
-        studentTenantId: activeStudent.tenantId || activeStudent.tenant_id || tenantId,
-        developmentTier: activeTierKey,
-        positionCode: activePositionCode
-      });
+      const saved = await saveAthleteTestResult(
+        userProfile,
+        {
+          ...entryDraft,
+          academyId: activeAcademy?.id || activeStudent?.academyId || null,
+          classId: selectedClass?.id || activeStudent?.classId || null,
+          studentId: activeStudent.id,
+          studentTenantId: activeStudent.tenantId || activeStudent.tenant_id || tenantId,
+          developmentTier: activeTierKey,
+          positionCode: activePositionCode
+        },
+        { calibrationConfig: calibrationConfig || undefined }
+      );
 
       const persistenceLabel =
         saved.persistenceSource === 'DEMO_LOCAL_STORAGE'
           ? 'Mode Pratinjau Demo (Browser Lokal)'
           : 'Database Supabase Tenant';
 
+      const scoreSummaryText =
+        saved.convertedScore !== null && saved.convertedScore !== undefined
+          ? `Skor Indikator: ${saved.convertedScore}/100 (${saved.calibrationStatus})`
+          : `status ${saved.calibrationStatus} (Skor 1–100: Belum Terkalibrasi)`;
+
       setSaveFeedback({
         type: 'success',
-        message: `Hasil ${activeTestDef.shortName} (${saved.finalDisplayValue}) berhasil disimpan ke ${persistenceLabel} untuk ${activeStudent.studentName || activeStudent.name} dengan status PENDING_CALIBRATION.`
+        message: `Hasil ${activeTestDef.shortName} (${saved.finalDisplayValue}) berhasil disimpan ke ${persistenceLabel} untuk ${activeStudent.studentName || activeStudent.name} dengan ${scoreSummaryText}.`
       });
 
       // Reset input nilai percobaan agar siap untuk pencatatan berikutnya
@@ -741,9 +774,18 @@ export default function AssessmentBatterySection({
                     <span className="rounded-md bg-white/10 px-2 py-0.5 font-mono text-xs text-slate-200">
                       Indikator: {activeTestDef.indicatorId}
                     </span>
-                    <span className="rounded-md bg-amber-500/20 border border-amber-400/40 px-2 py-0.5 font-mono text-[11px] font-semibold text-amber-200">
-                      PENDING_CALIBRATION
-                    </span>
+                    {SUPPORTED_CONVERTER_TESTS[activeTestDef.testId] ? (
+                      <span
+                        data-testid="converter-engine-active-badge"
+                        className="rounded-md bg-cyan-500/20 border border-cyan-400/40 px-2 py-0.5 font-mono text-[11px] font-semibold text-cyan-200"
+                      >
+                        CONVERTER ENGINE v1 READY
+                      </span>
+                    ) : (
+                      <span className="rounded-md bg-amber-500/20 border border-amber-400/40 px-2 py-0.5 font-mono text-[11px] font-semibold text-amber-200">
+                        PENDING_CALIBRATION
+                      </span>
+                    )}
                   </div>
                   <span className="text-xs font-semibold text-slate-300">
                     Satuan: <strong className="text-white">{activeTestDef.unitLabel}</strong>
@@ -1065,7 +1107,7 @@ export default function AssessmentBatterySection({
                     </div>
                   )}
 
-                  {/* KARTU PRATINJAU HASIL AKHIR MENTAH OTOMATIS */}
+                  {/* KARTU PRATINJAU HASIL AKHIR MENTAH & KONVERSI SKOR OTOMATIS */}
                   {livePreviewValidation?.isValid && livePreviewValidation.normalizedRecord && (
                     <div
                       data-testid="live-result-preview"
@@ -1086,13 +1128,29 @@ export default function AssessmentBatterySection({
                           </div>
                         )}
                       </div>
-                      <div className="flex flex-col items-start sm:items-end gap-1 shrink-0">
-                        <span className="rounded-md bg-amber-100 border border-amber-300 px-2.5 py-1 font-mono text-[11px] font-bold text-amber-900">
-                          Status: PENDING_CALIBRATION
-                        </span>
-                        <span className="text-[11px] text-slate-600">
-                          Skor 1–100 belum dikonversi (menunggu norma kalibrasi)
-                        </span>
+                      <div className="flex flex-col items-start sm:items-end gap-1 shrink-0" data-testid="live-score-conversion-preview">
+                        {liveScoreConversionPreview?.convertedScore !== null &&
+                        liveScoreConversionPreview?.convertedScore !== undefined ? (
+                          <>
+                            <span className="rounded-md bg-emerald-600 px-2.5 py-1 font-mono text-xs font-extrabold text-white">
+                              Skor Indikator: {liveScoreConversionPreview.convertedScore} / 100 (CALIBRATED)
+                            </span>
+                            <span className="text-[11px] text-emerald-900">
+                              {liveScoreConversionPreview.reason}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="rounded-md bg-amber-100 border border-amber-300 px-2.5 py-1 font-mono text-[11px] font-bold text-amber-900">
+                              Status: {liveScoreConversionPreview?.calibrationStatus || 'PENDING_CALIBRATION'}
+                            </span>
+                            <span className="text-[11px] text-slate-600">
+                              {liveScoreConversionPreview?.isSupportedTest
+                                ? 'Skor 1–100: Belum Terkalibrasi (Menunggu parameter norma acuan tEliteSec & tBaseSec)'
+                                : 'Skor 1–100 belum dikonversi (menunggu norma kalibrasi)'}
+                            </span>
+                          </>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1294,6 +1352,23 @@ export default function AssessmentBatterySection({
                       <div className="font-mono text-base font-extrabold text-emerald-700">
                         {item.finalDisplayValue}
                       </div>
+                    </div>
+                    <div
+                      className="text-right border-l border-slate-200 pl-3"
+                      data-testid={`history-converted-score-${item.testId}`}
+                    >
+                      <div className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
+                        Skor Indikator (1–100)
+                      </div>
+                      {item.convertedScore !== null && item.convertedScore !== undefined ? (
+                        <div className="font-mono text-base font-extrabold text-cyan-700">
+                          {item.convertedScore} / 100
+                        </div>
+                      ) : (
+                        <div className="font-mono text-xs font-bold text-amber-800">
+                          Belum Terkalibrasi
+                        </div>
+                      )}
                     </div>
                     <button
                       type="button"

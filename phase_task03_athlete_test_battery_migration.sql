@@ -51,11 +51,11 @@ CREATE TABLE IF NOT EXISTS public.athlete_test_results (
     derived_metrics JSONB NOT NULL DEFAULT '{}'::jsonb
         CHECK (jsonb_typeof(derived_metrics) = 'object'),
 
-    -- Status Validitas & Kalibrasi (Fase 1: Tanpa Konversi Skor Fiktif)
+    -- Status Validitas & Kalibrasi (Mendukung PENDING_CALIBRATION maupun CALIBRATED saat norma tersedia)
     attempt_status TEXT NOT NULL DEFAULT 'VALID'
         CHECK (attempt_status IN ('VALID', 'PARTIAL_VALID')),
     calibration_status TEXT NOT NULL DEFAULT 'PENDING_CALIBRATION'
-        CHECK (calibration_status IN ('PENDING_CALIBRATION', 'READY_FOR_CALIBRATION', 'NEEDS_FURTHER_DESIGN')),
+        CHECK (calibration_status IN ('PENDING_CALIBRATION', 'CALIBRATED', 'READY_FOR_CALIBRATION', 'NEEDS_FURTHER_DESIGN')),
     converted_score NUMERIC NULL
         CHECK (converted_score IS NULL OR (converted_score >= 1 AND converted_score <= 100)),
 
