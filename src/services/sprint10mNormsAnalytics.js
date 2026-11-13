@@ -155,7 +155,7 @@ export function extractRecordMeasurementMethod(record) {
 
   if (!raw || typeof raw !== 'string') return null;
   const upper = raw.trim().toUpperCase();
-  if (!upper) return null;
+  if (!upper || !isStandardMeasurementMethod(upper)) return null;
   return upper;
 }
 
@@ -562,7 +562,9 @@ export function recapitulateSprint10mRawData(records = [], options = {}) {
     if (!Number.isFinite(rawVal) || rawVal <= 0) return false;
 
     const extractedMethod = extractRecordMeasurementMethod(rec);
-    const recMethod = extractedMethod || UNSPECIFIED_MEASUREMENT_METHOD;
+    const recMethod = isStandardMeasurementMethod(extractedMethod)
+      ? extractedMethod
+      : UNSPECIFIED_MEASUREMENT_METHOD;
     if (measurementMethod && measurementMethod !== 'ALL') {
       const normalizedFilterMethod =
         String(measurementMethod).trim().toUpperCase() === 'NULL'
@@ -615,7 +617,10 @@ export function recapitulateSprint10mRawData(records = [], options = {}) {
     const fallbackStudent = studentsByIdMap?.[stuId] || null;
     const recAgeGroup = extractRecordAgeGroup(rec, fallbackStudent);
     const recTier = String(rec.developmentTier || rec.development_tier || 'UNSPECIFIED_TIER').trim();
-    const recMethod = extractRecordMeasurementMethod(rec) || UNSPECIFIED_MEASUREMENT_METHOD;
+    const extractedMethod = extractRecordMeasurementMethod(rec);
+    const recMethod = isStandardMeasurementMethod(extractedMethod)
+      ? extractedMethod
+      : UNSPECIFIED_MEASUREMENT_METHOD;
     const recDate = String(rec.testDate || rec.test_date || '').trim();
     const recPeriod = recDate.length >= 7 ? recDate.slice(0, 7) : 'UNKNOWN_PERIOD';
     const rawVal = Number(rec.finalRawValue ?? rec.final_raw_value);
@@ -739,7 +744,10 @@ export function recapitulateAssessmentBatteryRawData(records = [], options = {})
     const rawVal = Number(rec.finalRawValue ?? rec.final_raw_value);
     if (!Number.isFinite(rawVal) || rawVal <= 0) return false;
 
-    const recMethod = extractRecordMeasurementMethod(rec) || UNSPECIFIED_MEASUREMENT_METHOD;
+    const extractedMethod = extractRecordMeasurementMethod(rec);
+    const recMethod = isStandardMeasurementMethod(extractedMethod)
+      ? extractedMethod
+      : UNSPECIFIED_MEASUREMENT_METHOD;
     if (normalizedFilterMethod !== 'ALL' && recMethod !== normalizedFilterMethod) {
       return false;
     }
@@ -786,7 +794,10 @@ export function recapitulateAssessmentBatteryRawData(records = [], options = {})
     const fallbackStudent = studentsByIdMap?.[stuId] || null;
     const recAgeGroup = extractRecordAgeGroup(rec, fallbackStudent);
     const recTier = String(rec.developmentTier || rec.development_tier || 'UNSPECIFIED_TIER').trim();
-    const recMethod = extractRecordMeasurementMethod(rec) || UNSPECIFIED_MEASUREMENT_METHOD;
+    const extractedMethod = extractRecordMeasurementMethod(rec);
+    const recMethod = isStandardMeasurementMethod(extractedMethod)
+      ? extractedMethod
+      : UNSPECIFIED_MEASUREMENT_METHOD;
     const recDate = String(rec.testDate || rec.test_date || '').trim();
     const recPeriod = recDate.length >= 7 ? recDate.slice(0, 7) : 'UNKNOWN_PERIOD';
     const rawVal = Number(rec.finalRawValue ?? rec.final_raw_value);

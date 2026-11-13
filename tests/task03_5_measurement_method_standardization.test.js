@@ -609,3 +609,89 @@ test('Task 03.5 (6): Paket SQL Task 03.5 bersifat aditif, non-destruktif terhada
   assert.ok(verifySqlNoComments.includes('ROLLBACK;'));
   assert.equal(/\bCOMMIT\s*;/i.test(verifySqlNoComments), false);
 });
+
+test('Task 03.5.1 (Audit): Metode tidak dikenal tidak pernah lolos ke model/rekapitulasi & SQL Task 03.5/03.4 menegakkan record baru non-NULL tanpa mengubah legacy NULL', () => {
+  // 1. Legacy record dengan metadata JSONB non-standar (mis. HAND_TIMER_LEGACY) harus ternormalisasi menjadi null / UNSPECIFIED
+  const legacyUnknownRow = {
+    id: 'leg-unknown-1',
+    tenant_id: 'tenant-audit',
+    student_id: 'stu-audit-1',
+    test_id: 'TST-SPR-10M',
+    indicator_id: 'FTB-UNI-PHY-01',
+    test_date: '2026-11-13',
+    measurement_method: null,
+    derived_metrics: { measurementMethod: 'HAND_TIMER_LEGACY' },
+    auxiliary_inputs: {},
+    final_raw_value: 2.17,
+    final_unit: 's',
+    final_display_value: '2.17 s',
+    calibration_status: 'PENDING_CALIBRATION',
+    converted_score: null,
+    created_at: '2026-11-13T09:00:00Z'
+  };
+
+  assert.equal(extractRecordMeasurementMethod(legacyUnknownRow), null);
+  const mappedUnknown = mapTestResultRowToModel(legacyUnknownRow, 'SUPABASE_DB');
+  assert.equal(mappedUnknown.measurementMethod, null);
+
+  const sprRecap = recapitulateSprint10mRawData([mappedUnknown], {
+    expectedTenantId: 'tenant-audit'
+  });
+  assert.equal(sprRecap.totalMatchingRecords, 1);
+  assert.equal(sprRecap.groups[0].measurementMethod, UNSPECIFIED_MEASUREMENT_METHOD);
+
+  const allRecap = recapitulateAssessmentBatteryRawData([legacyUnknownRow], {
+    expectedTenantId: 'tenant-audit'
+  });
+  assert.equal(allRecap.totalMatchingRecords, 1);
+  assert.equal(allRecap.groups[0].measurementMethod, UNSPECIFIED_MEASUREMENT_METHOD);
+  assert.equal(allRecap.groups[0].isMethodSpecified, false);
+
+  // 2. Audit SQL Task 03.5 & sinkronisasi Task 03.4
+  const sql035Dir = path.resolve(process.cwd(), 'docs/assessment/sql/task03_5');
+  const sql034Dir = path.resolve(process.cwd(), 'docs/assessment/sql/task03_4');
+
+  const mig035 = fs.readFileSync(
+    path.join(sql035Dir, '01_task03_5_measurement_method_standardization.sql'),
+    'utf8'
+  );
+  const trigger034 = fs.readFileSync(
+    path.join(sql034Dir, '03_security_functions_and_triggers.sql'),
+    'utf8'
+  );
+  const master034 = fs.readFileSync(
+    path.join(sql034Dir, '00_master_task03_4_assessment_battery_migration.sql'),
+    'utf8'
+  );
+  const rollback034 = fs.readFileSync(
+    path.join(sql034Dir, '07_rollback_plan.sql'),
+    'utf8'
+  );
+
+  for (const [label, sql] of [
+    ['01_task03_5', mig035],
+    ['03_security_functions_and_triggers', trigger034],
+    ['00_master', master034]
+  ]) {
+    assert.ok(
+      sql.includes('measurement_method wajib diisi dengan metode pengukuran standar yang kompatibel untuk test_id'),
+      `${label}: INSERT baru tanpa metode pada dual-method test wajib ditolak (23514)`
+    );
+    assert.ok(
+      sql.includes('measurement_method yang sudah tercatat tidak boleh dikosongkan menjadi NULL'),
+      `${label}: UPDATE mengosongkan measurement_method non-null menjadi NULL wajib ditolak (23514)`
+    );
+    assert.ok(
+      sql.includes('SECURITY DEFINER') &&
+        sql.includes('SET search_path = public, extensions, pg_temp') &&
+        sql.includes('OWNER TO postgres'),
+      `${label}: keamanan SECURITY DEFINER / search_path / owner postgres wajib utuh`
+    );
+  }
+
+  assert.ok(
+    rollback034.includes('DROP CONSTRAINT IF EXISTS chk_athlete_test_results_measurement_method_compatibility;'),
+    '07_rollback_plan.sql wajib mencakup DROP CONSTRAINT IF EXISTS chk_athlete_test_results_measurement_method_compatibility'
+  );
+});
+

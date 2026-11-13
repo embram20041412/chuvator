@@ -631,12 +631,12 @@ BEGIN
 
     BEGIN
         INSERT INTO public.athlete_test_results (
-            tenant_id, academy_id, class_id, student_id,
+            tenant_id, academy_id, class_id, student_id, measurement_method,
             test_id, indicator_id, indicator_name, category_id,
             test_date, input_schema_type, final_raw_value, final_unit,
             final_display_value, aggregation_method
         ) VALUES (
-            v_tenant_a, v_acad_a, v_class_a1_id, v_stu_a2_id,
+            v_tenant_a, v_acad_a, v_class_a1_id, v_stu_a2_id, 'STOPWATCH_MANUAL',
             'TST-SPR-10M', 'FTB-UNI-PHY-01', 'Akselerasi', 'physical',
             '2026-10-21', 'MULTI_TRIAL_BEST_MIN', 2.01, 's', '2.01 s', 'MIN'
         );
@@ -666,12 +666,12 @@ BEGIN
 
     BEGIN
         INSERT INTO public.athlete_test_results (
-            tenant_id, academy_id, class_id, student_id,
+            tenant_id, academy_id, class_id, student_id, measurement_method,
             test_id, indicator_id, indicator_name, category_id,
             test_date, input_schema_type, final_raw_value, final_unit,
             final_display_value, aggregation_method
         ) VALUES (
-            v_tenant_a, v_acad_a, v_class_a1_id, v_stu_a1_id,
+            v_tenant_a, v_acad_a, v_class_a1_id, v_stu_a1_id, 'STOPWATCH_MANUAL',
             'TST-SPR-10M', 'FTB-UNI-PHY-01', 'Akselerasi', 'physical',
             '2026-10-21', 'MULTI_TRIAL_BEST_MIN', 2.02, 's', '2.02 s', 'MIN'
         );
@@ -693,12 +693,12 @@ BEGIN
 
     BEGIN
         INSERT INTO public.athlete_test_results (
-            tenant_id, academy_id, class_id, student_id,
+            tenant_id, academy_id, class_id, student_id, measurement_method,
             test_id, indicator_id, indicator_name, category_id,
             test_date, input_schema_type, final_raw_value, final_unit,
             final_display_value, aggregation_method
         ) VALUES (
-            v_tenant_a, v_acad_a, v_class_a1_id, v_stu_a1_id,
+            v_tenant_a, v_acad_a, v_class_a1_id, v_stu_a1_id, 'STOPWATCH_MANUAL',
             'TST-SPR-10M', 'FTB-UNI-PHY-01', 'Akselerasi', 'physical',
             '2026-10-21', 'MULTI_TRIAL_BEST_MIN', 2.03, 's', '2.03 s', 'MIN'
         );
@@ -718,12 +718,12 @@ BEGIN
 
     BEGIN
         INSERT INTO public.athlete_test_results (
-            tenant_id, academy_id, class_id, student_id,
+            tenant_id, academy_id, class_id, student_id, measurement_method,
             test_id, indicator_id, indicator_name, category_id,
             test_date, input_schema_type, final_raw_value, final_unit,
             final_display_value, aggregation_method
         ) VALUES (
-            v_tenant_a, v_acad_a, v_class_a1_id, v_stu_a1_id,
+            v_tenant_a, v_acad_a, v_class_a1_id, v_stu_a1_id, 'STOPWATCH_MANUAL',
             'TST-SPR-10M', 'FTB-UNI-PHY-01', 'Akselerasi', 'physical',
             '2026-10-22', 'MULTI_TRIAL_BEST_MIN', 2.00, 's', '2.00 s', 'MIN'
         );
@@ -751,12 +751,12 @@ BEGIN
 
     BEGIN
         INSERT INTO public.athlete_test_results (
-            tenant_id, academy_id, class_id, student_id,
+            tenant_id, academy_id, class_id, student_id, measurement_method,
             test_id, indicator_id, indicator_name, category_id,
             test_date, input_schema_type, final_raw_value, final_unit,
             final_display_value, aggregation_method
         ) VALUES (
-            v_tenant_a, v_acad_a, v_class_a1_id, v_stu_a1_id,
+            v_tenant_a, v_acad_a, v_class_a1_id, v_stu_a1_id, 'STOPWATCH_MANUAL',
             'TST-SPR-10M', 'FTB-UNI-PHY-01', 'Akselerasi', 'physical',
             '2026-10-22', 'MULTI_TRIAL_BEST_MIN', 2.00, 's', '2.00 s', 'MIN'
         );
@@ -784,12 +784,12 @@ BEGIN
 
     BEGIN
         INSERT INTO public.athlete_test_results (
-            tenant_id, academy_id, class_id, student_id,
+            tenant_id, academy_id, class_id, student_id, measurement_method,
             test_id, indicator_id, indicator_name, category_id,
             test_date, input_schema_type, final_raw_value, final_unit,
             final_display_value, aggregation_method
         ) VALUES (
-            v_tenant_a, v_acad_a, v_class_a1_id, v_stu_a1_id,
+            v_tenant_a, v_acad_a, v_class_a1_id, v_stu_a1_id, 'STOPWATCH_MANUAL',
             'TST-SPR-10M', 'FTB-UNI-PHY-01', 'Akselerasi', 'physical',
             '2026-10-23', 'MULTI_TRIAL_BEST_MIN', 2.00, 's', '2.00 s', 'MIN'
         );
@@ -821,12 +821,12 @@ BEGIN
 
     BEGIN
         INSERT INTO public.athlete_test_results (
-            tenant_id, academy_id, class_id, student_id,
+            tenant_id, academy_id, class_id, student_id, measurement_method,
             test_id, indicator_id, indicator_name, category_id,
             test_date, input_schema_type, final_raw_value, final_unit,
             final_display_value, aggregation_method
         ) VALUES (
-            v_tenant_c, v_acad_c, v_class_c1_id, v_stu_c1_id,
+            v_tenant_c, v_acad_c, v_class_c1_id, v_stu_c1_id, 'STOPWATCH_MANUAL',
             'TST-SPR-10M', 'FTB-UNI-PHY-01', 'Akselerasi', 'physical',
             '2026-10-23', 'MULTI_TRIAL_BEST_MIN', 2.00, 's', '2.00 s', 'MIN'
         );
@@ -887,12 +887,12 @@ BEGIN
     PERFORM set_config('request.jwt.claims', json_build_object('sub', v_owner_a_uid, 'role', 'authenticated')::text, true);
     BEGIN
         INSERT INTO public.athlete_test_results (
-            tenant_id, academy_id, class_id, student_id,
+            tenant_id, academy_id, class_id, student_id, measurement_method,
             test_id, indicator_id, indicator_name, category_id,
             test_date, input_schema_type, final_raw_value, final_unit,
             final_display_value, aggregation_method
         ) VALUES (
-            v_tenant_a, v_acad_a, v_class_a1_id, v_stu_b1_id,
+            v_tenant_a, v_acad_a, v_class_a1_id, v_stu_b1_id, 'STOPWATCH_MANUAL',
             'TST-SPR-10M', 'FTB-UNI-PHY-01', 'Akselerasi', 'physical',
             '2026-10-24', 'MULTI_TRIAL_BEST_MIN', 2.00, 's', '2.00 s', 'MIN'
         );
@@ -902,12 +902,12 @@ BEGIN
 
     BEGIN
         INSERT INTO public.athlete_test_results (
-            tenant_id, academy_id, class_id, student_id,
+            tenant_id, academy_id, class_id, student_id, measurement_method,
             test_id, indicator_id, indicator_name, category_id,
             test_date, input_schema_type, final_raw_value, final_unit,
             final_display_value, aggregation_method
         ) VALUES (
-            v_tenant_a, v_acad_a_other, v_class_a1_id, v_stu_a1_id,
+            v_tenant_a, v_acad_a_other, v_class_a1_id, v_stu_a1_id, 'STOPWATCH_MANUAL',
             'TST-SPR-10M', 'FTB-UNI-PHY-01', 'Akselerasi', 'physical',
             '2026-10-24', 'MULTI_TRIAL_BEST_MIN', 2.00, 's', '2.00 s', 'MIN'
         );
@@ -923,12 +923,12 @@ BEGIN
     PERFORM set_config('request.jwt.claims', json_build_object('sub', v_owner_a_uid, 'role', 'authenticated')::text, true);
     BEGIN
         INSERT INTO public.athlete_test_results (
-            tenant_id, academy_id, class_id, student_id, coach_id,
+            tenant_id, academy_id, class_id, student_id, coach_id, measurement_method,
             test_id, indicator_id, indicator_name, category_id,
             test_date, input_schema_type, final_raw_value, final_unit,
             final_display_value, aggregation_method
         ) VALUES (
-            v_tenant_a, v_acad_a, v_class_a1_id, v_stu_a1_id, v_coach_b1_id,
+            v_tenant_a, v_acad_a, v_class_a1_id, v_stu_a1_id, v_coach_b1_id, 'STOPWATCH_MANUAL',
             'TST-SPR-10M', 'FTB-UNI-PHY-01', 'Akselerasi', 'physical',
             '2026-10-24', 'MULTI_TRIAL_BEST_MIN', 2.00, 's', '2.00 s', 'MIN'
         );
@@ -939,12 +939,12 @@ BEGIN
     PERFORM set_config('request.jwt.claims', json_build_object('sub', v_coach_a1_uid::text, 'role', 'authenticated')::text, true);
     BEGIN
         INSERT INTO public.athlete_test_results (
-            tenant_id, academy_id, class_id, student_id, coach_id,
+            tenant_id, academy_id, class_id, student_id, coach_id, measurement_method,
             test_id, indicator_id, indicator_name, category_id,
             test_date, input_schema_type, final_raw_value, final_unit,
             final_display_value, aggregation_method
         ) VALUES (
-            v_tenant_a, v_acad_a, v_class_a1_id, v_stu_a1_id, v_coach_a2_id,
+            v_tenant_a, v_acad_a, v_class_a1_id, v_stu_a1_id, v_coach_a2_id, 'STOPWATCH_MANUAL',
             'TST-SPR-10M', 'FTB-UNI-PHY-01', 'Akselerasi', 'physical',
             '2026-10-24', 'MULTI_TRIAL_BEST_MIN', 2.00, 's', '2.00 s', 'MIN'
         );
@@ -1008,38 +1008,88 @@ BEGIN
     RAISE NOTICE '[PASS] TEST 17: Re-sinkronisasi kolom konteks saat UPDATE derived_metrics terverifikasi';
 
     -- =========================================================================
-    -- TEST 18: SANITASI measurement_method WHITESPACE & LEGACY NONSTANDAR
+    -- TEST 18: STANDARISASI measurement_method RECORD BARU & PELESTARIAN LEGACY NULL
     -- =========================================================================
+    -- 18A. Auto-default whitespace pada tes metode tunggal (TST-AGL-ARW -> STOPWATCH_MANUAL)
     INSERT INTO public.athlete_test_results (
         id, tenant_id, academy_id, class_id, student_id,
         measurement_method,
         test_id, indicator_id, indicator_name, category_id,
         test_date, input_schema_type, final_raw_value, final_unit,
         final_display_value, aggregation_method, derived_metrics
-    ) VALUES
-    (
+    ) VALUES (
         v_res_ws_id, v_tenant_a, v_acad_a, v_class_a1_id, v_stu_a1_id,
         '   ',
-        'TST-SPR-10M', 'FTB-UNI-PHY-01', 'Akselerasi', 'physical',
-        '2026-10-25', 'MULTI_TRIAL_BEST_MIN', 2.18, 's', '2.18 s', 'MIN', '{}'::jsonb
-    ),
-    (
+        'TST-AGL-ARW', 'FTB-UNI-PHY-02', 'Kelincahan', 'physical',
+        '2026-10-25', 'BILATERAL_AVERAGE', 16.20, 's', '16.20 s', 'AVG', '{}'::jsonb
+    );
+
+    SELECT measurement_method INTO v_sync_method FROM public.athlete_test_results WHERE id = v_res_ws_id;
+    IF v_sync_method <> 'STOPWATCH_MANUAL' THEN
+        RAISE EXCEPTION 'FAIL TEST 18A: Whitespace pada tes metode tunggal TST-AGL-ARW harus terstandar menjadi STOPWATCH_MANUAL, aktual: %', v_sync_method;
+    END IF;
+
+    -- 18B. Record legacy NULL pra-migrasi tetap NULL dan tetap NULL saat UPDATE notes
+    PERFORM set_config('role', 'postgres', true);
+    EXECUTE 'ALTER TABLE public.athlete_test_results DISABLE TRIGGER trg_validate_and_protect_athlete_test_results';
+    INSERT INTO public.athlete_test_results (
+        id, tenant_id, academy_id, class_id, student_id,
+        measurement_method,
+        test_id, indicator_id, indicator_name, category_id,
+        test_date, input_schema_type, final_raw_value, final_unit,
+        final_display_value, aggregation_method, derived_metrics
+    ) VALUES (
         v_res_legacy_id, v_tenant_a, v_acad_a, v_class_a1_id, v_stu_a1_id,
         NULL,
         'TST-SPR-10M', 'FTB-UNI-PHY-01', 'Akselerasi', 'physical',
         '2026-10-26', 'MULTI_TRIAL_BEST_MIN', 2.25, 's', '2.25 s', 'MIN',
         '{"measurementMethod":"HAND_TIMER_LEGACY"}'::jsonb
     );
+    EXECUTE 'ALTER TABLE public.athlete_test_results ENABLE TRIGGER trg_validate_and_protect_athlete_test_results';
+    PERFORM set_config('role', 'authenticated', true);
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_owner_a_uid, 'role', 'authenticated')::text, true);
 
-    SELECT measurement_method INTO v_sync_method FROM public.athlete_test_results WHERE id = v_res_ws_id;
-    IF v_sync_method IS NOT NULL THEN
-        RAISE EXCEPTION 'FAIL TEST 18A: Whitespace measurement_method harus dinormalisasi ke NULL, aktual: %', v_sync_method;
-    END IF;
-
+    UPDATE public.athlete_test_results SET notes = 'Catatan legacy tanpa metode' WHERE id = v_res_legacy_id;
     SELECT measurement_method INTO v_sync_method FROM public.athlete_test_results WHERE id = v_res_legacy_id;
     IF v_sync_method IS NOT NULL THEN
-        RAISE EXCEPTION 'FAIL TEST 18B: Metode JSONB nonstandar TST-SPR-10M harus tetap NULL, aktual: %', v_sync_method;
+        RAISE EXCEPTION 'FAIL TEST 18B: Record legacy NULL harus tetap NULL saat UPDATE notes, aktual: %', v_sync_method;
     END IF;
+
+    -- 18C. Record baru dengan metode NULL / tidak dikenal / tidak kompatibel wajib ditolak (23514)
+    BEGIN
+        INSERT INTO public.athlete_test_results (
+            tenant_id, academy_id, class_id, student_id,
+            measurement_method,
+            test_id, indicator_id, indicator_name, category_id,
+            test_date, input_schema_type, final_raw_value, final_unit,
+            final_display_value, aggregation_method
+        ) VALUES (
+            v_tenant_a, v_acad_a, v_class_a1_id, v_stu_a1_id,
+            '   ',
+            'TST-SPR-10M', 'FTB-UNI-PHY-01', 'Akselerasi', 'physical',
+            '2026-10-27', 'MULTI_TRIAL_BEST_MIN', 2.18, 's', '2.18 s', 'MIN'
+        );
+        RAISE EXCEPTION 'FAIL TEST 18C-1: INSERT baru TST-SPR-10M tanpa metode (whitespace/NULL) wajib ditolak (23514)!';
+    EXCEPTION WHEN SQLSTATE '23514' THEN NULL;
+    END;
+
+    BEGIN
+        INSERT INTO public.athlete_test_results (
+            tenant_id, academy_id, class_id, student_id,
+            measurement_method,
+            test_id, indicator_id, indicator_name, category_id,
+            test_date, input_schema_type, final_raw_value, final_unit,
+            final_display_value, aggregation_method, derived_metrics
+        ) VALUES (
+            v_tenant_a, v_acad_a, v_class_a1_id, v_stu_a1_id,
+            NULL,
+            'TST-SPR-10M', 'FTB-UNI-PHY-01', 'Akselerasi', 'physical',
+            '2026-10-27', 'MULTI_TRIAL_BEST_MIN', 2.18, 's', '2.18 s', 'MIN',
+            '{"measurementMethod":"HAND_TIMER_LEGACY"}'::jsonb
+        );
+        RAISE EXCEPTION 'FAIL TEST 18C-2: INSERT baru dengan metode JSONB tidak dikenal wajib ditolak (23514)!';
+    EXCEPTION WHEN SQLSTATE '23514' THEN NULL;
+    END;
 
     BEGIN
         INSERT INTO public.athlete_test_results (
@@ -1054,24 +1104,24 @@ BEGIN
             'TST-SPR-10M', 'FTB-UNI-PHY-01', 'Akselerasi', 'physical',
             '2026-10-27', 'MULTI_TRIAL_BEST_MIN', 2.20, 's', '2.20 s', 'MIN'
         );
-        RAISE EXCEPTION 'FAIL TEST 18C: Nilai eksplisit measurement_method tidak valid pada TST-SPR-10M wajib ditolak (23514)!';
+        RAISE EXCEPTION 'FAIL TEST 18C-3: Nilai eksplisit measurement_method tidak valid pada TST-SPR-10M wajib ditolak (23514)!';
     EXCEPTION WHEN SQLSTATE '23514' THEN NULL;
     END;
     v_passed_scenarios := v_passed_scenarios + 1;
-    RAISE NOTICE '[PASS] TEST 18: Sanitasi whitespace/legacy & proteksi metode TST-SPR-10M terverifikasi';
+    RAISE NOTICE '[PASS] TEST 18: Standarisasi metode baru & pelestarian legacy NULL terverifikasi';
 
     -- =========================================================================
     -- TEST 19: KONSISTENSI KALIBRASI & PROTEKSI FAKTA MENTAH
     -- =========================================================================
     BEGIN
         INSERT INTO public.athlete_test_results (
-            tenant_id, academy_id, class_id, student_id,
+            tenant_id, academy_id, class_id, student_id, measurement_method,
             test_id, indicator_id, indicator_name, category_id,
             test_date, input_schema_type, final_raw_value, final_unit,
             final_display_value, aggregation_method,
             calibration_status, converted_score
         ) VALUES (
-            v_tenant_a, v_acad_a, v_class_a1_id, v_stu_a1_id,
+            v_tenant_a, v_acad_a, v_class_a1_id, v_stu_a1_id, 'STOPWATCH_MANUAL',
             'TST-SPR-10M', 'FTB-UNI-PHY-01', 'Akselerasi', 'physical',
             '2026-10-28', 'MULTI_TRIAL_BEST_MIN', 2.10, 's', '2.10 s', 'MIN',
             'PENDING_CALIBRATION', 85

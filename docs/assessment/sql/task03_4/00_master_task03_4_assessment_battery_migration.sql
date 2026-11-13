@@ -572,7 +572,6 @@ DECLARE
     v_default_single_method TEXT;
     v_raw_age_group TEXT;
     v_ctx_age_group TEXT;
-    v_json_changed BOOLEAN;
     v_method_json_changed BOOLEAN;
     v_age_group_json_changed BOOLEAN;
     v_age_years_json_changed BOOLEAN;
@@ -686,50 +685,58 @@ BEGIN
         ELSE NULL
     END;
 
-    -- Normalisasi & Sinkronisasi measurement_method (INSERT maupun UPDATE saat derived_metrics/auxiliary_inputs berubah)
+    -- Normalisasi & Sinkronisasi measurement_method:
+    --   * INSERT baru wajib memiliki metode standar kompatibel dengan test_id (tidak boleh NULL atau tidak dikenal).
+    --   * UPDATE pada record legacy NULL tetap menjaga NULL selama tidak diubah, dan melarang pengosongan nilai non-null ke NULL.
     v_raw_top_method := NULLIF(UPPER(trim(COALESCE(NEW.measurement_method, ''))), '');
     v_ctx_method := COALESCE(
         NULLIF(UPPER(trim(COALESCE(NEW.derived_metrics->>'measurementMethod', ''))), ''),
         NULLIF(UPPER(trim(COALESCE(NEW.derived_metrics->'athleteTestContext'->>'measurementMethod', ''))), ''),
         NULLIF(UPPER(trim(COALESCE(NEW.auxiliary_inputs->>'measurementMethod', ''))), '')
     );
-    v_json_changed := (TG_OP = 'INSERT')
-        OR (NEW.derived_metrics IS DISTINCT FROM OLD.derived_metrics)
-        OR (NEW.auxiliary_inputs IS DISTINCT FROM OLD.auxiliary_inputs);
     v_method_json_changed := (TG_OP = 'UPDATE') AND (
         NULLIF(UPPER(trim(COALESCE(OLD.derived_metrics->>'measurementMethod', ''))), '') IS DISTINCT FROM NULLIF(UPPER(trim(COALESCE(NEW.derived_metrics->>'measurementMethod', ''))), '')
         OR NULLIF(UPPER(trim(COALESCE(OLD.derived_metrics->'athleteTestContext'->>'measurementMethod', ''))), '') IS DISTINCT FROM NULLIF(UPPER(trim(COALESCE(NEW.derived_metrics->'athleteTestContext'->>'measurementMethod', ''))), '')
         OR NULLIF(UPPER(trim(COALESCE(OLD.auxiliary_inputs->>'measurementMethod', ''))), '') IS DISTINCT FROM NULLIF(UPPER(trim(COALESCE(NEW.auxiliary_inputs->>'measurementMethod', ''))), '')
     );
 
-    IF TG_OP = 'UPDATE' AND (NEW.measurement_method IS DISTINCT FROM OLD.measurement_method) THEN
-        NEW.measurement_method := v_raw_top_method;
-    ELSIF v_method_json_changed THEN
-        IF NEW.test_id IN ('TST-SPR-10M', 'TST-SPR-30M') THEN
-            IF v_ctx_method IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO') THEN
-                NEW.measurement_method := v_ctx_method;
-            ELSE
-                NEW.measurement_method := NULL;
+    IF TG_OP = 'INSERT' THEN
+        IF v_raw_top_method IS NOT NULL THEN
+            IF v_ctx_method IS NOT NULL AND v_ctx_method IS DISTINCT FROM v_raw_top_method THEN
+                RAISE EXCEPTION 'Inkonsistensi measurement_method kolom (%) dengan JSONB (%) untuk test_id %.',
+                    v_raw_top_method, v_ctx_method, NEW.test_id
+                    USING ERRCODE = '23514';
             END IF;
-        ELSE
+            NEW.measurement_method := v_raw_top_method;
+        ELSIF v_ctx_method IS NOT NULL THEN
             NEW.measurement_method := v_ctx_method;
-        END IF;
-    ELSIF v_raw_top_method IS NOT NULL THEN
-        NEW.measurement_method := v_raw_top_method;
-    ELSIF v_json_changed AND v_ctx_method IS NOT NULL THEN
-        IF NEW.test_id IN ('TST-SPR-10M', 'TST-SPR-30M') THEN
-            IF v_ctx_method IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO') THEN
-                NEW.measurement_method := v_ctx_method;
-            ELSE
-                NEW.measurement_method := NULL;
-            END IF;
+        ELSIF v_default_single_method IS NOT NULL THEN
+            NEW.measurement_method := v_default_single_method;
         ELSE
-            NEW.measurement_method := v_ctx_method;
+            RAISE EXCEPTION 'measurement_method wajib diisi dengan metode pengukuran standar yang kompatibel untuk test_id %.',
+                NEW.test_id
+                USING ERRCODE = '23514';
         END IF;
-    ELSIF TG_OP = 'INSERT' AND NEW.measurement_method IS NULL AND v_ctx_method IS NULL AND v_default_single_method IS NOT NULL THEN
-        NEW.measurement_method := v_default_single_method;
     ELSE
-        NEW.measurement_method := NULL;
+        IF NEW.measurement_method IS DISTINCT FROM OLD.measurement_method THEN
+            IF v_raw_top_method IS NULL THEN
+                RAISE EXCEPTION 'measurement_method yang sudah tercatat tidak boleh dikosongkan menjadi NULL.'
+                    USING ERRCODE = '23514';
+            END IF;
+            NEW.measurement_method := v_raw_top_method;
+        ELSIF v_method_json_changed THEN
+            IF v_ctx_method IS NULL THEN
+                IF OLD.measurement_method IS NOT NULL THEN
+                    RAISE EXCEPTION 'measurement_method yang sudah tercatat tidak boleh dikosongkan menjadi NULL melalui metadata JSONB.'
+                        USING ERRCODE = '23514';
+                END IF;
+                NEW.measurement_method := NULL;
+            ELSE
+                NEW.measurement_method := v_ctx_method;
+            END IF;
+        ELSE
+            NEW.measurement_method := NULLIF(UPPER(trim(COALESCE(OLD.measurement_method, ''))), '');
+        END IF;
     END IF;
 
     -- Normalisasi & Sinkronisasi age_group (INSERT maupun UPDATE saat derived_metrics berubah)
@@ -829,7 +836,7 @@ SET
     measurement_method = COALESCE(
         NULLIF(UPPER(trim(measurement_method)), ''),
         CASE
-            WHEN test_id = 'TST-SPR-10M' THEN
+            WHEN test_id IN ('TST-SPR-10M', 'TST-SPR-30M') THEN
                 CASE
                     WHEN UPPER(NULLIF(trim(derived_metrics->>'measurementMethod'), '')) IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO')
                     THEN UPPER(NULLIF(trim(derived_metrics->>'measurementMethod'), ''))
@@ -839,12 +846,47 @@ SET
                     THEN UPPER(NULLIF(trim(auxiliary_inputs->>'measurementMethod'), ''))
                     ELSE NULL
                 END
+            WHEN test_id IN ('TST-AGL-ARW', 'TST-BAL-STK', 'TST-COD-505', 'TST-COR-PLK', 'TST-RSA-630', 'TST-SSB-GK-03', 'TST-WF-TLA') THEN
+                CASE
+                    WHEN COALESCE(
+                        UPPER(NULLIF(trim(derived_metrics->>'measurementMethod'), '')),
+                        UPPER(NULLIF(trim(derived_metrics->'athleteTestContext'->>'measurementMethod'), '')),
+                        UPPER(NULLIF(trim(auxiliary_inputs->>'measurementMethod'), ''))
+                    ) = 'STOPWATCH_MANUAL' THEN 'STOPWATCH_MANUAL'
+                    ELSE NULL
+                END
+            WHEN test_id IN ('TST-MOB-SAR', 'TST-RXN-RLR', 'TST-JMP-VER', 'TST-PWR-SBJ', 'TST-SHT-DST') THEN
+                CASE
+                    WHEN COALESCE(
+                        UPPER(NULLIF(trim(derived_metrics->>'measurementMethod'), '')),
+                        UPPER(NULLIF(trim(derived_metrics->'athleteTestContext'->>'measurementMethod'), '')),
+                        UPPER(NULLIF(trim(auxiliary_inputs->>'measurementMethod'), ''))
+                    ) = 'PHYSICAL_MEASURING_TOOL' THEN 'PHYSICAL_MEASURING_TOOL'
+                    ELSE NULL
+                END
+            WHEN test_id IN ('TST-END-BLP', 'TST-STR-PU1', 'TST-SSB-WAP', 'TST-SSB-GK-02') THEN
+                CASE
+                    WHEN COALESCE(
+                        UPPER(NULLIF(trim(derived_metrics->>'measurementMethod'), '')),
+                        UPPER(NULLIF(trim(derived_metrics->'athleteTestContext'->>'measurementMethod'), '')),
+                        UPPER(NULLIF(trim(auxiliary_inputs->>'measurementMethod'), ''))
+                    ) = 'MANUAL_COUNT' THEN 'MANUAL_COUNT'
+                    ELSE NULL
+                END
             ELSE
-                COALESCE(
-                    UPPER(NULLIF(trim(derived_metrics->>'measurementMethod'), '')),
-                    UPPER(NULLIF(trim(derived_metrics->'athleteTestContext'->>'measurementMethod'), '')),
-                    UPPER(NULLIF(trim(auxiliary_inputs->>'measurementMethod'), ''))
-                )
+                CASE
+                    WHEN COALESCE(
+                        UPPER(NULLIF(trim(derived_metrics->>'measurementMethod'), '')),
+                        UPPER(NULLIF(trim(derived_metrics->'athleteTestContext'->>'measurementMethod'), '')),
+                        UPPER(NULLIF(trim(auxiliary_inputs->>'measurementMethod'), ''))
+                    ) IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO', 'PHYSICAL_MEASURING_TOOL', 'MANUAL_COUNT')
+                    THEN COALESCE(
+                        UPPER(NULLIF(trim(derived_metrics->>'measurementMethod'), '')),
+                        UPPER(NULLIF(trim(derived_metrics->'athleteTestContext'->>'measurementMethod'), '')),
+                        UPPER(NULLIF(trim(auxiliary_inputs->>'measurementMethod'), ''))
+                    )
+                    ELSE NULL
+                END
         END
     ),
     age_group = COALESCE(

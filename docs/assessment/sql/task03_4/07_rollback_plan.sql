@@ -33,9 +33,11 @@ DROP FUNCTION IF EXISTS public.coach_can_manage_student(TEXT, UUID, UUID);
 DROP FUNCTION IF EXISTS public.athlete_belongs_to_tenant(UUID, TEXT, UUID, UUID);
 DROP FUNCTION IF EXISTS public.get_strict_tenant_member_role(TEXT);
 
--- 3. Hapus Constraints Tambahan Task 03.4 (Data tetap aman)
+-- 3. Hapus Constraints Tambahan Task 03.4 / 03.5 (Data tetap aman)
 ALTER TABLE public.athlete_test_results
     DROP CONSTRAINT IF EXISTS chk_athlete_test_results_calibration_consistency;
+ALTER TABLE public.athlete_test_results
+    DROP CONSTRAINT IF EXISTS chk_athlete_test_results_measurement_method_compatibility;
 ALTER TABLE public.athlete_test_results
     DROP CONSTRAINT IF EXISTS chk_athlete_test_results_spr10m_method;
 ALTER TABLE public.athlete_test_results

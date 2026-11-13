@@ -62,14 +62,14 @@ BEGIN
     INSERT INTO public.students (id, tenant_id, academy_id, class_id, name, birth_date)
     VALUES (v_stu_id, v_tenant, v_acad_id, v_class_id, 'Atlet Uji 03.5', '2014-06-10');
 
-    -- 1. Verifikasi auto-assign metode standar saat INSERT (tanpa mengisi kolom) pada tes metode tunggal
+    -- 1. Verifikasi auto-assign metode standar saat INSERT (NULL maupun whitespace) pada tes metode tunggal
     INSERT INTO public.athlete_test_results (
-        id, tenant_id, academy_id, class_id, student_id,
+        id, tenant_id, academy_id, class_id, student_id, measurement_method,
         test_id, indicator_id, indicator_name, category_id,
         test_date, input_schema_type, final_raw_value, final_unit,
         final_display_value, aggregation_method
     ) VALUES (
-        v_res_id, v_tenant, v_acad_id, v_class_id, v_stu_id,
+        v_res_id, v_tenant, v_acad_id, v_class_id, v_stu_id, '   ',
         'TST-MOB-SAR', 'FTB-UNI-PHY-04', 'Mobilitas', 'physical',
         '2026-11-12', 'MULTI_TRIAL_BEST_MAX', 31.5, 'cm', '31.5 cm', 'MAX'
     );
@@ -91,7 +91,8 @@ BEGIN
     (v_tenant, v_acad_id, v_class_id, v_stu_id, 'SMARTPHONE_VIDEO', 'TST-SPR-10M', 'FTB-UNI-PHY-01', 'Akselerasi', 'physical', '2026-11-12', 'MULTI_TRIAL_BEST_MIN', 2.11, 's', '2.11 s', 'MIN'),
     (v_tenant, v_acad_id, v_class_id, v_stu_id, 'MANUAL_COUNT', 'TST-SSB-WAP', 'FTB-SSB-OUT-02', 'Koordinasi Mata-Kaki', 'position_specific', '2026-11-12', 'MULTI_TRIAL_BEST_MAX', 19, 'reps', '19 reps', 'MAX');
 
-    -- 3. Verifikasi legacy NULL pada TST-SPR-10M tetap NULL & tetap NULL saat UPDATE notes
+    -- 3. Simulasikan record legacy pre-Task 03.5 (measurement_method NULL) dan verifikasi tetap NULL saat UPDATE notes
+    EXECUTE 'ALTER TABLE public.athlete_test_results DISABLE TRIGGER trg_validate_and_protect_athlete_test_results';
     INSERT INTO public.athlete_test_results (
         id, tenant_id, academy_id, class_id, student_id, measurement_method,
         test_id, indicator_id, indicator_name, category_id,
@@ -102,6 +103,7 @@ BEGIN
         'TST-SPR-10M', 'FTB-UNI-PHY-01', 'Akselerasi', 'physical',
         '2026-11-13', 'MULTI_TRIAL_BEST_MIN', 2.20, 's', '2.20 s', 'MIN'
     );
+    EXECUTE 'ALTER TABLE public.athlete_test_results ENABLE TRIGGER trg_validate_and_protect_athlete_test_results';
 
     UPDATE public.athlete_test_results SET notes = 'Verifikasi legacy NULL tetap utuh' WHERE id = v_legacy_id;
     SELECT measurement_method INTO v_method FROM public.athlete_test_results WHERE id = v_legacy_id;
@@ -109,7 +111,38 @@ BEGIN
         RAISE EXCEPTION 'FAIL: Legacy NULL tidak boleh berubah menjadi %, harus tetap NULL', v_method;
     END IF;
 
-    -- 4. Verifikasi penolakan metode tidak kompatibel / tidak valid (23514)
+    -- 4. Verifikasi penolakan record baru NULL/kosong pada dual-method, metode tidak kompatibel, atau metode tidak dikenal (23514)
+    BEGIN
+        INSERT INTO public.athlete_test_results (
+            tenant_id, academy_id, class_id, student_id, measurement_method,
+            test_id, indicator_id, indicator_name, category_id,
+            test_date, input_schema_type, final_raw_value, final_unit,
+            final_display_value, aggregation_method
+        ) VALUES (
+            v_tenant, v_acad_id, v_class_id, v_stu_id, NULL,
+            'TST-SPR-10M', 'FTB-UNI-PHY-01', 'Akselerasi', 'physical',
+            '2026-11-12', 'MULTI_TRIAL_BEST_MIN', 2.15, 's', '2.15 s', 'MIN'
+        );
+        RAISE EXCEPTION 'FAIL: INSERT baru TST-SPR-10M dengan measurement_method NULL wajib ditolak (23514)!';
+    EXCEPTION WHEN SQLSTATE '23514' THEN NULL;
+    END;
+
+    BEGIN
+        INSERT INTO public.athlete_test_results (
+            tenant_id, academy_id, class_id, student_id, measurement_method,
+            test_id, indicator_id, indicator_name, category_id,
+            test_date, input_schema_type, final_raw_value, final_unit,
+            final_display_value, aggregation_method, derived_metrics
+        ) VALUES (
+            v_tenant, v_acad_id, v_class_id, v_stu_id, NULL,
+            'TST-SPR-30M', 'FTB-UNI-PHY-06', 'Kecepatan Maksimal', 'physical',
+            '2026-11-12', 'MULTI_TRIAL_BEST_MIN', 4.30, 's', '4.30 s', 'MIN',
+            '{"measurementMethod":"LASER_GATE"}'::jsonb
+        );
+        RAISE EXCEPTION 'FAIL: INSERT baru dengan metode JSONB tidak dikenal (LASER_GATE) wajib ditolak (23514)!';
+    EXCEPTION WHEN SQLSTATE '23514' THEN NULL;
+    END;
+
     BEGIN
         INSERT INTO public.athlete_test_results (
             tenant_id, academy_id, class_id, student_id, measurement_method,
@@ -137,6 +170,14 @@ BEGIN
             '2026-11-12', 'BILATERAL_AVERAGE', 16.5, 's', '16.5 s', 'AVG'
         );
         RAISE EXCEPTION 'FAIL: TST-AGL-ARW dengan SMARTPHONE_VIDEO wajib ditolak (23514)!';
+    EXCEPTION WHEN SQLSTATE '23514' THEN NULL;
+    END;
+
+    BEGIN
+        UPDATE public.athlete_test_results
+        SET measurement_method = NULL
+        WHERE id = v_res_id;
+        RAISE EXCEPTION 'FAIL: UPDATE menghapus measurement_method non-null menjadi NULL wajib ditolak (23514)!';
     EXCEPTION WHEN SQLSTATE '23514' THEN NULL;
     END;
 
