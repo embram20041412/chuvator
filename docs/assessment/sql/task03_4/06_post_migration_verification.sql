@@ -123,19 +123,21 @@ DECLARE
     v_tenant_b_uuid UUID := '34000000-0000-4000-8000-00000000000b';
     v_tenant_c_uuid UUID := '34000000-0000-4000-8000-00000000000c';
 
-    -- Actor UIDs
+    -- Actor UIDs (platform_superadmins.auth_uid, tenants.owner_uid, users_staff.uid bertipe TEXT;
+    -- coaches.auth_uid bertipe UUID pada database target)
     v_superadmin_uid     TEXT := '34000000-0000-4000-8000-000000000101';
     v_owner_a_uid        TEXT := '34000000-0000-4000-8000-000000000102';
     v_admin_a_uid        TEXT := '34000000-0000-4000-8000-000000000103';
-    v_coach_a1_uid       TEXT := '34000000-0000-4000-8000-000000000104';
-    v_coach_a2_uid       TEXT := '34000000-0000-4000-8000-000000000105';
+    v_coach_a1_uid       UUID := '34000000-0000-4000-8000-000000000104';
+    v_coach_a2_uid       UUID := '34000000-0000-4000-8000-000000000105';
     v_kasir_a_uid        TEXT := '34000000-0000-4000-8000-000000000106';
     v_staff_a_uid        TEXT := '34000000-0000-4000-8000-000000000107';
     v_outsider_uid       TEXT := '34000000-0000-4000-8000-000000000108';
     v_inactive_staff_uid TEXT := '34000000-0000-4000-8000-000000000109';
-    v_coach_noclass_uid  TEXT := '34000000-0000-4000-8000-000000000110';
-    v_coach_unlinked_uid TEXT := '34000000-0000-4000-8000-000000000111';
+    v_coach_noclass_uid  UUID := '34000000-0000-4000-8000-000000000110';
+    v_coach_unlinked_uid UUID := '34000000-0000-4000-8000-000000000111';
     v_owner_c_uid        TEXT := '34000000-0000-4000-8000-000000000112';
+    v_coach_b1_uid       UUID := '34000000-0000-4000-8000-000000000198';
 
     -- Domain Fixtures
     v_acad_a         UUID := '34000000-0000-4000-8000-000000000201';
@@ -227,14 +229,14 @@ BEGIN
 
     INSERT INTO public.users_staff (uid, tenant_id, email, name, role, status)
     VALUES
-        (v_admin_a_uid,        v_tenant_a, 'admin-a@chuvator.test',        'Admin A',        'admin', 'active'),
-        (v_coach_a1_uid,       v_tenant_a, 'coach-a1@chuvator.test',       'Coach A1',       'coach', 'active'),
-        (v_coach_a2_uid,       v_tenant_a, 'coach-a2@chuvator.test',       'Coach A2',       'coach', 'active'),
-        (v_coach_noclass_uid,  v_tenant_a, 'coach-noclass@chuvator.test',  'Coach NoClass',  'coach', 'active'),
-        (v_coach_unlinked_uid, v_tenant_a, 'coach-unlinked@chuvator.test', 'Coach Unlinked', 'coach', 'active'),
-        (v_kasir_a_uid,        v_tenant_a, 'kasir-a@chuvator.test',        'Kasir A',        'kasir', 'active'),
-        (v_staff_a_uid,        v_tenant_a, 'staff-a@chuvator.test',        'Staff A',        'staff', 'active'),
-        (v_inactive_staff_uid, v_tenant_a, 'inactive-a@chuvator.test',     'Inactive A',     'coach', 'inactive');
+        (v_admin_a_uid,              v_tenant_a, 'admin-a@chuvator.test',        'Admin A',        'admin', 'active'),
+        (v_coach_a1_uid::text,       v_tenant_a, 'coach-a1@chuvator.test',       'Coach A1',       'coach', 'active'),
+        (v_coach_a2_uid::text,       v_tenant_a, 'coach-a2@chuvator.test',       'Coach A2',       'coach', 'active'),
+        (v_coach_noclass_uid::text,  v_tenant_a, 'coach-noclass@chuvator.test',  'Coach NoClass',  'coach', 'active'),
+        (v_coach_unlinked_uid::text, v_tenant_a, 'coach-unlinked@chuvator.test', 'Coach Unlinked', 'coach', 'active'),
+        (v_kasir_a_uid,              v_tenant_a, 'kasir-a@chuvator.test',        'Kasir A',        'kasir', 'active'),
+        (v_staff_a_uid,              v_tenant_a, 'staff-a@chuvator.test',        'Staff A',        'staff', 'active'),
+        (v_inactive_staff_uid,       v_tenant_a, 'inactive-a@chuvator.test',     'Inactive A',     'coach', 'inactive');
 
     IF v_has_staff_is_active THEN
         EXECUTE 'UPDATE public.users_staff SET is_active = TRUE WHERE tenant_id = $1 AND uid <> $2'
@@ -255,7 +257,7 @@ BEGIN
         (v_coach_a1_id,      v_tenant_a, v_acad_a, 'Coach A1',       'active', v_coach_a1_uid),
         (v_coach_a2_id,      v_tenant_a, v_acad_a, 'Coach A2',       'active', v_coach_a2_uid),
         (v_coach_noclass_id, v_tenant_a, v_acad_a, 'Coach No Class', 'active', v_coach_noclass_uid),
-        (v_coach_b1_id,      v_tenant_b, v_acad_b, 'Coach B1',       'active', '34000000-0000-4000-8000-000000000198');
+        (v_coach_b1_id,      v_tenant_b, v_acad_b, 'Coach B1',       'active', v_coach_b1_uid);
 
     INSERT INTO public.academy_classes (id, tenant_id, academy_id, class_name, coach_id)
     VALUES
@@ -381,7 +383,7 @@ BEGIN
     -- =========================================================================
     -- TEST 3: COACH DALAM CAKUPAN KELAS (SELECT/INSERT/UPDATE/DELETE + Multi-Metode)
     -- =========================================================================
-    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_coach_a1_uid, 'role', 'authenticated')::text, true);
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_coach_a1_uid::text, 'role', 'authenticated')::text, true);
 
     INSERT INTO public.athlete_test_results (
         id, tenant_id, academy_id, class_id, student_id, coach_id, recorded_by_name,
@@ -453,7 +455,7 @@ BEGIN
     -- =========================================================================
     -- TEST 5: COACH TANPA KELAS AKTIF (FAIL-CLOSED: SELECT=0, INSERT=42501)
     -- =========================================================================
-    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_coach_noclass_uid, 'role', 'authenticated')::text, true);
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_coach_noclass_uid::text, 'role', 'authenticated')::text, true);
 
     SELECT COUNT(*) INTO v_count FROM public.athlete_test_results WHERE tenant_id = v_tenant_a;
     IF v_count <> 0 THEN
@@ -480,7 +482,7 @@ BEGIN
     -- =========================================================================
     -- TEST 6: COACH TANPA RELASI public.coaches (FAIL-CLOSED: SELECT=0, INSERT=42501)
     -- =========================================================================
-    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_coach_unlinked_uid, 'role', 'authenticated')::text, true);
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_coach_unlinked_uid::text, 'role', 'authenticated')::text, true);
 
     SELECT COUNT(*) INTO v_count FROM public.athlete_test_results WHERE tenant_id = v_tenant_a;
     IF v_count <> 0 THEN
@@ -669,7 +671,7 @@ BEGIN
         RAISE EXCEPTION 'FAIL TEST 13B: Outsider berhasil mengenumerasi student Tenant A via RPC!';
     END IF;
 
-    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_coach_a1_uid, 'role', 'authenticated')::text, true);
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_coach_a1_uid::text, 'role', 'authenticated')::text, true);
     SELECT public.athlete_belongs_to_tenant(v_stu_a2_id, v_tenant_a, v_class_a2_id, v_acad_a) INTO v_bool;
     IF v_bool IS DISTINCT FROM FALSE THEN
         RAISE EXCEPTION 'FAIL TEST 13C: Coach A1 berhasil mengenumerasi student Kelas A2 via RPC!';
@@ -732,7 +734,7 @@ BEGIN
     EXCEPTION WHEN SQLSTATE '42501' THEN NULL;
     END;
 
-    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_coach_a1_uid, 'role', 'authenticated')::text, true);
+    PERFORM set_config('request.jwt.claims', json_build_object('sub', v_coach_a1_uid::text, 'role', 'authenticated')::text, true);
     BEGIN
         INSERT INTO public.athlete_test_results (
             tenant_id, academy_id, class_id, student_id, coach_id,

@@ -218,3 +218,46 @@ test('Task 03.4.3 (F — Temuan #9 & #10): Preflight tahan schema missing/legacy
   assert.ok(verifySql.includes('v_coach_unlinked_uid'), 'Verification SQL wajib menguji coach tanpa relasi coaches');
   assert.ok(verifySql.includes('pg_get_userbyid(p.proowner) AS owner_role'), 'Bagian A5 verification wajib mengaudit owner fungsi');
 });
+
+test('Task 03.4.3.1: 06_post_migration_verification.sql konsisten UUID pada v_coach_*_uid & coaches.auth_uid serta TEXT pada users_staff.uid', () => {
+  const verifySql = readSql('06_post_migration_verification.sql');
+  const declareBlock = extractBodyBetween(verifySql, 'DECLARE', 'BEGIN');
+
+  const coachUidDecls = [...declareBlock.matchAll(/^\s*(v_coach_[a-z0-9_]+_uid)\s+(UUID|TEXT)\s*:=/gim)];
+  assert.ok(coachUidDecls.length >= 5, 'Semua variabel v_coach_*_uid harus dideklarasikan pada DECLARE');
+  for (const [, varName, declaredType] of coachUidDecls) {
+    assert.equal(
+      declaredType.toUpperCase(),
+      'UUID',
+      `Variabel ${varName} wajib bertipe UUID agar sesuai dengan public.coaches.auth_uid`
+    );
+  }
+
+  const usersStaffInsert = extractBodyBetween(verifySql, 'INSERT INTO public.users_staff', ';');
+  for (const coachVar of ['v_coach_a1_uid', 'v_coach_a2_uid', 'v_coach_noclass_uid', 'v_coach_unlinked_uid']) {
+    assert.ok(
+      usersStaffInsert.includes(`${coachVar}::text`),
+      `INSERT INTO public.users_staff wajib cast ${coachVar}::text untuk kolom uid (TEXT)`
+    );
+  }
+
+  const coachesInsert = extractBodyBetween(verifySql, 'INSERT INTO public.coaches', ';');
+  for (const coachVar of ['v_coach_a1_uid', 'v_coach_a2_uid', 'v_coach_noclass_uid', 'v_coach_b1_uid']) {
+    assert.ok(
+      coachesInsert.includes(coachVar),
+      `INSERT INTO public.coaches wajib memakai variabel UUID ${coachVar} pada kolom auth_uid`
+    );
+    assert.equal(
+      coachesInsert.includes(`${coachVar}::text`),
+      false,
+      `INSERT INTO public.coaches dilarang mengirim ${coachVar}::text ke kolom auth_uid (UUID)`
+    );
+  }
+
+  // Pastikan recorded_by_user_id update pada TEST 16 juga menggunakan explicit ::uuid cast dari v_owner_a_uid (TEXT)
+  assert.ok(
+    verifySql.includes('SET recorded_by_user_id = v_owner_a_uid::uuid'),
+    'TEST 16 wajib melakukan explicit cast v_owner_a_uid::uuid untuk kolom recorded_by_user_id (UUID)'
+  );
+});
+
