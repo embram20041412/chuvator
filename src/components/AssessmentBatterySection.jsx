@@ -13,11 +13,12 @@ import {
   UserCheck,
   ShieldAlert,
   Trash2,
-  Sparkles,
   FileSpreadsheet,
   SlidersHorizontal,
   RefreshCw,
-  HelpCircle
+  HelpCircle,
+  TrendingUp,
+  Layers
 } from 'lucide-react';
 
 import {
@@ -26,6 +27,8 @@ import {
   DEVELOPMENT_TIERS,
   FOOTBALL_POSITIONS,
   TIER_1_POSITIONS,
+  SPRINT_MEASUREMENT_METHODS,
+  SPRINT_MEASUREMENT_METHOD_SPECS,
   getTestDefinitionById,
   getTestsWithAthleteApplicability,
   normalizeTierIdentifier,
@@ -42,6 +45,7 @@ import {
   saveAthleteTestResult,
   getAthleteTestResults,
   getLatestTestResultsByIndicatorMap,
+  getTenantSprint10mTestRecords,
   deleteAthleteTestResult,
   isExplicitDemoSession
 } from '../services/assessmentBatteryService.js';
@@ -50,6 +54,12 @@ import {
   convertTestResultToIndicatorScore,
   SUPPORTED_CONVERTER_TESTS
 } from '../services/assessmentScoreConverter.js';
+
+import {
+  deriveStandardAgeGroup,
+  buildSprint10mLongitudinalProgress,
+  recapitulateSprint10mRawData
+} from '../services/sprint10mNormsAnalytics.js';
 
 /**
  * Menentukan Development Tier atlet dari kelas aktif atau usia atlet
@@ -201,11 +211,32 @@ export default function AssessmentBatterySection({
   const [saveFeedback, setSaveFeedback] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // State Riwayat Tes Atlet
+  // State Riwayat Tes Atlet & Rekapitulasi TST-SPR-10M Tenant
   const [athleteHistory, setAthleteHistory] = useState([]);
   const [latestByIndicator, setLatestByIndicator] = useState({});
+  const [tenantSprint10mRecords, setTenantSprint10mRecords] = useState([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [historyLoadError, setHistoryLoadError] = useState(null);
+
+  // State Filter Rekapitulasi Data Mentah TST-SPR-10M (Task 03.3)
+  const [recapAgeGroupFilter, setRecapAgeGroupFilter] = useState('ALL');
+  const [recapTierFilter, setRecapTierFilter] = useState('ALL');
+  const [recapMethodFilter, setRecapMethodFilter] = useState('ALL');
+  const [recapPeriodFilter, setRecapPeriodFilter] = useState('ALL');
+
+  // Kelompok usia standar dari tanggal lahir / tier atlet aktif
+  const activeStudentBirthDate =
+    activeStudent?.birthDate || activeStudent?.birth_date || null;
+
+  const activeAthleteAgeGroup = useMemo(
+    () =>
+      deriveStandardAgeGroup({
+        birthDate: activeStudentBirthDate,
+        testDate: entryDraft?.testDate || null,
+        developmentTier: activeTierKey
+      }),
+    [activeStudentBirthDate, entryDraft?.testDate, activeTierKey]
+  );
 
   // Daftar tes dengan evaluasi kesesuaian Tier & Posisi
   const testsWithApplicability = useMemo(
@@ -255,27 +286,31 @@ export default function AssessmentBatterySection({
     }
   }, [activeTestDef]);
 
-  // Muat riwayat hasil tes atlet
+  // Muat riwayat hasil tes atlet & rekapitulasi TST-SPR-10M tenant
   const loadAthleteHistory = useCallback(async () => {
     if (!tenantId || !activeStudent?.id) {
       setAthleteHistory([]);
       setLatestByIndicator({});
+      setTenantSprint10mRecords([]);
       setHistoryLoadError(null);
       return;
     }
     setIsLoadingHistory(true);
     setHistoryLoadError(null);
     try {
-      const [historyList, latestMap] = await Promise.all([
+      const [historyList, latestMap, tenantSprintRows] = await Promise.all([
         getAthleteTestResults(userProfile, activeStudent.id),
-        getLatestTestResultsByIndicatorMap(userProfile, activeStudent.id)
+        getLatestTestResultsByIndicatorMap(userProfile, activeStudent.id),
+        getTenantSprint10mTestRecords(userProfile)
       ]);
       setAthleteHistory(historyList);
       setLatestByIndicator(latestMap);
+      setTenantSprint10mRecords(tenantSprintRows);
     } catch (err) {
       console.error('[AssessmentBatterySection] Gagal memuat riwayat tes atlet:', err);
       setAthleteHistory([]);
       setLatestByIndicator({});
+      setTenantSprint10mRecords([]);
       setHistoryLoadError(
         err.message || 'Gagal membaca riwayat hasil pengukuran dari database Supabase.'
       );
@@ -287,6 +322,30 @@ export default function AssessmentBatterySection({
   useEffect(() => {
     loadAthleteHistory();
   }, [loadAthleteHistory]);
+
+  // Perkembangan Longitudinal Waktu Sprint 10m Atlet Aktif (Task 03.3)
+  const athleteSprint10mLongitudinal = useMemo(
+    () => buildSprint10mLongitudinalProgress(athleteHistory),
+    [athleteHistory]
+  );
+
+  // Rekapitulasi Data Mentah TST-SPR-10M untuk Penyusunan Norma (Task 03.3)
+  const sprint10mNormsRecap = useMemo(() => {
+    return recapitulateSprint10mRawData(tenantSprint10mRecords, {
+      expectedTenantId: tenantId || null,
+      ageGroup: recapAgeGroupFilter,
+      developmentTier: recapTierFilter,
+      measurementMethod: recapMethodFilter,
+      testPeriod: recapPeriodFilter
+    });
+  }, [
+    tenantSprint10mRecords,
+    tenantId,
+    recapAgeGroupFilter,
+    recapTierFilter,
+    recapMethodFilter,
+    recapPeriodFilter
+  ]);
 
   // Pratinjau hasil perhitungan real-time saat form diisi
   const livePreviewValidation = useMemo(() => {
@@ -306,11 +365,12 @@ export default function AssessmentBatterySection({
         indicatorId: norm.indicatorId,
         finalRawValue: norm.finalRawValue,
         finalUnit: norm.finalUnit,
-        developmentTier: activeTierKey
+        developmentTier: activeTierKey,
+        ageGroup: activeAthleteAgeGroup
       },
       { calibrationConfig: calibrationConfig || undefined }
     );
-  }, [livePreviewValidation, activeTierKey, calibrationConfig]);
+  }, [livePreviewValidation, activeTierKey, activeAthleteAgeGroup, calibrationConfig]);
 
   // Pratinjau khusus Bleep Test saat Level & Shuttle diisi
   const liveBleepPreview = useMemo(() => {
@@ -408,6 +468,8 @@ export default function AssessmentBatterySection({
           classId: selectedClass?.id || activeStudent?.classId || null,
           studentId: activeStudent.id,
           studentTenantId: activeStudent.tenantId || activeStudent.tenant_id || tenantId,
+          studentBirthDate: activeStudentBirthDate,
+          ageGroup: activeAthleteAgeGroup,
           developmentTier: activeTierKey,
           positionCode: activePositionCode
         },
@@ -424,13 +486,21 @@ export default function AssessmentBatterySection({
           ? `Skor Indikator: ${saved.convertedScore}/100 (${saved.calibrationStatus})`
           : `status ${saved.calibrationStatus} (Skor 1–100: Belum Terkalibrasi)`;
 
+      const methodBadgeText = saved.measurementMethod
+        ? ` [Metode: ${saved.measurementMethod}]`
+        : '';
+
       setSaveFeedback({
         type: 'success',
-        message: `Hasil ${activeTestDef.shortName} (${saved.finalDisplayValue}) berhasil disimpan ke ${persistenceLabel} untuk ${activeStudent.studentName || activeStudent.name} dengan ${scoreSummaryText}.`
+        message: `Hasil ${activeTestDef.shortName} (${saved.finalDisplayValue})${methodBadgeText} berhasil disimpan ke ${persistenceLabel} untuk ${activeStudent.studentName || activeStudent.name} dengan ${scoreSummaryText}.`
       });
 
-      // Reset input nilai percobaan agar siap untuk pencatatan berikutnya
-      setEntryDraft(createInitialTestEntryDraft(activeTestDef.testId, entryDraft.testDate));
+      // Reset input nilai percobaan agar siap untuk pencatatan berikutnya (pertahankan tanggal & metode pengukuran)
+      const nextDraft = createInitialTestEntryDraft(activeTestDef.testId, entryDraft.testDate);
+      if (entryDraft.measurementMethod) {
+        nextDraft.measurementMethod = entryDraft.measurementMethod;
+      }
+      setEntryDraft(nextDraft);
       await loadAthleteHistory();
 
       if (typeof onSavedResult === 'function') {
@@ -542,7 +612,7 @@ export default function AssessmentBatterySection({
       {/* ===================================================================
           BARIS KONTROL ATLET, JENJANG (TIER), DAN POSISI
          =================================================================== */}
-      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs">
+      <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           {/* Pemilih Atlet */}
           <div>
@@ -627,6 +697,37 @@ export default function AssessmentBatterySection({
             </select>
           </div>
         </div>
+
+        {/* Ringkasan Konteks Atlet & Sesi (Task 03.3) */}
+        {activeStudent && (
+          <div
+            data-testid="battery-athlete-context-bar"
+            className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 py-2 text-xs text-slate-700"
+          >
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <span>
+                Student ID: <strong className="font-mono text-slate-900">{activeStudent.id}</strong>
+              </span>
+              <span>
+                Tenant ID: <strong className="font-mono text-slate-900">{tenantId || '-'}</strong>
+              </span>
+              <span>
+                Kelompok Usia:{' '}
+                <strong className="font-mono text-emerald-800">{activeAthleteAgeGroup}</strong>
+                {activeStudentBirthDate ? ` (Lahir: ${activeStudentBirthDate})` : ''}
+              </span>
+              <span>
+                Tier: <strong className="font-mono text-slate-900">{activeTierKey}</strong>
+              </span>
+              <span>
+                Posisi: <strong className="font-mono text-slate-900">{activePositionCode}</strong>
+              </span>
+            </div>
+            <div className="text-slate-500">
+              Pencatat: <strong className="text-slate-800">{userProfile?.fullName || userProfile?.email || 'Pelatih SSB'}</strong>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ===================================================================
@@ -879,6 +980,58 @@ export default function AssessmentBatterySection({
                       </div>
                     </div>
 
+                    {/* Protokol Standar 8 Bagian khusus TST-SPR-10M (Task 03.3) */}
+                    {activeTestDef.standardizedProtocol && (
+                      <div
+                        data-testid="sprint10m-standardized-protocol-box"
+                        className="rounded-xl bg-emerald-50/70 p-3.5 border border-emerald-200 space-y-2"
+                      >
+                        <div className="font-bold text-emerald-950 flex items-center justify-between gap-2">
+                          <span>
+                            Protokol Standar Pengumpulan Data Lapangan ({activeTestDef.standardizedProtocol.protocolVersion})
+                          </span>
+                          <span className="rounded bg-emerald-200/80 px-2 py-0.5 font-mono text-[10px] font-bold text-emerald-950">
+                            8 Standar Wajib SSB
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 text-[11px] text-slate-700">
+                          <div className="rounded-lg bg-white p-2.5 border border-emerald-100">
+                            <div className="font-bold text-slate-900">1. Persiapan Lintasan 10 Meter</div>
+                            <p className="mt-0.5">{activeTestDef.standardizedProtocol.trackPreparation}</p>
+                          </div>
+                          <div className="rounded-lg bg-white p-2.5 border border-emerald-100">
+                            <div className="font-bold text-slate-900">2. Penempatan Garis Start & Finish</div>
+                            <p className="mt-0.5">{activeTestDef.standardizedProtocol.startFinishPlacement}</p>
+                          </div>
+                          <div className="rounded-lg bg-white p-2.5 border border-emerald-100">
+                            <div className="font-bold text-slate-900">3. Posisi Awal Atlet</div>
+                            <p className="mt-0.5">{activeTestDef.standardizedProtocol.startingStance}</p>
+                          </div>
+                          <div className="rounded-lg bg-white p-2.5 border border-emerald-100">
+                            <div className="font-bold text-slate-900">4. Instruksi Mulai Berlari</div>
+                            <p className="mt-0.5">{activeTestDef.standardizedProtocol.startCommand}</p>
+                          </div>
+                          <div className="rounded-lg bg-white p-2.5 border border-emerald-100 sm:col-span-2">
+                            <div className="font-bold text-slate-900">5. Cara Mencatat Waktu (Stopwatch vs Video HP)</div>
+                            <p className="mt-0.5">
+                              <strong>STOPWATCH_MANUAL:</strong> {activeTestDef.standardizedProtocol.timeRecordingRules?.STOPWATCH_MANUAL}
+                            </p>
+                            <p className="mt-1">
+                              <strong>SMARTPHONE_VIDEO:</strong> {activeTestDef.standardizedProtocol.timeRecordingRules?.SMARTPHONE_VIDEO}
+                            </p>
+                          </div>
+                          <div className="rounded-lg bg-white p-2.5 border border-emerald-100">
+                            <div className="font-bold text-slate-900">6. Jumlah Percobaan</div>
+                            <p className="mt-0.5">{activeTestDef.standardizedProtocol.trialsRule}</p>
+                          </div>
+                          <div className="rounded-lg bg-white p-2.5 border border-emerald-100">
+                            <div className="font-bold text-slate-900">7. Penentuan Hasil Akhir</div>
+                            <p className="mt-0.5">{activeTestDef.standardizedProtocol.finalResultDetermination}</p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="rounded-xl bg-white p-3 border border-slate-200">
                       <div className="font-bold text-slate-900 mb-1">Instruksi Pelaksanaan Pelatih & Atlet:</div>
                       <ol className="list-decimal pl-4 space-y-1 text-slate-700">
@@ -891,7 +1044,7 @@ export default function AssessmentBatterySection({
                     <div className="rounded-xl bg-amber-50/70 p-3 border border-amber-200">
                       <div className="font-bold text-amber-950 mb-1 flex items-center gap-1.5">
                         <HelpCircle className="h-3.5 w-3.5 text-amber-700" />
-                        <span>Kriteria Percobaan Sah, Tidak Sah & Keselamatan:</span>
+                        <span>8. Kondisi Percobaan Diulang / Tidak Valid & Keselamatan:</span>
                       </div>
                       <ul className="list-disc pl-4 space-y-1 text-amber-900">
                         {activeTestDef.validityRules.map((rule, idx) => (
@@ -945,6 +1098,57 @@ export default function AssessmentBatterySection({
                       </select>
                     </div>
                   </div>
+
+                  {/* Pemilih Metode Pengukuran Waktu Wajib (Task 03.3: TST-SPR-10M) */}
+                  {activeTestDef.requiresMeasurementMethod && (
+                    <div
+                      data-testid="battery-measurement-method-box"
+                      className="rounded-xl border border-cyan-300 bg-cyan-50/60 p-3.5 space-y-2.5"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <label
+                          htmlFor="battery-measurement-method-select"
+                          className="text-xs font-bold uppercase tracking-wider text-cyan-950"
+                        >
+                          Metode Pencatatan Waktu Sprint (Wajib Tercatat) <span className="text-rose-600">*</span>
+                        </label>
+                        <span className="rounded bg-cyan-200/80 px-2 py-0.5 font-mono text-[10px] font-bold text-cyan-950">
+                          Data Tidak Dianggap Identik
+                        </span>
+                      </div>
+
+                      <select
+                        id="battery-measurement-method-select"
+                        data-testid="battery-measurement-method-select"
+                        value={entryDraft.measurementMethod || SPRINT_MEASUREMENT_METHODS.STOPWATCH_MANUAL}
+                        onChange={(e) => {
+                          setValidationErrors([]);
+                          setFieldErrors({});
+                          setEntryDraft((prev) => ({
+                            ...prev,
+                            measurementMethod: e.target.value
+                          }));
+                        }}
+                        className="w-full rounded-xl border border-cyan-400 bg-white px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:border-emerald-600 focus:outline-none min-h-[44px]"
+                      >
+                        {Object.values(SPRINT_MEASUREMENT_METHOD_SPECS).map((spec) => (
+                          <option key={spec.code} value={spec.code}>
+                            {spec.code} — {spec.label}
+                          </option>
+                        ))}
+                      </select>
+
+                      <p className="text-[11px] text-cyan-950 leading-relaxed">
+                        {
+                          SPRINT_MEASUREMENT_METHOD_SPECS[
+                            entryDraft.measurementMethod || SPRINT_MEASUREMENT_METHODS.STOPWATCH_MANUAL
+                          ]?.description
+                        }{' '}
+                        <strong>Catatan Metodologi:</strong> Hasil <code>STOPWATCH_MANUAL</code> dan{' '}
+                        <code>SMARTPHONE_VIDEO</code> dipisahkan secara ketat pada analisis longitudinal dan rekapitulasi norma.
+                      </p>
+                    </div>
+                  )}
 
                   {/* Input Tambahan Wajib (Auxiliary Fields): mis. Tinggi Raihan Berdiri H1 atau Level/Shuttle Bleep Test */}
                   {Array.isArray(activeTestDef.auxiliaryFields) && activeTestDef.auxiliaryFields.length > 0 && (
@@ -1120,6 +1324,14 @@ export default function AssessmentBatterySection({
                         <div className="text-lg font-extrabold text-slate-900 font-mono mt-0.5">
                           {livePreviewValidation.normalizedRecord.finalDisplayValue}
                         </div>
+                        {livePreviewValidation.normalizedRecord.measurementMethod && (
+                          <div className="text-xs text-cyan-900 font-semibold mt-0.5">
+                            Metode Pengukuran:{' '}
+                            <span className="font-mono">
+                              {livePreviewValidation.normalizedRecord.measurementMethod}
+                            </span>
+                          </div>
+                        )}
                         {activeTestDef.testId === 'TST-RSA-630' && (
                           <div className="text-xs text-emerald-900 mt-0.5">
                             Total 6 Sprint: <strong>{livePreviewValidation.normalizedRecord.derivedMetrics.totalSprintTimeSec} s</strong> •
@@ -1232,6 +1444,100 @@ export default function AssessmentBatterySection({
       </div>
 
       {/* ===================================================================
+          PANEL PERKEMBANGAN LONGITUDINAL WAKTU SPRINT 10M ATLET (TASK 03.3)
+         =================================================================== */}
+      <div
+        data-testid="sprint10m-longitudinal-panel"
+        className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-3"
+      >
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-emerald-600" />
+              <span>
+                Perkembangan Longitudinal Waktu Sprint 10m (TST-SPR-10M) —{' '}
+                {activeStudent?.studentName || activeStudent?.name || 'Atlet'}
+              </span>
+            </h3>
+            <p className="text-xs text-slate-500">
+              Setiap sesi pada tanggal berbeda disimpan sebagai catatan terpisah tanpa menimpa hasil sebelumnya. Perbandingan selisih waktu hanya dihitung antar-sesi dengan metode pengukuran yang sama.
+            </p>
+          </div>
+          <span className="rounded-lg bg-slate-100 px-2.5 py-1 font-mono text-xs font-bold text-slate-700 shrink-0">
+            Total Sesi TST-SPR-10M: {athleteSprint10mLongitudinal.totalSessions}
+          </span>
+        </div>
+
+        {athleteSprint10mLongitudinal.hasMixedMethods && (
+          <div
+            data-testid="sprint10m-mixed-method-warning"
+            className="rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950 flex items-start gap-2"
+          >
+            <Info className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
+            <div>
+              <strong>Perhatian Metodologi Longitudinal:</strong> Atlet ini memiliki riwayat pengukuran dengan metode berbeda (<code>STOPWATCH_MANUAL</code> dan <code>SMARTPHONE_VIDEO</code>). Selisih perkembangan waktu (delta detik) hanya dibandingkan terhadap sesi sebelumnya yang menggunakan metode identik.
+            </div>
+          </div>
+        )}
+
+        {athleteSprint10mLongitudinal.totalSessions === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-4 text-center text-xs text-slate-500">
+            Belum ada catatan longitudinal <strong>TST-SPR-10M (Sprint 10 Meter)</strong> untuk atlet ini.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+            {athleteSprint10mLongitudinal.entries.map((entry) => (
+              <div
+                key={entry.id || `${entry.testDate}-${entry.sessionOrder}`}
+                data-testid={`sprint10m-longitudinal-entry-${entry.sessionOrder}`}
+                className="rounded-xl border border-slate-200 bg-slate-50/60 p-3 space-y-1.5"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-mono text-xs font-bold text-slate-700">
+                    Sesi #{entry.sessionOrder} • {entry.testDate}
+                  </span>
+                  <span className="rounded bg-cyan-100 border border-cyan-300 px-1.5 py-0.5 font-mono text-[10px] font-bold text-cyan-900">
+                    {entry.measurementMethod}
+                  </span>
+                </div>
+                <div className="flex items-baseline justify-between gap-2">
+                  <div className="font-mono text-base font-extrabold text-slate-900">
+                    {entry.finalDisplayValue}
+                  </div>
+                  <div className="text-xs font-bold">
+                    {entry.progressionDirection === 'BASELINE' && (
+                      <span className="text-slate-500">Baseline Awal ({entry.measurementMethod})</span>
+                    )}
+                    {entry.progressionDirection === 'IMPROVED' && (
+                      <span className="text-emerald-700">
+                        Membaik {entry.deltaFromPrevSameMethodSec} s (vs {entry.prevSameMethodDate})
+                      </span>
+                    )}
+                    {entry.progressionDirection === 'SLOWER' && (
+                      <span className="text-rose-700">
+                        Melambat +{entry.deltaFromPrevSameMethodSec} s (vs {entry.prevSameMethodDate})
+                      </span>
+                    )}
+                    {entry.progressionDirection === 'UNCHANGED' && (
+                      <span className="text-slate-600">
+                        Stabil 0.00 s (vs {entry.prevSameMethodDate})
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="text-[11px] text-slate-500 flex flex-wrap items-center justify-between gap-1 pt-1 border-t border-slate-200/70">
+                  <span>
+                    Usia/Tier: <strong>{entry.ageGroup}</strong> ({entry.developmentTier || '-'})
+                  </span>
+                  <span>Posisi: <strong>{entry.positionCode || '-'}</strong></span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ===================================================================
           PANEL RIWAYAT PENGUKURAN TES LAPANGAN ATLET
          =================================================================== */}
       <div className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-4">
@@ -1244,7 +1550,7 @@ export default function AssessmentBatterySection({
               </span>
             </h3>
             <p className="text-xs text-slate-500">
-              Menampilkan rincian setiap percobaan (trials), hasil akhir mentah, dan status kalibrasi indikator.
+              Menampilkan rincian setiap percobaan (trials), metode pengukuran, hasil akhir mentah, dan status kalibrasi indikator.
             </p>
           </div>
 
@@ -1330,6 +1636,19 @@ export default function AssessmentBatterySection({
                       </span>
                       <span className="font-mono text-xs text-slate-500">{item.testId}</span>
                       <span className="text-xs font-semibold text-slate-500">• {item.testDate}</span>
+                      {item.measurementMethod && (
+                        <span
+                          data-testid={`history-measurement-method-${item.testId}`}
+                          className="rounded bg-cyan-100 border border-cyan-300 px-2 py-0.5 font-mono text-[10px] font-bold text-cyan-900"
+                        >
+                          {item.measurementMethod}
+                        </span>
+                      )}
+                      {item.ageGroup && (
+                        <span className="rounded bg-slate-200/80 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-700">
+                          {item.ageGroup}
+                        </span>
+                      )}
                       <span className="rounded bg-amber-100 border border-amber-300 px-2 py-0.5 font-mono text-[10px] font-bold text-amber-900">
                         {item.calibrationStatus}
                       </span>
@@ -1399,17 +1718,176 @@ export default function AssessmentBatterySection({
                     ))}
                 </div>
 
-                {(item.notes || item.surfaceCondition) && (
-                  <div className="text-[11px] text-slate-500 flex flex-wrap items-center justify-between gap-2">
-                    <span>
-                      Permukaan: <strong>{item.surfaceCondition}</strong>
-                      {item.notes ? ` • Catatan: "${item.notes}"` : ''}
-                    </span>
-                    <span>Dicatat oleh: {item.recordedByName}</span>
-                  </div>
-                )}
+                <div className="text-[11px] text-slate-500 flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    Permukaan: <strong>{item.surfaceCondition}</strong>
+                    {item.developmentTier ? ` • Tier: ${item.developmentTier}` : ''}
+                    {item.positionCode ? ` • Posisi: ${item.positionCode}` : ''}
+                    {item.notes ? ` • Catatan: "${item.notes}"` : ''}
+                  </span>
+                  <span>Dicatat oleh: {item.recordedByName}</span>
+                </div>
               </div>
             ))}
+          </div>
+        )}
+      </div>
+
+      {/* ===================================================================
+          PANEL REKAPITULASI DATA MENTAH TST-SPR-10M (FONDASI NORMA — TASK 03.3)
+         =================================================================== */}
+      <div
+        data-testid="sprint10m-recap-panel"
+        className="rounded-2xl border border-slate-200 bg-white p-4 sm:p-5 shadow-xs space-y-4"
+      >
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Layers className="h-4 w-4 text-emerald-600" />
+              <span>
+                Rekapitulasi Data Mentah TST-SPR-10M (Fondasi Penyusunan Norma Akselerasi)
+              </span>
+            </h3>
+            <p className="text-xs text-slate-500">
+              Mengelompokkan nilai mentah (detik) berdasarkan Kelompok Usia, Development Tier, Metode Pengukuran (<code>STOPWATCH_MANUAL</code> vs <code>SMARTPHONE_VIDEO</code> terpisah), Tenant, dan Periode Tes tanpa mengarang norma performa.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <span className="rounded-lg bg-emerald-50 border border-emerald-200 px-2.5 py-1 font-mono text-xs font-bold text-emerald-900">
+              Sampel Cocok: {sprint10mNormsRecap.totalMatchingRecords} Tes ({sprint10mNormsRecap.groups.length} Kelompok)
+            </span>
+          </div>
+        </div>
+
+        {/* Filter Rekapitulasi */}
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-4">
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+              Filter Kelompok Usia
+            </label>
+            <select
+              data-testid="recap-filter-age-group"
+              value={recapAgeGroupFilter}
+              onChange={(e) => setRecapAgeGroupFilter(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-2 text-xs font-semibold text-slate-900"
+            >
+              <option value="ALL">Semua Kelompok Usia</option>
+              <option value="U-8">U-8</option>
+              <option value="U-10">U-10</option>
+              <option value="U-12">U-12</option>
+              <option value="U-14">U-14</option>
+              <option value="U-16">U-16</option>
+              <option value="U-18">U-18</option>
+              <option value="SENIOR">SENIOR</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+              Filter Development Tier
+            </label>
+            <select
+              data-testid="recap-filter-tier"
+              value={recapTierFilter}
+              onChange={(e) => setRecapTierFilter(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-2 text-xs font-semibold text-slate-900"
+            >
+              <option value="ALL">Semua Tier</option>
+              {Object.entries(DEVELOPMENT_TIERS).map(([tierKey, cfg]) => (
+                <option key={tierKey} value={tierKey}>
+                  {cfg.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+              Filter Metode Pengukuran
+            </label>
+            <select
+              data-testid="recap-filter-method"
+              value={recapMethodFilter}
+              onChange={(e) => setRecapMethodFilter(e.target.value)}
+              className="w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-2 text-xs font-semibold text-slate-900"
+            >
+              <option value="ALL">Semua Metode (Dipisah per Grup)</option>
+              <option value="STOPWATCH_MANUAL">STOPWATCH_MANUAL</option>
+              <option value="SMARTPHONE_VIDEO">SMARTPHONE_VIDEO</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[11px] font-bold uppercase tracking-wider text-slate-600 mb-1">
+              Filter Periode Tes (YYYY-MM)
+            </label>
+            <input
+              type="text"
+              data-testid="recap-filter-period"
+              placeholder="ALL atau YYYY-MM (mis. 2026-11)"
+              value={recapPeriodFilter === 'ALL' ? '' : recapPeriodFilter}
+              onChange={(e) => {
+                const v = e.target.value.trim();
+                setRecapPeriodFilter(v ? v : 'ALL');
+              }}
+              className="w-full rounded-lg border border-slate-300 bg-slate-50 px-2.5 py-2 text-xs font-semibold text-slate-900"
+            />
+          </div>
+        </div>
+
+        {/* Tabel Kelompok Rekapitulasi Data Mentah */}
+        {sprint10mNormsRecap.groups.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-4 text-center text-xs text-slate-500">
+            Belum ada data mentah <strong>TST-SPR-10M</strong> yang sesuai dengan filter rekapitulasi saat ini.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-xs" data-testid="sprint10m-recap-table">
+              <thead>
+                <tr className="border-b border-slate-200 bg-slate-50 text-[11px] font-bold uppercase text-slate-600">
+                  <th className="py-2.5 px-3">Tenant</th>
+                  <th className="py-2.5 px-3">Kelompok Usia</th>
+                  <th className="py-2.5 px-3">Development Tier</th>
+                  <th className="py-2.5 px-3">Metode Pengukuran</th>
+                  <th className="py-2.5 px-3">Periode Tes</th>
+                  <th className="py-2.5 px-3 text-right">N Tes (Atlet)</th>
+                  <th className="py-2.5 px-3 text-right">Tercepat (s)</th>
+                  <th className="py-2.5 px-3 text-right">Median (s)</th>
+                  <th className="py-2.5 px-3 text-right">Rata-rata (s)</th>
+                  <th className="py-2.5 px-3 text-right">Terlambat (s)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+                {sprint10mNormsRecap.groups.map((grp) => (
+                  <tr key={grp.groupKey} className="hover:bg-slate-50/80">
+                    <td className="py-2.5 px-3 font-mono text-slate-700">{grp.tenantId}</td>
+                    <td className="py-2.5 px-3 font-bold text-slate-900">{grp.ageGroup}</td>
+                    <td className="py-2.5 px-3 font-mono text-slate-700">{grp.developmentTier}</td>
+                    <td className="py-2.5 px-3">
+                      <span className="rounded bg-cyan-100 border border-cyan-300 px-2 py-0.5 font-mono text-[10px] font-bold text-cyan-900">
+                        {grp.measurementMethod}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 font-mono text-slate-700">{grp.testPeriod}</td>
+                    <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
+                      {grp.sampleCount} ({grp.uniqueStudentCount})
+                    </td>
+                    <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-700">
+                      {grp.fastestRawSec.toFixed(2)} s
+                    </td>
+                    <td className="py-2.5 px-3 text-right font-mono text-slate-800">
+                      {grp.medianRawSec.toFixed(2)} s
+                    </td>
+                    <td className="py-2.5 px-3 text-right font-mono text-slate-800">
+                      {grp.meanRawSec.toFixed(2)} s
+                    </td>
+                    <td className="py-2.5 px-3 text-right font-mono text-slate-600">
+                      {grp.slowestRawSec.toFixed(2)} s
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>

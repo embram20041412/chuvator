@@ -8,6 +8,7 @@
 import {
   TEST_INPUT_SCHEMA_TYPES,
   BLEEP_LEVEL_SHUTTLES,
+  SPRINT_MEASUREMENT_METHODS,
   getTestDefinitionById
 } from '../config/footballTestBatteryCatalog.js';
 
@@ -149,11 +150,16 @@ export function createInitialTestEntryDraft(testId, existingDate = null) {
     });
   }
 
+  const defaultMeasurementMethod = testDef.requiresMeasurementMethod
+    ? testDef.defaultMeasurementMethod || SPRINT_MEASUREMENT_METHODS.STOPWATCH_MANUAL
+    : null;
+
   return {
     testId: testDef.testId,
     indicatorId: testDef.indicatorId,
     testDate: todayStr,
     unit: testDef.unit,
+    measurementMethod: defaultMeasurementMethod,
     trials,
     auxiliaryInputs,
     notes: '',
@@ -209,6 +215,43 @@ export function validateAndComputeTestBatteryEntry(payload) {
   if (!testDate || !/^\d{4}-\d{2}-\d{2}$/.test(testDate)) {
     errors.push('Tanggal pelaksanaan tes wajib diisi dengan format YYYY-MM-DD.');
     fieldErrors.testDate = 'Tanggal tes tidak valid.';
+  }
+
+  // Validasi metode pengukuran wajib untuk tes yang mensyaratkan pembedaan alat (mis. TST-SPR-10M: STOPWATCH_MANUAL vs SMARTPHONE_VIDEO)
+  let resolvedMeasurementMethod = null;
+  if (testDef.requiresMeasurementMethod) {
+    const supportedMethods = Array.isArray(testDef.supportedMeasurementMethods)
+      ? testDef.supportedMeasurementMethods
+      : [SPRINT_MEASUREMENT_METHODS.STOPWATCH_MANUAL, SPRINT_MEASUREMENT_METHODS.SMARTPHONE_VIDEO];
+
+    const rawMethod =
+      payload.measurementMethod !== undefined
+        ? payload.measurementMethod
+        : payload.auxiliaryInputs?.measurementMethod !== undefined
+          ? payload.auxiliaryInputs.measurementMethod
+          : undefined;
+
+    if (rawMethod === undefined && payload.requireExplicitMeasurementMethod !== true) {
+      resolvedMeasurementMethod =
+        testDef.defaultMeasurementMethod || SPRINT_MEASUREMENT_METHODS.STOPWATCH_MANUAL;
+    } else if (isRawInputEmpty(rawMethod)) {
+      errors.push(
+        `Metode pengukuran waktu wajib dipilih untuk ${testDef.shortName} (${supportedMethods.join(' atau ')}).`
+      );
+      fieldErrors.measurementMethod = 'Metode pengukuran wajib dipilih.';
+    } else {
+      const normalizedMethod = String(rawMethod).trim().toUpperCase();
+      if (!supportedMethods.includes(normalizedMethod)) {
+        errors.push(
+          `Metode pengukuran "${rawMethod}" tidak didukung untuk ${testDef.shortName}. Pilih salah satu: ${supportedMethods.join(', ')}.`
+        );
+        fieldErrors.measurementMethod = `Metode harus salah satu dari: ${supportedMethods.join(', ')}.`;
+      } else {
+        resolvedMeasurementMethod = normalizedMethod;
+      }
+    }
+  } else if (payload.measurementMethod && typeof payload.measurementMethod === 'string') {
+    resolvedMeasurementMethod = payload.measurementMethod.trim().toUpperCase();
   }
 
   const schemaType = testDef.inputSchemaType;
@@ -612,6 +655,9 @@ export function validateAndComputeTestBatteryEntry(payload) {
   }
 
   const hasInvalidTrial = normalizedTrials.some((t) => !t.isValid);
+  const finalDerivedMetrics = resolvedMeasurementMethod
+    ? { ...derivedMetrics, measurementMethod: resolvedMeasurementMethod }
+    : derivedMetrics;
 
   return {
     isValid: true,
@@ -624,16 +670,19 @@ export function validateAndComputeTestBatteryEntry(payload) {
       indicatorName: testDef.indicatorName,
       categoryId: testDef.categoryId,
       testDate,
+      measurementMethod: resolvedMeasurementMethod,
       inputSchemaType: schemaType,
       trials: normalizedTrials,
       auxiliaryInputs: schemaType === TEST_INPUT_SCHEMA_TYPES.VERTICAL_JUMP_DELTA
         ? { standingReachCm }
-        : {},
+        : resolvedMeasurementMethod
+          ? { measurementMethod: resolvedMeasurementMethod }
+          : {},
       finalRawValue,
       finalUnit: testDef.unit,
       finalDisplayValue,
       aggregationMethod: testDef.finalResultMethod,
-      derivedMetrics,
+      derivedMetrics: finalDerivedMetrics,
       attemptStatus: hasInvalidTrial ? 'PARTIAL_VALID' : 'VALID',
       calibrationStatus: 'PENDING_CALIBRATION',
       mappingReadiness: testDef.mappingReadiness,

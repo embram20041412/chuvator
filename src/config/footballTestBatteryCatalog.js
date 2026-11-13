@@ -68,6 +68,42 @@ export const BLEEP_LEVEL_SHUTTLES = {
 };
 
 /**
+ * Metode pengukuran waktu standar untuk TST-SPR-10M (Task 03.3).
+ * PENTING: STOPWATCH_MANUAL dan SMARTPHONE_VIDEO menghasilkan karakteristik bias waktu
+ * yang berbeda (reaksi visual-motorik manusia ±0.15–0.24s vs frame-to-frame video),
+ * sehingga TIDAK BOLEH dianggap identik atau dicampur dalam satu kelompok norma.
+ */
+export const SPRINT_MEASUREMENT_METHODS = Object.freeze({
+  STOPWATCH_MANUAL: 'STOPWATCH_MANUAL',
+  SMARTPHONE_VIDEO: 'SMARTPHONE_VIDEO'
+});
+
+export const SPRINT_MEASUREMENT_METHOD_SPECS = Object.freeze({
+  STOPWATCH_MANUAL: Object.freeze({
+    code: 'STOPWATCH_MANUAL',
+    label: 'Stopwatch Manual (0.01s)',
+    shortLabel: 'Stopwatch Manual',
+    description:
+      'Pencatatan waktu menggunakan stopwatch digital genggam (0.01s) oleh pelatih di garis Finish 10m. Memiliki latensi reaksi visual-motorik manusia ±0.15–0.24 detik.',
+    precisionNote:
+      'Memiliki latensi reaksi visual-motorik manusia ±0.15–0.24 detik. Pencatat waktu wajib berdiri sejajar garis Finish 10m dan tidak boleh digabung dengan data kamera video.',
+    timingProcedure:
+      'Pencatat waktu berdiri tepat sejajar garis Finish (10m). Tekan START tepat saat kaki belakang atlet terangkat dari tanah (first foot release) dan tekan STOP tepat saat dada/torso atlet memotong garis Finish 10m.'
+  }),
+  SMARTPHONE_VIDEO: Object.freeze({
+    code: 'SMARTPHONE_VIDEO',
+    label: 'Video Smartphone (30/60/120 fps)',
+    shortLabel: 'Video Smartphone',
+    description:
+      'Pencatatan waktu berbasis rekaman video kamera HP (30/60/120 fps) dari samping lintasan (selisih frame t_finish - t_start) tanpa bias reaksi jari.',
+    precisionNote:
+      'Presisi tinggi berbasis frame video (±0.008–0.016 detik pada 60/120fps) tanpa bias reaksi jari. Tidak boleh digabung langsung dengan data Stopwatch Manual.',
+    timingProcedure:
+      'Tempatkan smartphone secara stabil tegak lurus lintasan (sekitar titik 5m–10m, jarak ±8–10m ke samping) agar garis Start (0m) dan Finish (10m) masuk dalam satu frame. Hitung selisih waktu frame saat kaki belakang terangkat (t_start) hingga torso memotong garis Finish (t_finish).'
+  })
+});
+
+/**
  * Katalog 18 Tes Objektif Sepak Bola (Single Source of Truth)
  */
 export const FOOTBALL_TEST_BATTERY_CATALOG = [
@@ -97,28 +133,76 @@ export const FOOTBALL_TEST_BATTERY_CATALOG = [
     trialLabels: ['Percobaan 1', 'Percobaan 2'],
     valueConstraints: { min: 1.0, max: 10.0, step: 0.01, decimals: 2 },
     restBetweenTrialsSec: 120,
+    requiresMeasurementMethod: true,
+    supportedMeasurementMethods: [
+      SPRINT_MEASUREMENT_METHODS.STOPWATCH_MANUAL,
+      SPRINT_MEASUREMENT_METHODS.SMARTPHONE_VIDEO
+    ],
+    defaultMeasurementMethod: SPRINT_MEASUREMENT_METHODS.STOPWATCH_MANUAL,
     equipment: [
       'Meteran gulung minimal 15m',
-      '4 kerucut (cone) penanda garis Start & Finish',
-      'Stopwatch digital (0.01s) atau kamera HP (30/60 fps)'
+      '4 kerucut (cone) penanda gerbang Start (0m) & Finish (10m)',
+      'Stopwatch digital (0.01s) ATAU Smartphone kamera 30/60/120 fps'
     ],
-    fieldSetup: 'Lintasan lurus datar 10 meter di atas rumput dengan area pengereman bebas minimal 10 meter setelah garis akhir.',
+    fieldSetup: 'Lintasan lurus datar 10 meter di atas rumput kering/sintetis dengan zona pengereman bebas minimal 10 meter setelah garis Finish.',
+    standardizedProtocol: {
+      protocolVersion: 'SSB-ID-SPR10M-v1.0',
+      trackPreparation:
+        'Pilih area rumput alami/sintetis yang rata, kering, dan bebas lubang atau genangan. Ukur lintasan lurus tepat 10,00 meter menggunakan meteran gulung, serta pastikan terdapat zona pengereman bebas minimal 10 meter di belakang garis Finish.',
+      startFinishPlacement:
+        'Pasang 2 cone sejajar selebar 1,5–2,0 meter pada titik 0,00 m sebagai Gerbang Start, dan 2 cone sejajar selebar 1,5–2,0 meter tepat pada titik 10,00 m sebagai Gerbang Finish.',
+      athleteStartingPosition:
+        'Atlet mengambil posisi berdiri Standing Split-Stance (satu kaki tumpu di depan tepat di belakang garis Start, ujung sepatu tidak boleh menyentuh/melewati garis). Lutut sedikit ditekuk, badan condong ke depan, dan wajib diam penuh minimal 2 detik tanpa gerakan mengayun (no rocking).',
+      startingStance:
+        'Atlet mengambil posisi berdiri Standing Split-Stance (satu kaki tumpu di depan tepat di belakang garis Start, ujung sepatu tidak boleh menyentuh/melewati garis). Lutut sedikit ditekuk, badan condong ke depan, dan wajib diam penuh minimal 2 detik tanpa gerakan mengayun (no rocking).',
+      startCommandInstruction:
+        'Pelatih memberikan aba-aba "BERSEDIA... SIAP..." lalu atlet mulai berlari eksplosif dengan dorongan penuh ke depan tanpa melangkah mundur (no counter-movement step).',
+      startCommand:
+        'Pelatih memberikan aba-aba "BERSEDIA... SIAP..." lalu atlet mulai berlari eksplosif dengan dorongan penuh ke depan tanpa melangkah mundur (no counter-movement step).',
+      timingMethodRules: {
+        STOPWATCH_MANUAL: SPRINT_MEASUREMENT_METHOD_SPECS.STOPWATCH_MANUAL.timingProcedure,
+        SMARTPHONE_VIDEO: SPRINT_MEASUREMENT_METHOD_SPECS.SMARTPHONE_VIDEO.timingProcedure
+      },
+      timeRecordingRules: {
+        STOPWATCH_MANUAL: SPRINT_MEASUREMENT_METHOD_SPECS.STOPWATCH_MANUAL.timingProcedure,
+        SMARTPHONE_VIDEO: SPRINT_MEASUREMENT_METHOD_SPECS.SMARTPHONE_VIDEO.timingProcedure
+      },
+      trialsAndRecovery:
+        'Setiap atlet melaksanakan 2 percobaan (Percobaan 1 & Percobaan 2). Di antara percobaan, atlet wajib berjalan santai kembali ke garis Start dengan waktu istirahat pemulihan 2–3 menit (120–180 detik).',
+      trialsRule:
+        'Setiap atlet melaksanakan 2 percobaan (Percobaan 1 & Percobaan 2). Di antara percobaan, atlet wajib berjalan santai kembali ke garis Start dengan waktu istirahat pemulihan 2–3 menit (120–180 detik).',
+      finalResultDetermination:
+        'Hasil akhir adalah waktu tercepat (nilai minimum / MIN) dari percobaan yang sah: Final = MIN(T1, T2) dalam detik (2 desimal). Jika hanya 1 percobaan yang sah, nilai percobaan sah tersebut digunakan dengan status PARTIAL_VALID.',
+      invalidAndRepeatConditions: [
+        'WAJIB DIULANG (setelah istirahat 2 menit): Atlet terpeleset saat tolakan awal karena rumput licin, lintasan terhalang pemain/bola lain, atau pencatat waktu terlambat/salah menekan tombol.',
+        'DINYATAKAN TIDAK SAH (FOUL / INVALID TRIAL): Atlet melakukan rolling start (bergerak/berayun sebelum start), menginjak/melewati garis Start sebelum tolakan, atau melambat sebelum torso melewati garis Finish 10m.',
+        'DINYATAKAN TIDAK SAH: Atlet melangkah mundur (false step) saat memulai tolakan pertama.',
+        'KESELAMATAN: Hentikan percobaan apabila atlet mengeluhkan nyeri otot hamstring/pangkal paha atau permukaan lapangan terlalu licin.'
+      ],
+      invalidOrRepeatConditions: [
+        'WAJIB DIULANG (setelah istirahat 2 menit): Atlet terpeleset saat tolakan awal karena rumput licin, lintasan terhalang pemain/bola lain, atau pencatat waktu terlambat/salah menekan tombol.',
+        'DINYATAKAN TIDAK SAH (FOUL / INVALID TRIAL): Atlet melakukan rolling start (bergerak/berayun sebelum start), menginjak/melewati garis Start sebelum tolakan, atau melambat sebelum torso melewati garis Finish 10m.',
+        'DINYATAKAN TIDAK SAH: Atlet melangkah mundur (false step) saat memulai tolakan pertama.',
+        'KESELAMATAN: Hentikan percobaan apabila atlet mengeluhkan nyeri otot hamstring/pangkal paha atau permukaan lapangan terlalu licin.'
+      ]
+    },
     instructions: [
-      'Atlet berdiri dengan posisi split-stance (satu kaki di depan tepat di belakang garis Start, tanpa gerakan berayun/rocking).',
-      'Pencatat waktu berdiri di garis Finish (10m). Waktu dimulai tepat saat kaki belakang atlet terangkat dari tanah (atau gunakan aba-aba visual ayunan bendera/tangan).',
-      'Atlet berlari secepat mungkin melewati garis 10m tanpa melambat sebelum melewati garis akhir.',
-      'Berikan istirahat jalan kaki kembali dan pemulihan 2–3 menit sebelum Percobaan 2.'
+      'Persiapan Lintasan & Garis: Ukur lintasan lurus 10,0m dengan 2 cone di garis Start (0m), 2 cone di garis Finish (10m), dan area pengereman bebas ≥10m setelah Finish.',
+      'Posisi Awal Atlet: Berdiri split-stance tepat di belakang garis Start (ujung sepatu tidak menginjak garis), tahan diam 2 detik tanpa gerakan berayun (rocking).',
+      'Mulai Berlari & Pencatatan Waktu: Pada aba-aba "Bersedia... Siap...", atlet berlari maksimal melewati garis 10m. Catat waktu sesuai metode yang dipilih (STOPWATCH_MANUAL di garis Finish atau SMARTPHONE_VIDEO frame-to-frame).',
+      'Jumlah Percobaan & Istirahat: Lakukan 2 percobaan dengan jeda istirahat jalan kaki 2–3 menit (120–180 detik). Hasil akhir adalah waktu tercepat dari percobaan sah.'
     ],
     validityRules: [
-      'Tidak sah apabila atlet mencuri start (rolling start) atau kaki menginjak melewati garis Start.',
-      'Tidak sah apabila atlet terpeleset saat tolakan awal atau melambat sebelum garis Finish.',
-      'Catatan metodologi: Stopwatch manual memiliki human reaction error ±0.15–0.24 detik; disarankan pencatat tetap sama atau verifikasi frame video HP.'
+      'Tidak sah (Foul) apabila atlet mencuri start (rolling start), melangkah mundur saat start, atau kaki menginjak melewati garis Start.',
+      'Diulang apabila atlet terpeleset saat tolakan awal, lintasan terganggu, atau terjadi kesalahan teknis pencatatan waktu.',
+      'Tidak sah apabila atlet melambat sebelum dada/torso melewati garis Finish 10m.',
+      'Pemisahan Metode Wajib: Data STOPWATCH_MANUAL (human reaction error ±0.15–0.24s) dan SMARTPHONE_VIDEO TIDAK BOLEH dianggap identik.'
     ],
     finalResultMethod: 'Nilai Terbaik (Waktu Tercepat / Minimum dari 2 percobaan sah)',
     formulaDescription: 'Final = min(T1, T2) dalam detik (s)',
     calibrationStatus: 'PENDING_CALIBRATION',
     mappingReadiness: 'READY_FOR_CALIBRATION',
-    normRequirement: 'Membutuhkan norma persentil per kelompok usia (U8, U10, U12, U14, U16, U18+) dan protokol alat (Stopwatch vs Video HP).'
+    normRequirement: 'Membutuhkan norma persentil per kelompok usia (U8, U10, U12, U14, U16, U18+) dan protokol alat (STOPWATCH_MANUAL vs SMARTPHONE_VIDEO).'
   },
 
   // ===========================================================================

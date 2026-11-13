@@ -32,6 +32,12 @@ import {
   recalculateRecordScoreWithCalibration,
   SCORE_CALIBRATION_STATUS
 } from './assessmentScoreConverter.js';
+import {
+  buildStandardizedAthleteTestContext,
+  extractRecordMeasurementMethod,
+  extractRecordAgeGroup,
+  recapitulateSprint10mRawData
+} from './sprint10mNormsAnalytics.js';
 
 export const EXPLICIT_DEMO_TENANT_ID = 'demo-tenant-1';
 const DEMO_LOCAL_STORE_KEY = 'chuvator_demo_only_test_results_v1::demo-tenant-1';
@@ -339,6 +345,7 @@ export function mapTestResultRowToModel(row, persistenceSource = 'SUPABASE_DB', 
   const testDef = getTestDefinitionById(row.test_id);
   const rawDerivedMetrics =
     row.derived_metrics && typeof row.derived_metrics === 'object' ? row.derived_metrics : {};
+  const athleteTestContext = rawDerivedMetrics.athleteTestContext || null;
 
   const mappedModel = {
     id: row.id,
@@ -358,6 +365,16 @@ export function mapTestResultRowToModel(row, persistenceSource = 'SUPABASE_DB', 
     categoryId: row.category_id || testDef?.categoryId || 'physical',
     developmentTier: row.development_tier || null,
     positionCode: row.position_code || null,
+
+    // Konteks Atlet & Metode Pengukuran (Task 03.3)
+    measurementMethod: extractRecordMeasurementMethod(row),
+    ageGroup: extractRecordAgeGroup(row),
+    studentBirthDate: athleteTestContext?.studentBirthDate || null,
+    ageYearsAtTest: athleteTestContext?.ageYearsAtTest ?? null,
+    testPeriod:
+      athleteTestContext?.testPeriod ||
+      (row.test_date && String(row.test_date).length >= 7 ? String(row.test_date).slice(0, 7) : null),
+    athleteTestContext,
 
     testDate: row.test_date,
     inputSchemaType: row.input_schema_type,
@@ -437,7 +454,9 @@ export async function saveAthleteTestResult(authContext, entryPayload, options =
   verifyCoachStudentScope(authContext, entryPayload, verifiedTenantId);
 
   // 4. Jalankan validasi ketat dan perhitungan nilai akhir mentah (tanpa mutasi input mentah)
-  const validation = validateAndComputeTestBatteryEntry(entryPayload);
+  const validation = validateAndComputeTestBatteryEntry(entryPayload, {
+    requireExplicitMeasurementMethod: Boolean(options?.requireExplicitMeasurementMethod)
+  });
   if (!validation.isValid) {
     const err = new Error(validation.errors[0] || 'Data hasil tes tidak memenuhi syarat validitas.');
     err.validationErrors = validation.errors;
@@ -447,6 +466,33 @@ export async function saveAthleteTestResult(authContext, entryPayload, options =
 
   const norm = validation.normalizedRecord;
 
+  // 4A. Bangun Konteks Atlet & Pelaksanaan Tes Standar (Task 03.3) tanpa duplikasi tabel siswa
+  const resolvedRecordedByName =
+    entryPayload.recordedByName ||
+    authContext?.fullName ||
+    authContext?.displayName ||
+    authContext?.email ||
+    'Pelatih SSB';
+
+  const athleteTestContext = buildStandardizedAthleteTestContext({
+    tenantId: verifiedTenantId,
+    studentId: String(studentId).trim(),
+    studentBirthDate:
+      entryPayload.studentBirthDate ||
+      entryPayload.birthDate ||
+      entryPayload.student?.birthDate ||
+      entryPayload.student?.birth_date ||
+      null,
+    ageGroup: entryPayload.ageGroup || null,
+    developmentTier: entryPayload.developmentTier || null,
+    positionCode: entryPayload.positionCode || null,
+    testDate: norm.testDate,
+    measurementMethod: norm.measurementMethod || null,
+    recordedByUserId: authContext?.uid || authContext?.id || null,
+    recordedByName: resolvedRecordedByName,
+    coachId: entryPayload.coachId || authContext?.coachId || null
+  });
+
   // 4B. Jalankan Score Conversion Engine (Task 03.2: TST-SPR-10M -> Skor 1–100 jika kalibrasi tersedia)
   // Fakta pengukuran mentah (`norm.finalRawValue` & `norm.trials`) TIDAK diubah.
   const conversionResult = convertTestResultToIndicatorScore(
@@ -455,8 +501,8 @@ export async function saveAthleteTestResult(authContext, entryPayload, options =
       indicatorId: norm.indicatorId,
       finalRawValue: norm.finalRawValue,
       finalUnit: norm.finalUnit,
-      developmentTier: entryPayload.developmentTier || null,
-      ageGroup: entryPayload.ageGroup || null
+      developmentTier: athleteTestContext.developmentTier || entryPayload.developmentTier || null,
+      ageGroup: athleteTestContext.ageGroup || entryPayload.ageGroup || null
     },
     {
       calibrationConfig: options.calibrationConfig,
@@ -466,6 +512,8 @@ export async function saveAthleteTestResult(authContext, entryPayload, options =
 
   const enrichedDerivedMetrics = {
     ...(norm.derivedMetrics || {}),
+    measurementMethod: norm.measurementMethod || null,
+    athleteTestContext,
     scoreConversion: {
       isSupportedTest: Boolean(conversionResult.isSupportedTest),
       isCalibrated: Boolean(conversionResult.isCalibrated),
@@ -492,21 +540,16 @@ export async function saveAthleteTestResult(authContext, entryPayload, options =
     academy_id: entryPayload.academyId || null,
     class_id: entryPayload.classId || null,
     student_id: String(studentId).trim(),
-    coach_id: entryPayload.coachId || authContext?.coachId || null,
-    recorded_by_user_id: authContext?.uid || authContext?.id || null,
-    recorded_by_name:
-      entryPayload.recordedByName ||
-      authContext?.fullName ||
-      authContext?.displayName ||
-      authContext?.email ||
-      'Pelatih SSB',
+    coach_id: athleteTestContext.coachId,
+    recorded_by_user_id: athleteTestContext.recordedByUserId,
+    recorded_by_name: resolvedRecordedByName,
 
     test_id: norm.testId,
     indicator_id: norm.indicatorId,
     indicator_name: norm.indicatorName,
     category_id: norm.categoryId,
-    development_tier: entryPayload.developmentTier || null,
-    position_code: entryPayload.positionCode || null,
+    development_tier: athleteTestContext.developmentTier || null,
+    position_code: athleteTestContext.positionCode || null,
 
     test_date: norm.testDate,
     input_schema_type: norm.inputSchemaType,
@@ -675,6 +718,84 @@ export async function getLatestTestResultsByIndicatorMap(authContext, studentId,
   });
 
   return latestMap;
+}
+
+/**
+ * Mengambil seluruh hasil tes TST-SPR-10M pada cakupan tenant aktif (untuk rekapitulasi norma).
+ * Mematuhi isolasi multi-tenant dan cakupan akses pelatih (coach scope).
+ */
+export async function getTenantSprint10mTestRecords(authContext, options = {}) {
+  const verifiedTenantId = verifyAndResolveTenantId(authContext, options?.tenantId, {
+    requireWritePermission: false
+  });
+
+  const isDemoMode = isExplicitDemoSession(authContext, verifiedTenantId);
+
+  if (isDemoMode) {
+    const demoRows = readDemoOnlyLocalStore().filter((row) => {
+      if (!row || row.tenant_id !== EXPLICIT_DEMO_TENANT_ID) return false;
+      if (row.test_id !== 'TST-SPR-10M') return false;
+      return true;
+    });
+
+    const sortedDemo = demoRows.sort((a, b) => {
+      const dateCompare = String(b.test_date || '').localeCompare(String(a.test_date || ''));
+      if (dateCompare !== 0) return dateCompare;
+      return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+    });
+
+    return sortedDemo.map((r) => mapTestResultRowToModel(r, 'DEMO_LOCAL_STORAGE', options));
+  }
+
+  const dbClient = options.supabaseClient || supabase;
+  if (!dbClient) {
+    throw formatDatabasePersistenceError(
+      { code: 'NO_SUPABASE_CLIENT', message: 'Klien database Supabase tidak terinisialisasi.' },
+      'memuat rekapitulasi data mentah TST-SPR-10M'
+    );
+  }
+
+  const query = dbClient
+    .from('athlete_test_results')
+    .select('*')
+    .eq('tenant_id', verifiedTenantId)
+    .eq('test_id', 'TST-SPR-10M')
+    .order('test_date', { ascending: false })
+    .order('created_at', { ascending: false });
+
+  const { data, error } = await query;
+  if (error) {
+    throw formatDatabasePersistenceError(error, 'memuat rekapitulasi data mentah TST-SPR-10M');
+  }
+
+  const safeRows = (Array.isArray(data) ? data : []).filter(
+    (row) =>
+      row &&
+      String(row.tenant_id).trim() === verifiedTenantId &&
+      String(row.test_id).trim() === 'TST-SPR-10M'
+  );
+
+  return safeRows.map((r) => mapTestResultRowToModel(r, 'SUPABASE_DB', options));
+}
+
+/**
+ * Menghasilkan rekapitulasi data mentah TST-SPR-10M untuk penyusunan norma performa pada masa depan,
+ * dikelompokkan berdasarkan kelompok usia, Development Tier, metode pengukuran, tenant, dan periode tes.
+ */
+export async function getTenantSprint10mNormsRecapitulation(
+  authContext,
+  filterOptions = {},
+  options = {}
+) {
+  const verifiedTenantId = verifyAndResolveTenantId(authContext, filterOptions?.tenantId || options?.tenantId, {
+    requireWritePermission: false
+  });
+
+  const records = await getTenantSprint10mTestRecords(authContext, options);
+  return recapitulateSprint10mRawData(records, {
+    ...filterOptions,
+    expectedTenantId: verifiedTenantId
+  });
 }
 
 /**
