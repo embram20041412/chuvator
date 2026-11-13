@@ -205,11 +205,153 @@ export function mapEvaluationFromSupabase(row, extra = {}) {
 }
 
 // -------------------------------------------------------------------------
+// DETERMINISTIC DEMO DATA (KHUSUS tenantId === 'demo-tenant-1' SAAT AUTODEMO)
+// -------------------------------------------------------------------------
+const DEMO_ACADEMY_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-000000000001';
+const DEMO_CLASS_U12_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-000000000012';
+const DEMO_CLASS_U16_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-000000000016';
+const DEMO_EVAL_STORAGE_KEY = 'chuvator_demo_academy_evaluations_v1';
+
+const DEMO_ACADEMIES = [
+  {
+    id: DEMO_ACADEMY_ID,
+    tenant_id: 'demo-tenant-1',
+    name: 'Akademi Sepakbola CHUVATOR',
+    academy_name: 'Akademi Sepakbola CHUVATOR',
+    category: 'field',
+    category_label: 'Field & Team Sports',
+    sport_category: 'field',
+    sport: 'SepakBola',
+    description: 'Program pembinaan sepakbola usia dini hingga prestasi (4-Tier LTAD & Scouting Combine).',
+    created_at: '2026-01-01T00:00:00.000Z'
+  }
+];
+
+const DEMO_CLASSES = [
+  {
+    id: DEMO_CLASS_U12_ID,
+    tenant_id: 'demo-tenant-1',
+    academy_id: DEMO_ACADEMY_ID,
+    academy_name: 'Akademi Sepakbola CHUVATOR',
+    class_name: 'Sepakbola U-12 (Skill Phase)',
+    sport: 'SepakBola',
+    coach_id: null,
+    coach_name: 'Coach Bima Sakti',
+    min_age: 10,
+    max_age: 12,
+    max_quota: 24,
+    tier_code: 'FILANESIA_F2',
+    tier_label: 'Tier 2: U10–U12 (Skill Phase)',
+    schedule: 'Selasa & Kamis, 15:30–17:00',
+    schedules: ['Selasa 15:30', 'Kamis 15:30'],
+    is_archived: false
+  },
+  {
+    id: DEMO_CLASS_U16_ID,
+    tenant_id: 'demo-tenant-1',
+    academy_id: DEMO_ACADEMY_ID,
+    academy_name: 'Akademi Sepakbola CHUVATOR',
+    class_name: 'Sepakbola U-16 (Tactical Phase)',
+    sport: 'SepakBola',
+    coach_id: null,
+    coach_name: 'Coach Indra Wijaya',
+    min_age: 13,
+    max_age: 16,
+    max_quota: 24,
+    tier_code: 'FILANESIA_F3',
+    tier_label: 'Tier 3: U13–U16 (Tactical Phase)',
+    schedule: 'Rabu & Sabtu, 15:30–17:30',
+    schedules: ['Rabu 15:30', 'Sabtu 15:30'],
+    is_archived: false
+  }
+];
+
+const DEMO_STUDENTS = [
+  {
+    id: 'demo-student-fc-1',
+    tenant_id: 'demo-tenant-1',
+    student_name: 'Rafa Pratama',
+    birth_date: '2015-05-14',
+    academy_id: DEMO_ACADEMY_ID,
+    academy_name: 'Akademi Sepakbola CHUVATOR',
+    class_id: DEMO_CLASS_U12_ID,
+    class_name: 'Sepakbola U-12 (Skill Phase)',
+    coach_name: 'Coach Bima Sakti',
+    sport_category: 'field',
+    player_role: 'ST',
+    parent_name: 'Budi Pratama',
+    parent_phone: '081234567801',
+    spp_status: 'Lunas',
+    monthly_fee: 350000
+  },
+  {
+    id: 'demo-student-fc-2',
+    tenant_id: 'demo-tenant-1',
+    student_name: 'Naufal Hakim',
+    birth_date: '2014-08-21',
+    academy_id: DEMO_ACADEMY_ID,
+    academy_name: 'Akademi Sepakbola CHUVATOR',
+    class_id: DEMO_CLASS_U12_ID,
+    class_name: 'Sepakbola U-12 (Skill Phase)',
+    coach_name: 'Coach Bima Sakti',
+    sport_category: 'field',
+    player_role: 'CM',
+    parent_name: 'Hendra Hakim',
+    parent_phone: '081234567802',
+    spp_status: 'Lunas',
+    monthly_fee: 350000
+  },
+  {
+    id: 'demo-student-fc-3',
+    tenant_id: 'demo-tenant-1',
+    student_name: 'Bagas Permana',
+    birth_date: '2011-03-10',
+    academy_id: DEMO_ACADEMY_ID,
+    academy_name: 'Akademi Sepakbola CHUVATOR',
+    class_id: DEMO_CLASS_U16_ID,
+    class_name: 'Sepakbola U-16 (Tactical Phase)',
+    coach_name: 'Coach Indra Wijaya',
+    sport_category: 'field',
+    player_role: 'LW',
+    parent_name: 'Agus Permana',
+    parent_phone: '081234567803',
+    spp_status: 'Lunas',
+    monthly_fee: 400000
+  }
+];
+
+function isDemoTenant(tenantId) {
+  return tenantId === 'demo-tenant-1';
+}
+
+function readDemoEvals() {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return [];
+    const raw = window.localStorage.getItem(DEMO_EVAL_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeDemoEvals(list) {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    window.localStorage.setItem(DEMO_EVAL_STORAGE_KEY, JSON.stringify(list));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+// -------------------------------------------------------------------------
 // 1. WORKSPACE AKADEMI (academies)
 // -------------------------------------------------------------------------
 
 export async function getAcademies(tenantId) {
   if (!tenantId) return [];
+  if (isDemoTenant(tenantId)) {
+    return DEMO_ACADEMIES.map(mapAcademyFromSupabase);
+  }
   try {
     const { data, error } = await supabase
       .from('academies')
@@ -325,6 +467,13 @@ export async function getClasses(tenantId, academyId = null, coachId = null, opt
   if (!tenantId) return [];
 
   const { includeArchived = false, onlyArchived = false } = (typeof options === 'object' && options !== null) ? options : {};
+
+  if (isDemoTenant(tenantId)) {
+    if (onlyArchived) return [];
+    let list = DEMO_CLASSES;
+    if (academyId) list = list.filter((c) => c.academy_id === academyId);
+    return list.map(mapClassFromSupabase);
+  }
 
   let query = supabase
     .from('academy_classes')
@@ -537,6 +686,19 @@ export async function deleteClass(classId) {
 
 export async function getCoaches(tenantId, academyId = null) {
   if (!tenantId) return [];
+  if (isDemoTenant(tenantId)) {
+    return [
+      mapCoachFromSupabase({
+        id: 'demo-coach-1',
+        tenant_id: 'demo-tenant-1',
+        academy_id: DEMO_ACADEMY_ID,
+        name: 'Coach Bima Sakti',
+        sport_specialty: 'SepakBola',
+        license: 'AFC B License',
+        status: 'Aktif'
+      })
+    ];
+  }
   try {
     let query = supabase
       .from('coaches')
@@ -700,6 +862,16 @@ export async function deleteCoach(coachId) {
 
 export async function getStudents(tenantId, academyId = null, classId = null) {
   if (!tenantId) return [];
+  if (isDemoTenant(tenantId)) {
+    let list = DEMO_STUDENTS;
+    if (academyId) list = list.filter((s) => s.academy_id === academyId);
+    if (classId) list = list.filter((s) => s.class_id === classId);
+    return list.map((row) => ({
+      ...mapStudentFromSupabase(row),
+      academyId: row.academy_id,
+      classId: row.class_id
+    }));
+  }
 
   // PENTING: Gunakan select('*') tanpa FK join academy_classes(...)
   // agar query tidak error jika class_id bertipe TEXT tanpa FK constraint
@@ -1120,6 +1292,13 @@ export async function deleteStudent(studentId) {
 export async function getEvaluationsByClass(tenantId, classId, limitCount = 100) {
   if (!tenantId || !classId) return [];
 
+  if (isDemoTenant(tenantId)) {
+    const all = readDemoEvals();
+    return all
+      .filter((e) => e.classId === classId)
+      .slice(0, limitCount);
+  }
+
   const safeClassId = toUuidOrNull(classId) || classId;
   const { data, error } = await supabase
     .from('academy_evaluations')
@@ -1138,6 +1317,33 @@ export async function getEvaluationsByClass(tenantId, classId, limitCount = 100)
 
 export async function createEvaluation(payload) {
   const tenantId = payload.tenantId || payload.tenant_id;
+  if (isDemoTenant(tenantId)) {
+    const nowIso = new Date().toISOString();
+    const demoEval = mapEvaluationFromSupabase(
+      {
+        id: `demo-eval-${Date.now()}`,
+        tenant_id: tenantId,
+        class_id: payload.classId || payload.class_id,
+        student_id: payload.studentId || payload.student_id,
+        active_tier: Number(payload.activeTier ?? 2),
+        overall_score: Number(payload.overallScore ?? 0),
+        pillar_scores: payload.pillarScores || {},
+        scores: payload.scores || {},
+        coach_note: payload.coachNote || '',
+        evaluator: payload.evaluator || 'Coach Bima Sakti',
+        created_at: nowIso
+      },
+      {
+        ...payload,
+        classId: payload.classId || payload.class_id,
+        studentId: payload.studentId || payload.student_id
+      }
+    );
+    const existing = readDemoEvals();
+    writeDemoEvals([demoEval, ...existing].slice(0, 100));
+    return demoEval;
+  }
+
   const classId = toUuidOrNull(payload.classId || payload.class_id);
   const studentId = toUuidOrNull(payload.studentId || payload.student_id);
   const activeTier = payload.activeTier ?? payload.active_tier ?? 1;
@@ -1188,6 +1394,11 @@ export async function createEvaluation(payload) {
 
 export async function deleteEvaluation(evaluationId) {
   if (!evaluationId) return true;
+  if (String(evaluationId).startsWith('demo-eval-')) {
+    const existing = readDemoEvals();
+    writeDemoEvals(existing.filter((e) => e.id !== evaluationId));
+    return true;
+  }
   const { error } = await supabase
     .from('academy_evaluations')
     .delete()

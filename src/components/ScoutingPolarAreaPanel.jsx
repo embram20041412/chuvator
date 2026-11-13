@@ -176,10 +176,17 @@ export default function ScoutingPolarAreaPanel({
   onOpenEdit,
   isArchived = false,
   sportName = 'Sepakbola / Futsal',
-  isMobile = false
+  isMobile = false,
+  measuredIndicatorMap = {}
 }) {
   const [hoveredKey, setHoveredKey] = useState(null);
   const [showMobileChart, setShowMobileChart] = useState(true);
+
+  const totalMeasuredCount = useMemo(() => {
+    return Object.values(measuredIndicatorMap || {}).filter(
+      (rec) => rec && rec.source === 'battery_test'
+    ).length;
+  }, [measuredIndicatorMap]);
 
   // Active or hovered category for focal preview
   const currentFocalKey = hoveredKey || activeCategoryKey;
@@ -219,11 +226,15 @@ export default function ScoutingPolarAreaPanel({
       // Label coordinate outside the 100-mark circle
       const labelRadius = isMobile ? maxOuterRadius + 24 : maxOuterRadius + 28;
       const labelPos = polarToCartesian(cx, cy, labelRadius, midAngle);
+      const measuredCount = (cat.indicators || []).filter(
+        (ind) => measuredIndicatorMap?.[ind]?.source === 'battery_test'
+      ).length;
 
       return {
         ...cat,
         theme,
         score,
+        measuredCount,
         startAngle,
         endAngle,
         midAngle,
@@ -232,7 +243,7 @@ export default function ScoutingPolarAreaPanel({
         isHovered: (hoveredKey === cat.key) || (activeCategoryKey === cat.key)
       };
     });
-  }, [categoryList, numSlices, anglePerSlice, innerRadius, usableRadius, maxOuterRadius, cx, cy, hoveredKey, activeCategoryKey, isMobile]);
+  }, [categoryList, numSlices, anglePerSlice, innerRadius, usableRadius, maxOuterRadius, cx, cy, hoveredKey, activeCategoryKey, isMobile, measuredIndicatorMap]);
 
   // Concentric Scale Circles (25, 50, 75, 100)
   const scaleLevels = [25, 50, 75, 100];
@@ -247,9 +258,19 @@ export default function ScoutingPolarAreaPanel({
               <BarChart2 className="w-4 h-4 text-[#16A779]" />
             </div>
             <div className="min-w-0">
-              <h3 className="font-bold text-[13px] text-[#17233D] leading-tight truncate my-0">
-                Scouting Polar-Area
-              </h3>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h3 className="font-bold text-[13px] text-[#17233D] leading-tight truncate my-0">
+                  Scouting Polar-Area
+                </h3>
+                {totalMeasuredCount > 0 && (
+                  <span
+                    data-testid="polar-measured-badge"
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap"
+                  >
+                    Terukur via Tes ({totalMeasuredCount})
+                  </span>
+                )}
+              </div>
               <p className="text-[11px] text-[#68758B] font-medium leading-tight truncate my-0 mt-0.5">
                 {categoryList.length} Kategori &bull; Skala 0–100
               </p>
@@ -549,6 +570,11 @@ export default function ScoutingPolarAreaPanel({
                   <span className="text-[11px] font-bold text-[#17233D] truncate">
                     {slice.shortLabel || slice.theme.shortLabel || slice.label}
                   </span>
+                  {slice.measuredCount > 0 && (
+                    <span className="text-[9px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1 rounded shrink-0">
+                      Tes
+                    </span>
+                  )}
                 </div>
                 <span
                   className="text-[12px] font-extrabold font-mono shrink-0"
@@ -573,13 +599,21 @@ export default function ScoutingPolarAreaPanel({
             <BarChart2 className="w-4 h-4 text-[#C89D32]" />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h3 className="font-extrabold text-xs sm:text-sm text-slate-900 tracking-tight">
                 Scouting Polar-Area Chart
               </h3>
               <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#101D38]/5 text-[#101D38] border border-[#101D38]/15">
                 Opta Nightingale Rose
               </span>
+              {totalMeasuredCount > 0 && (
+                <span
+                  data-testid="polar-measured-badge"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200 tabular-nums"
+                >
+                  Terukur via Tes ({totalMeasuredCount})
+                </span>
+              )}
             </div>
             <p className="text-[10px] text-slate-500 font-medium">
               7 pilar performa &bull; Ketuk sektor untuk edit
@@ -908,7 +942,26 @@ export default function ScoutingPolarAreaPanel({
 
           </div>
 
-          {/* Quick Chart Hint */}
+          {/* Quick Chart Hint & Measured Pillars Summary */}
+          {totalMeasuredCount > 0 && (
+            <div className="w-full mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-center gap-1.5">
+              {sliceData
+                .filter((s) => s.measuredCount > 0)
+                .map((s) => (
+                  <span
+                    key={`measured-pillar-${s.key}`}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold bg-emerald-50/90 text-emerald-800 border border-emerald-200 tabular-nums"
+                  >
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: s.theme.color }}
+                    />
+                    <span>{s.shortLabel || s.label}: Terukur via Tes ({s.measuredCount})</span>
+                  </span>
+                ))}
+            </div>
+          )}
+
           <div className="flex items-center gap-1.5 mt-3 text-[11px] text-slate-500 font-medium">
             <Sparkles className="w-3.5 h-3.5 text-[#C89D32]" />
             <span>Arahkan kursor atau ketuk irisan pilar untuk membuka lembar edit penilaian indikator</span>

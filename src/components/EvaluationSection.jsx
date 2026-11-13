@@ -44,7 +44,8 @@ import {
   Edit3,
   Check,
   X,
-  Archive
+  Archive,
+  Timer
 } from 'lucide-react';
 
 import {
@@ -112,6 +113,10 @@ import TennisAssessmentView from './TennisAssessmentView';
 import ScoutingPolarAreaPanel from './ScoutingPolarAreaPanel';
 import AssessmentIndicatorsAccordion from './AssessmentIndicatorsAccordion';
 import AthleteAssessmentEditView from './AthleteAssessmentEditView';
+import ScoutingCombineHub from './ScoutingCombineHub';
+import RubricAssessmentSheet from './RubricAssessmentSheet';
+import scoutingCombineService from '../services/scoutingCombineService';
+import { INDICATOR_KEY_TO_LABEL } from '../utils/combineScoringEngine';
 import {
   MobileEvaluationContextBar,
   MobileScoreHeroCard,
@@ -3040,10 +3045,59 @@ function FootballAssessmentView({
 
   // Scores state: { [indicatorName]: number }
   const [scores, setScores] = useState({});
+  const [footballMode, setFootballMode] = useState('report'); // 'report' | 'combine' | 'rubric'
+  const [athleteIndicatorRecords, setAthleteIndicatorRecords] = useState({});
   const [coachNote, setCoachNote] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
+
+  // Map raw indicator_key records -> CHUVATOR display label records for Polar Area & Accordion
+  const measuredIndicatorMap = useMemo(() => {
+    const mapped = {};
+    Object.entries(athleteIndicatorRecords || {}).forEach(([key, rec]) => {
+      if (!rec) return;
+      const label = rec.indicator_label || INDICATOR_KEY_TO_LABEL[key] || key;
+      mapped[label] = {
+        ...rec,
+        indicator_key: key,
+        indicator_label: label
+      };
+    });
+    return mapped;
+  }, [athleteIndicatorRecords]);
+
+  const measuredBatteryEntries = useMemo(() => {
+    return Object.values(measuredIndicatorMap).filter((rec) => rec && rec.source === 'battery_test');
+  }, [measuredIndicatorMap]);
+
+  const measuredAvgScore = useMemo(() => {
+    if (!measuredBatteryEntries || measuredBatteryEntries.length === 0) return null;
+    const sum = measuredBatteryEntries.reduce((acc, rec) => acc + (Number(rec.score) || 0), 0);
+    return Math.round(sum / measuredBatteryEntries.length);
+  }, [measuredBatteryEntries]);
+
+  const handleSelectTierFromCombine = useCallback((tierNum) => {
+    const t = Math.max(1, Math.min(4, Number(tierNum) || 1));
+    setOverrideTier(`FILANESIA_F${t}`);
+  }, []);
+
+  const handleCombineOrRubricSynced = useCallback((indicatorScoresMap) => {
+    const nextMap = indicatorScoresMap || {};
+    setAthleteIndicatorRecords(nextMap);
+    setScores((prev) => {
+      const merged = { ...prev };
+      Object.entries(nextMap).forEach(([key, rec]) => {
+        if (!rec) return;
+        const label = rec.indicator_label || INDICATOR_KEY_TO_LABEL[key];
+        if (label && Number.isFinite(Number(rec.score))) {
+          merged[label] = Math.max(1, Math.min(100, Math.round(Number(rec.score))));
+        }
+      });
+      return merged;
+    });
+    setSuccessMsg('Hasil tes tersimpan ke athlete_indicator_scores & otomatis memperbarui Grafik Polar Area.');
+  }, []);
 
   // Memoized latest evaluation doc for current student in Football
   const latestEvalDoc = useMemo(() => {
@@ -3094,21 +3148,25 @@ function FootballAssessmentView({
     }
   }, [activeTier, selectedStudent]);
 
-  // LOGIKA TRANSISI & RESET STATE SETIAP KALI SISWA / KELAS BERUBAH
+  // LOGIKA TRANSISI & RESET STATE SETIAP KALI SISWA / KELAS BERUBAH + SINKRON athlete_indicator_scores
   useEffect(() => {
+    let isMounted = true;
     if (!selectedStudent?.id) {
       setScores({});
-      return;
+      setAthleteIndicatorRecords({});
+      return () => {
+        isMounted = false;
+      };
     }
 
     setCoachNote('');
     setErrorMsg(null);
     setSuccessMsg(null);
 
-    if (latestEvalDoc) {
-      setScores(latestEvalDoc.scores || {});
+    const baseScores = latestEvalDoc?.scores ? { ...latestEvalDoc.scores } : {};
+    setScores(baseScores);
 
-      // Restore position/secondaryPosition/spec/style
+    if (latestEvalDoc) {
       const posCode = latestEvalDoc.playerRole || selectedStudent.playerRole || selectedStudent.position || (activeTier === 1 ? 'OUTFIELD_SSB' : activeTier === 2 ? 'CM' : 'ST');
       setSelectedPosition(posCode);
 
@@ -3122,9 +3180,6 @@ function FootballAssessmentView({
       const styleVal = latestEvalDoc.styleCode || selectedStudent.styleCode || 'STY07';
       setSelectedStyleCode(styleVal);
     } else {
-      // Siswa Baru: Inisialisasi dari 0
-      setScores({});
-
       const posCode = selectedStudent.playerRole || selectedStudent.position || (activeTier === 1 ? 'OUTFIELD_SSB' : activeTier === 2 ? 'CM' : 'ST');
       setSelectedPosition(posCode);
 
@@ -3135,7 +3190,35 @@ function FootballAssessmentView({
       setSelectedSpecialization(selectedStudent.specialization || (posConfig.specializations ? posConfig.specializations[0] : 'Poacher'));
       setSelectedStyleCode(selectedStudent.styleCode || 'STY07');
     }
-  }, [selectedStudent?.id, latestEvalDoc?.id]);
+
+    // Fetch live scores synced from Scouting Combine / Rubric (`athlete_indicator_scores`)
+    if (tenantId) {
+      scoutingCombineService
+        .getAthleteIndicatorScores(tenantId, selectedStudent.id)
+        .then((indicatorMap) => {
+          if (!isMounted || !indicatorMap) return;
+          setAthleteIndicatorRecords(indicatorMap);
+          setScores((prev) => {
+            const merged = { ...prev };
+            Object.entries(indicatorMap).forEach(([key, rec]) => {
+              if (!rec) return;
+              const label = rec.indicator_label || INDICATOR_KEY_TO_LABEL[key];
+              if (label && Number.isFinite(Number(rec.score))) {
+                merged[label] = Math.max(1, Math.min(100, Math.round(Number(rec.score))));
+              }
+            });
+            return merged;
+          });
+        })
+        .catch((err) => {
+          console.warn('[FootballAssessmentView] Failed loading athlete_indicator_scores:', err);
+        });
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedStudent?.id, latestEvalDoc?.id, tenantId]);
 
   const handlePositionChange = (newCode) => {
     setSelectedPosition(newCode);
@@ -3492,70 +3575,188 @@ function FootballAssessmentView({
             />
 
             {selectedStudent && (
-              <form onSubmit={handleSaveEvaluation} className="space-y-3">
-                {/* C. Ringkasan Skor Utama */}
-                <MobileScoreHeroCard
-                  studentName={selectedStudent.studentName}
-                  overallScore={axisScores.overall}
-                  gradeText={overallGrade.grade}
-                  positionLabel={positionText}
-                  tacticalRoleLabel={tacticalRoleText}
-                  tierShortLabel={tierConfig.shortLabel}
-                  latestEvalDate={latestEvalDoc?.date || null}
-                  evaluationDate={evaluationDate}
-                  onOpenEdit={() => {
-                    setActiveModalCategoryKey(null);
-                    setIsEditingIndicators(true);
-                  }}
-                  isArchived={isArchived}
-                />
+              <>
+                {/* Mode Switcher (Rapor Polar Area / Scouting Combine / Rubrik) */}
+                <div className="grid grid-cols-3 gap-1.5 p-1 bg-white rounded-2xl border border-[#E7EBF2] shadow-2xs">
+                  <button
+                    type="button"
+                    data-testid="football-mode-report"
+                    onClick={() => setFootballMode('report')}
+                    className={`min-h-[44px] px-2 py-1.5 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer ${
+                      footballMode === 'report'
+                        ? 'bg-[#354944] text-white border-b-2 border-[#C89D32] shadow-2xs'
+                        : 'text-[#68758B]'
+                    }`}
+                  >
+                    Rapor Polar
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="football-mode-combine"
+                    onClick={() => setFootballMode('combine')}
+                    className={`min-h-[44px] px-2 py-1.5 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer ${
+                      footballMode === 'combine'
+                        ? 'bg-[#354944] text-white border-b-2 border-[#C89D32] shadow-2xs'
+                        : 'text-[#68758B]'
+                    }`}
+                  >
+                    Combine Tes
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="football-mode-rubric"
+                    onClick={() => setFootballMode('rubric')}
+                    className={`min-h-[44px] px-2 py-1.5 rounded-xl text-[11px] font-extrabold transition-all cursor-pointer ${
+                      footballMode === 'rubric'
+                        ? 'bg-[#354944] text-white border-b-2 border-[#C89D32] shadow-2xs'
+                        : 'text-[#68758B]'
+                    }`}
+                  >
+                    Rubrik 1–5
+                  </button>
+                </div>
 
-                {/* D. Scouting Polar-Area (Elemen Visual Utama) */}
-                <ScoutingPolarAreaPanel
-                  categoryList={footballCategoryList}
-                  overallScore={axisScores.overall}
-                  overallGrade={overallGrade}
-                  activeCategoryKey={activeModalCategoryKey}
-                  onSelectCategory={(key) => setActiveModalCategoryKey(key)}
-                  onOpenEdit={(key) => {
-                    if (key) setActiveModalCategoryKey(key);
-                    setIsEditingIndicators(true);
-                  }}
-                  isArchived={isArchived}
-                  sportName={detectedSport || 'Sepakbola'}
-                  isMobile={true}
-                />
+                {footballMode === 'combine' ? (
+                  <ScoutingCombineHub
+                    students={students}
+                    selectedStudentId={selectedStudent.id}
+                    onSelectStudentId={setSelectedStudentId}
+                    activeTier={activeTier}
+                    onChangeTier={handleSelectTierFromCombine}
+                    tenantId={tenantId}
+                    evaluatorId={selectedClass?.coachId || null}
+                    existingIndicatorScores={athleteIndicatorRecords}
+                    onSyncedToReport={(map) => {
+                      handleCombineOrRubricSynced(map);
+                    }}
+                    isArchived={isArchived}
+                    isMobile={true}
+                  />
+                ) : footballMode === 'rubric' ? (
+                  <RubricAssessmentSheet
+                    students={students}
+                    selectedStudentId={selectedStudent.id}
+                    onSelectStudentId={setSelectedStudentId}
+                    activeTier={activeTier}
+                    onChangeTier={handleSelectTierFromCombine}
+                    tenantId={tenantId}
+                    evaluatorId={selectedClass?.coachId || null}
+                    existingIndicatorScores={athleteIndicatorRecords}
+                    onSyncedToReport={(map) => {
+                      handleCombineOrRubricSynced(map);
+                    }}
+                    isArchived={isArchived}
+                    isMobile={true}
+                  />
+                ) : (
+                  <form onSubmit={handleSaveEvaluation} className="space-y-3">
+                    {/* C. Ringkasan Skor Utama */}
+                    <MobileScoreHeroCard
+                      studentName={selectedStudent.studentName}
+                      overallScore={axisScores.overall}
+                      gradeText={overallGrade.grade}
+                      positionLabel={positionText}
+                      tacticalRoleLabel={tacticalRoleText}
+                      tierShortLabel={tierConfig.shortLabel}
+                      latestEvalDate={latestEvalDoc?.date || null}
+                      evaluationDate={evaluationDate}
+                      onOpenEdit={() => {
+                        setActiveModalCategoryKey(null);
+                        setIsEditingIndicators(true);
+                      }}
+                      isArchived={isArchived}
+                    />
 
-                {/* E. Tujuh Indikator Penilaian (Progressive Disclosure Accordion) */}
-                <AssessmentIndicatorsAccordion
-                  categoryList={footballCategoryList}
-                  scores={scores}
-                  onScoreChange={handleScoreChange}
-                  onAdjustScore={handleAdjustScore}
-                  onSetCategoryPreset={handleSetCategoryPreset}
-                  activeCategoryKey={activeModalCategoryKey}
-                  isArchived={isArchived}
-                  tierLabel={`${detectedSport || 'Sepakbola'} • ${tierConfig.shortLabel}`}
-                  isMobile={true}
-                  defaultOpenFirst={false}
-                />
+                    {/* D. Scouting Polar-Area (Elemen Visual Utama) */}
+                    <ScoutingPolarAreaPanel
+                      categoryList={footballCategoryList}
+                      overallScore={axisScores.overall}
+                      overallGrade={overallGrade}
+                      activeCategoryKey={activeModalCategoryKey}
+                      onSelectCategory={(key) => setActiveModalCategoryKey(key)}
+                      onOpenEdit={(key) => {
+                        if (key) setActiveModalCategoryKey(key);
+                        setIsEditingIndicators(true);
+                      }}
+                      isArchived={isArchived}
+                      sportName={detectedSport || 'Sepakbola'}
+                      isMobile={true}
+                      measuredIndicatorMap={measuredIndicatorMap}
+                    />
 
-                {/* F & G. Catatan Pelatih dan AI Insight + Simpan Evaluasi */}
-                <MobileAiAndCoachNotesSection
-                  studentId={selectedStudent.id}
-                  studentName={selectedStudent.studentName}
-                  coachNote={coachNote}
-                  onChangeCoachNote={setCoachNote}
-                  onGenerateAiDraft={handleGenerateDraft}
-                  isSaving={isSaving}
-                  isArchived={isArchived}
-                  hasUnsavedChanges={hasUnsavedChanges}
-                  latestEvalDate={latestEvalDoc?.date || null}
-                  errorMsg={errorMsg}
-                  successMsg={successMsg}
-                  saveButtonLabel="Simpan Evaluasi Atlet"
-                />
-              </form>
+                    {/* D2. Indikator Terukur via Tes (Mobile Summary Strip) */}
+                    {measuredBatteryEntries.length > 0 && (
+                      <div
+                        data-testid="measured-indicators-strip"
+                        className="bg-white rounded-2xl border border-emerald-200/90 p-3 shadow-2xs space-y-2"
+                      >
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <h3 className="text-xs font-extrabold text-slate-900 tracking-tight flex items-center gap-1.5">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <span>Indikator Terukur via Tes ({measuredBatteryEntries.length})</span>
+                          </h3>
+                          {measuredAvgScore !== null && (
+                            <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 text-[10px] font-black tabular-nums">
+                              Rata-rata Terukur: {measuredAvgScore}/100
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                          {measuredBatteryEntries.map((rec) => (
+                            <div
+                              key={rec.indicator_key}
+                              className="p-2 rounded-xl bg-emerald-50/70 border border-emerald-200/80 flex items-center justify-between gap-1.5"
+                            >
+                              <div className="min-w-0">
+                                <p className="text-[11px] font-extrabold text-slate-900 truncate">
+                                  {rec.indicator_label}
+                                </p>
+                                <span className="text-[9px] font-bold text-emerald-700">
+                                  Terukur via Tes
+                                </span>
+                              </div>
+                              <span className="font-mono text-xs font-black text-emerald-800 tabular-nums shrink-0">
+                                {rec.score}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* E. Tujuh Indikator Penilaian (Progressive Disclosure Accordion) */}
+                    <AssessmentIndicatorsAccordion
+                      categoryList={footballCategoryList}
+                      scores={scores}
+                      onScoreChange={handleScoreChange}
+                      onAdjustScore={handleAdjustScore}
+                      onSetCategoryPreset={handleSetCategoryPreset}
+                      activeCategoryKey={activeModalCategoryKey}
+                      isArchived={isArchived}
+                      tierLabel={`${detectedSport || 'Sepakbola'} • ${tierConfig.shortLabel}`}
+                      isMobile={true}
+                      defaultOpenFirst={false}
+                      measuredIndicatorMap={measuredIndicatorMap}
+                    />
+
+                    {/* F & G. Catatan Pelatih dan AI Insight + Simpan Evaluasi */}
+                    <MobileAiAndCoachNotesSection
+                      studentId={selectedStudent.id}
+                      studentName={selectedStudent.studentName}
+                      coachNote={coachNote}
+                      onChangeCoachNote={setCoachNote}
+                      onGenerateAiDraft={handleGenerateDraft}
+                      isSaving={isSaving}
+                      isArchived={isArchived}
+                      hasUnsavedChanges={hasUnsavedChanges}
+                      latestEvalDate={latestEvalDoc?.date || null}
+                      errorMsg={errorMsg}
+                      successMsg={successMsg}
+                      saveButtonLabel="Simpan Evaluasi Atlet"
+                    />
+                  </form>
+                )}
+              </>
             )}
 
             {/* G. Riwayat Evaluasi (Collapsible Progressive Disclosure) */}
@@ -3739,8 +3940,91 @@ function FootballAssessmentView({
         )}
       </div>
 
-      {/* 2. FORM PENILAIAN ATHLETE ASSESSMENT WORKSPACE */}
+      {/* MODE SWITCHER: RAPOR POLAR AREA vs SCOUTING COMBINE vs RUBRIK 1-5 */}
       {selectedStudent && (
+        <div className="bg-white rounded-2xl p-1.5 border border-slate-200/90 shadow-2xs grid grid-cols-3 gap-1.5">
+          <button
+            type="button"
+            data-testid="football-mode-report"
+            onClick={() => setFootballMode('report')}
+            className={`min-h-[44px] px-3 py-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              footballMode === 'report'
+                ? 'bg-[#354944] text-white border-b-2 border-[#C89D32] shadow-xs'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <BarChart2 className="w-4 h-4 shrink-0" />
+            <span>Rapor &amp; Polar Area</span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="football-mode-combine"
+            onClick={() => setFootballMode('combine')}
+            className={`min-h-[44px] px-3 py-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              footballMode === 'combine'
+                ? 'bg-[#354944] text-white border-b-2 border-[#C89D32] shadow-xs'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <Timer className="w-4 h-4 shrink-0" />
+            <span>Scouting Combine (Teknik &amp; Fisik)</span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="football-mode-rubric"
+            onClick={() => setFootballMode('rubric')}
+            className={`min-h-[44px] px-3 py-2 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              footballMode === 'rubric'
+                ? 'bg-[#354944] text-white border-b-2 border-[#C89D32] shadow-xs'
+                : 'text-slate-600 hover:bg-slate-100'
+            }`}
+          >
+            <Brain className="w-4 h-4 shrink-0" />
+            <span>Rubrik (Taktik &amp; Mental)</span>
+          </button>
+        </div>
+      )}
+
+      {/* 2. FORM PENILAIAN ATHLETE ASSESSMENT WORKSPACE / SCOUTING COMBINE / RUBRIK */}
+      {selectedStudent && footballMode === 'combine' && (
+        <ScoutingCombineHub
+          students={students}
+          selectedStudentId={selectedStudent.id}
+          onSelectStudentId={setSelectedStudentId}
+          activeTier={activeTier}
+          onChangeTier={handleSelectTierFromCombine}
+          tenantId={tenantId}
+          evaluatorId={selectedClass?.coachId || null}
+          existingIndicatorScores={athleteIndicatorRecords}
+          onSyncedToReport={(map) => {
+            handleCombineOrRubricSynced(map);
+          }}
+          isArchived={isArchived}
+          isMobile={false}
+        />
+      )}
+
+      {selectedStudent && footballMode === 'rubric' && (
+        <RubricAssessmentSheet
+          students={students}
+          selectedStudentId={selectedStudent.id}
+          onSelectStudentId={setSelectedStudentId}
+          activeTier={activeTier}
+          onChangeTier={handleSelectTierFromCombine}
+          tenantId={tenantId}
+          evaluatorId={selectedClass?.coachId || null}
+          existingIndicatorScores={athleteIndicatorRecords}
+          onSyncedToReport={(map) => {
+            handleCombineOrRubricSynced(map);
+          }}
+          isArchived={isArchived}
+          isMobile={false}
+        />
+      )}
+
+      {selectedStudent && footballMode === 'report' && (
         <form onSubmit={handleSaveEvaluation} className="space-y-3.5">
           {isEditingIndicators ? (
             /* DEDICATED EDIT PENILAIAN INDIKATOR VIEW (CONFIG + PRESETS + 7 CATEGORIES) */
@@ -3794,6 +4078,21 @@ function FootballAssessmentView({
                       <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#354944] text-[#C89D32] border border-[#C89D32]/40">
                         {selectedPosition}{activeTier >= 3 && secondaryPosition && secondaryPosition !== 'NONE' ? ` / ${secondaryPosition}` : ''}
                       </span>
+                      {measuredBatteryEntries.length > 0 && (
+                        <>
+                          <span
+                            data-testid="report-measured-count-badge"
+                            className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-300 border border-emerald-400/40 tabular-nums"
+                          >
+                            {measuredBatteryEntries.length} Indikator Terukur via Tes
+                          </span>
+                          {measuredAvgScore !== null && (
+                            <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-md bg-[#C89D32]/20 text-[#F3D27A] border border-[#C89D32]/40 tabular-nums">
+                              Rata-rata Terukur: {measuredAvgScore}/100
+                            </span>
+                          )}
+                        </>
+                      )}
                     </div>
                     <p className="text-[11px] text-slate-300 font-medium truncate">
                       {tierConfig.shortLabel} ({studentAge} Thn) &bull; {formatDateIndonesian(evaluationDate)}
@@ -3804,7 +4103,7 @@ function FootballAssessmentView({
                 <div className="flex items-center gap-2.5 shrink-0">
                   <div className="text-right">
                     <div className="flex items-baseline gap-0.5 justify-end">
-                      <span className="font-mono text-xl sm:text-2xl font-black text-[#C89D32]">
+                      <span className="font-mono text-xl sm:text-2xl font-black text-[#C89D32] tabular-nums">
                         {axisScores.overall}
                       </span>
                       <span className="text-[10px] font-bold text-slate-400">/100</span>
@@ -3831,7 +4130,53 @@ function FootballAssessmentView({
                 }}
                 isArchived={isArchived}
                 sportName={detectedSport || "Sepakbola"}
+                measuredIndicatorMap={measuredIndicatorMap}
               />
+
+              {/* B2. INDIKATOR TERUKUR VIA TES (SYNCED FROM COMBINE & RUBRIC) */}
+              {measuredBatteryEntries.length > 0 && (
+                <div
+                  data-testid="measured-indicators-strip"
+                  className="bg-white rounded-2xl border border-emerald-200/90 p-3.5 sm:p-4 shadow-2xs space-y-2"
+                >
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <h3 className="text-xs font-extrabold text-slate-900 tracking-tight flex items-center gap-1.5">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                      <span>Indikator Terukur via Tes ({measuredBatteryEntries.length})</span>
+                    </h3>
+                    <div className="flex items-center gap-2">
+                      {measuredAvgScore !== null && (
+                        <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 text-[11px] font-black tabular-nums">
+                          Rata-rata Terukur: {measuredAvgScore}/100
+                        </span>
+                      )}
+                      <span className="text-[11px] font-semibold text-emerald-700">
+                        Tersinkronisasi otomatis ke Polar Area
+                      </span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {measuredBatteryEntries.map((rec) => (
+                      <div
+                        key={rec.indicator_key}
+                        className="p-2.5 rounded-xl bg-emerald-50/60 border border-emerald-200/80 flex items-center justify-between gap-2"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-xs font-extrabold text-slate-900 truncate">
+                            {rec.indicator_label}
+                          </p>
+                          <span className="text-[10px] font-bold text-emerald-700">
+                            Terukur via Tes
+                          </span>
+                        </div>
+                        <span className="font-mono text-sm font-black text-emerald-800 tabular-nums shrink-0">
+                          {rec.score}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* C. COMPACT COACH NOTES & AI DRAFT ANALYSIS */}
               <div className="p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl bg-white border border-slate-200 shadow-xs space-y-2.5">

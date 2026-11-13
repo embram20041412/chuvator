@@ -20,6 +20,7 @@ export function AccordionIndicatorCard({
   title,
   value = 0,
   isSpecial = false,
+  isMeasuredFromTest = false,
   onScoreChange,
   onAdjust,
   isArchived = false,
@@ -28,12 +29,19 @@ export function AccordionIndicatorCard({
   const numVal = Math.max(0, Math.min(100, Number(value) || 0));
 
   return (
-    <div className={`p-3 bg-white border ${isSpecial ? 'border-indigo-200/90' : 'border-slate-200/90'} rounded-2xl space-y-2 shadow-2xs`}>
+    <div className={`p-3 bg-white border ${isSpecial ? 'border-indigo-200/90' : isMeasuredFromTest ? 'border-emerald-300/90' : 'border-slate-200/90'} rounded-2xl space-y-2 shadow-2xs`}>
       <div className="flex items-center justify-between text-xs font-bold gap-2">
-        <span className="text-slate-800 truncate" title={title}>
-          {isSpecial && <Star className="w-3 h-3 text-indigo-500 fill-indigo-200 inline mr-1" />}
-          {title}
-        </span>
+        <div className="min-w-0 flex flex-col gap-0.5">
+          <span className="text-slate-800 truncate" title={title}>
+            {isSpecial && <Star className="w-3 h-3 text-indigo-500 fill-indigo-200 inline mr-1" />}
+            {title}
+          </span>
+          {isMeasuredFromTest && (
+            <span className="inline-flex items-center gap-1 w-fit px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              Terukur via Tes
+            </span>
+          )}
+        </div>
 
         {/* Stepper Buttons (-5 / +5) with 44px touch target */}
         <div className="flex items-center gap-1 shrink-0">
@@ -110,7 +118,8 @@ export default function AssessmentIndicatorsAccordion({
   isArchived = false,
   tierLabel = '',
   isMobile = false,
-  defaultOpenFirst = true
+  defaultOpenFirst = true,
+  measuredIndicatorMap = {}
 }) {
   // Open only the focused category or the first category by default (avoid opening all at once)
   const [openKeys, setOpenKeys] = useState(() => {
@@ -332,6 +341,7 @@ export default function AssessmentIndicatorsAccordion({
                               title={indName}
                               value={scores[indName] !== undefined ? scores[indName] : 0}
                               isSpecial={cat.isSpecial}
+                              isMeasuredFromTest={measuredIndicatorMap?.[indName]?.source === 'battery_test'}
                               onScoreChange={(val) => onScoreChange(indName, val)}
                               onAdjust={(delta) => onAdjustScore(indName, delta)}
                               isArchived={isArchived}
@@ -520,6 +530,7 @@ export default function AssessmentIndicatorsAccordion({
                             title={indName}
                             value={scores[indName] !== undefined ? scores[indName] : 0}
                             isSpecial={cat.isSpecial}
+                            isMeasuredFromTest={measuredIndicatorMap?.[indName]?.source === 'battery_test'}
                             onScoreChange={(val) => onScoreChange(indName, val)}
                             onAdjust={(delta) => onAdjustScore(indName, delta)}
                             isArchived={isArchived}
