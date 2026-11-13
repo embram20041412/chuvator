@@ -352,6 +352,7 @@ DECLARE
     v_old_ctx_nested_method TEXT;
     v_old_aux_method TEXT;
     v_ctx_method TEXT;
+    v_conflict_method TEXT;
     v_default_single_method TEXT;
     v_raw_age_group TEXT;
     v_ctx_age_group TEXT;
@@ -388,6 +389,21 @@ BEGIN
             RAISE EXCEPTION 'Mutasi indicator_id pada baris hasil tes yang sudah tersimpan dilarang.' USING ERRCODE = '42501';
         END IF;
         NEW.updated_at := NOW();
+    END IF;
+
+    -- Pastikan INSERT baru hanya memakai 18 test_id resmi Assessment Battery
+    -- (Evaluasi non-objective-test disimpan di public.academy_evaluations; baris historis tidak diubah).
+    IF TG_OP = 'INSERT' AND (
+        NEW.test_id IS NULL OR NEW.test_id NOT IN (
+            'TST-SPR-10M', 'TST-SPR-30M',
+            'TST-AGL-ARW', 'TST-BAL-STK', 'TST-COD-505', 'TST-COR-PLK', 'TST-RSA-630', 'TST-SSB-GK-03', 'TST-WF-TLA',
+            'TST-MOB-SAR', 'TST-RXN-RLR', 'TST-JMP-VER', 'TST-PWR-SBJ', 'TST-SHT-DST',
+            'TST-END-BLP', 'TST-STR-PU1', 'TST-SSB-WAP', 'TST-SSB-GK-02'
+        )
+    ) THEN
+        RAISE EXCEPTION 'test_id (%) tidak terdaftar pada katalog resmi 18 tes Assessment Battery.',
+            COALESCE(NEW.test_id, 'NULL')
+            USING ERRCODE = '23514';
     END IF;
 
     -- Pastikan student_id, class_id, dan academy_id milik NEW.tenant_id dan konsisten
@@ -519,7 +535,9 @@ BEGIN
         v_aux_changed := v_old_aux_method IS DISTINCT FROM v_aux_method;
         v_method_json_changed := v_dm_changed OR v_ctx_nested_changed OR v_aux_changed;
 
-        IF v_method_json_changed THEN
+        -- Jika kolom utama berubah ATAU ada mutasi pada jalur JSONB mana pun,
+        -- seluruh key JSONB non-null pada 3 jalur wajib saling konsisten.
+        IF (NEW.measurement_method IS DISTINCT FROM OLD.measurement_method) OR v_method_json_changed THEN
             IF (v_dm_method IS NOT NULL AND v_ctx_nested_method IS NOT NULL AND v_dm_method IS DISTINCT FROM v_ctx_nested_method)
                OR (v_dm_method IS NOT NULL AND v_aux_method IS NOT NULL AND v_dm_method IS DISTINCT FROM v_aux_method)
                OR (v_ctx_nested_method IS NOT NULL AND v_aux_method IS NOT NULL AND v_ctx_nested_method IS DISTINCT FROM v_aux_method) THEN
@@ -534,11 +552,19 @@ BEGIN
                 RAISE EXCEPTION 'measurement_method yang sudah tercatat tidak boleh dikosongkan menjadi NULL.'
                     USING ERRCODE = '23514';
             END IF;
-            IF v_method_json_changed AND v_ctx_method IS NOT NULL AND v_ctx_method IS DISTINCT FROM v_raw_top_method THEN
+
+            -- Periksa SELURUH nilai non-NULL pada 3 jalur JSONB walaupun JSONB tidak ikut berubah
+            v_conflict_method := COALESCE(
+                CASE WHEN v_dm_method IS NOT NULL AND v_dm_method IS DISTINCT FROM v_raw_top_method THEN v_dm_method ELSE NULL END,
+                CASE WHEN v_ctx_nested_method IS NOT NULL AND v_ctx_nested_method IS DISTINCT FROM v_raw_top_method THEN v_ctx_nested_method ELSE NULL END,
+                CASE WHEN v_aux_method IS NOT NULL AND v_aux_method IS DISTINCT FROM v_raw_top_method THEN v_aux_method ELSE NULL END
+            );
+            IF v_conflict_method IS NOT NULL THEN
                 RAISE EXCEPTION 'Inkonsistensi measurement_method kolom (%) dengan JSONB (%) saat UPDATE untuk test_id %.',
-                    v_raw_top_method, v_ctx_method, NEW.test_id
+                    v_raw_top_method, v_conflict_method, NEW.test_id
                     USING ERRCODE = '23514';
             END IF;
+
             NEW.measurement_method := v_raw_top_method;
         ELSIF v_method_json_changed THEN
             IF v_ctx_method IS NULL THEN
@@ -561,6 +587,12 @@ BEGIN
            OR (NEW.test_id IN ('TST-AGL-ARW', 'TST-BAL-STK', 'TST-COD-505', 'TST-COR-PLK', 'TST-RSA-630', 'TST-SSB-GK-03', 'TST-WF-TLA') AND NEW.measurement_method <> 'STOPWATCH_MANUAL')
            OR (NEW.test_id IN ('TST-MOB-SAR', 'TST-RXN-RLR', 'TST-JMP-VER', 'TST-PWR-SBJ', 'TST-SHT-DST') AND NEW.measurement_method <> 'PHYSICAL_MEASURING_TOOL')
            OR (NEW.test_id IN ('TST-END-BLP', 'TST-STR-PU1', 'TST-SSB-WAP', 'TST-SSB-GK-02') AND NEW.measurement_method <> 'MANUAL_COUNT')
+           OR (NEW.test_id NOT IN (
+               'TST-SPR-10M', 'TST-SPR-30M',
+               'TST-AGL-ARW', 'TST-BAL-STK', 'TST-COD-505', 'TST-COR-PLK', 'TST-RSA-630', 'TST-SSB-GK-03', 'TST-WF-TLA',
+               'TST-MOB-SAR', 'TST-RXN-RLR', 'TST-JMP-VER', 'TST-PWR-SBJ', 'TST-SHT-DST',
+               'TST-END-BLP', 'TST-STR-PU1', 'TST-SSB-WAP', 'TST-SSB-GK-02'
+           ))
         THEN
             RAISE EXCEPTION 'measurement_method (%) tidak dikenal atau tidak kompatibel untuk test_id %.',
                 NEW.measurement_method, NEW.test_id
@@ -631,20 +663,19 @@ BEGIN
 END;
 $$;
 
--- E. Tetapkan Kepemilikan Fungsi SECURITY DEFINER & Hak Eksekusi Least-Privilege
+-- E. Tetapkan Kepemilikan Fungsi SECURITY DEFINER (Fail-Closed) & Hak Eksekusi Least-Privilege
 DO $$
 BEGIN
-    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'postgres') THEN
-        BEGIN
-            ALTER FUNCTION public.get_strict_tenant_member_role(TEXT) OWNER TO postgres;
-            ALTER FUNCTION public.athlete_belongs_to_tenant(UUID, TEXT, UUID, UUID) OWNER TO postgres;
-            ALTER FUNCTION public.coach_can_manage_student(TEXT, UUID, UUID) OWNER TO postgres;
-            ALTER FUNCTION public.validate_and_protect_athlete_test_results() OWNER TO postgres;
-        EXCEPTION WHEN insufficient_privilege THEN
-            RAISE NOTICE 'Catatan Admin: Role eksekutor (%) bukan anggota role postgres; pastikan fungsi SECURITY DEFINER dijalankan oleh role berkemampuan BYPASSRLS.', current_user;
-        END;
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'postgres') THEN
+        RAISE EXCEPTION 'MIGRASI DIBATALKAN (ROLLBACK): Role wajib "postgres" tidak ditemukan pada pg_roles.'
+            USING ERRCODE = '42501';
     END IF;
 END $$;
+
+ALTER FUNCTION public.get_strict_tenant_member_role(TEXT) OWNER TO postgres;
+ALTER FUNCTION public.athlete_belongs_to_tenant(UUID, TEXT, UUID, UUID) OWNER TO postgres;
+ALTER FUNCTION public.coach_can_manage_student(TEXT, UUID, UUID) OWNER TO postgres;
+ALTER FUNCTION public.validate_and_protect_athlete_test_results() OWNER TO postgres;
 
 REVOKE ALL ON FUNCTION public.get_strict_tenant_member_role(TEXT) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.athlete_belongs_to_tenant(UUID, TEXT, UUID, UUID) FROM PUBLIC, anon;

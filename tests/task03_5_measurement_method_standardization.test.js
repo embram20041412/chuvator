@@ -786,4 +786,113 @@ test('Task 03.5.2 (Reconciliation): Integrasi trigger produksi, anti-bypass 3 ja
   assert.ok(verify035.includes('v_tenant_b'), 'Wajib menguji isolasi tenant');
 });
 
+test('Task 03.5.3 (Final Critical Gap Closure): Konsistensi UPDATE kolom-JSONB 3 jalur, fail-closed ownership, rollback jujur, scope 18 test_id & cakupan verifikasi penuh', () => {
+  const sql035Dir = path.resolve(process.cwd(), 'docs/assessment/sql/task03_5');
+  const sql034Dir = path.resolve(process.cwd(), 'docs/assessment/sql/task03_4');
+
+  const mig035 = fs.readFileSync(
+    path.join(sql035Dir, '01_task03_5_measurement_method_standardization.sql'),
+    'utf8'
+  );
+  const verify035 = fs.readFileSync(
+    path.join(sql035Dir, '02_task03_5_verification.sql'),
+    'utf8'
+  );
+  const rollback035 = fs.readFileSync(
+    path.join(sql035Dir, '03_task03_5_rollback.sql'),
+    'utf8'
+  );
+  const core034 = fs.readFileSync(
+    path.join(sql034Dir, '02_core_table_and_indexes.sql'),
+    'utf8'
+  );
+  const trigger034 = fs.readFileSync(
+    path.join(sql034Dir, '03_security_functions_and_triggers.sql'),
+    'utf8'
+  );
+  const master034 = fs.readFileSync(
+    path.join(sql034Dir, '00_master_task03_4_assessment_battery_migration.sql'),
+    'utf8'
+  );
+
+  const stripSqlComments = (sql) =>
+    sql.replace(/\/\*[\s\S]*?\*\//g, '').replace(/--.*$/gm, '');
+
+  // 1. Konsistensi UPDATE Kolom–JSONB 3 jalur (tanpa syarat v_method_json_changed) & scope 18 test_id
+  for (const [label, sql] of [
+    ['01_task03_5', mig035],
+    ['03_security_functions_and_triggers', trigger034],
+    ['00_master', master034]
+  ]) {
+    assert.ok(
+      sql.includes('v_conflict_method := COALESCE('),
+      `${label}: wajib memeriksa seluruh 3 jalur JSONB melalui v_conflict_method saat NEW.measurement_method berubah`
+    );
+    assert.equal(
+      sql.includes('IF v_method_json_changed AND v_ctx_method IS NOT NULL'),
+      false,
+      `${label}: celah v_method_json_changed AND pada pengecekan kolom berubah harus dihapus`
+    );
+    assert.ok(
+      sql.includes('IF (NEW.measurement_method IS DISTINCT FROM OLD.measurement_method) OR v_method_json_changed THEN'),
+      `${label}: perubahan kolom saja wajib memicu validasi konsistensi 3 jalur JSONB`
+    );
+    assert.ok(
+      sql.includes('tidak terdaftar pada katalog resmi 18 tes Assessment Battery'),
+      `${label}: INSERT baru dengan test_id di luar 18 tes wajib ditolak (23514)`
+    );
+    assert.equal(
+      /EXCEPTION\s+WHEN\s+insufficient_privilege/i.test(sql),
+      false,
+      `${label}: dilarang menelan kegagalan ALTER FUNCTION ... OWNER TO postgres dengan RAISE NOTICE`
+    );
+  }
+
+  // Constraint kompatibilitas tidak boleh punya escape hatch test_id NOT IN (...)
+  for (const [label, sql] of [
+    ['01_task03_5', mig035],
+    ['02_core_table_and_indexes', core034],
+    ['00_master', master034]
+  ]) {
+    const compatConstraintStart = sql.indexOf('ADD CONSTRAINT chk_athlete_test_results_measurement_method_compatibility');
+    assert.ok(compatConstraintStart !== -1, `${label}: constraint kompatibilitas wajib ada`);
+    const compatConstraintSnippet = sql.slice(compatConstraintStart, compatConstraintStart + 1600);
+    assert.equal(
+      /test_id\s+NOT\s+IN\s*\(/i.test(compatConstraintSnippet),
+      false,
+      `${label}: chk_athlete_test_results_measurement_method_compatibility tidak boleh meloloskan test_id tidak dikenal via OR test_id NOT IN`
+    );
+  }
+
+  // 2. Verifikasi pasca-CREATE FUNCTION pada 01_task03_5 (owner, SECURITY DEFINER, search_path, grants, trigger)
+  assert.ok(mig035.includes("IF v_owner IS DISTINCT FROM 'postgres' THEN"));
+  assert.ok(mig035.includes('IF v_secdef IS NOT TRUE THEN'));
+  assert.ok(mig035.includes("has_function_privilege('public', p.oid, 'EXECUTE')"));
+  assert.ok(mig035.includes("has_function_privilege('anon', p.oid, 'EXECUTE')"));
+  assert.ok(mig035.includes("has_function_privilege('authenticated', p.oid, 'EXECUTE')"));
+
+  // 3. Rollback fail-closed & jujur (tidak mengarang fungsi baseline Task 03.4)
+  const rollbackNoComments = stripSqlComments(rollback035);
+  assert.ok(rollback035.includes('BELUM AMAN / BELUM LENGKAP'));
+  assert.ok(rollbackNoComments.includes('REPLACE_WITH_PRE_TASK03_5_PRODUCTION_MD5'));
+  assert.ok(rollbackNoComments.includes('md5(v_actual_def)'));
+  assert.equal(
+    /CREATE\s+OR\s+REPLACE\s+FUNCTION\s+public\.validate_and_protect_athlete_test_results/i.test(rollbackNoComments),
+    false,
+    '03_task03_5_rollback.sql dilarang mengarang/menulis ulang definisi fungsi baseline berdasarkan perkiraan'
+  );
+
+  // 4. Cakupan verifikasi 02_task03_5_verification.sql (5 skenario UPDATE kolom-JSONB, role anon/kasir/coach full CRUD, 3-jalur JSONB, ownership & rollback jujur)
+  assert.ok(verify035.includes('v_res_aux_only_id'), 'Wajib menguji UPDATE kolom saja ketika hanya auxiliary_inputs lama terisi');
+  assert.ok(verify035.includes('v_res_clean_dual_id'), 'Wajib menguji UPDATE kolom saja ketika JSONB kosong');
+  assert.ok(verify035.includes('v_legacy_clean_id'), 'Wajib menguji pengisian metode valid pada legacy NULL');
+  assert.ok(verify035.includes('TST-UNREGISTERED-99'), 'Wajib menguji penolakan test_id tidak terdaftar');
+  assert.ok(verify035.includes("PERFORM set_config('role', 'anon', true);"), 'Wajib menguji role anon');
+  assert.ok(verify035.includes('v_kasir_a_uid'), 'Wajib menguji role kasir SELECT/INSERT/UPDATE/DELETE');
+  assert.ok(verify035.includes('v_res_coach_del_id'), 'Wajib menguji Coach in-class DELETE');
+  assert.ok(verify035.includes('v_res_a2_id'), 'Wajib menguji Coach out-of-class UPDATE/DELETE');
+  assert.ok(verify035.includes('BELUM AMAN / BELUM TERVERIFIKASI'), 'Wajib menyatakan status konsistensi fungsi baseline rollback secara jujur');
+});
+
+
 

@@ -1,5 +1,5 @@
 -- =============================================================================
--- CHUVATOR — TASK 03.5.2: MEASUREMENT METHOD STANDARDIZATION (PRODUCTION RECONCILED)
+-- CHUVATOR — TASK 03.5.3: MEASUREMENT METHOD STANDARDIZATION (FINAL GAP CLOSURE)
 -- 01_task03_5_measurement_method_standardization.sql
 -- =============================================================================
 -- TARGET        : Supabase PostgreSQL CHUVATOR (`public.athlete_test_results`)
@@ -66,17 +66,11 @@ BEGIN
               OR (test_id IN ('TST-AGL-ARW', 'TST-BAL-STK', 'TST-COD-505', 'TST-COR-PLK', 'TST-RSA-630', 'TST-SSB-GK-03', 'TST-WF-TLA') AND measurement_method = 'STOPWATCH_MANUAL')
               OR (test_id IN ('TST-MOB-SAR', 'TST-RXN-RLR', 'TST-JMP-VER', 'TST-PWR-SBJ', 'TST-SHT-DST') AND measurement_method = 'PHYSICAL_MEASURING_TOOL')
               OR (test_id IN ('TST-END-BLP', 'TST-STR-PU1', 'TST-SSB-WAP', 'TST-SSB-GK-02') AND measurement_method = 'MANUAL_COUNT')
-              OR (test_id NOT IN (
-                  'TST-SPR-10M', 'TST-SPR-30M',
-                  'TST-AGL-ARW', 'TST-BAL-STK', 'TST-COD-505', 'TST-COR-PLK', 'TST-RSA-630', 'TST-SSB-GK-03', 'TST-WF-TLA',
-                  'TST-MOB-SAR', 'TST-RXN-RLR', 'TST-JMP-VER', 'TST-PWR-SBJ', 'TST-SHT-DST',
-                  'TST-END-BLP', 'TST-STR-PU1', 'TST-SSB-WAP', 'TST-SSB-GK-02'
-              ))
           )
       );
 
     IF v_incompatible_count > 0 THEN
-        RAISE EXCEPTION 'MIGRASI TASK 03.5 DIHENTIKAN: Ditemukan % baris eksisting dengan nilai non-null measurement_method yang tidak sesuai protokol 18 tes. Periksa melalui script inspeksi terlebih dahulu (tidak dilakukan penimpaan paksa).',
+        RAISE EXCEPTION 'MIGRASI TASK 03.5 DIHENTIKAN: Ditemukan % baris eksisting dengan nilai non-null measurement_method atau test_id di luar protokol 18 tes. Periksa melalui script inspeksi terlebih dahulu (tidak dilakukan penimpaan paksa).',
             v_incompatible_count
             USING ERRCODE = '23514';
     END IF;
@@ -101,12 +95,6 @@ BEGIN
                         OR (test_id IN ('TST-AGL-ARW', 'TST-BAL-STK', 'TST-COD-505', 'TST-COR-PLK', 'TST-RSA-630', 'TST-SSB-GK-03', 'TST-WF-TLA') AND measurement_method = 'STOPWATCH_MANUAL')
                         OR (test_id IN ('TST-MOB-SAR', 'TST-RXN-RLR', 'TST-JMP-VER', 'TST-PWR-SBJ', 'TST-SHT-DST') AND measurement_method = 'PHYSICAL_MEASURING_TOOL')
                         OR (test_id IN ('TST-END-BLP', 'TST-STR-PU1', 'TST-SSB-WAP', 'TST-SSB-GK-02') AND measurement_method = 'MANUAL_COUNT')
-                        OR (test_id NOT IN (
-                            'TST-SPR-10M', 'TST-SPR-30M',
-                            'TST-AGL-ARW', 'TST-BAL-STK', 'TST-COD-505', 'TST-COR-PLK', 'TST-RSA-630', 'TST-SSB-GK-03', 'TST-WF-TLA',
-                            'TST-MOB-SAR', 'TST-RXN-RLR', 'TST-JMP-VER', 'TST-PWR-SBJ', 'TST-SHT-DST',
-                            'TST-END-BLP', 'TST-STR-PU1', 'TST-SSB-WAP', 'TST-SSB-GK-02'
-                        ))
                     )
                 )
             );
@@ -145,6 +133,7 @@ DECLARE
     v_old_ctx_nested_method TEXT;
     v_old_aux_method TEXT;
     v_ctx_method TEXT;
+    v_conflict_method TEXT;
     v_default_single_method TEXT;
     v_raw_age_group TEXT;
     v_ctx_age_group TEXT;
@@ -181,6 +170,21 @@ BEGIN
             RAISE EXCEPTION 'Mutasi indicator_id pada baris hasil tes yang sudah tersimpan dilarang.' USING ERRCODE = '42501';
         END IF;
         NEW.updated_at := NOW();
+    END IF;
+
+    -- Pastikan INSERT baru hanya memakai 18 test_id resmi Assessment Battery
+    -- (Evaluasi non-objective-test disimpan di public.academy_evaluations; baris historis tidak diubah).
+    IF TG_OP = 'INSERT' AND (
+        NEW.test_id IS NULL OR NEW.test_id NOT IN (
+            'TST-SPR-10M', 'TST-SPR-30M',
+            'TST-AGL-ARW', 'TST-BAL-STK', 'TST-COD-505', 'TST-COR-PLK', 'TST-RSA-630', 'TST-SSB-GK-03', 'TST-WF-TLA',
+            'TST-MOB-SAR', 'TST-RXN-RLR', 'TST-JMP-VER', 'TST-PWR-SBJ', 'TST-SHT-DST',
+            'TST-END-BLP', 'TST-STR-PU1', 'TST-SSB-WAP', 'TST-SSB-GK-02'
+        )
+    ) THEN
+        RAISE EXCEPTION 'test_id (%) tidak terdaftar pada katalog resmi 18 tes Assessment Battery.',
+            COALESCE(NEW.test_id, 'NULL')
+            USING ERRCODE = '23514';
     END IF;
 
     -- Pastikan student_id, class_id, dan academy_id milik NEW.tenant_id dan konsisten
@@ -311,8 +315,9 @@ BEGIN
         v_aux_changed := v_old_aux_method IS DISTINCT FROM v_aux_method;
         v_method_json_changed := v_dm_changed OR v_ctx_nested_changed OR v_aux_changed;
 
-        -- Jika ada mutasi pada jalur JSONB mana pun, seluruh key JSONB non-null harus saling konsisten
-        IF v_method_json_changed THEN
+        -- Jika kolom utama berubah ATAU ada mutasi pada jalur JSONB mana pun,
+        -- seluruh key JSONB non-null pada 3 jalur wajib saling konsisten.
+        IF (NEW.measurement_method IS DISTINCT FROM OLD.measurement_method) OR v_method_json_changed THEN
             IF (v_dm_method IS NOT NULL AND v_ctx_nested_method IS NOT NULL AND v_dm_method IS DISTINCT FROM v_ctx_nested_method)
                OR (v_dm_method IS NOT NULL AND v_aux_method IS NOT NULL AND v_dm_method IS DISTINCT FROM v_aux_method)
                OR (v_ctx_nested_method IS NOT NULL AND v_aux_method IS NOT NULL AND v_ctx_nested_method IS DISTINCT FROM v_aux_method) THEN
@@ -327,11 +332,19 @@ BEGIN
                 RAISE EXCEPTION 'measurement_method yang sudah tercatat tidak boleh dikosongkan menjadi NULL.'
                     USING ERRCODE = '23514';
             END IF;
-            IF v_method_json_changed AND v_ctx_method IS NOT NULL AND v_ctx_method IS DISTINCT FROM v_raw_top_method THEN
+
+            -- Periksa SELURUH nilai non-NULL pada 3 jalur JSONB walaupun JSONB tidak ikut berubah
+            v_conflict_method := COALESCE(
+                CASE WHEN v_dm_method IS NOT NULL AND v_dm_method IS DISTINCT FROM v_raw_top_method THEN v_dm_method ELSE NULL END,
+                CASE WHEN v_ctx_nested_method IS NOT NULL AND v_ctx_nested_method IS DISTINCT FROM v_raw_top_method THEN v_ctx_nested_method ELSE NULL END,
+                CASE WHEN v_aux_method IS NOT NULL AND v_aux_method IS DISTINCT FROM v_raw_top_method THEN v_aux_method ELSE NULL END
+            );
+            IF v_conflict_method IS NOT NULL THEN
                 RAISE EXCEPTION 'Inkonsistensi measurement_method kolom (%) dengan JSONB (%) saat UPDATE untuk test_id %.',
-                    v_raw_top_method, v_ctx_method, NEW.test_id
+                    v_raw_top_method, v_conflict_method, NEW.test_id
                     USING ERRCODE = '23514';
             END IF;
+
             NEW.measurement_method := v_raw_top_method;
         ELSIF v_method_json_changed THEN
             IF v_ctx_method IS NULL THEN
@@ -356,6 +369,12 @@ BEGIN
            OR (NEW.test_id IN ('TST-AGL-ARW', 'TST-BAL-STK', 'TST-COD-505', 'TST-COR-PLK', 'TST-RSA-630', 'TST-SSB-GK-03', 'TST-WF-TLA') AND NEW.measurement_method <> 'STOPWATCH_MANUAL')
            OR (NEW.test_id IN ('TST-MOB-SAR', 'TST-RXN-RLR', 'TST-JMP-VER', 'TST-PWR-SBJ', 'TST-SHT-DST') AND NEW.measurement_method <> 'PHYSICAL_MEASURING_TOOL')
            OR (NEW.test_id IN ('TST-END-BLP', 'TST-STR-PU1', 'TST-SSB-WAP', 'TST-SSB-GK-02') AND NEW.measurement_method <> 'MANUAL_COUNT')
+           OR (NEW.test_id NOT IN (
+               'TST-SPR-10M', 'TST-SPR-30M',
+               'TST-AGL-ARW', 'TST-BAL-STK', 'TST-COD-505', 'TST-COR-PLK', 'TST-RSA-630', 'TST-SSB-GK-03', 'TST-WF-TLA',
+               'TST-MOB-SAR', 'TST-RXN-RLR', 'TST-JMP-VER', 'TST-PWR-SBJ', 'TST-SHT-DST',
+               'TST-END-BLP', 'TST-STR-PU1', 'TST-SSB-WAP', 'TST-SSB-GK-02'
+           ))
         THEN
             RAISE EXCEPTION 'measurement_method (%) tidak dikenal atau tidak kompatibel untuk test_id %.',
                 NEW.measurement_method, NEW.test_id
@@ -433,18 +452,91 @@ CREATE TRIGGER trg_validate_and_protect_athlete_test_results
     FOR EACH ROW
     EXECUTE FUNCTION public.validate_and_protect_athlete_test_results();
 
--- 8. Pastikan Kepemilikan `postgres` & Least-Privilege Function Grants Tetap Terjaga
+-- 8. Penetapan Kepemilikan `postgres` (Fail-Closed) & Least-Privilege Function Grants
 DO $$
 BEGIN
-    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'postgres') THEN
-        BEGIN
-            ALTER FUNCTION public.validate_and_protect_athlete_test_results() OWNER TO postgres;
-        EXCEPTION WHEN insufficient_privilege THEN
-            RAISE NOTICE 'Catatan Admin: Role eksekutor (%) bukan anggota role postgres; pastikan fungsi SECURITY DEFINER dijalankan oleh role berkemampuan BYPASSRLS.', current_user;
-        END;
+    IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'postgres') THEN
+        RAISE EXCEPTION 'MIGRASI TASK 03.5 DIBATALKAN (ROLLBACK): Role wajib "postgres" tidak ditemukan pada pg_roles.'
+            USING ERRCODE = '42501';
     END IF;
 END $$;
 
+ALTER FUNCTION public.validate_and_protect_athlete_test_results() OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.validate_and_protect_athlete_test_results() FROM PUBLIC, anon, authenticated;
+
+-- 9. Verifikasi Eksplisit Pasca CREATE OR REPLACE FUNCTION (ROLLBACK otomatis bila gagal)
+DO $$
+DECLARE
+    v_fn_oid OID;
+    v_owner TEXT;
+    v_secdef BOOLEAN;
+    v_config TEXT[];
+    v_public_exec BOOLEAN;
+    v_anon_exec BOOLEAN;
+    v_auth_exec BOOLEAN;
+    v_trig_active BOOLEAN;
+BEGIN
+    v_fn_oid := to_regprocedure('public.validate_and_protect_athlete_test_results()');
+    IF v_fn_oid IS NULL THEN
+        RAISE EXCEPTION 'MIGRASI TASK 03.5 DIBATALKAN: Fungsi public.validate_and_protect_athlete_test_results() tidak ditemukan.'
+            USING ERRCODE = '42883';
+    END IF;
+
+    SELECT
+        pg_get_userbyid(p.proowner),
+        p.prosecdef,
+        p.proconfig,
+        has_function_privilege('public', p.oid, 'EXECUTE'),
+        has_function_privilege('anon', p.oid, 'EXECUTE'),
+        has_function_privilege('authenticated', p.oid, 'EXECUTE')
+    INTO
+        v_owner,
+        v_secdef,
+        v_config,
+        v_public_exec,
+        v_anon_exec,
+        v_auth_exec
+    FROM pg_proc p
+    WHERE p.oid = v_fn_oid;
+
+    IF v_owner IS DISTINCT FROM 'postgres' THEN
+        RAISE EXCEPTION 'MIGRASI TASK 03.5 DIBATALKAN (ROLLBACK): Owner fungsi trigger adalah %, wajib postgres.', v_owner
+            USING ERRCODE = '42501';
+    END IF;
+
+    IF v_secdef IS NOT TRUE THEN
+        RAISE EXCEPTION 'MIGRASI TASK 03.5 DIBATALKAN (ROLLBACK): SECURITY DEFINER harus aktif pada validate_and_protect_athlete_test_results().'
+            USING ERRCODE = '42501';
+    END IF;
+
+    IF NOT ('search_path=public, extensions, pg_temp' = ANY(COALESCE(v_config, ARRAY[]::text[]))) THEN
+        RAISE EXCEPTION 'MIGRASI TASK 03.5 DIBATALKAN (ROLLBACK): search_path fungsi trigger tidak sesuai (%).', array_to_string(v_config, '; ')
+            USING ERRCODE = '42501';
+    END IF;
+
+    IF v_public_exec OR v_anon_exec OR v_auth_exec THEN
+        RAISE EXCEPTION 'MIGRASI TASK 03.5 DIBATALKAN (ROLLBACK): Hak EXECUTE fungsi trigger bocor (public=%, anon=%, authenticated=%).',
+            v_public_exec, v_anon_exec, v_auth_exec
+            USING ERRCODE = '42501';
+    END IF;
+
+    SELECT EXISTS (
+        SELECT 1
+        FROM pg_trigger t
+        JOIN pg_class c ON c.oid = t.tgrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'public'
+          AND c.relname = 'athlete_test_results'
+          AND t.tgname = 'trg_validate_and_protect_athlete_test_results'
+          AND t.tgfoid = v_fn_oid
+          AND t.tgenabled <> 'D'
+          AND NOT t.tgisinternal
+    ) INTO v_trig_active;
+
+    IF NOT v_trig_active THEN
+        RAISE EXCEPTION 'MIGRASI TASK 03.5 DIBATALKAN (ROLLBACK): Trigger trg_validate_and_protect_athlete_test_results tidak aktif atau tidak tertaut ke fungsi trigger terbaru.'
+            USING ERRCODE = '42501';
+    END IF;
+END $$;
 
 COMMIT;
