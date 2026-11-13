@@ -44,8 +44,7 @@ import {
   Edit3,
   Check,
   X,
-  Archive,
-  Timer
+  Archive
 } from 'lucide-react';
 
 import {
@@ -69,10 +68,7 @@ import {
   isFootballOrMinisoccer,
   getPositionConfig,
   getStyleConfig,
-  SECONDARY_FOOTBALL_POSITIONS,
-  resolveIndicatorScore,
-  calculateCategoryAverage,
-  calculateOverallScore
+  SECONDARY_FOOTBALL_POSITIONS
 } from '../config/footballAssessmentData';
 
 import {
@@ -116,8 +112,6 @@ import TennisAssessmentView from './TennisAssessmentView';
 import ScoutingPolarAreaPanel from './ScoutingPolarAreaPanel';
 import AssessmentIndicatorsAccordion from './AssessmentIndicatorsAccordion';
 import AthleteAssessmentEditView from './AthleteAssessmentEditView';
-import AnalyticsSection from './AnalyticsSection';
-import AssessmentBatterySection from './AssessmentBatterySection';
 import {
   MobileEvaluationContextBar,
   MobileScoreHeroCard,
@@ -246,35 +240,17 @@ function formatDateIndonesian(dateStr) {
 // =====================================================================
 // MAIN COMPONENT EXPORT
 // =====================================================================
-export default function EvaluationSection({
-  selectedClass,
-  students = [],
-  tenantId,
-  userProfile = null,
-  activeAcademy,
-  isMobile = false,
-  initialAssessmentView = 'assessment'
-}) {
+export default function EvaluationSection({ selectedClass, students = [], tenantId, activeAcademy, isMobile = false }) {
   const isArchived = Boolean(selectedClass?.isArchived === true);
-
-  // Internal Sub-Navigation within Athlete Development Assessment:
-  // 'assessment' (Penilaian & Profil Atlet) | 'analytics' (Advanced Analytics & BI) | 'history' (Riwayat Assessment)
-  const [assessmentView, setAssessmentView] = useState(() => initialAssessmentView || 'assessment');
-
-  useEffect(() => {
-    if (initialAssessmentView) {
-      setAssessmentView(initialAssessmentView);
-    }
-  }, [initialAssessmentView]);
 
   // Filter students in current active class
   const classStudents = useMemo(() => {
     return students.filter(
-      (s) => s.classId === selectedClass?.id || (selectedClass?.className && s.className === selectedClass.className)
+      (s) => s.classId === selectedClass?.id || (!s.classId && selectedClass?.className && s.className === selectedClass.className)
     );
   }, [students, selectedClass?.id, selectedClass?.className]);
 
-  // Evaluation history for the selected class (shared with AnalyticsSection & HistorySection)
+  // Firestore fetch-once evaluation history (limited to 100 docs)
   const [history, setHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
   const [filterStudentId, setFilterStudentId] = useState('ALL');
@@ -348,308 +324,89 @@ export default function EvaluationSection({
   }, [selectedClass, isTennis]);
 
   return (
-    <div className="space-y-3.5">
+    <>
       {isArchived && (
-        <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs rounded-xl font-medium flex items-center gap-2.5 shadow-2xs">
+        <div className="mb-3.5 p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 text-xs rounded-xl font-medium flex items-center gap-2.5 shadow-2xs">
           <Archive className="w-4 h-4 text-amber-700 dark:text-amber-400 shrink-0" />
           <span>Kelas ini telah diarsipkan. Mode baca-saja aktif untuk peninjauan riwayat evaluasi.</span>
         </div>
       )}
-
-      {/* UNIFIED ATHLETE DEVELOPMENT ASSESSMENT SUB-NAVIGATION (DESKTOP & MOBILE) */}
-      {isMobile ? (
-        <div className="chua-m-eval-card !p-2 space-y-2">
-          <div className="flex items-center justify-between px-1">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <Award className="w-4 h-4 text-[#2455E8] shrink-0" />
-              <span className="text-[12px] font-extrabold text-[#17233D] truncate">
-                Athlete Development Assessment
-              </span>
-            </div>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F5F7FC] text-[#2455E8] border border-[#E7EBF2] shrink-0">
-              {effectiveSelectedClass?.sport || activeAcademy?.sport || ' Akademi'}
-            </span>
-          </div>
-
-          <div
-            className={`grid ${isFootball ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'} gap-1 p-1 bg-[#F5F7FC] rounded-[12px] border border-[#E7EBF2]`}
-            role="tablist"
-            aria-label="Mode Evaluasi Atlet"
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={assessmentView === 'assessment'}
-              onClick={() => setAssessmentView('assessment')}
-              className={`min-h-[38px] px-2 py-1.5 rounded-[9px] text-[11px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                assessmentView === 'assessment'
-                  ? 'bg-[#2455E8] text-white shadow-xs'
-                  : 'text-[#68758B] hover:text-[#17233D]'
-              }`}
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">Penilaian</span>
-            </button>
-
-            {isFootball && (
-              <button
-                type="button"
-                role="tab"
-                data-testid="tab-test-battery-mobile"
-                aria-selected={assessmentView === 'test_battery'}
-                onClick={() => setAssessmentView('test_battery')}
-                className={`min-h-[38px] px-2 py-1.5 rounded-[9px] text-[11px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                  assessmentView === 'test_battery'
-                    ? 'bg-emerald-600 text-white shadow-xs'
-                    : 'text-emerald-800 hover:text-emerald-950'
-                }`}
-              >
-                <Timer className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">Tes Lapangan (18)</span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              role="tab"
-              aria-selected={assessmentView === 'analytics'}
-              onClick={() => setAssessmentView('analytics')}
-              className={`min-h-[38px] px-2 py-1.5 rounded-[9px] text-[11px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                assessmentView === 'analytics'
-                  ? 'bg-[#2455E8] text-white shadow-xs'
-                  : 'text-[#68758B] hover:text-[#17233D]'
-              }`}
-            >
-              <BarChart2 className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">Analitik &amp; BI</span>
-            </button>
-
-            <button
-              type="button"
-              role="tab"
-              aria-selected={assessmentView === 'history'}
-              onClick={() => setAssessmentView('history')}
-              className={`min-h-[38px] px-2 py-1.5 rounded-[9px] text-[11px] font-bold flex items-center justify-center gap-1 transition-all cursor-pointer ${
-                assessmentView === 'history'
-                  ? 'bg-[#2455E8] text-white shadow-xs'
-                  : 'text-[#68758B] hover:text-[#17233D]'
-              }`}
-            >
-              <History className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">Riwayat ({history.length})</span>
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="bg-white dark:bg-[#162320] rounded-xl p-2.5 border border-slate-200/80 dark:border-slate-800 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div className="flex items-center gap-2 px-1">
-            <div className="p-1.5 rounded-lg bg-[#354944]/10 dark:bg-[#354944]/30 text-[#354944] dark:text-[#C89D32]">
-              <Award className="w-4 h-4" />
-            </div>
-            <div>
-              <h3 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 leading-tight">
-                Athlete Development Assessment
-              </h3>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Penilaian indikator performa, Tes Lapangan Objektif (Combine), Advanced Analytics &amp; BI, serta riwayat evaluasi kelas.
-              </p>
-            </div>
-          </div>
-
-          <div
-            className="inline-flex flex-wrap items-center gap-1 p-1 bg-slate-100 dark:bg-[#111C19] rounded-xl border border-slate-200/70 dark:border-slate-800 shrink-0"
-            role="tablist"
-            aria-label="Sub-menu Athlete Development Assessment"
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected={assessmentView === 'assessment'}
-              onClick={() => setAssessmentView('assessment')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                assessmentView === 'assessment'
-                  ? 'bg-[#354944] text-white shadow-2xs border-b-2 border-[#C89D32]'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
-              }`}
-            >
-              <SlidersHorizontal className="w-3.5 h-3.5" />
-              <span>Assessment &amp; Profil Atlet</span>
-            </button>
-
-            {isFootball && (
-              <button
-                type="button"
-                role="tab"
-                data-testid="tab-test-battery-desktop"
-                aria-selected={assessmentView === 'test_battery'}
-                onClick={() => setAssessmentView('test_battery')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  assessmentView === 'test_battery'
-                    ? 'bg-emerald-700 text-white shadow-2xs border-b-2 border-[#C89D32]'
-                    : 'text-emerald-800 dark:text-emerald-300 hover:bg-emerald-50/70'
-                }`}
-              >
-                <Timer className="w-3.5 h-3.5" />
-                <span>Tes Lapangan (18 Tes Objektif)</span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              role="tab"
-              aria-selected={assessmentView === 'analytics'}
-              onClick={() => setAssessmentView('analytics')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                assessmentView === 'analytics'
-                  ? 'bg-[#354944] text-white shadow-2xs border-b-2 border-[#C89D32]'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
-              }`}
-            >
-              <BarChart2 className="w-3.5 h-3.5" />
-              <span>Advanced Analytics &amp; BI</span>
-            </button>
-
-            <button
-              type="button"
-              role="tab"
-              aria-selected={assessmentView === 'history'}
-              onClick={() => setAssessmentView('history')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                assessmentView === 'history'
-                  ? 'bg-[#354944] text-white shadow-2xs border-b-2 border-[#C89D32]'
-                  : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
-              }`}
-            >
-              <History className="w-3.5 h-3.5" />
-              <span>Riwayat ({history.length})</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* SUB-VIEW 1: ASSESSMENT & PROFIL ATLET */}
-      {assessmentView === 'assessment' && (
-        <>
-          {isTennis ? (
-            <TennisAssessmentView
-              selectedClass={effectiveSelectedClass}
-              students={classStudents}
-              tenantId={tenantId}
-              activeAcademy={activeAcademy}
-              history={history}
-              loadingHistory={loadingHistory}
-              filterStudentId={filterStudentId}
-              setFilterStudentId={setFilterStudentId}
-              onDeleteEvaluation={handleDeleteEvaluation}
-              onEvaluationSaved={handleEvaluationSaved}
-              isArchived={isArchived}
-              isMobile={isMobile}
-            />
-          ) : isBadminton ? (
-            <BadmintonAssessmentView
-              selectedClass={selectedClass}
-              students={classStudents}
-              tenantId={tenantId}
-              activeAcademy={activeAcademy}
-              history={history}
-              loadingHistory={loadingHistory}
-              filterStudentId={filterStudentId}
-              setFilterStudentId={setFilterStudentId}
-              onDeleteEvaluation={handleDeleteEvaluation}
-              onEvaluationSaved={handleEvaluationSaved}
-              isArchived={isArchived}
-              isMobile={isMobile}
-            />
-          ) : isFutsal ? (
-            <FutsalAssessmentView
-              selectedClass={selectedClass}
-              students={classStudents}
-              tenantId={tenantId}
-              activeAcademy={activeAcademy}
-              history={history}
-              loadingHistory={loadingHistory}
-              filterStudentId={filterStudentId}
-              setFilterStudentId={setFilterStudentId}
-              onDeleteEvaluation={handleDeleteEvaluation}
-              onEvaluationSaved={handleEvaluationSaved}
-              isArchived={isArchived}
-              isMobile={isMobile}
-            />
-          ) : isFootball ? (
-            <FootballAssessmentView
-              selectedClass={selectedClass}
-              students={classStudents}
-              tenantId={tenantId}
-              activeAcademy={activeAcademy}
-              history={history}
-              loadingHistory={loadingHistory}
-              filterStudentId={filterStudentId}
-              setFilterStudentId={setFilterStudentId}
-              onDeleteEvaluation={handleDeleteEvaluation}
-              onEvaluationSaved={handleEvaluationSaved}
-              isArchived={isArchived}
-              isMobile={isMobile}
-            />
-          ) : (
-            <Standard4PillarView
-              selectedClass={selectedClass}
-              classStudents={classStudents}
-              tenantId={tenantId}
-              activeAcademy={activeAcademy}
-              history={history}
-              loadingHistory={loadingHistory}
-              filterStudentId={filterStudentId}
-              setFilterStudentId={setFilterStudentId}
-              onDeleteEvaluation={handleDeleteEvaluation}
-              onEvaluationSaved={handleEvaluationSaved}
-              isArchived={isArchived}
-              isMobile={isMobile}
-            />
-          )}
-        </>
-      )}
-
-      {/* SUB-VIEW 1B: FIELD TEST BATTERY / SCOUTING COMBINE (18 OBJECTIVE TESTS) */}
-      {assessmentView === 'test_battery' && (
-        <AssessmentBatterySection
-          userProfile={{
-            ...(userProfile || {}),
-            tenantId: tenantId || userProfile?.tenantId || userProfile?.tenant_id
-          }}
-          activeAcademy={activeAcademy}
-          selectedClass={effectiveSelectedClass}
-          students={classStudents}
-        />
-      )}
-
-      {/* SUB-VIEW 2: ADVANCED ANALYTICS & BI (INTEGRATED PHASE 2.0 ENGINE) */}
-      {assessmentView === 'analytics' && (
-        <AnalyticsSection
+      {isTennis ? (
+        <TennisAssessmentView
           selectedClass={effectiveSelectedClass}
           students={classStudents}
           tenantId={tenantId}
           activeAcademy={activeAcademy}
-          evaluations={history}
-          loading={loadingHistory}
-          isMobile={isMobile}
-        />
-      )}
-
-      {/* SUB-VIEW 3: DEDICATED ASSESSMENT HISTORY */}
-      {assessmentView === 'history' && (
-        <HistorySection
           history={history}
           loadingHistory={loadingHistory}
           filterStudentId={filterStudentId}
           setFilterStudentId={setFilterStudentId}
-          students={classStudents}
           onDeleteEvaluation={handleDeleteEvaluation}
+          onEvaluationSaved={handleEvaluationSaved}
+          isArchived={isArchived}
+        />
+      ) : isBadminton ? (
+        <BadmintonAssessmentView
+          selectedClass={selectedClass}
+          students={classStudents}
+          tenantId={tenantId}
+          activeAcademy={activeAcademy}
+          history={history}
+          loadingHistory={loadingHistory}
+          filterStudentId={filterStudentId}
+          setFilterStudentId={setFilterStudentId}
+          onDeleteEvaluation={handleDeleteEvaluation}
+          onEvaluationSaved={handleEvaluationSaved}
           isArchived={isArchived}
           isMobile={isMobile}
-          defaultOpen={true}
+        />
+      ) : isFutsal ? (
+        <FutsalAssessmentView
+          selectedClass={selectedClass}
+          students={classStudents}
+          tenantId={tenantId}
+          activeAcademy={activeAcademy}
+          history={history}
+          loadingHistory={loadingHistory}
+          filterStudentId={filterStudentId}
+          setFilterStudentId={setFilterStudentId}
+          onDeleteEvaluation={handleDeleteEvaluation}
+          onEvaluationSaved={handleEvaluationSaved}
+          isArchived={isArchived}
+          isMobile={isMobile}
+        />
+      ) : isFootball ? (
+        <FootballAssessmentView
+          selectedClass={selectedClass}
+          students={classStudents}
+          tenantId={tenantId}
+          activeAcademy={activeAcademy}
+          history={history}
+          loadingHistory={loadingHistory}
+          filterStudentId={filterStudentId}
+          setFilterStudentId={setFilterStudentId}
+          onDeleteEvaluation={handleDeleteEvaluation}
+          onEvaluationSaved={handleEvaluationSaved}
+          isArchived={isArchived}
+          isMobile={isMobile}
+        />
+      ) : (
+        <Standard4PillarView
+          selectedClass={selectedClass}
+          classStudents={classStudents}
+          tenantId={tenantId}
+          activeAcademy={activeAcademy}
+          history={history}
+          loadingHistory={loadingHistory}
+          filterStudentId={filterStudentId}
+          setFilterStudentId={setFilterStudentId}
+          onDeleteEvaluation={handleDeleteEvaluation}
+          onEvaluationSaved={handleEvaluationSaved}
+          isArchived={isArchived}
+          isMobile={isMobile}
         />
       )}
-    </div>
+    </>
   );
 }
 
@@ -704,7 +461,7 @@ function FutsalAssessmentView({
   }, [selectedClass?.id, selectedClass?.tierCode, selectedClass?.minAge, selectedClass?.maxAge]);
 
   const studentAge = useMemo(() => {
-    if (!selectedStudent) return null;
+    if (!selectedStudent) return 0;
     if (selectedStudent.birthDate) {
       const calculated = calculateAge(selectedStudent.birthDate);
       if (calculated !== '-') {
@@ -717,7 +474,7 @@ function FutsalAssessmentView({
       const num = parseInt(String(rawAge).replace(/\D/g, ''), 10);
       if (!isNaN(num) && num > 0) return num;
     }
-    return null;
+    return 10;
   }, [selectedStudent]);
 
   const detectedFutsalTier = useMemo(() => {
@@ -834,45 +591,36 @@ function FutsalAssessmentView({
     };
   }, [activeFutsalTier]);
 
-  // 7-Axis Calculated Average Scores for Futsal (Only averaging evaluated indicators !== null)
+  // 7-Axis Calculated Average Scores for Futsal
   const axisScores = useMemo(() => {
-    const rawFisik = calculateCategoryAverage(scores, filteredCategoryIndicators.fisik);
-    const rawTeknik = calculateCategoryAverage(scores, filteredCategoryIndicators.teknik);
-    const rawTaktik = calculateCategoryAverage(scores, filteredCategoryIndicators.taktik);
-    const rawMental = calculateCategoryAverage(scores, filteredCategoryIndicators.mental);
-    const rawPerkembangan = calculateCategoryAverage(scores, filteredCategoryIndicators.perkembangan);
-    const rawKomunikasi = calculateCategoryAverage(scores, filteredCategoryIndicators.komunikasi);
-    const rawKhususPosisi = calculateCategoryAverage(scores, currentPosIndicatorsConfig.indicators);
+    const calcCategoryAvg = (indicatorList) => {
+      if (!indicatorList || indicatorList.length === 0) return 0;
+      const total = indicatorList.reduce((sum, ind) => {
+        const val = scores[ind] !== undefined ? scores[ind] : 0;
+        return sum + val;
+      }, 0);
+      return Math.round(total / indicatorList.length);
+    };
 
-    const rawOverall = calculateOverallScore([
-      rawFisik,
-      rawTeknik,
-      rawTaktik,
-      rawMental,
-      rawPerkembangan,
-      rawKomunikasi,
-      rawKhususPosisi
-    ]);
+    const fisik = calcCategoryAvg(filteredCategoryIndicators.fisik);
+    const teknik = calcCategoryAvg(filteredCategoryIndicators.teknik);
+    const taktik = calcCategoryAvg(filteredCategoryIndicators.taktik);
+    const mental = calcCategoryAvg(filteredCategoryIndicators.mental);
+    const perkembangan = calcCategoryAvg(filteredCategoryIndicators.perkembangan);
+    const komunikasi = calcCategoryAvg(filteredCategoryIndicators.komunikasi);
+    const khususPosisi = calcCategoryAvg(currentPosIndicatorsConfig.indicators);
+
+    const overall = Math.round((fisik + teknik + taktik + mental + perkembangan + komunikasi + khususPosisi) / 7);
 
     return {
-      fisik: rawFisik ?? 0,
-      teknik: rawTeknik ?? 0,
-      taktik: rawTaktik ?? 0,
-      mental: rawMental ?? 0,
-      perkembangan: rawPerkembangan ?? 0,
-      komunikasi: rawKomunikasi ?? 0,
-      khususPosisi: rawKhususPosisi ?? 0,
-      overall: rawOverall ?? 0,
-      raw: {
-        fisik: rawFisik,
-        teknik: rawTeknik,
-        taktik: rawTaktik,
-        mental: rawMental,
-        perkembangan: rawPerkembangan,
-        komunikasi: rawKomunikasi,
-        khususPosisi: rawKhususPosisi,
-        overall: rawOverall
-      }
+      fisik,
+      teknik,
+      taktik,
+      mental,
+      perkembangan,
+      komunikasi,
+      khususPosisi,
+      overall
     };
   }, [scores, filteredCategoryIndicators, currentPosIndicatorsConfig]);
 
@@ -894,8 +642,7 @@ function FutsalAssessmentView({
     setScores((prev) => {
       const updated = { ...prev };
       catObj.indicators.forEach((ind) => {
-        const key = typeof ind === 'object' ? ind.id : ind;
-        updated[key] = presetScore;
+        updated[ind] = presetScore;
       });
       return updated;
     });
@@ -915,18 +662,7 @@ function FutsalAssessmentView({
   // Adjust score with +/- 5
   const handleAdjustScore = (indicatorName, delta) => {
     setScores((prev) => {
-      let matchedInd = indicatorName;
-      for (const cat of futsalCategoryList) {
-        const found = (cat.indicators || []).find((ind) =>
-          typeof ind === 'object' ? ind.id === indicatorName || ind.name === indicatorName : ind === indicatorName
-        );
-        if (found) {
-          matchedInd = found;
-          break;
-        }
-      }
-      const resolved = resolveIndicatorScore(prev, matchedInd);
-      const curr = resolved !== null ? resolved : 0;
+      const curr = prev[indicatorName] !== undefined ? prev[indicatorName] : 0;
       const nextVal = Math.min(100, Math.max(0, curr + delta));
       return { ...prev, [indicatorName]: nextVal };
     });
@@ -948,8 +684,7 @@ function FutsalAssessmentView({
 
     const nextState = { ...scores };
     activeIndicators.forEach((ind) => {
-      const indId = typeof ind === 'object' ? ind.id : ind;
-      nextState[indId] = val;
+      nextState[ind] = val;
     });
     setScores(nextState);
 
@@ -1035,11 +770,7 @@ function FutsalAssessmentView({
 
     const finalScores = {};
     activeIndicators.forEach((ind) => {
-      const indId = typeof ind === 'object' ? ind.id : ind;
-      const resolvedVal = resolveIndicatorScore(scores, ind);
-      if (resolvedVal !== null && resolvedVal !== undefined) {
-        finalScores[indId] = resolvedVal;
-      }
+      finalScores[ind] = scores[ind] !== undefined ? scores[ind] : 0;
     });
 
     const styleObj = getFutsalStyleConfig(selectedStyleCode);
@@ -1654,7 +1385,7 @@ function BadmintonAssessmentView({
   }, [selectedClass?.id, selectedClass?.tierCode, selectedClass?.minAge, selectedClass?.maxAge]);
 
   const studentAge = useMemo(() => {
-    if (!selectedStudent) return null;
+    if (!selectedStudent) return 0;
     if (selectedStudent.birthDate) {
       const calculated = calculateAge(selectedStudent.birthDate);
       if (calculated !== '-') {
@@ -1667,7 +1398,7 @@ function BadmintonAssessmentView({
       const num = parseInt(String(rawAge).replace(/\D/g, ''), 10);
       if (!isNaN(num) && num > 0) return num;
     }
-    return null;
+    return 10;
   }, [selectedStudent]);
 
   const detectedBadmintonTier = useMemo(() => {
@@ -1814,54 +1545,48 @@ function BadmintonAssessmentView({
     };
   }, [activeBadmintonTier, isDoubles, eventSpecificConfig]);
 
-  // Dynamic Radar & Pillar Average Scores Calculation (Only averaging evaluated indicators !== null)
+  // Dynamic Radar & Pillar Average Scores Calculation
   const axisScores = useMemo(() => {
-    const rawFisik = calculateCategoryAverage(scores, filteredCategoryIndicators.fisik);
-    const rawTeknik = calculateCategoryAverage(scores, filteredCategoryIndicators.teknik);
-    const rawTaktik = calculateCategoryAverage(scores, filteredCategoryIndicators.taktik);
-    const rawMental = calculateCategoryAverage(scores, filteredCategoryIndicators.mental);
-    const rawPerkembangan = calculateCategoryAverage(scores, filteredCategoryIndicators.perkembangan);
-    const rawKhususNomor = calculateCategoryAverage(scores, filteredCategoryIndicators.khususNomor);
+    const calcCategoryAvg = (indicatorList) => {
+      if (!indicatorList || indicatorList.length === 0) return 0;
+      const total = indicatorList.reduce((sum, ind) => {
+        const val = scores[ind] !== undefined ? scores[ind] : 0;
+        return sum + val;
+      }, 0);
+      return Math.round(total / indicatorList.length);
+    };
+
+    const fisik = calcCategoryAvg(filteredCategoryIndicators.fisik);
+    const teknik = calcCategoryAvg(filteredCategoryIndicators.teknik);
+    const taktik = calcCategoryAvg(filteredCategoryIndicators.taktik);
+    const mental = calcCategoryAvg(filteredCategoryIndicators.mental);
+    const perkembangan = calcCategoryAvg(filteredCategoryIndicators.perkembangan);
+    const khususNomor = calcCategoryAvg(filteredCategoryIndicators.khususNomor);
 
     if (isDoubles && activeBadmintonTier >= 2) {
-      const rawKomunikasi = calculateCategoryAverage(scores, filteredCategoryIndicators.komunikasi);
-      const rawOverall = calculateOverallScore([
-        rawFisik,
-        rawTeknik,
-        rawTaktik,
-        rawMental,
-        rawPerkembangan,
-        rawKomunikasi,
-        rawKhususNomor
-      ]);
+      const komunikasi = calcCategoryAvg(filteredCategoryIndicators.komunikasi);
+      const overall = Math.round((fisik + teknik + taktik + mental + perkembangan + komunikasi + khususNomor) / 7);
       return {
-        fisik: rawFisik ?? 0,
-        teknik: rawTeknik ?? 0,
-        taktik: rawTaktik ?? 0,
-        mental: rawMental ?? 0,
-        perkembangan: rawPerkembangan ?? 0,
-        komunikasi: rawKomunikasi ?? 0,
-        khususNomor: rawKhususNomor ?? 0,
-        overall: rawOverall ?? 0
+        fisik,
+        teknik,
+        taktik,
+        mental,
+        perkembangan,
+        komunikasi,
+        khususNomor,
+        overall
       };
     } else {
-      const rawOverall = calculateOverallScore([
-        rawFisik,
-        rawTeknik,
-        rawTaktik,
-        rawMental,
-        rawPerkembangan,
-        rawKhususNomor
-      ]);
+      const overall = Math.round((fisik + teknik + taktik + mental + perkembangan + khususNomor) / 6);
       return {
-        fisik: rawFisik ?? 0,
-        teknik: rawTeknik ?? 0,
-        taktik: rawTaktik ?? 0,
-        mental: rawMental ?? 0,
-        perkembangan: rawPerkembangan ?? 0,
+        fisik,
+        teknik,
+        taktik,
+        mental,
+        perkembangan,
         komunikasi: undefined,
-        khususNomor: rawKhususNomor ?? 0,
-        overall: rawOverall ?? 0
+        khususNomor,
+        overall
       };
     }
   }, [scores, filteredCategoryIndicators, isDoubles, activeBadmintonTier]);
@@ -1894,8 +1619,7 @@ function BadmintonAssessmentView({
     setScores((prev) => {
       const updated = { ...prev };
       catObj.indicators.forEach((ind) => {
-        const key = typeof ind === 'object' ? ind.id : ind;
-        updated[key] = presetScore;
+        updated[ind] = presetScore;
       });
       return updated;
     });
@@ -1917,29 +1641,18 @@ function BadmintonAssessmentView({
     return list;
   }, [axisScores, isDoubles, activeBadmintonTier]);
 
-  const handleAdjustScore = (indId, delta) => {
+  const handleAdjustScore = (indicatorName, delta) => {
     setScores((prev) => {
-      let matchedInd = indId;
-      for (const cat of badmintonCategoryList) {
-        const found = (cat.indicators || []).find((ind) =>
-          typeof ind === 'object' ? ind.id === indId || ind.name === indId : ind === indId
-        );
-        if (found) {
-          matchedInd = found;
-          break;
-        }
-      }
-      const resolved = resolveIndicatorScore(prev, matchedInd);
-      const curr = resolved !== null ? resolved : 0;
+      const curr = prev[indicatorName] !== undefined ? prev[indicatorName] : 0;
       const nextVal = Math.min(100, Math.max(0, curr + delta));
-      return { ...prev, [indId]: nextVal };
+      return { ...prev, [indicatorName]: nextVal };
     });
   };
 
-  const handleScoreChange = (indId, value) => {
+  const handleScoreChange = (indicatorName, value) => {
     setScores((prev) => ({
       ...prev,
-      [indId]: Math.min(100, Math.max(0, Number(value) || 0))
+      [indicatorName]: Math.min(100, Math.max(0, Number(value) || 0))
     }));
   };
 
@@ -1951,8 +1664,7 @@ function BadmintonAssessmentView({
 
     const nextState = { ...scores };
     activeIndicators.forEach((ind) => {
-      const indId = typeof ind === 'object' ? ind.id : ind;
-      nextState[indId] = val;
+      nextState[ind] = val;
     });
     setScores(nextState);
 
@@ -2056,20 +1768,6 @@ function BadmintonAssessmentView({
     setSuccessMsg(null);
 
     try {
-      const activeIndicators = [];
-      Object.values(filteredCategoryIndicators).forEach((arr) => {
-        activeIndicators.push(...arr);
-      });
-
-      const finalScores = {};
-      activeIndicators.forEach((ind) => {
-        const indId = typeof ind === 'object' ? ind.id : ind;
-        const resolvedVal = resolveIndicatorScore(scores, ind);
-        if (resolvedVal !== null && resolvedVal !== undefined) {
-          finalScores[indId] = resolvedVal;
-        }
-      });
-
       const payload = {
         tenantId,
         classId: selectedClass?.id || '',
@@ -2086,7 +1784,7 @@ function BadmintonAssessmentView({
         styleCode: isStyleUnlocked ? styleCode : 'N/A',
         doublesSpecCode: (isDoubles && isDoublesSpecUnlocked) ? doublesSpecCode : 'N/A',
         specialization: (isDoubles && isDoublesSpecUnlocked) ? doublesSpecConfig.name : 'N/A',
-        scores: finalScores,
+        scores: scores,
         healthPhysicalReadiness,
         healthInjuryNotes,
         healthRecoveryQuality,
@@ -3008,25 +2706,21 @@ function BadmintonAssessmentView({
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
-                      {indicatorList.map((ind) => {
-                        const indId = typeof ind === 'object' ? ind.id : ind;
-                        const indName = typeof ind === 'object' ? ind.name : ind;
-                        const resolvedVal = resolveIndicatorScore(scores, ind);
-                        const isUntested = resolvedVal === null || resolvedVal === undefined;
-                        const val = isUntested ? 0 : resolvedVal;
+                      {indicatorList.map((indicatorName) => {
+                        const val = scores[indicatorName] !== undefined ? scores[indicatorName] : 0;
                         const scoreGrade = getScoreGrade(val);
 
                         return (
                           <div
-                            key={indId}
+                            key={indicatorName}
                             className="p-3 bg-slate-50/70 hover:bg-white border border-slate-200/80 hover:border-teal-300 rounded-2xl transition-all space-y-2 shadow-2xs"
                           >
                             <div className="flex items-start justify-between gap-2">
                               <span className="text-xs font-bold text-slate-800 leading-snug">
-                                {indName}
+                                {indicatorName}
                               </span>
-                              <span className={`px-2 py-0.5 text-[10px] font-black rounded-lg border ${isUntested ? 'bg-slate-100 text-slate-500 border-slate-200' : scoreGrade.badge}`}>
-                                {isUntested ? 'UNTESTED' : `${val} / 100`}
+                              <span className={`px-2 py-0.5 text-[10px] font-black rounded-lg border ${scoreGrade.badge}`}>
+                                {val} / 100
                               </span>
                             </div>
 
@@ -3034,7 +2728,7 @@ function BadmintonAssessmentView({
                             <div className="flex items-center gap-2 pt-1">
                               <button
                                 type="button"
-                                onClick={() => handleAdjustScore(indId, -5)}
+                                onClick={() => handleAdjustScore(indicatorName, -5)}
                                 title="Kurangi 5"
                                 className="p-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-600 font-bold hover:text-rose-600 transition-colors cursor-pointer"
                               >
@@ -3042,21 +2736,21 @@ function BadmintonAssessmentView({
                               </button>
 
                               <input
-                                aria-label={`Skor ${indName}`}
-                                name={indId}
-                                id={`evaluation-section-${indId}`}
+  aria-label="evaluation section val"
+  name="val"
+  id="evaluation-section-val"
                                 type="range"
                                 min="0"
                                 max="100"
                                 step="1"
                                 value={val}
-                                onChange={(e) => handleScoreChange(indId, e.target.value)}
+                                onChange={(e) => handleScoreChange(indicatorName, e.target.value)}
                                 className="w-full accent-teal-600 cursor-pointer h-1.5 bg-slate-200 rounded-lg"
                               />
 
                               <button
                                 type="button"
-                                onClick={() => handleAdjustScore(indId, 5)}
+                                onClick={() => handleAdjustScore(indicatorName, 5)}
                                 title="Tambah 5"
                                 className="p-1 bg-white hover:bg-slate-100 border border-slate-200 rounded-lg text-slate-600 font-bold hover:text-emerald-600 transition-colors cursor-pointer"
                               >
@@ -3274,7 +2968,7 @@ function FootballAssessmentView({
   }, [selectedClass?.id, selectedClass?.tierCode, selectedClass?.minAge, selectedClass?.maxAge, selectedClass?.className, selectedClass?.name]);
 
   const studentAge = useMemo(() => {
-    if (!selectedStudent) return null;
+    if (!selectedStudent) return 0;
     if (selectedStudent.birthDate) {
       const calculated = calculateAge(selectedStudent.birthDate);
       if (calculated !== '-') {
@@ -3287,7 +2981,7 @@ function FootballAssessmentView({
       const num = parseInt(String(rawAge).replace(/\D/g, ''), 10);
       if (!isNaN(num) && num > 0) return num;
     }
-    return null;
+    return 10;
   }, [selectedStudent]);
 
   const detectedTier = useMemo(() => {
@@ -3295,14 +2989,11 @@ function FootballAssessmentView({
   }, [studentAge]);
 
   const detectedTierCode = useMemo(() => {
-    if (studentAge === null || studentAge === undefined || detectedTier === 'AGE_UNVERIFIED') {
-      return 'AGE_UNVERIFIED';
-    }
     if (studentAge <= 9) return 'Fase 1 (Joy Phase)';
     if (studentAge <= 12) return 'Fase 2 (Skill Phase)';
     if (studentAge <= 16) return 'Fase 3 (Tactical Phase)';
     return 'Fase 4 (Performance Phase)';
-  }, [studentAge, detectedTier]);
+  }, [studentAge]);
 
   const activeTier = useMemo(() => {
     if (overrideTier && overrideTier !== 'AUTO') {
@@ -3468,45 +3159,36 @@ function FootballAssessmentView({
     };
   }, [activeTier]);
 
-  // 7-Axis Calculated Average Scores (Only averaging evaluated indicators !== null)
+  // 7-Axis Calculated Average Scores (Only counting active indicators in activeTier)
   const axisScores = useMemo(() => {
-    const rawFisik = calculateCategoryAverage(scores, filteredCategoryIndicators.fisik);
-    const rawTeknik = calculateCategoryAverage(scores, filteredCategoryIndicators.teknik);
-    const rawTaktik = calculateCategoryAverage(scores, filteredCategoryIndicators.taktik);
-    const rawMental = calculateCategoryAverage(scores, filteredCategoryIndicators.mental);
-    const rawKomunikasi = calculateCategoryAverage(scores, filteredCategoryIndicators.komunikasi);
-    const rawPerkembangan = calculateCategoryAverage(scores, filteredCategoryIndicators.perkembangan);
-    const rawKhususPosisi = calculateCategoryAverage(scores, currentPosIndicatorsConfig.indicators);
+    const calcCategoryAvg = (indicatorList) => {
+      if (!indicatorList || indicatorList.length === 0) return 0;
+      const total = indicatorList.reduce((sum, ind) => {
+        const val = scores[ind] !== undefined ? scores[ind] : 0;
+        return sum + val;
+      }, 0);
+      return Math.round(total / indicatorList.length);
+    };
 
-    const rawOverall = calculateOverallScore([
-      rawFisik,
-      rawTeknik,
-      rawTaktik,
-      rawMental,
-      rawKomunikasi,
-      rawPerkembangan,
-      rawKhususPosisi
-    ]);
+    const fisik = calcCategoryAvg(filteredCategoryIndicators.fisik);
+    const teknik = calcCategoryAvg(filteredCategoryIndicators.teknik);
+    const taktik = calcCategoryAvg(filteredCategoryIndicators.taktik);
+    const mental = calcCategoryAvg(filteredCategoryIndicators.mental);
+    const komunikasi = calcCategoryAvg(filteredCategoryIndicators.komunikasi);
+    const perkembangan = calcCategoryAvg(filteredCategoryIndicators.perkembangan);
+    const khususPosisi = calcCategoryAvg(currentPosIndicatorsConfig.indicators);
+
+    const overall = Math.round((fisik + teknik + taktik + mental + komunikasi + perkembangan + khususPosisi) / 7);
 
     return {
-      fisik: rawFisik ?? 0,
-      teknik: rawTeknik ?? 0,
-      taktik: rawTaktik ?? 0,
-      mental: rawMental ?? 0,
-      komunikasi: rawKomunikasi ?? 0,
-      perkembangan: rawPerkembangan ?? 0,
-      khususPosisi: rawKhususPosisi ?? 0,
-      overall: rawOverall ?? 0,
-      raw: {
-        fisik: rawFisik,
-        teknik: rawTeknik,
-        taktik: rawTaktik,
-        mental: rawMental,
-        komunikasi: rawKomunikasi,
-        perkembangan: rawPerkembangan,
-        khususPosisi: rawKhususPosisi,
-        overall: rawOverall
-      }
+      fisik,
+      teknik,
+      taktik,
+      mental,
+      komunikasi,
+      perkembangan,
+      khususPosisi,
+      overall
     };
   }, [scores, filteredCategoryIndicators, currentPosIndicatorsConfig]);
 
@@ -3528,8 +3210,7 @@ function FootballAssessmentView({
     setScores((prev) => {
       const updated = { ...prev };
       catObj.indicators.forEach((ind) => {
-        const key = typeof ind === 'object' ? ind.id : ind;
-        updated[key] = presetScore;
+        updated[ind] = presetScore;
       });
       return updated;
     });
@@ -3549,18 +3230,7 @@ function FootballAssessmentView({
   // Adjust score handler with +/- 5 step
   const handleAdjustScore = (indicatorName, delta) => {
     setScores((prev) => {
-      let matchedInd = indicatorName;
-      for (const cat of footballCategoryList) {
-        const found = (cat.indicators || []).find((ind) =>
-          typeof ind === 'object' ? ind.id === indicatorName || ind.name === indicatorName : ind === indicatorName
-        );
-        if (found) {
-          matchedInd = found;
-          break;
-        }
-      }
-      const resolved = resolveIndicatorScore(prev, matchedInd);
-      const curr = resolved !== null ? resolved : 0;
+      const curr = prev[indicatorName] !== undefined ? prev[indicatorName] : 0;
       const nextVal = Math.min(100, Math.max(0, curr + delta));
       return { ...prev, [indicatorName]: nextVal };
     });
@@ -3584,8 +3254,7 @@ function FootballAssessmentView({
 
     const nextState = { ...scores };
     activeIndicators.forEach((ind) => {
-      const indId = typeof ind === 'object' ? ind.id : ind;
-      nextState[indId] = val;
+      nextState[ind] = val;
     });
     setScores(nextState);
 
@@ -3673,11 +3342,7 @@ function FootballAssessmentView({
 
     const finalScores = {};
     activeIndicators.forEach((ind) => {
-      const indId = typeof ind === 'object' ? ind.id : ind;
-      const resolvedVal = resolveIndicatorScore(scores, ind);
-      if (resolvedVal !== null && resolvedVal !== undefined) {
-        finalScores[indId] = resolvedVal;
-      }
+      finalScores[ind] = scores[ind] !== undefined ? scores[ind] : 0;
     });
 
     const styleObj = getStyleConfig(selectedStyleCode);
@@ -4322,8 +3987,8 @@ export function CategoryAssessmentModal({
     const total = indicators.length;
     if (total === 0) return { total: 0, rated: 0, percent: 100, isCompleted: true };
     const rated = indicators.filter((ind) => {
-      const s = resolveIndicatorScore(scores, ind);
-      return s !== undefined && s !== null;
+      const s = scores[ind];
+      return s !== undefined && s !== null && s > 0;
     }).length;
     const percent = Math.round((rated / total) * 100);
     const isCompleted = rated === total && total > 0;
@@ -4585,17 +4250,15 @@ export function CategoryAssessmentModal({
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     {(activeCategory.indicators || []).map((ind) => {
-                      const val = resolveIndicatorScore(scores, ind);
-                      const indId = typeof ind === 'object' ? ind.id : ind;
-                      const indName = typeof ind === 'object' ? ind.name : ind;
+                      const val = scores[ind] !== undefined ? scores[ind] : 0;
                       return (
                         <IndicatorCard
-                          key={indId}
-                          title={indName}
+                          key={ind}
+                          title={ind}
                           value={val}
                           isSpecial={activeCategory.isSpecial}
-                          onScoreChange={(v) => onScoreChange(indId, v)}
-                          onAdjust={(delta) => onAdjustScore(indId, delta)}
+                          onScoreChange={(v) => onScoreChange(ind, v)}
+                          onAdjust={(delta) => onAdjustScore(ind, delta)}
                           isArchived={isArchived}
                         />
                       );
@@ -4671,9 +4334,6 @@ export function CategoryAssessmentModal({
 // COMPONENT: INDIVIDUAL INDICATOR CARD WITH +/- BUTTONS & TOUCH SLIDER
 // =====================================================================
 function IndicatorCard({ title, value, isSpecial = false, onScoreChange, onAdjust, isArchived = false }) {
-  const isUntested = value === null || value === undefined;
-  const numVal = isUntested ? 0 : Math.max(0, Math.min(100, Number(value)));
-
   return (
     <div className={`p-3.5 bg-white border ${isSpecial ? 'border-indigo-200 hover:border-indigo-400' : 'border-slate-200/90 hover:border-slate-300'} rounded-2xl space-y-2 shadow-2xs transition-all`}>
       <div className="flex items-center justify-between text-xs font-bold gap-2">
@@ -4693,11 +4353,8 @@ function IndicatorCard({ title, value, isSpecial = false, onScoreChange, onAdjus
             <Minus className="w-3 h-3" />
           </button>
 
-          <span
-            className={`w-8 text-center font-black text-sm ${isUntested ? 'text-slate-400' : isSpecial ? 'text-indigo-600' : 'text-emerald-600'}`}
-            title={isUntested ? 'UNTESTED (Belum Dinilai)' : `Skor: ${numVal}`}
-          >
-            {isUntested ? '—' : numVal}
+          <span className={`w-8 text-center font-black text-sm ${isSpecial ? 'text-indigo-600' : 'text-emerald-600'}`}>
+            {value}
           </span>
 
           <button
@@ -4713,15 +4370,15 @@ function IndicatorCard({ title, value, isSpecial = false, onScoreChange, onAdjus
       </div>
 
       <input
-        aria-label="evaluation section value"
-        name="value"
-        id="evaluation-section-value"
+  aria-label="evaluation section value"
+  name="value"
+  id="evaluation-section-value"
         type="range"
         min="0"
         max="100"
         step="1"
         disabled={isArchived}
-        value={numVal}
+        value={value}
         onChange={(e) => onScoreChange(e.target.value)}
         className={`w-full cursor-pointer h-1.5 bg-slate-200 rounded-lg ${isSpecial ? 'accent-indigo-600' : 'accent-emerald-600'} disabled:opacity-50 disabled:cursor-not-allowed`}
       />
@@ -4801,19 +4458,18 @@ function Standard4PillarView({
   }, [selectedStudent?.id, latestEvalDoc?.id]);
 
   const pillarScores = useMemo(() => {
-    const rawFisik = calculateCategoryAverage(scores, pillars.fisik);
-    const rawTeknik = calculateCategoryAverage(scores, pillars.teknik);
-    const rawTaktik = calculateCategoryAverage(scores, pillars.taktik);
-    const rawMental = calculateCategoryAverage(scores, pillars.mental);
-    const rawPosition = calculateCategoryAverage(scores, roleKPIs);
-    const rawOverall = calculateOverallScore([rawFisik, rawTeknik, rawTaktik, rawMental, rawPosition]);
+    const computeAvg = (kpiList) => {
+      if (!kpiList || kpiList.length === 0) return 0;
+      const total = kpiList.reduce((sum, kpi) => sum + (scores[kpi] !== undefined ? scores[kpi] : 0), 0);
+      return Math.round(total / kpiList.length);
+    };
 
-    const fisik = rawFisik ?? 0;
-    const teknik = rawTeknik ?? 0;
-    const taktik = rawTaktik ?? 0;
-    const mental = rawMental ?? 0;
-    const position = rawPosition ?? 0;
-    const overall = rawOverall ?? 0;
+    const fisik = computeAvg(pillars.fisik);
+    const teknik = computeAvg(pillars.teknik);
+    const taktik = computeAvg(pillars.taktik);
+    const mental = computeAvg(pillars.mental);
+    const position = computeAvg(roleKPIs);
+    const overall = Math.round((fisik + teknik + taktik + mental + position) / 5);
 
     const allActiveKPIs = Array.from(new Set([
       ...(pillars.fisik || []),
@@ -4909,10 +4565,7 @@ function Standard4PillarView({
     setIsSaving(true);
     const finalScores = {};
     pillarScores.allActiveKPIs.forEach((kpi) => {
-      const resolvedVal = resolveIndicatorScore(scores, kpi);
-      if (resolvedVal !== null && resolvedVal !== undefined) {
-        finalScores[kpi] = resolvedVal;
-      }
+      finalScores[kpi] = scores[kpi] !== undefined ? scores[kpi] : 0;
     });
 
     try {
@@ -5388,8 +5041,7 @@ export function HistorySection({
   students = [],
   onDeleteEvaluation,
   isArchived = false,
-  isMobile = false,
-  defaultOpen = false
+  isMobile = false
 }) {
   const [expandedIds, setExpandedIds] = useState({});
 
@@ -5404,7 +5056,6 @@ export function HistorySection({
         onDeleteEvaluation={onDeleteEvaluation}
         isArchived={isArchived}
         getScoreGradeFn={getScoreGrade}
-        defaultOpen={defaultOpen}
       />
     );
   }

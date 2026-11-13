@@ -237,10 +237,9 @@ export default function AcademyPage({ userProfile }) {
     }
   }, [isCoachOnly, coachProfile?.academy_id, activeAcademyId]);
 
-  // Sync activeAcademyTab and attendanceSubTab when URL parameters change
+  // Sync activeAcademyTab when URL tab parameter changes
   useEffect(() => {
     const currentTab = searchParams.get('tab');
-    const currentSubTab = searchParams.get('subtab');
     if (currentTab && validTabs.includes(currentTab)) {
       if (isCoachOnly && (currentTab === 'dasbor' || currentTab === 'siswa' || currentTab === 'pelatih')) {
         setActiveAcademyTab('kelas');
@@ -249,16 +248,6 @@ export default function AcademyPage({ userProfile }) {
       }
     } else if (!currentTab) {
       setActiveAcademyTab(isCoachOnly ? 'kelas' : 'dasbor');
-    }
-
-    if (currentSubTab) {
-      if (currentSubTab === 'evaluasi' || currentSubTab === 'analitik' || currentSubTab === 'analytics') {
-        setAttendanceSubTab('evaluasi');
-      } else if (currentSubTab === 'antropometri' || currentSubTab === 'growth') {
-        setAttendanceSubTab('antropometri');
-      } else if (currentSubTab === 'presensi') {
-        setAttendanceSubTab('presensi');
-      }
     }
   }, [searchParams, isCoachOnly]);
 
@@ -272,13 +261,8 @@ export default function AcademyPage({ userProfile }) {
   const [expandedStudentId, setExpandedStudentId] = useState(null);
 
   // Attendance & Evaluation State
-  const subTabParam = searchParams.get('subtab');
   const [selectedClassId, setSelectedClassId] = useState('');
-  const [attendanceSubTab, setAttendanceSubTab] = useState(() => {
-    if (subTabParam === 'evaluasi' || subTabParam === 'analitik' || subTabParam === 'analytics') return 'evaluasi';
-    if (subTabParam === 'antropometri' || subTabParam === 'growth') return 'antropometri';
-    return 'presensi';
-  }); // 'presensi' | 'evaluasi' | 'antropometri'
+  const [attendanceSubTab, setAttendanceSubTab] = useState('presensi'); // 'presensi' | 'evaluasi'
 
   // Real-Time States from Database
   const [students, setStudents] = useState([]);
@@ -2206,14 +2190,11 @@ export default function AcademyPage({ userProfile }) {
                           selectedClass={currentClass}
                           students={filteredStudents.filter((s) => s.classId === currentClass.id || s.className === currentClass.className)}
                           tenantId={tenantId}
-                          userProfile={userProfile}
                           activeAcademy={activeAcademy}
-                          isMobile={false}
-                          initialAssessmentView={subTabParam === 'analitik' || subTabParam === 'analytics' ? 'analytics' : 'assessment'}
                         />
                       </div>
 
-                      <div className={attendanceSubTab === 'antropometri' || attendanceSubTab === 'perkembangan' ? 'block' : 'hidden'}>
+                      <div className={attendanceSubTab === 'perkembangan' || (attendanceSubTab !== 'presensi' && attendanceSubTab !== 'evaluasi') ? 'block' : 'hidden'}>
                         <GrowthTrackerSection
                           selectedClass={currentClass}
                           isArchived={currentClass?.isArchived === true}

@@ -208,95 +208,8 @@ export function mapEvaluationFromSupabase(row, extra = {}) {
 // 1. WORKSPACE AKADEMI (academies)
 // -------------------------------------------------------------------------
 
-const DEMO_PREVIEW_ACADEMY_ID = '00000000-0000-4000-8000-000000000101';
-const DEMO_PREVIEW_CLASS_TIER3_ID = '00000000-0000-4000-8000-000000000201';
-const DEMO_PREVIEW_CLASS_TIER1_ID = '00000000-0000-4000-8000-000000000202';
-const DEMO_PREVIEW_CLASS_TIER4_ID = '00000000-0000-4000-8000-000000000203';
-
-const DEMO_PREVIEW_ACADEMIES = [
-  {
-    id: DEMO_PREVIEW_ACADEMY_ID,
-    tenant_id: 'demo-tenant-1',
-    name: 'SSB Garuda Muda Nusantara',
-    academy_name: 'SSB Garuda Muda Nusantara',
-    category: 'team',
-    category_label: 'Sepak Bola & Minisoccer',
-    sport_category: 'SepakBola',
-    sport: 'SepakBola',
-    description: 'Sekolah Sepak Bola Pembinaan Usia Dini & Youth Development (U8–U18)',
-    logo_url: '',
-    created_at: '2026-01-10T08:00:00.000Z'
-  }
-];
-
-const DEMO_PREVIEW_CLASSES = [
-  {
-    id: DEMO_PREVIEW_CLASS_TIER3_ID,
-    tenant_id: 'demo-tenant-1',
-    academy_id: DEMO_PREVIEW_ACADEMY_ID,
-    academy_name: 'SSB Garuda Muda Nusantara',
-    class_name: 'KU-14 / U-15 Elit (Tactical Phase)',
-    sport: 'SepakBola',
-    coach_id: '00000000-0000-4000-8000-000000000301',
-    coach_name: 'Coach Hendra Wijaya (Lisensi C AFC)',
-    min_age: 13,
-    max_age: 16,
-    max_quota: 24,
-    tier_code: 'TIER_3',
-    tier_label: 'Fase 3 — Tactical Phase (U-14 & U-16)',
-    schedule: 'Selasa, Kamis, Sabtu (15:30 - 17:30)',
-    schedules: ['Selasa 15:30', 'Kamis 15:30', 'Sabtu 15:30'],
-    is_archived: false,
-    created_at: '2026-01-10T08:00:00.000Z'
-  },
-  {
-    id: DEMO_PREVIEW_CLASS_TIER1_ID,
-    tenant_id: 'demo-tenant-1',
-    academy_id: DEMO_PREVIEW_ACADEMY_ID,
-    academy_name: 'SSB Garuda Muda Nusantara',
-    class_name: 'KU-8 / U-9 Grassroots (Joy Phase)',
-    sport: 'SepakBola',
-    coach_id: '00000000-0000-4000-8000-000000000301',
-    coach_name: 'Coach Hendra Wijaya (Lisensi C AFC)',
-    min_age: 6,
-    max_age: 9,
-    max_quota: 20,
-    tier_code: 'TIER_1',
-    tier_label: 'Fase 1 — Joy Phase (U-8 & U-10)',
-    schedule: 'Rabu, Minggu (08:00 - 09:30)',
-    schedules: ['Rabu 08:00', 'Minggu 08:00'],
-    is_archived: false,
-    created_at: '2026-01-10T08:00:00.000Z'
-  },
-  {
-    id: DEMO_PREVIEW_CLASS_TIER4_ID,
-    tenant_id: 'demo-tenant-1',
-    academy_id: DEMO_PREVIEW_ACADEMY_ID,
-    academy_name: 'SSB Garuda Muda Nusantara',
-    class_name: 'KU-18 Pro Youth (Performance Phase)',
-    sport: 'SepakBola',
-    coach_id: '00000000-0000-4000-8000-000000000301',
-    coach_name: 'Coach Hendra Wijaya (Lisensi C AFC)',
-    min_age: 17,
-    max_age: 20,
-    max_quota: 22,
-    tier_code: 'TIER_4',
-    tier_label: 'Fase 4 — Performance Phase (U-18 / Senior)',
-    schedule: 'Senin, Rabu, Jumat (16:00 - 18:00)',
-    schedules: ['Senin 16:00', 'Rabu 16:00', 'Jumat 16:00'],
-    is_archived: false,
-    created_at: '2026-01-10T08:00:00.000Z'
-  }
-];
-
-export const isExplicitDemoTenant = (tenantId) =>
-  String(tenantId || '').trim() === 'demo-tenant-1';
-
 export async function getAcademies(tenantId) {
   if (!tenantId) return [];
-  if (isExplicitDemoTenant(tenantId)) {
-    return DEMO_PREVIEW_ACADEMIES.map(mapAcademyFromSupabase);
-  }
   try {
     const { data, error } = await supabase
       .from('academies')
@@ -308,8 +221,7 @@ export async function getAcademies(tenantId) {
       console.warn('[Supabase getAcademies Error]:', error);
       return [];
     }
-    const rows = data || [];
-    return rows.map(mapAcademyFromSupabase);
+    return (data || []).map(mapAcademyFromSupabase);
   } catch (err) {
     console.warn('[Supabase getAcademies Catch]:', err);
     return [];
@@ -413,14 +325,6 @@ export async function getClasses(tenantId, academyId = null, coachId = null, opt
   if (!tenantId) return [];
 
   const { includeArchived = false, onlyArchived = false } = (typeof options === 'object' && options !== null) ? options : {};
-  const safeAcademyId = toUuidOrNull(academyId);
-
-  if (isExplicitDemoTenant(tenantId)) {
-    if (onlyArchived) return [];
-    return DEMO_PREVIEW_CLASSES
-      .filter((c) => !safeAcademyId || c.academy_id === safeAcademyId)
-      .map(mapClassFromSupabase);
-  }
 
   let query = supabase
     .from('academy_classes')
@@ -428,6 +332,7 @@ export async function getClasses(tenantId, academyId = null, coachId = null, opt
     .eq('tenant_id', tenantId)
     .order('class_name', { ascending: true });
 
+  const safeAcademyId = toUuidOrNull(academyId);
   if (safeAcademyId) {
     query = query.eq('academy_id', safeAcademyId);
   }
@@ -449,8 +354,7 @@ export async function getClasses(tenantId, academyId = null, coachId = null, opt
     console.error('[Supabase getClasses Error]:', error);
     return [];
   }
-  const rows = data || [];
-  return rows.map(mapClassFromSupabase);
+  return (data || []).map(mapClassFromSupabase);
 }
 
 export async function createClass({
@@ -794,124 +698,8 @@ export async function deleteCoach(coachId) {
 // 4. SISWA AKADEMI (students)
 // -------------------------------------------------------------------------
 
-const DEMO_PREVIEW_STUDENTS = [
-  {
-    id: '00000000-0000-4000-8000-000000000401',
-    tenant_id: 'demo-tenant-1',
-    student_name: 'Rizky Pratama Putra',
-    birth_date: '2012-04-15',
-    school_origin: 'SMPN 4 Bekasi',
-    academy_id: DEMO_PREVIEW_ACADEMY_ID,
-    academy_name: 'SSB Garuda Muda Nusantara',
-    class_id: DEMO_PREVIEW_CLASS_TIER3_ID,
-    class_name: 'KU-14 / U-15 Elit (Tactical Phase)',
-    coach_name: 'Coach Hendra Wijaya (Lisensi C AFC)',
-    sport_category: 'SepakBola',
-    player_role: 'WFR/WFL',
-    parent_name: 'Budi Pratama',
-    parent_phone: '081234567801',
-    phone: '081234567801',
-    join_date: '2025-02-01',
-    monthly_fee: 350000,
-    payment_status: 'lunas',
-    spp_status: 'Lunas',
-    height: 164,
-    weight: 53,
-    tournaments: [],
-    growth_history: [],
-    created_at: '2026-01-10T08:00:00.000Z'
-  },
-  {
-    id: '00000000-0000-4000-8000-000000000402',
-    tenant_id: 'demo-tenant-1',
-    student_name: 'Dimas Aditya Saputra',
-    birth_date: '2012-08-22',
-    school_origin: 'SMPN 1 Bekasi',
-    academy_id: DEMO_PREVIEW_ACADEMY_ID,
-    academy_name: 'SSB Garuda Muda Nusantara',
-    class_id: DEMO_PREVIEW_CLASS_TIER3_ID,
-    class_name: 'KU-14 / U-15 Elit (Tactical Phase)',
-    coach_name: 'Coach Hendra Wijaya (Lisensi C AFC)',
-    sport_category: 'SepakBola',
-    player_role: 'CM',
-    parent_name: 'Agus Saputra',
-    parent_phone: '081234567802',
-    phone: '081234567802',
-    join_date: '2025-02-01',
-    monthly_fee: 350000,
-    payment_status: 'lunas',
-    spp_status: 'Lunas',
-    height: 161,
-    weight: 51,
-    tournaments: [],
-    growth_history: [],
-    created_at: '2026-01-10T08:00:00.000Z'
-  },
-  {
-    id: '00000000-0000-4000-8000-000000000403',
-    tenant_id: 'demo-tenant-1',
-    student_name: 'Naufal Alfarizi (GK)',
-    birth_date: '2018-05-10',
-    school_origin: 'SDN Harapan Baru 2',
-    academy_id: DEMO_PREVIEW_ACADEMY_ID,
-    academy_name: 'SSB Garuda Muda Nusantara',
-    class_id: DEMO_PREVIEW_CLASS_TIER1_ID,
-    class_name: 'KU-8 / U-9 Grassroots (Joy Phase)',
-    coach_name: 'Coach Hendra Wijaya (Lisensi C AFC)',
-    sport_category: 'SepakBola',
-    player_role: 'GK_SSB',
-    parent_name: 'Ridwan Alfarizi',
-    parent_phone: '081234567803',
-    phone: '081234567803',
-    join_date: '2025-03-10',
-    monthly_fee: 300000,
-    payment_status: 'lunas',
-    spp_status: 'Lunas',
-    height: 132,
-    weight: 29,
-    tournaments: [],
-    growth_history: [],
-    created_at: '2026-01-10T08:00:00.000Z'
-  },
-  {
-    id: '00000000-0000-4000-8000-000000000404',
-    tenant_id: 'demo-tenant-1',
-    student_name: 'Bagas Kaffa Ramadhan',
-    birth_date: '2008-11-03',
-    school_origin: 'SMAN 2 Bekasi',
-    academy_id: DEMO_PREVIEW_ACADEMY_ID,
-    academy_name: 'SSB Garuda Muda Nusantara',
-    class_id: DEMO_PREVIEW_CLASS_TIER4_ID,
-    class_name: 'KU-18 Pro Youth (Performance Phase)',
-    coach_name: 'Coach Hendra Wijaya (Lisensi C AFC)',
-    sport_category: 'SepakBola',
-    player_role: 'ST',
-    parent_name: 'Hadi Ramadhan',
-    parent_phone: '081234567804',
-    phone: '081234567804',
-    join_date: '2024-09-01',
-    monthly_fee: 400000,
-    payment_status: 'lunas',
-    spp_status: 'Lunas',
-    height: 175,
-    weight: 66,
-    tournaments: [],
-    growth_history: [],
-    created_at: '2026-01-10T08:00:00.000Z'
-  }
-];
-
 export async function getStudents(tenantId, academyId = null, classId = null) {
   if (!tenantId) return [];
-
-  const safeAcademyId = toUuidOrNull(academyId);
-  const safeClassId = toUuidOrNull(classId);
-
-  if (isExplicitDemoTenant(tenantId)) {
-    return DEMO_PREVIEW_STUDENTS
-      .filter((s) => (!safeAcademyId || s.academy_id === safeAcademyId) && (!safeClassId || s.class_id === safeClassId))
-      .map(mapStudentFromSupabase);
-  }
 
   // PENTING: Gunakan select('*') tanpa FK join academy_classes(...)
   // agar query tidak error jika class_id bertipe TEXT tanpa FK constraint
@@ -921,9 +709,11 @@ export async function getStudents(tenantId, academyId = null, classId = null) {
     .eq('tenant_id', tenantId)
     .order('student_name', { ascending: true });
 
+  const safeAcademyId = toUuidOrNull(academyId);
   if (safeAcademyId) {
     query = query.eq('academy_id', safeAcademyId);
   }
+  const safeClassId = toUuidOrNull(classId);
   if (safeClassId) {
     query = query.eq('class_id', safeClassId);
   }
@@ -933,8 +723,7 @@ export async function getStudents(tenantId, academyId = null, classId = null) {
     console.error('[Supabase getStudents Error]:', error);
     return [];
   }
-  const rows = data || [];
-  return rows.map(mapStudentFromSupabase);
+  return (data || []).map(mapStudentFromSupabase);
 }
 
 export async function createStudent(payload) {

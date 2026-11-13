@@ -12,22 +12,20 @@ import {
   Target
 } from 'lucide-react';
 import { getCategoryTheme } from './ScoutingPolarAreaPanel';
-import { resolveIndicatorScore } from '../config/footballAssessmentData';
 
 // ============================================================================
 // SINGLE INDICATOR CARD (SLIDER + STEPPER, MOBILE-FIRST 44PX TOUCH TARGETS)
 // ============================================================================
 export function AccordionIndicatorCard({
   title,
-  value = null,
+  value = 0,
   isSpecial = false,
   onScoreChange,
   onAdjust,
   isArchived = false,
   accentColor = '#10B981'
 }) {
-  const isUntested = value === null || value === undefined;
-  const numVal = isUntested ? 0 : Math.max(0, Math.min(100, Number(value)));
+  const numVal = Math.max(0, Math.min(100, Number(value) || 0));
 
   return (
     <div className={`p-3 bg-white border ${isSpecial ? 'border-indigo-200/90' : 'border-slate-200/90'} rounded-2xl space-y-2 shadow-2xs`}>
@@ -52,10 +50,9 @@ export function AccordionIndicatorCard({
 
           <span 
             className="w-9 text-center font-black font-mono text-sm tabular-nums"
-            style={{ color: isUntested ? '#94A3B8' : accentColor }}
-            title={isUntested ? 'UNTESTED (Belum Dinilai)' : `Skor: ${numVal}`}
+            style={{ color: accentColor }}
           >
-            {isUntested ? '—' : numVal}
+            {numVal}
           </span>
 
           <button
@@ -158,8 +155,8 @@ export default function AssessmentIndicatorsAccordion({
     const total = indicators.length;
     if (total === 0) return { total: 0, rated: 0, isCompleted: true };
     const rated = indicators.filter((ind) => {
-      const s = resolveIndicatorScore(scores, ind);
-      return s !== null && s !== undefined;
+      const s = scores[ind];
+      return s !== undefined && s !== null && s > 0;
     }).length;
     return {
       total,
@@ -329,24 +326,18 @@ export default function AssessmentIndicatorsAccordion({
                         </div>
                       ) : (
                         <div className="space-y-2">
-                          {indicators.map((ind) => {
-                            const indId = typeof ind === 'object' ? ind.id : ind;
-                            const indName = typeof ind === 'object' ? ind.name : ind;
-                            const finalValue = resolveIndicatorScore(scores, ind);
-
-                            return (
-                              <AccordionIndicatorCard
-                                key={indId}
-                                title={indName}
-                                value={finalValue}
-                                isSpecial={cat.isSpecial}
-                                onScoreChange={(val) => onScoreChange(indId, val)}
-                                onAdjust={(delta) => onAdjustScore(indId, delta)}
-                                isArchived={isArchived}
-                                accentColor={theme.color}
-                              />
-                            );
-                          })}
+                          {indicators.map((indName) => (
+                            <AccordionIndicatorCard
+                              key={indName}
+                              title={indName}
+                              value={scores[indName] !== undefined ? scores[indName] : 0}
+                              isSpecial={cat.isSpecial}
+                              onScoreChange={(val) => onScoreChange(indName, val)}
+                              onAdjust={(delta) => onAdjustScore(indName, delta)}
+                              isArchived={isArchived}
+                              accentColor={theme.color}
+                            />
+                          ))}
                         </div>
                       )}
                     </motion.div>
@@ -523,24 +514,18 @@ export default function AssessmentIndicatorsAccordion({
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                        {indicators.map((ind) => {
-                          const indId = typeof ind === 'object' ? ind.id : ind;
-                          const indName = typeof ind === 'object' ? ind.name : ind;
-                          const finalValue = resolveIndicatorScore(scores, ind);
-
-                          return (
-                            <AccordionIndicatorCard
-                              key={indId}
-                              title={indName}
-                              value={finalValue}
-                              isSpecial={cat.isSpecial}
-                              onScoreChange={(val) => onScoreChange(indId, val)}
-                              onAdjust={(delta) => onAdjustScore(indId, delta)}
-                              isArchived={isArchived}
-                              accentColor={theme.color}
-                            />
-                          );
-                        })}
+                        {indicators.map((indName) => (
+                          <AccordionIndicatorCard
+                            key={indName}
+                            title={indName}
+                            value={scores[indName] !== undefined ? scores[indName] : 0}
+                            isSpecial={cat.isSpecial}
+                            onScoreChange={(val) => onScoreChange(indName, val)}
+                            onAdjust={(delta) => onAdjustScore(indName, delta)}
+                            isArchived={isArchived}
+                            accentColor={theme.color}
+                          />
+                        ))}
                       </div>
                     )}
                   </motion.div>

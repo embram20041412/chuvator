@@ -2,20 +2,6 @@
 // KAMUS DATA "ATHLETE DEVELOPMENT ASSESSMENT" (4-TIER LTAD BADMINTON)
 // =====================================================================
 
-import {
-  parseValidAgeInput,
-  resolveIndicatorScore,
-  calculateCategoryAverage,
-  calculateOverallScore
-} from './footballAssessmentData';
-
-export {
-  parseValidAgeInput,
-  resolveIndicatorScore,
-  calculateCategoryAverage,
-  calculateOverallScore
-};
-
 export function isBadmintonSport(selectedClass, activeAcademy) {
   const isTableTennis = (str) => str.includes('meja') || str.includes('table');
 
@@ -135,8 +121,16 @@ export const PBSI_AGE_LEVELS = [
 ];
 
 export function detectBadmintonTierFromAge(ageInput) {
-  const parsed = parseValidAgeInput(ageInput);
-  if (parsed === null || parsed <= 0) return 'AGE_UNVERIFIED';
+  if (ageInput === undefined || ageInput === null || ageInput === '') return 1;
+  let parsed = 0;
+  if (typeof ageInput === 'number') {
+    parsed = ageInput;
+  } else {
+    const digits = String(ageInput).replace(/\D/g, '');
+    parsed = parseInt(digits, 10) || 0;
+  }
+
+  if (parsed <= 0) return 1;
   if (parsed <= 10) return 1; // Pra-Usia Dini & Usia Dini (<=10)
   if (parsed >= 11 && parsed <= 13) return 2; // Anak-Anak (11-13)
   if (parsed >= 14 && parsed <= 17) return 3; // Pemula & Remaja (14-17)
@@ -144,17 +138,21 @@ export function detectBadmintonTierFromAge(ageInput) {
 }
 
 export function detectPbsiLevelFromAge(ageInput) {
-  const age = parseValidAgeInput(ageInput);
-  if (age === null || age <= 0) {
-    return { ...PBSI_AGE_LEVELS[0], status: 'AGE_UNVERIFIED' };
+  if (ageInput === undefined || ageInput === null || ageInput === '') return PBSI_AGE_LEVELS[0];
+  let parsed = 0;
+  if (typeof ageInput === 'number') {
+    parsed = ageInput;
+  } else {
+    const digits = String(ageInput).replace(/\D/g, '');
+    parsed = parseInt(digits, 10) || 0;
   }
 
-  if (age <= 8) return PBSI_AGE_LEVELS[0]; // Pra-Usia Dini
-  if (age <= 10) return PBSI_AGE_LEVELS[1]; // Usia Dini
-  if (age <= 13) return PBSI_AGE_LEVELS[2]; // Anak-Anak
-  if (age <= 15) return PBSI_AGE_LEVELS[3]; // Pemula
-  if (age <= 17) return PBSI_AGE_LEVELS[4]; // Remaja
-  if (age === 18) return PBSI_AGE_LEVELS[5]; // Taruna
+  if (parsed <= 8) return PBSI_AGE_LEVELS[0]; // Pra-Usia Dini
+  if (parsed <= 10) return PBSI_AGE_LEVELS[1]; // Usia Dini
+  if (parsed <= 13) return PBSI_AGE_LEVELS[2]; // Anak-Anak
+  if (parsed <= 15) return PBSI_AGE_LEVELS[3]; // Pemula
+  if (parsed <= 17) return PBSI_AGE_LEVELS[4]; // Remaja
+  if (parsed === 18) return PBSI_AGE_LEVELS[5]; // Taruna
   return PBSI_AGE_LEVELS[6]; // Dewasa
 }
 
@@ -326,109 +324,109 @@ export const BADMINTON_CORE_CATEGORIES = {
     key: 'fisik',
     label: 'Fisik / Physical',
     indicators: [
-      { id: 'BDM-UNI-PHY-01', name: 'Akselerasi', minTier: 1, type: 'OBJECTIVE_TEST', legacy_keys: ['Akselerasi'] },
-      { id: 'BDM-UNI-PHY-02', name: 'Reaksi', minTier: 1, type: 'OBJECTIVE_TEST', legacy_keys: ['Reaksi'] },
-      { id: 'BDM-UNI-PHY-03', name: 'Kelincahan', minTier: 1, type: 'OBJECTIVE_TEST', legacy_keys: ['Kelincahan'] },
-      { id: 'BDM-UNI-PHY-04', name: 'Gerak Lapangan', minTier: 1, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Gerak Lapangan'] },
-      { id: 'BDM-UNI-PHY-05', name: 'Keseimbangan', minTier: 1, type: 'OBJECTIVE_TEST', legacy_keys: ['Keseimbangan'] },
-      { id: 'BDM-UNI-PHY-06', name: 'Deselerasi', minTier: 2, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Deselerasi'] },
-      { id: 'BDM-UNI-PHY-07', name: 'Daya Ledak Kaki', minTier: 2, type: 'OBJECTIVE_TEST', legacy_keys: ['Daya Ledak Kaki'] },
-      { id: 'BDM-UNI-PHY-08', name: 'Kekuatan Lunge', minTier: 2, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Kekuatan Lunge'] },
-      { id: 'BDM-UNI-PHY-09', name: 'Kontrol Pendaratan', minTier: 2, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Kontrol Pendaratan'] },
-      { id: 'BDM-UNI-PHY-10', name: 'Kekuatan Inti', minTier: 3, type: 'OBJECTIVE_TEST', legacy_keys: ['Kekuatan Inti'] },
-      { id: 'BDM-UNI-PHY-11', name: 'Daya Tahan', minTier: 3, type: 'OBJECTIVE_TEST', legacy_keys: ['Daya Tahan'] },
-      { id: 'BDM-UNI-PHY-12', name: 'Gerak Berulang', minTier: 3, type: 'OBJECTIVE_TEST', legacy_keys: ['Gerak Berulang'] },
-      { id: 'BDM-UNI-PHY-13', name: 'Pemulihan Antar-Reli', minTier: 3, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Pemulihan Antar-Reli'] },
-      { id: 'BDM-UNI-PHY-14', name: 'Daya Tahan Bahu', minTier: 4, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Daya Tahan Bahu'] },
-      { id: 'BDM-UNI-PHY-15', name: 'Daya Tahan Genggaman', minTier: 4, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Daya Tahan Genggaman'] }
+      { name: 'Akselerasi', minTier: 1 },
+      { name: 'Reaksi', minTier: 1 },
+      { name: 'Kelincahan', minTier: 1 },
+      { name: 'Gerak Lapangan', minTier: 1 },
+      { name: 'Keseimbangan', minTier: 1 },
+      { name: 'Deselerasi', minTier: 2 },
+      { name: 'Daya Ledak Kaki', minTier: 2 },
+      { name: 'Kekuatan Lunge', minTier: 2 },
+      { name: 'Kontrol Pendaratan', minTier: 2 },
+      { name: 'Kekuatan Inti', minTier: 3 },
+      { name: 'Daya Tahan', minTier: 3 },
+      { name: 'Gerak Berulang', minTier: 3 },
+      { name: 'Pemulihan Antar-Reli', minTier: 3 },
+      { name: 'Daya Tahan Bahu', minTier: 4 },
+      { name: 'Daya Tahan Genggaman', minTier: 4 }
     ]
   },
   teknik: {
     key: 'teknik',
     label: 'Teknik / Technical',
     indicators: [
-      { id: 'BDM-UNI-TEC-01', name: 'Pegangan Raket (Grip Versatility)', minTier: 1, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Pegangan Raket (Grip Versatility)'] },
-      { id: 'BDM-UNI-TEC-02', name: 'Footwork Lapangan', minTier: 1, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Footwork Lapangan'] },
-      { id: 'BDM-UNI-TEC-03', name: 'Servis Pendek', minTier: 1, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Servis Pendek'] },
-      { id: 'BDM-UNI-TEC-04', name: 'Servis Panjang / Flick', minTier: 1, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Servis Panjang / Flick'] },
-      { id: 'BDM-UNI-TEC-05', name: 'Lob / Clear', minTier: 1, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Lob / Clear'] },
-      { id: 'BDM-UNI-TEC-06', name: 'Return Servis', minTier: 2, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Return Servis'] },
-      { id: 'BDM-UNI-TEC-07', name: 'Net Shot (Permainan Net)', minTier: 2, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Net Shot (Permainan Net)'] },
-      { id: 'BDM-UNI-TEC-08', name: 'Drop Shot', minTier: 2, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Drop Shot'] },
-      { id: 'BDM-UNI-TEC-09', name: 'Smash Penuh', minTier: 2, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Smash Penuh'] },
-      { id: 'BDM-UNI-TEC-10', name: 'Konsistensi Pukulan', minTier: 2, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Konsistensi Pukulan'] },
-      { id: 'BDM-UNI-TEC-11', name: 'Net Kill / Tangkisan Net', minTier: 3, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Net Kill / Tangkisan Net'] },
-      { id: 'BDM-UNI-TEC-12', name: 'Half-Smash / Clip Smash', minTier: 3, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Half-Smash / Clip Smash'] },
-      { id: 'BDM-UNI-TEC-13', name: 'Drive Datar', minTier: 3, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Drive Datar'] },
-      { id: 'BDM-UNI-TEC-14', name: 'Pertahanan Blok / Lift', minTier: 3, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Pertahanan Blok / Lift'] },
-      { id: 'BDM-UNI-TEC-15', name: 'Pukulan Backhand Overhead', minTier: 4, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Pukulan Backhand Overhead'] },
-      { id: 'BDM-UNI-TEC-16', name: 'Deception (Teknik Tipuan Pukulan)', minTier: 4, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Deception (Teknik Tipuan Pukulan)'] }
+      { name: 'Pegangan Raket (Grip Versatility)', minTier: 1 },
+      { name: 'Footwork Lapangan', minTier: 1 },
+      { name: 'Servis Pendek', minTier: 1 },
+      { name: 'Servis Panjang / Flick', minTier: 1 },
+      { name: 'Lob / Clear', minTier: 1 },
+      { name: 'Return Servis', minTier: 2 },
+      { name: 'Net Shot (Permainan Net)', minTier: 2 },
+      { name: 'Drop Shot', minTier: 2 },
+      { name: 'Smash Penuh', minTier: 2 },
+      { name: 'Konsistensi Pukulan', minTier: 2 },
+      { name: 'Net Kill / Tangkisan Net', minTier: 3 },
+      { name: 'Half-Smash / Clip Smash', minTier: 3 },
+      { name: 'Drive Datar', minTier: 3 },
+      { name: 'Pertahanan Blok / Lift', minTier: 3 },
+      { name: 'Pukulan Backhand Overhead', minTier: 4 },
+      { name: 'Deception (Teknik Tipuan Pukulan)', minTier: 4 }
     ]
   },
   taktik: {
     key: 'taktik',
     label: 'Taktik / Tactical',
     indicators: [
-      { id: 'BDM-UNI-TAC-01', name: 'Timing Split-Step', minTier: 1, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Timing Split-Step'] },
-      { id: 'BDM-UNI-TAC-02', name: 'Posisi Pemulihan', minTier: 1, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Posisi Pemulihan'] },
-      { id: 'BDM-UNI-TAC-03', name: 'Cakupan Lapangan', minTier: 1, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Cakupan Lapangan'] },
-      { id: 'BDM-UNI-TAC-04', name: 'Antisipasi', minTier: 2, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Antisipasi'] },
-      { id: 'BDM-UNI-TAC-05', name: 'Pilihan Pukulan', minTier: 2, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Pilihan Pukulan'] },
-      { id: 'BDM-UNI-TAC-06', name: 'Bangun Serangan', minTier: 2, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Bangun Serangan'] },
-      { id: 'BDM-UNI-TAC-07', name: 'Kontrol Reli', minTier: 2, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Kontrol Reli'] },
-      { id: 'BDM-UNI-TAC-08', name: 'Penutupan Poin', minTier: 2, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Penutupan Poin'] },
-      { id: 'BDM-UNI-TAC-09', name: 'Rotasi Ganda', minTier: 2, type: 'OBSERVATION_RUBRIC', isDoublesOnly: true, legacy_keys: ['Rotasi Ganda'] },
-      { id: 'BDM-UNI-TAC-10', name: 'Pembagian Area', minTier: 2, type: 'OBSERVATION_RUBRIC', isDoublesOnly: true, legacy_keys: ['Pembagian Area'] },
-      { id: 'BDM-UNI-TAC-11', name: 'Eksploitasi Kelemahan', minTier: 3, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Eksploitasi Kelemahan'] },
-      { id: 'BDM-UNI-TAC-12', name: 'Variasi Tempo', minTier: 3, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Variasi Tempo'] },
-      { id: 'BDM-UNI-TAC-13', name: 'Transisi Menyerang', minTier: 3, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Transisi Menyerang'] },
-      { id: 'BDM-UNI-TAC-14', name: 'Transisi Bertahan', minTier: 3, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Transisi Bertahan'] },
-      { id: 'BDM-UNI-TAC-15', name: 'Adaptasi Taktik', minTier: 3, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Adaptasi Taktik'] },
-      { id: 'BDM-UNI-TAC-16', name: 'Baca Tipuan', minTier: 4, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Baca Tipuan'] },
-      { id: 'BDM-UNI-TAC-17', name: 'Keputusan Tekanan', minTier: 4, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Keputusan Tekanan'] },
-      { id: 'BDM-UNI-TAC-18', name: 'Manajemen Pertandingan', minTier: 4, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Manajemen Pertandingan'] }
+      { name: 'Timing Split-Step', minTier: 1 },
+      { name: 'Posisi Pemulihan', minTier: 1 },
+      { name: 'Cakupan Lapangan', minTier: 1 },
+      { name: 'Antisipasi', minTier: 2 },
+      { name: 'Pilihan Pukulan', minTier: 2 },
+      { name: 'Bangun Serangan', minTier: 2 },
+      { name: 'Kontrol Reli', minTier: 2 },
+      { name: 'Penutupan Poin', minTier: 2 },
+      { name: 'Rotasi Ganda', minTier: 2, isDoublesOnly: true },
+      { name: 'Pembagian Area', minTier: 2, isDoublesOnly: true },
+      { name: 'Eksploitasi Kelemahan', minTier: 3 },
+      { name: 'Variasi Tempo', minTier: 3 },
+      { name: 'Transisi Menyerang', minTier: 3 },
+      { name: 'Transisi Bertahan', minTier: 3 },
+      { name: 'Adaptasi Taktik', minTier: 3 },
+      { name: 'Baca Tipuan', minTier: 4 },
+      { name: 'Keputusan Tekanan', minTier: 4 },
+      { name: 'Manajemen Pertandingan', minTier: 4 }
     ]
   },
   mental: {
     key: 'mental',
     label: 'Mental / Psychology',
     indicators: [
-      { id: 'BDM-UNI-MEN-01', name: 'Fokus', minTier: 1, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Fokus'] },
-      { id: 'BDM-UNI-MEN-02', name: 'Percaya Diri', minTier: 1, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Percaya Diri'] },
-      { id: 'BDM-UNI-MEN-03', name: 'Daya Juang', minTier: 1, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Daya Juang'] },
-      { id: 'BDM-UNI-MEN-04', name: 'Kontrol Emosi', minTier: 2, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Kontrol Emosi'] },
-      { id: 'BDM-UNI-MEN-05', name: 'Disiplin Taktik', minTier: 2, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Disiplin Taktik'] },
-      { id: 'BDM-UNI-MEN-06', name: 'Ketahanan Tekanan', minTier: 3, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Ketahanan Tekanan'] },
-      { id: 'BDM-UNI-MEN-07', name: 'Reset Mental', minTier: 3, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Reset Mental'] },
-      { id: 'BDM-UNI-MEN-08', name: 'Konsistensi Mental', minTier: 3, type: 'DEVELOPMENT_TRACKING', legacy_keys: ['Konsistensi Mental'] }
+      { name: 'Fokus', minTier: 1 },
+      { name: 'Percaya Diri', minTier: 1 },
+      { name: 'Daya Juang', minTier: 1 },
+      { name: 'Kontrol Emosi', minTier: 2 },
+      { name: 'Disiplin Taktik', minTier: 2 },
+      { name: 'Ketahanan Tekanan', minTier: 3 },
+      { name: 'Reset Mental', minTier: 3 },
+      { name: 'Konsistensi Mental', minTier: 3 }
     ]
   },
   komunikasi: {
     key: 'komunikasi',
     label: 'Komunikasi (Khusus Ganda)',
     indicators: [
-      { id: 'BDM-UNI-COM-01', name: 'Komunikasi Verbal', minTier: 2, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Komunikasi Verbal'] },
-      { id: 'BDM-UNI-COM-02', name: 'Isyarat Pasangan', minTier: 2, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Isyarat Pasangan'] },
-      { id: 'BDM-UNI-COM-03', name: 'Koordinasi Gerak', minTier: 2, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Koordinasi Gerak'] },
-      { id: 'BDM-UNI-COM-04', name: 'Dukungan Mental', minTier: 2, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Dukungan Mental'] },
-      { id: 'BDM-UNI-COM-05', name: 'Kepercayaan Pasangan', minTier: 3, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Kepercayaan Pasangan'] },
-      { id: 'BDM-UNI-COM-06', name: 'Pembagian Tanggung Jawab', minTier: 3, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Pembagian Tanggung Jawab'] },
-      { id: 'BDM-UNI-COM-07', name: 'Respons Pasangan', minTier: 3, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Respons Pasangan'] },
-      { id: 'BDM-UNI-COM-08', name: 'Adaptasi Pasangan', minTier: 3, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Adaptasi Pasangan'] }
+      { name: 'Komunikasi Verbal', minTier: 2 },
+      { name: 'Isyarat Pasangan', minTier: 2 },
+      { name: 'Koordinasi Gerak', minTier: 2 },
+      { name: 'Dukungan Mental', minTier: 2 },
+      { name: 'Kepercayaan Pasangan', minTier: 3 },
+      { name: 'Pembagian Tanggung Jawab', minTier: 3 },
+      { name: 'Respons Pasangan', minTier: 3 },
+      { name: 'Adaptasi Pasangan', minTier: 3 }
     ]
   },
   perkembangan: {
     key: 'perkembangan',
     label: 'Perkembangan / Development',
     indicators: [
-      { id: 'BDM-UNI-DEV-01', name: 'Kehadiran Latihan', minTier: 1, type: 'ADMINISTRATIVE_DATA', legacy_keys: ['Kehadiran Latihan'] },
-      { id: 'BDM-UNI-DEV-02', name: 'Respons Latihan', minTier: 1, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Respons Latihan'] },
-      { id: 'BDM-UNI-DEV-03', name: 'Kemajuan Teknik', minTier: 1, type: 'DEVELOPMENT_TRACKING', legacy_keys: ['Kemajuan Teknik'] },
-      { id: 'BDM-UNI-DEV-04', name: 'Kepatuhan Program', minTier: 2, type: 'ADMINISTRATIVE_DATA', legacy_keys: ['Kepatuhan Program'] },
-      { id: 'BDM-UNI-DEV-05', name: 'Kemajuan Fisik', minTier: 2, type: 'DEVELOPMENT_TRACKING', legacy_keys: ['Kemajuan Fisik'] },
-      { id: 'BDM-UNI-DEV-06', name: 'Pencapaian Target', minTier: 3, type: 'DEVELOPMENT_TRACKING', legacy_keys: ['Pencapaian Target'] },
-      { id: 'BDM-UNI-DEV-07', name: 'Kesiapan Bertanding', minTier: 3, type: 'READINESS_CONTEXT', legacy_keys: ['Kesiapan Bertanding'] },
-      { id: 'BDM-UNI-DEV-08', name: 'Evaluasi Mandiri', minTier: 3, type: 'OBSERVATION_RUBRIC', legacy_keys: ['Evaluasi Mandiri'] }
+      { name: 'Kehadiran Latihan', minTier: 1 },
+      { name: 'Respons Latihan', minTier: 1 },
+      { name: 'Kemajuan Teknik', minTier: 1 },
+      { name: 'Kepatuhan Program', minTier: 2 },
+      { name: 'Kemajuan Fisik', minTier: 2 },
+      { name: 'Pencapaian Target', minTier: 3 },
+      { name: 'Kesiapan Bertanding', minTier: 3 },
+      { name: 'Evaluasi Mandiri', minTier: 3 }
     ]
   }
 };
@@ -436,20 +434,21 @@ export const BADMINTON_CORE_CATEGORIES = {
 export function getFilteredBadmintonIndicatorsForCategory(catKey, activeTier, isDoubles) {
   const cat = BADMINTON_CORE_CATEGORIES[catKey];
   if (!cat) return [];
-  const safeTier = typeof activeTier === 'number' && activeTier >= 1 ? activeTier : 1;
 
   if (catKey === 'komunikasi') {
-    if (!isDoubles || safeTier < 2) return [];
+    if (!isDoubles || activeTier < 2) return [];
     return cat.indicators
-      .filter((ind) => ind.minTier <= safeTier);
+      .filter((ind) => ind.minTier <= activeTier)
+      .map((ind) => ind.name);
   }
 
   return cat.indicators
     .filter((ind) => {
-      if (ind.minTier > safeTier) return false;
+      if (ind.minTier > activeTier) return false;
       if (ind.isDoublesOnly && !isDoubles) return false;
       return true;
-    });
+    })
+    .map((ind) => ind.name);
 }
 
 // ---------------------------------------------------------------------
@@ -461,11 +460,11 @@ export const BADMINTON_EVENT_INDICATORS = {
     label: 'Gerak Dasar & Fun-Badminton (Usia Dini)',
     shortLabel: 'Fun-Badminton',
     indicators: [
-      { id: 'BDM-EVT-BAS-01', name: 'Koordinasi Mata-Tangan & Ayunan Raket', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Koordinasi Mata-Tangan & Ayunan Raket'] },
-      { id: 'BDM-EVT-BAS-02', name: 'Kelincahan Langkah Dasar (Footwork Rhythm)', type: 'OBJECTIVE_TEST', legacy_keys: ['Kelincahan Langkah Dasar (Footwork Rhythm)'] },
-      { id: 'BDM-EVT-BAS-03', name: 'Keberanian Memukul & Menjangkau Kok', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Keberanian Memukul & Menjangkau Kok'] },
-      { id: 'BDM-EVT-BAS-04', name: 'Pengenalan Aturan & Area Lapangan', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Pengenalan Aturan & Area Lapangan'] },
-      { id: 'BDM-EVT-BAS-05', name: 'Antusiasme & Kesenangan Bermain (Fun-Badminton)', type: 'READINESS_CONTEXT', legacy_keys: ['Antusiasme & Kesenangan Bermain (Fun-Badminton)'] }
+      'Koordinasi Mata-Tangan & Ayunan Raket',
+      'Kelincahan Langkah Dasar (Footwork Rhythm)',
+      'Keberanian Memukul & Menjangkau Kok',
+      'Pengenalan Aturan & Area Lapangan',
+      'Antusiasme & Kesenangan Bermain (Fun-Badminton)'
     ]
   },
   MS: {
@@ -473,14 +472,14 @@ export const BADMINTON_EVENT_INDICATORS = {
     label: 'Khusus Tunggal Putra (MS)',
     shortLabel: 'Tunggal Putra',
     indicators: [
-      { id: 'BDM-EVT-MS-01', name: 'Dominasi Serangan', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Dominasi Serangan'] },
-      { id: 'BDM-EVT-MS-02', name: 'Smash Penentu', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Smash Penentu'] },
-      { id: 'BDM-EVT-MS-03', name: 'Kontrol Reli Panjang', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Kontrol Reli Panjang'] },
-      { id: 'BDM-EVT-MS-04', name: 'Cakupan Lapangan Tunggal', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Cakupan Lapangan Tunggal'] },
-      { id: 'BDM-EVT-MS-05', name: 'Serangan dari Belakang', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Serangan dari Belakang'] },
-      { id: 'BDM-EVT-MS-06', name: 'Counterattack', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Counterattack'] },
-      { id: 'BDM-EVT-MS-07', name: 'Variasi Arah', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Variasi Arah'] },
-      { id: 'BDM-EVT-MS-08', name: 'Kontrol Tempo Tunggal', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Kontrol Tempo Tunggal'] }
+      'Dominasi Serangan',
+      'Smash Penentu',
+      'Kontrol Reli Panjang',
+      'Cakupan Lapangan Tunggal',
+      'Serangan dari Belakang',
+      'Counterattack',
+      'Variasi Arah',
+      'Kontrol Tempo Tunggal'
     ]
   },
   WS: {
@@ -488,14 +487,14 @@ export const BADMINTON_EVENT_INDICATORS = {
     label: 'Khusus Tunggal Putri (WS)',
     shortLabel: 'Tunggal Putri',
     indicators: [
-      { id: 'BDM-EVT-WS-01', name: 'Konsistensi Reli', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Konsistensi Reli'] },
-      { id: 'BDM-EVT-WS-02', name: 'Ketahanan Reli', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Ketahanan Reli'] },
-      { id: 'BDM-EVT-WS-03', name: 'Akurasi Penempatan', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Akurasi Penempatan'] },
-      { id: 'BDM-EVT-WS-04', name: 'Transisi Serangan', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Transisi Serangan'] },
-      { id: 'BDM-EVT-WS-05', name: 'Variasi Tempo', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Variasi Tempo'] },
-      { id: 'BDM-EVT-WS-06', name: 'Pertahanan Tunggal', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Pertahanan Tunggal'] },
-      { id: 'BDM-EVT-WS-07', name: 'Kontrol Area Belakang', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Kontrol Area Belakang'] },
-      { id: 'BDM-EVT-WS-08', name: 'Efektivitas Poin', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Efektivitas Poin'] }
+      'Konsistensi Reli',
+      'Ketahanan Reli',
+      'Akurasi Penempatan',
+      'Transisi Serangan',
+      'Variasi Tempo',
+      'Pertahanan Tunggal',
+      'Kontrol Area Belakang',
+      'Efektivitas Poin'
     ]
   },
   MD: {
@@ -503,15 +502,15 @@ export const BADMINTON_EVENT_INDICATORS = {
     label: 'Khusus Ganda Putra (MD)',
     shortLabel: 'Ganda Putra',
     indicators: [
-      { id: 'BDM-EVT-MD-01', name: 'Tekanan Servis', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Tekanan Servis'] },
-      { id: 'BDM-EVT-MD-02', name: 'Return Menyerang', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Return Menyerang'] },
-      { id: 'BDM-EVT-MD-03', name: 'Dominasi Depan', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Dominasi Depan'] },
-      { id: 'BDM-EVT-MD-04', name: 'Serangan Belakang', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Serangan Belakang'] },
-      { id: 'BDM-EVT-MD-05', name: 'Kecepatan Drive', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Kecepatan Drive'] },
-      { id: 'BDM-EVT-MD-06', name: 'Pertahanan Ganda', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Pertahanan Ganda'] },
-      { id: 'BDM-EVT-MD-07', name: 'Rotasi Serang', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Rotasi Serang'] },
-      { id: 'BDM-EVT-MD-08', name: 'Transisi Formasi', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Transisi Formasi'] },
-      { id: 'BDM-EVT-MD-09', name: 'Tekanan Beruntun', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Tekanan Beruntun'] }
+      'Tekanan Servis',
+      'Return Menyerang',
+      'Dominasi Depan',
+      'Serangan Belakang',
+      'Kecepatan Drive',
+      'Pertahanan Ganda',
+      'Rotasi Serang',
+      'Transisi Formasi',
+      'Tekanan Beruntun'
     ]
   },
   WD: {
@@ -519,15 +518,15 @@ export const BADMINTON_EVENT_INDICATORS = {
     label: 'Khusus Ganda Putri (WD)',
     shortLabel: 'Ganda Putri',
     indicators: [
-      { id: 'BDM-EVT-WD-01', name: 'Kontrol Depan', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Kontrol Depan'] },
-      { id: 'BDM-EVT-WD-02', name: 'Penempatan Serangan', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Penempatan Serangan'] },
-      { id: 'BDM-EVT-WD-03', name: 'Pertahanan Beruntun', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Pertahanan Beruntun'] },
-      { id: 'BDM-EVT-WD-04', name: 'Kontrol Reli Ganda', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Kontrol Reli Ganda'] },
-      { id: 'BDM-EVT-WD-05', name: 'Rotasi Pasangan', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Rotasi Pasangan'] },
-      { id: 'BDM-EVT-WD-06', name: 'Serangan Celah', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Serangan Celah'] },
-      { id: 'BDM-EVT-WD-07', name: 'Konsistensi Pasangan', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Konsistensi Pasangan'] },
-      { id: 'BDM-EVT-WD-08', name: 'Transisi Formasi', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Transisi Formasi'] },
-      { id: 'BDM-EVT-WD-09', name: 'Penguasaan Area', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Penguasaan Area'] }
+      'Kontrol Depan',
+      'Penempatan Serangan',
+      'Pertahanan Beruntun',
+      'Kontrol Reli Ganda',
+      'Rotasi Pasangan',
+      'Serangan Celah',
+      'Konsistensi Pasangan',
+      'Transisi Formasi',
+      'Penguasaan Area'
     ]
   },
   XD: {
@@ -535,28 +534,27 @@ export const BADMINTON_EVENT_INDICATORS = {
     label: 'Khusus Ganda Campuran (XD)',
     shortLabel: 'Ganda Campuran',
     indicators: [
-      { id: 'BDM-EVT-XD-01', name: 'Kontrol Depan', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Kontrol Depan'] },
-      { id: 'BDM-EVT-XD-02', name: 'Serangan Belakang', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Serangan Belakang'] },
-      { id: 'BDM-EVT-XD-03', name: 'Rotasi Campuran', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Rotasi Campuran'] },
-      { id: 'BDM-EVT-XD-04', name: 'Pembagian Area', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Pembagian Area'] },
-      { id: 'BDM-EVT-XD-05', name: 'Kombinasi Serangan', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Kombinasi Serangan'] },
-      { id: 'BDM-EVT-XD-06', name: 'Pertahanan Pasangan', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Pertahanan Pasangan'] },
-      { id: 'BDM-EVT-XD-07', name: 'Transisi Formasi', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Transisi Formasi'] },
-      { id: 'BDM-EVT-XD-08', name: 'Sinkronisasi Gerak', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Sinkronisasi Gerak'] },
-      { id: 'BDM-EVT-XD-09', name: 'Strategi Pasangan', type: 'OBSERVATION_RUBRIC', legacy_keys: ['Strategi Pasangan'] }
+      'Kontrol Depan',
+      'Serangan Belakang',
+      'Rotasi Campuran',
+      'Pembagian Area',
+      'Kombinasi Serangan',
+      'Pertahanan Pasangan',
+      'Transisi Formasi',
+      'Sinkronisasi Gerak',
+      'Strategi Pasangan'
     ]
   }
 };
 
 export function getBadmintonEventSpecificConfigForTier(eventCode, activeTier) {
-  const safeTier = typeof activeTier === 'number' && activeTier >= 1 ? activeTier : 1;
-  if (safeTier === 1) {
+  if (activeTier === 1) {
     return BADMINTON_EVENT_INDICATORS.BASIC_SINGLE;
   }
 
   const baseConfig = BADMINTON_EVENT_INDICATORS[eventCode] || BADMINTON_EVENT_INDICATORS.MS;
 
-  if (safeTier === 2) {
+  if (activeTier === 2) {
     // Tier 2: First 5 fundamental indicators
     return {
       ...baseConfig,
@@ -564,7 +562,7 @@ export function getBadmintonEventSpecificConfigForTier(eventCode, activeTier) {
     };
   }
 
-  if (safeTier === 3) {
+  if (activeTier === 3) {
     // Tier 3: First 6 indicators
     return {
       ...baseConfig,
