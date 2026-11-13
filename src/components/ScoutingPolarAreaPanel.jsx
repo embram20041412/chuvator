@@ -183,9 +183,14 @@ export default function ScoutingPolarAreaPanel({
   const [showMobileChart, setShowMobileChart] = useState(true);
 
   const totalMeasuredCount = useMemo(() => {
-    return Object.values(measuredIndicatorMap || {}).filter(
-      (rec) => rec && rec.source === 'battery_test'
-    ).length;
+    const seen = new Set();
+    return Object.values(measuredIndicatorMap || {}).filter((rec) => {
+      if (!rec || !(Number(rec.score) > 0) || rec.source !== 'battery_test') return false;
+      const key = rec.indicator_key || rec.indicator_label;
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).length;
   }, [measuredIndicatorMap]);
 
   // Active or hovered category for focal preview
@@ -227,7 +232,7 @@ export default function ScoutingPolarAreaPanel({
       const labelRadius = isMobile ? maxOuterRadius + 24 : maxOuterRadius + 28;
       const labelPos = polarToCartesian(cx, cy, labelRadius, midAngle);
       const measuredCount = (cat.indicators || []).filter(
-        (ind) => measuredIndicatorMap?.[ind]?.source === 'battery_test'
+        (ind) => measuredIndicatorMap?.[ind]?.source === 'battery_test' && Number(measuredIndicatorMap?.[ind]?.score) > 0
       ).length;
 
       return {

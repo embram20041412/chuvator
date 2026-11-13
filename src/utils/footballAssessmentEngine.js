@@ -1748,25 +1748,55 @@ export function calculateAthleteAttendanceMetrics(
     });
   }
 
-  // Fallback deterministik apabila kelas belum memiliki sesi tercatat di tabel
+  // Jika data presensi akademi untuk atlet tersebut kosong / belum ada, JANGAN berikan skor 95 atau 98 secara default.
   if (totalSessions === 0) {
-    totalSessions = 12;
-    if (safeId.includes('fc-2')) {
-      hadirCount = 10;
-      izinCount = 2;
-      sakitCount = 0;
-      alpaCount = 0;
-    } else if (safeId.includes('fc-3')) {
-      hadirCount = 12;
-      izinCount = 0;
-      sakitCount = 0;
-      alpaCount = 0;
-    } else {
-      hadirCount = 11;
-      izinCount = 1;
-      sakitCount = 0;
-      alpaCount = 0;
-    }
+    const noAttendanceBadge = 'Belum Ada Presensi';
+    return {
+      hasAttendanceData: false,
+      totalSessions: 0,
+      hadirCount: 0,
+      izinCount: 0,
+      sakitCount: 0,
+      alpaCount: 0,
+      attendancePercentage: null,
+      compliancePercentage: null,
+      consistencyPercentage: null,
+      badgeText: noAttendanceBadge,
+      indicators: {
+        kehadiran_latihan: {
+          code: 'DEV01',
+          indicator_key: 'kehadiran_latihan',
+          indicator_label: 'Kehadiran Latihan',
+          score: 0,
+          attendancePercentage: null,
+          badgeText: noAttendanceBadge,
+          hasAttendanceData: false,
+          source: 'attendance_sync'
+        },
+        kepatuhan_program: {
+          code: 'DEV02',
+          indicator_key: 'kepatuhan_program',
+          indicator_label: 'Kepatuhan Program',
+          score: 0,
+          attendancePercentage: null,
+          compliancePercentage: null,
+          badgeText: noAttendanceBadge,
+          hasAttendanceData: false,
+          source: 'attendance_sync'
+        },
+        konsistensi_kehadiran: {
+          code: 'DEV03',
+          indicator_key: 'konsistensi_kehadiran',
+          indicator_label: 'Konsistensi Kehadiran',
+          score: 0,
+          attendancePercentage: null,
+          consistencyPercentage: null,
+          badgeText: noAttendanceBadge,
+          hasAttendanceData: false,
+          source: 'attendance_sync'
+        }
+      }
+    };
   }
 
   const attendancePercentage = Math.max(0, Math.min(100, Math.round((hadirCount / totalSessions) * 100)));
@@ -1794,6 +1824,7 @@ export function calculateAthleteAttendanceMetrics(
       score: kehadiranScore,
       attendancePercentage,
       badgeText,
+      hasAttendanceData: true,
       source: 'attendance_sync'
     },
     kepatuhan_program: {
@@ -1804,6 +1835,7 @@ export function calculateAthleteAttendanceMetrics(
       attendancePercentage,
       compliancePercentage,
       badgeText,
+      hasAttendanceData: true,
       source: 'attendance_sync'
     },
     konsistensi_kehadiran: {
@@ -1814,11 +1846,13 @@ export function calculateAthleteAttendanceMetrics(
       attendancePercentage,
       consistencyPercentage,
       badgeText,
+      hasAttendanceData: true,
       source: 'attendance_sync'
     }
   };
 
   return {
+    hasAttendanceData: true,
     totalSessions,
     hadirCount,
     izinCount,
@@ -1833,80 +1867,42 @@ export function calculateAthleteAttendanceMetrics(
 }
 
 /**
- * Bangun peta skor indikator dasar (baseline) dari katalog Master Test Library + Modul Presensi
- * agar tidak ada indikator yang bernilai 0 atau kosong pada Rapor & Polar Area.
+ * Bangun peta skor indikator awal secara ketat (Zero-Data Integrity):
+ * Tidak pernah menghasilkan nilai dummy/mock (68, 70, 71, dll.) apabila atlet belum memiliki riwayat tes.
+ * Hanya mengembalikan indikator presensi apabila atlet benar-benar memiliki rekaman presensi (`hasAttendanceData === true`).
  *
  * @param {any} [options]
+ * @returns {Record<string, any>}
  */
 export function buildBaselineIndicatorScoresForAthlete(options = {}) {
   const {
-    athleteId = 'default',
+    athleteId = '',
     athleteName = '',
-    tier = 2,
     attendanceRows = []
   } = options;
 
-  const normalizedTier = Math.max(1, Math.min(4, Number(tier) || 2));
-  const seedOffset = String(athleteId).includes('fc-2')
-    ? -2
-    : String(athleteId).includes('fc-3')
-      ? 4
-      : 0;
+  if (!Array.isArray(attendanceRows) || attendanceRows.length === 0) {
+    return {};
+  }
 
-  const baselineMap = {};
-  const nowIso = new Date().toISOString();
-
-  MASTER_FOOTBALL_TESTS_CATALOG.forEach((test) => {
-    const key = test.indicator_key;
-    if (baselineMap[key]) return;
-
-    const bench = FOOTBALL_TEST_BENCHMARKS[test.test_code]?.[normalizedTier] ||
-      FOOTBALL_TEST_BENCHMARKS[test.test_code]?.[2];
-
-    let defaultScore = 78;
-    if (test.measurement_type === 'RUBRIC') {
-      defaultScore = 84;
-    } else if (bench) {
-      const sampleMetric = test.is_lower_better
-        ? Number(((bench.good + bench.fair) / 2).toFixed(2))
-        : Math.round((bench.good + bench.fair) / 2);
-      const calc = calculateAssessmentScore({
-        testCode: test.test_code,
-        tier: normalizedTier,
-        rawValues: {
-          raw_value_1: test.measurement_type === 'ACCURACY'
-            ? Math.max(1, Math.round(((sampleMetric / 100) * (test.defaultTotal || 10))))
-            : sampleMetric,
-          raw_value_2: test.measurement_type === 'ACCURACY' ? (test.defaultTotal || 10) : ''
-        },
-        testMeta: test
-      });
-      if (calc !== null) defaultScore = calc;
-    }
-
-    const finalScore = Math.max(55, Math.min(96, defaultScore + seedOffset));
-    baselineMap[key] = {
-      id: `baseline-${athleteId}-${key}`,
-      indicator_key: key,
-      indicator_label: MASTER_INDICATOR_KEY_TO_LABEL[key] || test.indicator_label,
-      score: finalScore,
-      test_codes: [test.test_code],
-      tests_count: 1,
-      source: 'battery_test',
-      updated_at: nowIso
-    };
-  });
-
-  // Integrasikan 3 indikator Perkembangan Atlet otomatis dari Modul Presensi
   const attendanceMetrics = calculateAthleteAttendanceMetrics(attendanceRows, athleteId, athleteName);
+  if (!attendanceMetrics.hasAttendanceData) {
+    return {};
+  }
+
+  const resultMap = {};
+  const nowIso = new Date().toISOString();
   Object.values(attendanceMetrics.indicators).forEach((attInd) => {
-    baselineMap[attInd.indicator_key] = {
+    resultMap[attInd.indicator_key] = {
       id: `attendance-${athleteId}-${attInd.indicator_key}`,
       indicator_key: attInd.indicator_key,
       indicator_label: attInd.indicator_label,
       score: attInd.score,
       attendancePercentage: attInd.attendancePercentage,
+      attendance_percentage: attInd.attendancePercentage,
       badgeText: attInd.badgeText,
+      badge_text: attInd.badgeText,
+      hasAttendanceData: true,
       test_codes: [attInd.code],
       tests_count: 1,
       source: 'attendance_sync',
@@ -1914,7 +1910,7 @@ export function buildBaselineIndicatorScoresForAthlete(options = {}) {
     };
   });
 
-  return baselineMap;
+  return resultMap;
 }
 
 export const WIZARD_RESUME_STORAGE_PREFIX = 'chuvator_football_wizard_resume_';

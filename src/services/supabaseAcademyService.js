@@ -324,73 +324,19 @@ function isDemoTenant(tenantId) {
   return tenantId === 'demo-tenant-1';
 }
 
-const DEMO_ATTENDANCE_STORAGE_KEY = 'chuvator_demo_academy_attendance_v1';
+const DEMO_ATTENDANCE_STORAGE_KEY = 'chuvator_demo_academy_attendance_v2';
 
-const DEMO_ATTENDANCE_SESSIONS = [
-  '2026-11-12',
-  '2026-11-10',
-  '2026-11-05',
-  '2026-11-03',
-  '2026-10-29',
-  '2026-10-27',
-  '2026-10-22',
-  '2026-10-20',
-  '2026-10-15',
-  '2026-10-13',
-  '2026-10-08',
-  '2026-10-06'
-].map((dateStr, idx) => ({
-  id: `demo-att-u12-${idx + 1}`,
-  tenant_id: 'demo-tenant-1',
-  academy_id: DEMO_ACADEMY_ID,
-  class_id: DEMO_CLASS_U12_ID,
-  date: dateStr,
-  coachName: 'Coach Bima Sakti',
-  coachAttended: true,
-  coach_attended: true,
-  notes: idx === 0 ? 'Latihan taktik 7v7 & penyelesaian akhir.' : 'Sesi rutin kurikulum Skill Phase.',
-  students_data: [
-    {
-      studentId: 'demo-student-fc-1',
-      studentName: 'Rafa Pratama',
-      status: idx === 5 ? 'Izin' : 'Hadir' // 11/12 Hadir = 92%
-    },
-    {
-      studentId: 'demo-student-fc-2',
-      studentName: 'Naufal Hakim',
-      status: idx === 3 || idx === 8 ? 'Izin' : 'Hadir' // 10/12 Hadir = 83%
-    }
-  ],
-  students: [
-    {
-      studentId: 'demo-student-fc-1',
-      studentName: 'Rafa Pratama',
-      status: idx === 5 ? 'Izin' : 'Hadir'
-    },
-    {
-      studentId: 'demo-student-fc-2',
-      studentName: 'Naufal Hakim',
-      status: idx === 3 || idx === 8 ? 'Izin' : 'Hadir'
-    }
-  ],
-  summary: {
-    hadir: idx === 5 || idx === 3 || idx === 8 ? 1 : 2,
-    izin: idx === 5 || idx === 3 || idx === 8 ? 1 : 0,
-    sakit: 0,
-    alpa: 0
-  },
-  created_at: `${dateStr}T09:00:00.000Z`
-}));
+const DEMO_ATTENDANCE_SESSIONS = [];
 
 function readDemoAttendance() {
   try {
     if (typeof window === 'undefined' || !window.localStorage) return DEMO_ATTENDANCE_SESSIONS;
     const raw = window.localStorage.getItem(DEMO_ATTENDANCE_STORAGE_KEY);
-    if (!raw) return DEMO_ATTENDANCE_SESSIONS;
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEMO_ATTENDANCE_SESSIONS;
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return DEMO_ATTENDANCE_SESSIONS;
+    return [];
   }
 }
 

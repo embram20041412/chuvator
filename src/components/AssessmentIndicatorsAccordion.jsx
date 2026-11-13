@@ -32,6 +32,8 @@ export function AccordionIndicatorCard({
   accentColor = '#10B981'
 }) {
   const numVal = Math.max(0, Math.min(100, Number(value) || 0));
+  const isUnmeasured = numVal <= 0;
+  const isNoAttendance = attendanceBadgeText === 'Belum Ada Presensi';
   const isReadOnly = Boolean(isArchived || lockedToMasterLibrary || attendanceBadgeText);
 
   return (
@@ -40,7 +42,7 @@ export function AccordionIndicatorCard({
       className={`p-3 bg-white border ${
         isSpecial
           ? 'border-indigo-200/90'
-          : attendanceBadgeText || isMeasuredFromTest
+          : !isUnmeasured && (attendanceBadgeText || isMeasuredFromTest)
             ? 'border-emerald-300/90'
             : 'border-slate-200/90'
       } rounded-2xl space-y-2 shadow-2xs`}
@@ -53,13 +55,23 @@ export function AccordionIndicatorCard({
           </span>
           <div className="flex flex-wrap items-center gap-1">
             {attendanceBadgeText ? (
-              <span
-                data-testid="badge-linked-attendance"
-                className="inline-flex items-center gap-1 w-fit px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-300"
-              >
-                <Lock className="w-2.5 h-2.5 text-emerald-700 shrink-0" />
-                <span>{attendanceBadgeText}</span>
-              </span>
+              isNoAttendance ? (
+                <span
+                  data-testid="badge-no-attendance"
+                  className="inline-flex items-center gap-1 w-fit px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200"
+                >
+                  <Lock className="w-2.5 h-2.5 text-amber-700 shrink-0" />
+                  <span>Belum Ada Presensi</span>
+                </span>
+              ) : (
+                <span
+                  data-testid="badge-linked-attendance"
+                  className="inline-flex items-center gap-1 w-fit px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-300"
+                >
+                  <Lock className="w-2.5 h-2.5 text-emerald-700 shrink-0" />
+                  <span>{attendanceBadgeText}</span>
+                </span>
+              )
             ) : (
               lockedToMasterLibrary && (
                 <span
@@ -71,10 +83,23 @@ export function AccordionIndicatorCard({
                 </span>
               )
             )}
-            {isMeasuredFromTest && !attendanceBadgeText && (
-              <span className="inline-flex items-center gap-1 w-fit px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
-                Terukur via Tes
+            {isUnmeasured && !attendanceBadgeText ? (
+              <span
+                data-testid="badge-unmeasured"
+                className="inline-flex items-center gap-1 w-fit px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-slate-100 text-slate-500 border border-slate-200"
+              >
+                Belum Diukur
               </span>
+            ) : (
+              isMeasuredFromTest &&
+              !attendanceBadgeText && (
+                <span
+                  data-testid="badge-measured-test"
+                  className="inline-flex items-center gap-1 w-fit px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200"
+                >
+                  Terukur via Tes
+                </span>
+              )
             )}
           </div>
         </div>
@@ -98,11 +123,13 @@ export function AccordionIndicatorCard({
             <Minus className="w-3.5 h-3.5" />
           </button>
 
-          <span 
+          <span
+            data-testid={`indicator-score-display-${title}`}
             className="w-9 text-center font-black font-mono text-sm tabular-nums"
-            style={{ color: accentColor }}
+            style={{ color: isUnmeasured ? '#94A3B8' : accentColor }}
+            title={isUnmeasured ? 'Belum Diukur (0/100)' : `${numVal}/100`}
           >
-            {numVal}
+            {isUnmeasured ? (isNoAttendance ? 0 : '-') : numVal}
           </span>
 
           <button
@@ -231,8 +258,21 @@ export default function AssessmentIndicatorsAccordion({
       catKey === 'perkembangan' ||
       ['kehadiran_latihan', 'kepatuhan_program', 'konsistensi_kehadiran'].includes(normKey);
     if (!isAttendanceIndicator) return null;
+
+    const scoreVal = resolveIndicatorScore(scores, indName);
+    const hasAttendance =
+      Boolean(rec?.hasAttendanceData) &&
+      scoreVal > 0 &&
+      (rec?.attendancePercentage !== null && rec?.attendancePercentage !== undefined ||
+        rec?.attendance_percentage !== null && rec?.attendance_percentage !== undefined);
+
+    if (!hasAttendance) {
+      return 'Belum Ada Presensi';
+    }
+
+    if (rec?.badgeText) return rec.badgeText;
     if (rec?.badge_text) return rec.badge_text;
-    const pct = rec?.attendance_percentage ?? 92;
+    const pct = rec?.attendancePercentage ?? rec?.attendance_percentage;
     return `Terhubung Otomatis ke Modul Presensi (${pct}%)`;
   };
 

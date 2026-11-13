@@ -12,8 +12,8 @@ import {
   normalizeIndicatorKey
 } from '../utils/footballAssessmentEngine';
 
-const DEMO_INDICATOR_STORAGE_PREFIX = 'chuvator_demo_combine_indicators_';
-const DEMO_SESSIONS_STORAGE_PREFIX = 'chuvator_demo_master_sessions_';
+const DEMO_INDICATOR_STORAGE_PREFIX = 'chuvator_demo_combine_indicators_v2_';
+const DEMO_SESSIONS_STORAGE_PREFIX = 'chuvator_demo_master_sessions_v2_';
 
 function isDemoAssessmentContext(tenantId, athleteId) {
   if (!tenantId) return true;
@@ -114,6 +114,7 @@ export async function getMasterFootballCatalog({
  * - `kehadiran_latihan` (DEV01: Kehadiran Latihan)
  * - `kepatuhan_program` (DEV02: Kepatuhan Program)
  * - `konsistensi_kehadiran` (DEV03: Konsistensi Kehadiran)
+ * If no attendance rows exist for the athlete, returns `indicators: {}` and `hasAttendanceData: false`.
  */
 export async function syncAthleteAttendanceToDevelopmentIndicators({
   tenantId,
@@ -135,6 +136,14 @@ export async function syncAthleteAttendanceToDevelopmentIndicators({
     athleteId,
     athleteName
   );
+
+  if (!attendanceMetrics.hasAttendanceData) {
+    return {
+      attendanceMetrics,
+      indicators: {}
+    };
+  }
+
   const nowIso = new Date().toISOString();
   const syncedIndicators = {};
 
@@ -145,10 +154,13 @@ export async function syncAthleteAttendanceToDevelopmentIndicators({
       athlete_id: athleteId,
       indicator_key: indKey,
       indicator_label: rec.indicator_label,
-      test_code: rec.test_code,
+      test_code: rec.code || rec.test_code,
       score: rec.score,
       source: 'attendance_sync',
+      hasAttendanceData: true,
+      attendancePercentage: attendanceMetrics.attendancePercentage,
       attendance_percentage: attendanceMetrics.attendancePercentage,
+      badgeText: attendanceMetrics.badgeText,
       badge_text: attendanceMetrics.badgeText,
       updated_at: nowIso
     };
@@ -184,16 +196,15 @@ export async function syncAthleteAttendanceToDevelopmentIndicators({
 }
 
 /**
- * Fetch latest indicator scores from `public.athlete_indicator_scores`, merged with
- * baseline field test scores and live automated attendance indicators so zero indicators are 0/empty.
- * Returns map keyed by `indicator_key`: { [key]: { indicator_key, indicator_label, score, source, updated_at } }
+ * Fetch latest indicator scores from `public.athlete_indicator_scores` strictly without any mock/dummy fallback.
+ * If `athlete_test_sessions` and `athlete_indicator_scores` are empty for `(tenant_id, athlete_id)`
+ * and no attendance records exist for the athlete, strictly returns `{}`.
  */
 export async function getAthleteIndicatorScores(tenantId, athleteId, options = {}) {
   if (!tenantId || !athleteId) return {};
 
   const classId = options.classId || null;
   const athleteName = options.athleteName || '';
-  const tier = Math.max(1, Math.min(4, Number(options.tier) || 2));
 
   let attendanceRows = [];
   try {
@@ -202,65 +213,91 @@ export async function getAthleteIndicatorScores(tenantId, athleteId, options = {
     attendanceRows = [];
   }
 
-  const baselineMap = buildBaselineIndicatorScoresForAthlete({
+  // Only populates attendance indicators if `attendanceRows` actually contains records for this athlete
+  const attendanceMap = buildBaselineIndicatorScoresForAthlete({
     athleteId,
     athleteName,
-    tier,
     attendanceRows
   });
 
   if (isDemoAssessmentContext(tenantId, athleteId)) {
-    const key = `${DEMO_INDICATOR_STORAGE_PREFIX}${tenantId}_${athleteId}`;
-    const storedMap = readLocalJson(key, {});
-    const merged = { ...baselineMap };
+    const sessionsKey = `${DEMO_SESSIONS_STORAGE_PREFIX}${tenantId}_${athleteId}`;
+    const indicatorsKey = `${DEMO_INDICATOR_STORAGE_PREFIX}${tenantId}_${athleteId}`;
+    const storedSessions = readLocalJson(sessionsKey, []);
+    const hasValidSessions = Array.isArray(storedSessions) && storedSessions.length > 0;
+
+    if (!hasValidSessions) {
+      writeLocalJson(indicatorsKey, attendanceMap);
+      return { ...attendanceMap };
+    }
+
+    const storedMap = readLocalJson(indicatorsKey, {});
+    const merged = { ...attendanceMap };
 
     Object.entries(storedMap || {}).forEach(([rawKey, rec]) => {
       if (!rec) return;
+      if (String(rec.id || '').startsWith('baseline-')) return;
       const canonicalKey = normalizeIndicatorKey(rawKey);
       if (!canonicalKey) return;
-      // Preserve live attendance_sync calculation for development indicators
-      if (merged[canonicalKey]?.source === 'attendance_sync' && rec.source !== 'attendance_sync') {
+      if (['kehadiran_latihan', 'kepatuhan_program', 'konsistensi_kehadiran'].includes(canonicalKey)) {
         return;
       }
       const numScore = Number(rec.score);
       if (Number.isFinite(numScore) && numScore > 0) {
         merged[canonicalKey] = {
-          ...merged[canonicalKey],
           ...rec,
           indicator_key: canonicalKey,
           indicator_label:
             MASTER_INDICATOR_KEY_TO_LABEL[canonicalKey] || rec.indicator_label || canonicalKey,
-          score: Math.max(1, Math.min(100, Math.round(numScore)))
+          score: Math.max(1, Math.min(100, Math.round(numScore))),
+          source: rec.source || 'battery_test'
         };
       }
     });
 
-    writeLocalJson(key, merged);
     return merged;
   }
 
-  const { data, error } = await supabase
-    .from('athlete_indicator_scores')
-    .select('*')
-    .eq('tenant_id', tenantId)
-    .eq('athlete_id', athleteId);
+  // Real Supabase query: verify both `athlete_test_sessions` and `athlete_indicator_scores`
+  const [{ data: sessionsData, error: sessionsError }, { data, error }] = await Promise.all([
+    supabase
+      .from('athlete_test_sessions')
+      .select('id,test_code,calculated_score,testing_date')
+      .eq('tenant_id', tenantId)
+      .eq('athlete_id', athleteId)
+      .limit(100),
+    supabase
+      .from('athlete_indicator_scores')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .eq('athlete_id', athleteId)
+  ]);
 
   if (error) {
     console.warn('[scoutingCombineService] getAthleteIndicatorScores error:', error);
-    return baselineMap;
+    return { ...attendanceMap };
   }
 
-  const map = { ...baselineMap };
+  // If `athlete_test_sessions` was queried without error and is empty, no test sessions exist for this athlete
+  const hasRealTestSessions = sessionsError
+    ? Array.isArray(data) && data.length > 0
+    : Array.isArray(sessionsData) && sessionsData.length > 0;
+
+  if (!hasRealTestSessions) {
+    return { ...attendanceMap };
+  }
+
+  const map = { ...attendanceMap };
   (data || []).forEach((row) => {
     const canonicalKey = normalizeIndicatorKey(row.indicator_key);
     if (!canonicalKey) return;
-    if (map[canonicalKey]?.source === 'attendance_sync' && row.source !== 'attendance_sync') {
+    if (['kehadiran_latihan', 'kepatuhan_program', 'konsistensi_kehadiran'].includes(canonicalKey)) {
+      if (!attendanceMap[canonicalKey]) return;
       return;
     }
     const numScore = Number(row.score);
     if (Number.isFinite(numScore) && numScore > 0) {
       map[canonicalKey] = {
-        ...map[canonicalKey],
         id: row.id,
         indicator_key: canonicalKey,
         indicator_label:
@@ -271,6 +308,24 @@ export async function getAthleteIndicatorScores(tenantId, athleteId, options = {
       };
     }
   });
+
+  // If `athlete_test_sessions` has rows but `athlete_indicator_scores` was empty, aggregate from sessions
+  if (Object.keys(map).length === Object.keys(attendanceMap).length && Array.isArray(sessionsData) && sessionsData.length > 0) {
+    const agg = aggregateIndicatorScores(sessionsData);
+    Object.values(agg).forEach((item) => {
+      map[item.indicator_key] = {
+        id: `session-agg-${item.indicator_key}`,
+        indicator_key: item.indicator_key,
+        indicator_label: item.indicator_label,
+        score: item.score,
+        test_codes: item.test_codes,
+        tests_count: item.tests_count,
+        source: 'battery_test',
+        updated_at: new Date().toISOString()
+      };
+    });
+  }
+
   return map;
 }
 
@@ -545,6 +600,42 @@ export function clearWizardResumeState(tenantId, athleteId) {
   }
 }
 
+/**
+ * Clear all test sessions and indicator scores for an athlete (demo localStorage & Supabase).
+ */
+export async function clearAthleteAssessmentData(tenantId, athleteId) {
+  if (!athleteId) return {};
+  clearWizardResumeState(tenantId, athleteId);
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const indStorageKey = `${DEMO_INDICATOR_STORAGE_PREFIX}${tenantId || 'demo'}_${athleteId}`;
+      const sesStorageKey = `${DEMO_SESSIONS_STORAGE_PREFIX}${tenantId || 'demo'}_${athleteId}`;
+      window.localStorage.removeItem(indStorageKey);
+      window.localStorage.removeItem(sesStorageKey);
+    }
+  } catch (err) {
+    console.warn('[scoutingCombineService] clearAthleteAssessmentData localStorage error:', err);
+  }
+
+  if (!isDemoAssessmentContext(tenantId, athleteId)) {
+    try {
+      await supabase
+        .from('athlete_test_sessions')
+        .delete()
+        .eq('tenant_id', tenantId)
+        .eq('athlete_id', athleteId);
+      await supabase
+        .from('athlete_indicator_scores')
+        .delete()
+        .eq('tenant_id', tenantId)
+        .eq('athlete_id', athleteId);
+    } catch (err) {
+      console.warn('[scoutingCombineService] clearAthleteAssessmentData Supabase error:', err);
+    }
+  }
+  return {};
+}
+
 const scoutingCombineService = {
   getMasterFootballCatalog,
   getAthleteIndicatorScores,
@@ -553,8 +644,10 @@ const scoutingCombineService = {
   syncAthleteAttendanceToDevelopmentIndicators,
   loadWizardResumeState,
   saveWizardResumeState,
-  clearWizardResumeState
+  clearWizardResumeState,
+  clearAthleteAssessmentData
 };
 
 export default scoutingCombineService;
+
 

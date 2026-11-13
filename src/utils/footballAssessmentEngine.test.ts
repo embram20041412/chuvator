@@ -227,10 +227,31 @@ test('computeWizardSessionProgress & resolveWizardStepTransition manage Step-by-
   assert.ok(stepAfterSkip.skippedTestCodes.includes(sampleTests[1].test_code));
 });
 
-test('convertAttendanceRateToScore, calculateAthleteAttendanceMetrics, and buildBaselineIndicatorScoresForAthlete ensure zero empty indicators', () => {
+test('convertAttendanceRateToScore, calculateAthleteAttendanceMetrics, and buildBaselineIndicatorScoresForAthlete enforce strict zero-data integrity', () => {
   assert.equal(convertAttendanceRateToScore(92), 95);
   assert.equal(convertAttendanceRateToScore(40), 40);
 
+  // 1. Empty attendance must return 0 and "Belum Ada Presensi" (NEVER dummy 95 or 98)
+  const emptyMetrics = calculateAthleteAttendanceMetrics([], 'new-athlete-1', 'Atlet Baru');
+  assert.equal(emptyMetrics.hasAttendanceData, false);
+  assert.equal(emptyMetrics.attendancePercentage, null);
+  assert.equal(emptyMetrics.badgeText, 'Belum Ada Presensi');
+  assert.equal(emptyMetrics.indicators.kehadiran_latihan.score, 0);
+  assert.equal(emptyMetrics.indicators.kepatuhan_program.score, 0);
+  assert.equal(emptyMetrics.indicators.konsistensi_kehadiran.score, 0);
+
+  // Baseline for untested athlete with no attendance must be strictly empty {} (NO dummy 68, 70, 71, 74)
+  const emptyBaseline = buildBaselineIndicatorScoresForAthlete({
+    athleteId: 'new-athlete-1',
+    athleteName: 'Atlet Baru',
+    tier: 2,
+    attendanceRows: []
+  });
+  assert.deepEqual(emptyBaseline, {});
+  assert.equal(resolveIndicatorScore(emptyBaseline, 'Akselerasi'), 0);
+  assert.equal(resolveIndicatorScore(emptyBaseline, 'Kehadiran Latihan'), 0);
+
+  // 2. Real attendance rows calculate real DEV01-DEV03 scores without generating fake field/rubric scores
   const sampleAttendance = [
     {
       date: '2025-05-01',
@@ -279,6 +300,7 @@ test('convertAttendanceRateToScore, calculateAthleteAttendanceMetrics, and build
     'demo-student-1',
     'Rafa Pratama'
   );
+  assert.equal(metrics.hasAttendanceData, true);
   assert.equal(metrics.attendancePercentage, 90);
   assert.equal(metrics.badgeText, 'Terhubung Otomatis ke Modul Presensi (90%)');
   assert.equal(metrics.indicators.kehadiran_latihan.score, 95);
@@ -296,7 +318,12 @@ test('convertAttendanceRateToScore, calculateAthleteAttendanceMetrics, and build
     attendanceRows: sampleAttendance
   });
 
-  // Verify every indicator in baseline is > 0 and resolveIndicatorScore works with both snake_case and label
+  // Only the 3 real attendance indicators should be present in baseline (never field/rubric dummy scores)
+  assert.deepEqual(
+    Object.keys(baseline).sort(),
+    ['kehadiran_latihan', 'kepatuhan_program', 'konsistensi_kehadiran']
+  );
+
   const flatScores: Record<string, number> = {};
   Object.entries(baseline).forEach(([k, v]: [string, any]) => {
     assert.ok(v.score >= 1 && v.score <= 100, `Indicator ${k} invalid score: ${v.score}`);
@@ -305,11 +332,10 @@ test('convertAttendanceRateToScore, calculateAthleteAttendanceMetrics, and build
 
   assert.equal(resolveIndicatorScore(flatScores, 'Kehadiran Latihan'), 95);
   assert.equal(resolveIndicatorScore(flatScores, 'kehadiran_latihan'), 95);
-  assert.ok(resolveIndicatorScore(flatScores, 'Akselerasi') > 0);
-  assert.ok(resolveIndicatorScore(flatScores, 'Kontrol Bola') > 0);
-  assert.ok(resolveIndicatorScore(flatScores, 'Posisi Bertahan') > 0);
-  assert.ok(resolveIndicatorScore(flatScores, 'Fokus') > 0);
-  assert.ok(resolveIndicatorScore(flatScores, 'Komunikasi Verbal') > 0);
+  // Untested field indicators remain 0
+  assert.equal(resolveIndicatorScore(flatScores, 'Akselerasi'), 0);
+  assert.equal(resolveIndicatorScore(flatScores, 'Kontrol Bola'), 0);
 });
+
 
 

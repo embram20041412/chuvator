@@ -3063,7 +3063,7 @@ function FootballAssessmentView({
   const measuredIndicatorMap = useMemo(() => {
     const mapped = {};
     Object.entries(athleteIndicatorRecords || {}).forEach(([key, rec]) => {
-      if (!rec) return;
+      if (!rec || !(Number(rec.score) > 0)) return;
       const canonicalKey = normalizeIndicatorKey(key) || key;
       const label = rec.indicator_label || ALL_FOOTBALL_INDICATOR_LABELS[canonicalKey] || key;
       const entry = {
@@ -3080,9 +3080,9 @@ function FootballAssessmentView({
   const measuredBatteryEntries = useMemo(() => {
     const seen = new Set();
     return Object.values(athleteIndicatorRecords || {}).filter((rec) => {
-      if (!rec || !rec.indicator_key || seen.has(rec.indicator_key)) return false;
+      if (!rec || !rec.indicator_key || !(Number(rec.score) > 0) || seen.has(rec.indicator_key)) return false;
       seen.add(rec.indicator_key);
-      return rec.source === 'battery_test' || rec.source === 'attendance_sync';
+      return rec.source === 'battery_test' || (rec.source === 'attendance_sync' && rec.hasAttendanceData !== false);
     });
   }, [athleteIndicatorRecords]);
 
@@ -3100,23 +3100,23 @@ function FootballAssessmentView({
   const handleCombineOrRubricSynced = useCallback((indicatorScoresMap) => {
     const nextMap = indicatorScoresMap || {};
     setAthleteIndicatorRecords(nextMap);
-    setScores((prev) => {
-      const merged = { ...prev };
-      Object.entries(nextMap).forEach(([key, rec]) => {
-        if (!rec) return;
-        const canonicalKey = normalizeIndicatorKey(key) || key;
-        const label = rec.indicator_label || ALL_FOOTBALL_INDICATOR_LABELS[canonicalKey];
-        if (Number.isFinite(Number(rec.score))) {
-          const clamped = Math.max(1, Math.min(100, Math.round(Number(rec.score))));
-          merged[canonicalKey] = clamped;
-          if (label) {
-            merged[label] = clamped;
-          }
-        }
-      });
-      return merged;
+    const nextScores = {};
+    Object.entries(nextMap).forEach(([key, rec]) => {
+      if (!rec || !(Number(rec.score) > 0)) return;
+      const canonicalKey = normalizeIndicatorKey(key) || key;
+      const label = rec.indicator_label || ALL_FOOTBALL_INDICATOR_LABELS[canonicalKey];
+      const clamped = Math.max(1, Math.min(100, Math.round(Number(rec.score))));
+      nextScores[canonicalKey] = clamped;
+      if (label) {
+        nextScores[label] = clamped;
+      }
     });
-    setSuccessMsg('Hasil tes tersimpan ke athlete_indicator_scores & otomatis memperbarui Grafik Polar Area.');
+    setScores(nextScores);
+    if (Object.keys(nextScores).length > 0) {
+      setSuccessMsg('Hasil tes tersimpan ke athlete_indicator_scores & otomatis memperbarui Grafik Polar Area.');
+    } else {
+      setSuccessMsg(null);
+    }
   }, []);
 
   // Memoized latest evaluation doc for current student in Football
@@ -3183,8 +3183,9 @@ function FootballAssessmentView({
     setErrorMsg(null);
     setSuccessMsg(null);
 
-    const baseScores = latestEvalDoc?.scores ? { ...latestEvalDoc.scores } : {};
-    setScores(baseScores);
+    // Reset scores to empty first; populate strictly from athlete_indicator_scores / athlete_test_sessions
+    setScores({});
+    setAthleteIndicatorRecords({});
 
     if (latestEvalDoc) {
       const posCode = latestEvalDoc.playerRole || selectedStudent.playerRole || selectedStudent.position || (activeTier === 1 ? 'OUTFIELD_SSB' : activeTier === 2 ? 'CM' : 'ST');
@@ -3220,24 +3221,21 @@ function FootballAssessmentView({
           tier: activeTier
         })
         .then((indicatorMap) => {
-          if (!isMounted || !indicatorMap) return;
-          setAthleteIndicatorRecords(indicatorMap);
-          setScores((prev) => {
-            const merged = { ...prev };
-            Object.entries(indicatorMap).forEach(([key, rec]) => {
-              if (!rec) return;
-              const canonicalKey = normalizeIndicatorKey(key) || key;
-              const label = rec.indicator_label || ALL_FOOTBALL_INDICATOR_LABELS[canonicalKey];
-              if (Number.isFinite(Number(rec.score))) {
-                const clamped = Math.max(1, Math.min(100, Math.round(Number(rec.score))));
-                merged[canonicalKey] = clamped;
-                if (label) {
-                  merged[label] = clamped;
-                }
-              }
-            });
-            return merged;
+          if (!isMounted) return;
+          const safeMap = indicatorMap || {};
+          setAthleteIndicatorRecords(safeMap);
+          const nextScores = {};
+          Object.entries(safeMap).forEach(([key, rec]) => {
+            if (!rec || !(Number(rec.score) > 0)) return;
+            const canonicalKey = normalizeIndicatorKey(key) || key;
+            const label = rec.indicator_label || ALL_FOOTBALL_INDICATOR_LABELS[canonicalKey];
+            const clamped = Math.max(1, Math.min(100, Math.round(Number(rec.score))));
+            nextScores[canonicalKey] = clamped;
+            if (label) {
+              nextScores[label] = clamped;
+            }
           });
+          setScores(nextScores);
         })
         .catch((err) => {
           console.warn('[FootballAssessmentView] Failed loading athlete_indicator_scores:', err);

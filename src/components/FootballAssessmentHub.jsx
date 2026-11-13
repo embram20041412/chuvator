@@ -276,7 +276,7 @@ export default function FootballAssessmentHub({
     });
   };
 
-  const handleResetAll = () => {
+  const handleResetAll = async () => {
     setInputsByCode({});
     setCompletedTestCodes([]);
     setSkippedTestCodes([]);
@@ -285,7 +285,10 @@ export default function FootballAssessmentHub({
     setFeedback(null);
     setWizardFeedback(null);
     if (activeAthleteId) {
-      clearWizardResumeState(tenantId, activeAthleteId);
+      await scoutingCombineService.clearAthleteAssessmentData(tenantId, activeAthleteId);
+      if (typeof onSyncedToReport === 'function') {
+        onSyncedToReport({});
+      }
     }
   };
 
@@ -1363,23 +1366,41 @@ export default function FootballAssessmentHub({
             <Lock size={14} className="text-emerald-700 shrink-0" />
             <span>Kategori 6: Perkembangan Atlet (Otomatis dari Modul Presensi Akademi)</span>
           </div>
-          <span
-            data-testid="badge-linked-attendance"
-            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-900 border border-emerald-300"
-          >
-            {existingIndicatorScores?.kehadiran_latihan?.badge_text ||
-              `Terhubung Otomatis ke Modul Presensi (${existingIndicatorScores?.kehadiran_latihan?.attendance_percentage ?? 92}%)`}
-          </span>
+          {(() => {
+            const devRec = existingIndicatorScores?.kehadiran_latihan;
+            const hasAtt =
+              Boolean(devRec?.hasAttendanceData) ||
+              (Number(devRec?.score) > 0 && Number.isFinite(Number(devRec?.attendance_percentage ?? devRec?.attendancePercentage)));
+            const attPct = devRec?.attendance_percentage ?? devRec?.attendancePercentage;
+            return hasAtt ? (
+              <span
+                data-testid="badge-linked-attendance"
+                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-900 border border-emerald-300"
+              >
+                {devRec?.badge_text || devRec?.badgeText || `Terhubung Otomatis ke Modul Presensi (${attPct}%)`}
+              </span>
+            ) : (
+              <span
+                data-testid="badge-no-attendance"
+                className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-slate-100 text-slate-600 border border-slate-300"
+              >
+                Belum Ada Presensi
+              </span>
+            );
+          })()}
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           {ATTENDANCE_DEVELOPMENT_INDICATORS.map((devInd) => {
             const devCode = devInd.code || devInd.test_code || devInd.indicator_key;
             const rec = existingIndicatorScores?.[devInd.indicator_key];
-            const scoreVal = rec?.score ?? 95;
-            const badgeText =
-              rec?.badgeText ||
-              rec?.badge_text ||
-              `Terhubung Otomatis ke Modul Presensi (${rec?.attendancePercentage ?? rec?.attendance_percentage ?? 92}%)`;
+            const hasAtt =
+              Boolean(rec?.hasAttendanceData) ||
+              (Number(rec?.score) > 0 && Number.isFinite(Number(rec?.attendance_percentage ?? rec?.attendancePercentage)));
+            const scoreVal = hasAtt && Number(rec?.score) > 0 ? Math.round(Number(rec.score)) : 0;
+            const attPct = rec?.attendancePercentage ?? rec?.attendance_percentage;
+            const badgeText = hasAtt
+              ? rec?.badgeText || rec?.badge_text || `Terhubung Otomatis ke Modul Presensi (${attPct}%)`
+              : 'Belum Ada Presensi';
             return (
               <div
                 key={devCode}
@@ -1395,11 +1416,11 @@ export default function FootballAssessmentHub({
                       {devInd.indicator_label}
                     </span>
                   </div>
-                  <p className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 truncate mt-0.5">
+                  <p className={`text-[10px] font-semibold truncate mt-0.5 ${hasAtt ? 'text-emerald-700 dark:text-emerald-300' : 'text-slate-500 dark:text-slate-400'}`}>
                     {badgeText}
                   </p>
                 </div>
-                <span className="font-mono text-sm font-black text-emerald-800 dark:text-emerald-300 tabular-nums shrink-0">
+                <span className={`font-mono text-sm font-black tabular-nums shrink-0 ${hasAtt ? 'text-emerald-800 dark:text-emerald-300' : 'text-slate-400 dark:text-slate-500'}`}>
                   {scoreVal}/100
                 </span>
               </div>
