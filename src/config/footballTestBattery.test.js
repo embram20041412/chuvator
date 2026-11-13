@@ -22,8 +22,116 @@ import {
   getAthleteTestResults,
   getLatestTestResultsByIndicatorMap,
   deleteAthleteTestResult,
-  clearTenantLocalTestBatteryStore
+  clearTenantLocalTestBatteryStore,
+  isExplicitDemoSession
 } from '../services/assessmentBatteryService.js';
+
+/**
+ * Helper pembuat mock Supabase client yang mensimulasikan tabel PostgreSQL
+ * public.athlete_test_results beserta pemeriksaan tenant_id di level query.
+ */
+function createStatefulSupabaseStub({ simulateError = null } = {}) {
+  const rows = [];
+  let idSeq = 1;
+
+  const buildChain = (contextTenantId) => {
+    const filters = {};
+    let op = 'select';
+    let insertPayload = null;
+
+    const chain = {
+      select() {
+        if (op !== 'insert' && op !== 'delete') op = 'select';
+        return chain;
+      },
+      insert(payloadArr) {
+        op = 'insert';
+        insertPayload = Array.isArray(payloadArr) ? payloadArr[0] : payloadArr;
+        return chain;
+      },
+      delete() {
+        op = 'delete';
+        return chain;
+      },
+      eq(col, val) {
+        filters[col] = val;
+        return chain;
+      },
+      order() {
+        return chain;
+      },
+      limit() {
+        return chain;
+      },
+      async single() {
+        if (simulateError) {
+          return { data: null, error: simulateError };
+        }
+        if (op === 'insert') {
+          if (contextTenantId && insertPayload.tenant_id !== contextTenantId) {
+            return {
+              data: null,
+              error: {
+                code: '42501',
+                message: 'new row violates row-level security policy for table "athlete_test_results"'
+              }
+            };
+          }
+          const created = {
+            id: `00000000-0000-4000-8000-${String(idSeq++).padStart(12, '0')}`,
+            ...insertPayload,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+          rows.push(created);
+          return { data: created, error: null };
+        }
+        return { data: null, error: null };
+      },
+      async maybeSingle() {
+        if (simulateError) {
+          return { data: null, error: simulateError };
+        }
+        if (op === 'delete') {
+          const idx = rows.findIndex((r) => {
+            if (contextTenantId && r.tenant_id !== contextTenantId) return false;
+            return Object.entries(filters).every(([k, v]) => String(r[k]) === String(v));
+          });
+          if (idx === -1) return { data: null, error: null };
+          const [removed] = rows.splice(idx, 1);
+          return { data: { id: removed.id }, error: null };
+        }
+        return { data: null, error: null };
+      },
+      then(resolve, reject) {
+        if (simulateError) {
+          return Promise.resolve({ data: null, error: simulateError }).then(resolve, reject);
+        }
+        const matched = rows
+          .filter((r) => {
+            if (contextTenantId && r.tenant_id !== contextTenantId) return false;
+            return Object.entries(filters).every(([k, v]) => String(r[k]) === String(v));
+          })
+          .sort((a, b) => String(b.test_date).localeCompare(String(a.test_date)));
+        return Promise.resolve({ data: matched, error: null }).then(resolve, reject);
+      }
+    };
+
+    return chain;
+  };
+
+  return {
+    rows,
+    forTenant(tenantId) {
+      return {
+        from(tableName) {
+          assert.equal(tableName, 'athlete_test_results');
+          return buildChain(tenantId);
+        }
+      };
+    }
+  };
+}
 
 test('Catalog Integrity: Seluruh 18 indikator OBJECTIVE_TEST terdaftar dengan canonical ID yang konsisten', () => {
   const audit = verifyCatalogAgainstIndicatorRegistry();
@@ -61,7 +169,6 @@ test('Catalog Integrity: Seluruh 18 indikator OBJECTIVE_TEST terdaftar dengan ca
     assert.ok(Array.isArray(def.validityRules) && def.validityRules.length > 0);
   });
 
-  // Pastikan TST-SHT-DST (Kekuatan Tembakan) memiliki penanda NEEDS_FURTHER_DESIGN sesuai Task 02.1
   const shotTest = getTestDefinitionByIndicatorId('FTB-UNI-TEC-07');
   assert.equal(shotTest.mappingReadiness, 'NEEDS_FURTHER_DESIGN');
 });
@@ -71,17 +178,12 @@ test('Applicability Filter: Menyaring kesesuaian tes berdasarkan Development Tie
   const wingTest = getTestDefinitionByIndicatorId('FTB-POS-WF-01');
   const rsaTest = getTestDefinitionByIndicatorId('FTB-UNI-PHY-14');
 
-  // GK SSB pada Tier 1 harus cocok untuk FTB-SSB-GK-02
   assert.equal(isTestApplicableToAthlete(ssbGkTest, 'TIER_1_GRASSROOTS', 'GK').isApplicable, true);
-  // Pemain Outfield (CM) pada Tier 1 tidak cocok untuk FTB-SSB-GK-02
   assert.equal(isTestApplicableToAthlete(ssbGkTest, 'TIER_1_GRASSROOTS', 'CM').isApplicable, false);
 
-  // Wing Forward (WFR) pada Tier 3 cocok untuk FTB-POS-WF-01
   assert.equal(isTestApplicableToAthlete(wingTest, 'TIER_3_YOUTH_DEV', 'WFR').isApplicable, true);
-  // Center Back (CB) pada Tier 3 tidak cocok untuk FTB-POS-WF-01
   assert.equal(isTestApplicableToAthlete(wingTest, 'TIER_3_YOUTH_DEV', 'CB').isApplicable, false);
 
-  // RSA 6x30m hanya berlaku pada Tier 4
   assert.equal(isTestApplicableToAthlete(rsaTest, 'TIER_2_FOUNDATION', 'CM').isApplicable, false);
   assert.equal(isTestApplicableToAthlete(rsaTest, 'TIER_4_ELITE_PRO', 'CM').isApplicable, true);
 });
@@ -94,7 +196,6 @@ test('Strict Empty & Negative Rules: Input kosong TIDAK dianggap 0 dan angka neg
   assert.equal(parseStrictNumericValue('').isValidNumber, false);
   assert.equal(parseStrictNumericValue('').numericValue, null);
 
-  // Sprint 10m dengan Percobaan 2 dibiarkan kosong tapi berstatus valid -> harus ditolak!
   const emptyTrialResult = validateAndComputeTestBatteryEntry({
     testId: 'TST-SPR-10M',
     testDate: '2026-11-12',
@@ -107,7 +208,6 @@ test('Strict Empty & Negative Rules: Input kosong TIDAK dianggap 0 dan angka neg
   assert.equal(emptyTrialResult.isValid, false);
   assert.ok(emptyTrialResult.errors.some((e) => e.includes('Percobaan 2 belum diisi')));
 
-  // Input angka negatif -> harus ditolak!
   const negativeResult = validateAndComputeTestBatteryEntry({
     testId: 'TST-SPR-10M',
     testDate: '2026-11-12',
@@ -120,7 +220,6 @@ test('Strict Empty & Negative Rules: Input kosong TIDAK dianggap 0 dan angka neg
   assert.equal(negativeResult.isValid, false);
   assert.ok(negativeResult.errors.some((e) => e.includes('negatif')));
 
-  // Input nilai 0 -> harus ditolak!
   const zeroResult = validateAndComputeTestBatteryEntry({
     testId: 'TST-STR-PU1',
     testDate: '2026-11-12',
@@ -132,7 +231,6 @@ test('Strict Empty & Negative Rules: Input kosong TIDAK dianggap 0 dan angka neg
 });
 
 test('Multi-Trial & Invalid Trial Handling: Menghitung nilai terbaik dan menangani percobaan tidak sah (foul)', () => {
-  // 10m Sprint: 2 percobaan sah -> pilih waktu tercepat (minimum)
   const sprintValid = validateAndComputeTestBatteryEntry({
     testId: 'TST-SPR-10M',
     testDate: '2026-11-12',
@@ -146,11 +244,9 @@ test('Multi-Trial & Invalid Trial Handling: Menghitung nilai terbaik dan menanga
   assert.equal(sprintValid.normalizedRecord.finalRawValue, 2.06);
   assert.equal(sprintValid.normalizedRecord.attemptStatus, 'VALID');
   assert.equal(sprintValid.normalizedRecord.calibrationStatus, 'PENDING_CALIBRATION');
-  // Pastikan nilai mentah percobaan tidak dimutasi diam-diam
   assert.equal(sprintValid.normalizedRecord.trials[0].rawInput, '2.18');
   assert.equal(sprintValid.normalizedRecord.trials[1].rawInput, '2.06');
 
-  // 10m Sprint: Percobaan 1 sah (2.14s), Percobaan 2 terpeleset (ditandai isValid: false) -> sah sebagai PARTIAL_VALID
   const sprintPartial = validateAndComputeTestBatteryEntry({
     testId: 'TST-SPR-10M',
     testDate: '2026-11-12',
@@ -166,8 +262,7 @@ test('Multi-Trial & Invalid Trial Handling: Menghitung nilai terbaik dan menanga
   assert.equal(sprintPartial.normalizedRecord.trials[1].isValid, false);
 });
 
-test('Specialized Test Schemas: Ruler Drop (3x), Bilateral 505, Sargent Vertical Jump (H2-H1), Bleep Test, dan 6x30m RSA', () => {
-  // 1. Ruler Drop (3 percobaan wajib -> rata-rata cm & estimasi ms)
+test('Specialized Test Schemas: Ruler Drop (3x), Sargent Vertical Jump (H2-H1), Bleep Test, dan 6x30m RSA', () => {
   const rulerDrop = validateAndComputeTestBatteryEntry({
     testId: 'TST-RXN-RLR',
     testDate: '2026-11-12',
@@ -180,10 +275,8 @@ test('Specialized Test Schemas: Ruler Drop (3x), Bilateral 505, Sargent Vertical
   });
   assert.equal(rulerDrop.isValid, true);
   assert.equal(rulerDrop.normalizedRecord.finalRawValue, 16);
-  // sqrt(2 * 16 / 980) * 1000 = 180.7 ms
   assert.equal(rulerDrop.normalizedRecord.derivedMetrics.estimatedReactionTimeMs, 180.7);
 
-  // 2. Sargent Vertical Jump (H1 = 195 cm, H2_1 = 232 cm, H2_2 = 236.5 cm -> Delta = 41.5 cm)
   const vJump = validateAndComputeTestBatteryEntry({
     testId: 'TST-JMP-VER',
     testDate: '2026-11-12',
@@ -198,10 +291,9 @@ test('Specialized Test Schemas: Ruler Drop (3x), Bilateral 505, Sargent Vertical
   assert.equal(vJump.normalizedRecord.finalRawValue, 41.5);
   assert.equal(vJump.normalizedRecord.derivedMetrics.netVerticalJumpCm, 41.5);
 
-  // 3. Bleep Test (Level 8 Shuttle 5 -> Kumulatif 63 shuttle = 1260 meter)
   const bleepCalc = computeBleepCumulativeMetrics(8, 5);
   assert.equal(bleepCalc.isValid, true);
-  assert.equal(bleepCalc.cumulativeShuttles, 66); // L1(7)+L2(8)+L3(8)+L4(9)+L5(9)+L6(10)+L7(10) = 61 + 5 = 66
+  assert.equal(bleepCalc.cumulativeShuttles, 66);
   assert.equal(bleepCalc.cumulativeDistanceMeters, 1320);
 
   const bleepEntry = validateAndComputeTestBatteryEntry({
@@ -214,7 +306,6 @@ test('Specialized Test Schemas: Ruler Drop (3x), Bilateral 505, Sargent Vertical
   assert.equal(bleepEntry.isValid, true);
   assert.equal(bleepEntry.normalizedRecord.finalRawValue, 1320);
 
-  // 4. Bangsbo 6x30m RSA: Wajib 6 repetisi sah; tolak jika salah satu tidak sah
   const rsaIncomplete = validateAndComputeTestBatteryEntry({
     testId: 'TST-RSA-630',
     testDate: '2026-11-12',
@@ -244,90 +335,357 @@ test('Specialized Test Schemas: Ruler Drop (3x), Bilateral 505, Sargent Vertical
     ]
   });
   assert.equal(rsaComplete.isValid, true);
-  // Total = 27.18s; S_best = 4.40s; 6 * 4.40 = 26.40s; FI% = ((27.18 / 26.40) - 1) * 100 = 2.95%
   assert.equal(rsaComplete.normalizedRecord.finalRawValue, 27.18);
   assert.equal(rsaComplete.normalizedRecord.derivedMetrics.bestSprintTimeSec, 4.4);
   assert.equal(rsaComplete.normalizedRecord.derivedMetrics.fatigueIndexPercent, 2.95);
 });
 
-test('Multi-Tenant Storage Isolation: Tenant A tidak dapat membaca, menyimpan, atau menghapus data milik Tenant B', async () => {
-  const tenantA = { tenantId: 'ssb-garuda-muda-a', id: 'coach-a1', fullName: 'Coach Hendra' };
-  const tenantB = { tenantId: 'ssb-bintang-timur-b', id: 'coach-b1', fullName: 'Coach Riko' };
+test('Task 03.1 (1 & 2): Real Tenant Database Persistence & Read-Back via Supabase Tanpa Mutasi Diam-diam', async () => {
+  const dbStub = createStatefulSupabaseStub();
+  const realTenantCoach = {
+    tenantId: 'ssb-garuda-muda-a',
+    id: '00000000-0000-4000-8000-000000000901',
+    role: 'pelatih',
+    fullName: 'Coach Hendra'
+  };
 
-  clearTenantLocalTestBatteryStore(tenantA.tenantId);
-  clearTenantLocalTestBatteryStore(tenantB.tenantId);
+  assert.equal(isExplicitDemoSession(realTenantCoach), false);
+
+  const draft = createInitialTestEntryDraft('TST-SPR-10M', '2026-11-12');
+  draft.trials[0].rawInput = '2.15';
+  draft.trials[1].rawInput = '2.03';
+
+  const studentUuid = '00000000-0000-4000-8000-000000000501';
+
+  const saved = await saveAthleteTestResult(
+    realTenantCoach,
+    {
+      ...draft,
+      studentId: studentUuid,
+      studentTenantId: 'ssb-garuda-muda-a',
+      developmentTier: 'TIER_3_YOUTH_DEV',
+      positionCode: 'WFR'
+    },
+    { supabaseClient: dbStub.forTenant('ssb-garuda-muda-a') }
+  );
+
+  assert.equal(saved.persistenceSource, 'SUPABASE_DB');
+  assert.equal(saved.tenantId, 'ssb-garuda-muda-a');
+  assert.equal(saved.studentId, studentUuid);
+  assert.equal(saved.finalRawValue, 2.03);
+  assert.equal(saved.calibrationStatus, 'PENDING_CALIBRATION');
+  assert.equal(saved.convertedScore, null);
+  assert.equal(saved.trials[0].rawInput, '2.15');
+  assert.equal(saved.trials[1].rawInput, '2.03');
+
+  // Pembacaan kembali riwayat dari database (tanpa bergantung pada browser asal)
+  const historyFromDb = await getAthleteTestResults(realTenantCoach, studentUuid, {
+    supabaseClient: dbStub.forTenant('ssb-garuda-muda-a')
+  });
+  assert.equal(historyFromDb.length, 1);
+  assert.equal(historyFromDb[0].id, saved.id);
+  assert.equal(historyFromDb[0].persistenceSource, 'SUPABASE_DB');
+  assert.equal(historyFromDb[0].trials[0].rawInput, '2.15');
+  assert.equal(historyFromDb[0].trials[1].rawInput, '2.03');
+
+  const latestMap = await getLatestTestResultsByIndicatorMap(realTenantCoach, studentUuid, {
+    supabaseClient: dbStub.forTenant('ssb-garuda-muda-a')
+  });
+  assert.ok(latestMap['FTB-UNI-PHY-01']);
+  assert.equal(latestMap['FTB-UNI-PHY-01'].finalRawValue, 2.03);
+});
+
+test('Task 03.1 (3): Kegagalan Database pada Tenant Riil Melempar Error Jelas dan TIDAK Dialihkan ke localStorage', async () => {
+  const realTenantOwner = {
+    tenantId: 'ssb-garuda-muda-a',
+    id: '00000000-0000-4000-8000-000000000902',
+    role: 'owner',
+    fullName: 'Owner Garuda'
+  };
+  const studentUuid = '00000000-0000-4000-8000-000000000501';
+
+  const draft = createInitialTestEntryDraft('TST-SPR-10M', '2026-11-12');
+  draft.trials[0].rawInput = '2.11';
+  draft.trials[1].rawInput = '2.01';
+
+  // Simulasikan tabel belum dimigrasikan (42P01)
+  const unmigratedDbStub = createStatefulSupabaseStub({
+    simulateError: {
+      code: '42P01',
+      message: 'relation "public.athlete_test_results" does not exist'
+    }
+  });
+
+  await assert.rejects(
+    async () => {
+      await saveAthleteTestResult(
+        realTenantOwner,
+        {
+          ...draft,
+          studentId: studentUuid,
+          studentTenantId: 'ssb-garuda-muda-a'
+        },
+        { supabaseClient: unmigratedDbStub.forTenant('ssb-garuda-muda-a') }
+      );
+    },
+    (err) => {
+      assert.equal(err.code, '42P01');
+      assert.equal(err.isPersistenceFailure, true);
+      assert.ok(err.message.includes('Data TIDAK disimpan'));
+      assert.ok(err.message.includes('phase_task03_athlete_test_battery_migration.sql'));
+      return true;
+    }
+  );
+
+  // Pembacaan riwayat saat tabel belum tersedia pada tenant riil juga harus melempar error jelas (bukan kembali array kosong diam-diam atau baca localStorage)
+  await assert.rejects(
+    async () => {
+      await getAthleteTestResults(realTenantOwner, studentUuid, {
+        supabaseClient: unmigratedDbStub.forTenant('ssb-garuda-muda-a')
+      });
+    },
+    (err) => {
+      assert.equal(err.code, '42P01');
+      assert.equal(err.isPersistenceFailure, true);
+      return true;
+    }
+  );
+});
+
+test('Task 03.1 (4): Pemisahan Ketat Mode Pratinjau Demo dari Mode Tenant Riil', async () => {
+  const demoSession = {
+    tenantId: 'demo-tenant-1',
+    uid: 'demo-tenant-admin',
+    role: 'owner',
+    isDemoMode: true,
+    fullName: 'Coach Demo SSB'
+  };
+  const realSessionWithoutDemoFlag = {
+    tenantId: 'demo-tenant-1',
+    uid: 'real-uid-without-demo-flag',
+    role: 'owner'
+  };
+  const realTenantSession = {
+    tenantId: 'ssb-real-tenant-01',
+    uid: 'real-owner-01',
+    role: 'owner',
+    isDemoMode: true // Bahkan jika isDemoMode dipalsukan pada tenant riil, tetap harus ditolak dari localStorage!
+  };
+
+  assert.equal(isExplicitDemoSession(demoSession), true);
+  assert.equal(isExplicitDemoSession(realSessionWithoutDemoFlag), false);
+  assert.equal(isExplicitDemoSession(realTenantSession), false);
+
+  clearTenantLocalTestBatteryStore('demo-tenant-1');
+
+  const draft = createInitialTestEntryDraft('TST-SPR-10M', '2026-11-12');
+  draft.trials[0].rawInput = '2.20';
+  draft.trials[1].rawInput = '2.09';
+
+  const savedDemo = await saveAthleteTestResult(demoSession, {
+    ...draft,
+    studentId: '00000000-0000-4000-8000-000000000401',
+    studentTenantId: 'demo-tenant-1'
+  });
+  assert.equal(savedDemo.persistenceSource, 'DEMO_LOCAL_STORAGE');
+
+  const demoHistory = await getAthleteTestResults(
+    demoSession,
+    '00000000-0000-4000-8000-000000000401'
+  );
+  assert.equal(demoHistory.length, 1);
+
+  // Tenant riil dengan database kosong tidak boleh pernah melihat data demo
+  const emptyRealDb = createStatefulSupabaseStub();
+  const realHistory = await getAthleteTestResults(
+    realTenantSession,
+    '00000000-0000-4000-8000-000000000401',
+    { supabaseClient: emptyRealDb.forTenant('ssb-real-tenant-01') }
+  );
+  assert.equal(realHistory.length, 0);
+});
+
+test('Task 03.1 (5): Keamanan Multi-Tenant, Scope Pelatih, Hak Akses Role, dan Blokir Operasional Superadmin', async () => {
+  const dbStub = createStatefulSupabaseStub();
+  const tenantA = {
+    tenantId: 'ssb-garuda-muda-a',
+    id: '00000000-0000-4000-8000-000000000901',
+    role: 'owner',
+    fullName: 'Owner A'
+  };
+  const tenantB = {
+    tenantId: 'ssb-bintang-timur-b',
+    id: '00000000-0000-4000-8000-000000000902',
+    role: 'owner',
+    fullName: 'Owner B'
+  };
+  const studentA = '00000000-0000-4000-8000-000000000501';
 
   const draft = createInitialTestEntryDraft('TST-SPR-10M', '2026-11-12');
   draft.trials[0].rawInput = '2.12';
   draft.trials[1].rawInput = '2.04';
 
-  // 1. Simpan hasil tes untuk atlet di Tenant A
-  const savedA = await saveAthleteTestResult(tenantA, {
-    ...draft,
-    studentId: 'student-101',
-    developmentTier: 'TIER_2_FOUNDATION',
-    positionCode: 'WFR',
-    forceLocalStore: true
+  const savedA = await saveAthleteTestResult(
+    tenantA,
+    {
+      ...draft,
+      studentId: studentA,
+      studentTenantId: 'ssb-garuda-muda-a'
+    },
+    { supabaseClient: dbStub.forTenant('ssb-garuda-muda-a') }
+  );
+
+  // 1. Tenant B tidak dapat membaca data Tenant A
+  const historyFromB = await getAthleteTestResults(tenantB, studentA, {
+    supabaseClient: dbStub.forTenant('ssb-bintang-timur-b')
   });
-
-  assert.equal(savedA.tenantId, 'ssb-garuda-muda-a');
-  assert.equal(savedA.finalRawValue, 2.04);
-  assert.equal(savedA.calibrationStatus, 'PENDING_CALIBRATION');
-  assert.equal(savedA.convertedScore, null);
-
-  // 2. Tenant A dapat membaca riwayat atletnya sendiri
-  const historyA = await getAthleteTestResults(tenantA, 'student-101', { forceLocalStore: true });
-  assert.equal(historyA.length, 1);
-  assert.equal(historyA[0].id, savedA.id);
-
-  const latestMapA = await getLatestTestResultsByIndicatorMap(tenantA, 'student-101', { forceLocalStore: true });
-  assert.ok(latestMapA['FTB-UNI-PHY-01']);
-  assert.equal(latestMapA['FTB-UNI-PHY-01'].finalRawValue, 2.04);
-
-  // 3. Tenant B mencoba membaca studentId yang sama ('student-101') -> harus kosong (terisolasi penuh)
-  const historyFromB = await getAthleteTestResults(tenantB, 'student-101', { forceLocalStore: true });
   assert.equal(historyFromB.length, 0);
 
-  // 4. Tenant B mencoba memalsukan payload tenantId menjadi 'ssb-garuda-muda-a' -> wajib ditolak dengan error 42501!
+  // 2. Tenant B mencoba memalsukan tenantId payload menjadi milik Tenant A -> ditolak 42501
   await assert.rejects(
     async () => {
-      await saveAthleteTestResult(tenantB, {
-        ...draft,
-        tenantId: 'ssb-garuda-muda-a',
-        studentId: 'student-101',
-        forceLocalStore: true
-      });
+      await saveAthleteTestResult(
+        tenantB,
+        {
+          ...draft,
+          tenantId: 'ssb-garuda-muda-a',
+          studentId: studentA
+        },
+        { supabaseClient: dbStub.forTenant('ssb-bintang-timur-b') }
+      );
     },
     (err) => err.code === '42501'
   );
 
-  // 5. Tenant B mencoba menyimpan untuk atlet yang memiliki studentTenantId berbeda -> wajib ditolak dengan 42501!
+  // 3. Tenant B mencoba menyimpan untuk atlet yang terdaftar di Tenant A -> ditolak 42501
   await assert.rejects(
     async () => {
-      await saveAthleteTestResult(tenantB, {
-        ...draft,
-        studentId: 'student-101',
-        studentTenantId: 'ssb-garuda-muda-a',
-        forceLocalStore: true
-      });
+      await saveAthleteTestResult(
+        tenantB,
+        {
+          ...draft,
+          studentId: studentA,
+          studentTenantId: 'ssb-garuda-muda-a'
+        },
+        { supabaseClient: dbStub.forTenant('ssb-bintang-timur-b') }
+      );
     },
     (err) => err.code === '42501'
   );
 
-  // 6. Tenant B mencoba menghapus data milik Tenant A -> wajib ditolak dengan 42501 dan data Tenant A tetap utuh
+  // 4. Pelatih dengan scope terbatas pada kelas X mencoba menyimpan untuk atlet di kelas Y -> ditolak 42501
+  const scopedCoach = {
+    tenantId: 'ssb-garuda-muda-a',
+    id: '00000000-0000-4000-8000-000000000905',
+    role: 'pelatih',
+    allowedClassIds: ['00000000-0000-4000-8000-000000000201']
+  };
+  await assert.rejects(
+    async () => {
+      await saveAthleteTestResult(
+        scopedCoach,
+        {
+          ...draft,
+          studentId: studentA,
+          classId: '00000000-0000-4000-8000-000000000299'
+        },
+        { supabaseClient: dbStub.forTenant('ssb-garuda-muda-a') }
+      );
+    },
+    (err) => err.code === '42501'
+  );
+
+  // 5. Role 'kasir' tidak diizinkan menyimpan atau menghapus hasil tes -> ditolak 42501
+  const cashierUser = {
+    tenantId: 'ssb-garuda-muda-a',
+    id: '00000000-0000-4000-8000-000000000906',
+    role: 'kasir'
+  };
+  await assert.rejects(
+    async () => {
+      await saveAthleteTestResult(
+        cashierUser,
+        {
+          ...draft,
+          studentId: studentA
+        },
+        { supabaseClient: dbStub.forTenant('ssb-garuda-muda-a') }
+      );
+    },
+    (err) => err.code === '42501'
+  );
+
+  // 6. Akun Superadmin / Platform Owner ditolak dari fitur operasional Assessment Battery -> ditolak 42501
+  const superAdminUser = {
+    tenantId: 'ssb-garuda-muda-a',
+    id: '00000000-0000-4000-8000-000000000999',
+    role: 'superadmin',
+    isSuperAdmin: true
+  };
+  await assert.rejects(
+    async () => {
+      await getAthleteTestResults(superAdminUser, studentA, {
+        supabaseClient: dbStub.forTenant('ssb-garuda-muda-a')
+      });
+    },
+    (err) => err.code === '42501'
+  );
+  await assert.rejects(
+    async () => {
+      await saveAthleteTestResult(
+        superAdminUser,
+        {
+          ...draft,
+          studentId: studentA
+        },
+        { supabaseClient: dbStub.forTenant('ssb-garuda-muda-a') }
+      );
+    },
+    (err) => err.code === '42501'
+  );
+
+  // 7. Tenant B tidak dapat menghapus data milik Tenant A -> ditolak 42501 & data Tenant A tetap utuh
   await assert.rejects(
     async () => {
       await deleteAthleteTestResult(tenantB, savedA.id, {
-        tenantId: 'ssb-garuda-muda-a',
-        forceLocalStore: true
+        supabaseClient: dbStub.forTenant('ssb-bintang-timur-b')
       });
     },
     (err) => err.code === '42501'
   );
 
-  const historyAAfterAttack = await getAthleteTestResults(tenantA, 'student-101', { forceLocalStore: true });
-  assert.equal(historyAAfterAttack.length, 1);
+  const historyAfterFailedDelete = await getAthleteTestResults(tenantA, studentA, {
+    supabaseClient: dbStub.forTenant('ssb-garuda-muda-a')
+  });
+  assert.equal(historyAfterFailedDelete.length, 1);
+});
 
-  clearTenantLocalTestBatteryStore(tenantA.tenantId);
-  clearTenantLocalTestBatteryStore(tenantB.tenantId);
+test('Task 03.1 (6): Verifikasi Integrasi terhadap Instance Supabase Aktual (Tanpa Klaim Palsu / Tanpa Fallback LocalStorage)', async () => {
+  const realTenantProbeContext = {
+    tenantId: 'ssb-probe-verification-tenant',
+    id: '00000000-0000-4000-8000-000000000888',
+    role: 'owner'
+  };
+  const probeStudentUuid = '00000000-0000-4000-8000-000000000777';
+
+  // Panggil dengan default Supabase client (mengarah ke instance Supabase yang dikonfigurasi di src/config/supabase.js)
+  let caughtError = null;
+  let returnedRows = null;
+  try {
+    returnedRows = await getAthleteTestResults(realTenantProbeContext, probeStudentUuid);
+  } catch (err) {
+    caughtError = err;
+  }
+
+  // Jika tabel belum dimigrasikan di Supabase remote (PGRST205 / 42P01) atau ditolak RLS tanpa sesi JWT,
+  // service wajib melempar error eksplisit (isPersistenceFailure: true) dan TIDAK boleh diam-diam kembali ke localStorage.
+  if (caughtError) {
+    assert.equal(caughtError.isPersistenceFailure, true);
+    assert.ok(
+      caughtError.message.includes('Data TIDAK disimpan') ||
+        caughtError.message.includes('gagal diproses pada database Supabase')
+    );
+  } else {
+    assert.ok(Array.isArray(returnedRows));
+  }
 });

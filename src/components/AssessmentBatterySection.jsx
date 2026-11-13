@@ -42,7 +42,8 @@ import {
   saveAthleteTestResult,
   getAthleteTestResults,
   getLatestTestResultsByIndicatorMap,
-  deleteAthleteTestResult
+  deleteAthleteTestResult,
+  isExplicitDemoSession
 } from '../services/assessmentBatteryService.js';
 
 /**
@@ -114,6 +115,10 @@ export default function AssessmentBatterySection({
   onSavedResult = null
 }) {
   const tenantId = userProfile?.tenantId || userProfile?.tenant_id || '';
+  const isSuperAdminAccount =
+    userProfile?.isSuperAdmin === true ||
+    String(userProfile?.role || '').trim().toLowerCase() === 'superadmin';
+  const isDemoPreviewMode = isExplicitDemoSession(userProfile, tenantId);
 
   // Daftar siswa yang berada pada kelas aktif (atau semua siswa jika singleStudentMode)
   const availableStudents = useMemo(() => {
@@ -194,6 +199,7 @@ export default function AssessmentBatterySection({
   const [athleteHistory, setAthleteHistory] = useState([]);
   const [latestByIndicator, setLatestByIndicator] = useState({});
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [historyLoadError, setHistoryLoadError] = useState(null);
 
   // Daftar tes dengan evaluasi kesesuaian Tier & Posisi
   const testsWithApplicability = useMemo(
@@ -248,9 +254,11 @@ export default function AssessmentBatterySection({
     if (!tenantId || !activeStudent?.id) {
       setAthleteHistory([]);
       setLatestByIndicator({});
+      setHistoryLoadError(null);
       return;
     }
     setIsLoadingHistory(true);
+    setHistoryLoadError(null);
     try {
       const [historyList, latestMap] = await Promise.all([
         getAthleteTestResults(userProfile, activeStudent.id),
@@ -260,6 +268,11 @@ export default function AssessmentBatterySection({
       setLatestByIndicator(latestMap);
     } catch (err) {
       console.error('[AssessmentBatterySection] Gagal memuat riwayat tes atlet:', err);
+      setAthleteHistory([]);
+      setLatestByIndicator({});
+      setHistoryLoadError(
+        err.message || 'Gagal membaca riwayat hasil pengukuran dari database Supabase.'
+      );
     } finally {
       setIsLoadingHistory(false);
     }
@@ -373,9 +386,14 @@ export default function AssessmentBatterySection({
         positionCode: activePositionCode
       });
 
+      const persistenceLabel =
+        saved.persistenceSource === 'DEMO_LOCAL_STORAGE'
+          ? 'Mode Pratinjau Demo (Browser Lokal)'
+          : 'Database Supabase Tenant';
+
       setSaveFeedback({
         type: 'success',
-        message: `Hasil ${activeTestDef.shortName} (${saved.finalDisplayValue}) berhasil disimpan untuk ${activeStudent.studentName || activeStudent.name} dengan status PENDING_CALIBRATION.`
+        message: `Hasil ${activeTestDef.shortName} (${saved.finalDisplayValue}) berhasil disimpan ke ${persistenceLabel} untuk ${activeStudent.studentName || activeStudent.name} dengan status PENDING_CALIBRATION.`
       });
 
       // Reset input nilai percobaan agar siap untuk pencatatan berikutnya
@@ -443,6 +461,21 @@ export default function AssessmentBatterySection({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <div
+              data-testid="battery-storage-mode-badge"
+              className={`rounded-xl border px-3 py-2 text-right ${
+                isDemoPreviewMode
+                  ? 'bg-amber-500/15 border-amber-400/40 text-amber-200'
+                  : 'bg-emerald-500/15 border-emerald-400/40 text-emerald-200'
+              }`}
+            >
+              <div className="text-[10px] uppercase tracking-wider opacity-85">Jalur Penyimpanan</div>
+              <div className="text-xs font-bold">
+                {isDemoPreviewMode
+                  ? 'Mode Pratinjau Demo (Browser Lokal)'
+                  : 'Database Tenant (Supabase PostgreSQL)'}
+              </div>
+            </div>
             <div className="rounded-xl bg-white/10 border border-white/15 px-3 py-2 text-right">
               <div className="text-[11px] uppercase tracking-wider text-slate-300">Cakupan Atlet Ini</div>
               <div className="text-sm font-bold text-emerald-300">
@@ -452,6 +485,26 @@ export default function AssessmentBatterySection({
           </div>
         </div>
       </div>
+
+      {/* ===================================================================
+          PROTEKSI KONTEKS OPERASIONAL TENANT (BLOKIR SUPERADMIN)
+         =================================================================== */}
+      {isSuperAdminAccount && (
+        <div
+          data-testid="battery-superadmin-blocked-banner"
+          className="rounded-2xl border border-rose-300 bg-rose-50 p-4 text-xs text-rose-950 flex items-start gap-3 shadow-xs"
+        >
+          <ShieldAlert className="h-5 w-5 text-rose-700 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <div className="font-bold text-sm text-rose-900">
+              Akses Operasional Dibatasi untuk Akun Superadmin / Platform Owner
+            </div>
+            <p className="text-rose-800">
+              Fasilitas Assessment Battery hanya tersedia dalam konteks operasional tenant akademi (Owner Akademi, Admin Akademi, atau Pelatih yang bertugas). Akun Superadmin tidak diizinkan membaca atau memodifikasi data pengukuran atlet lintas tenant.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ===================================================================
           BARIS KONTROL ATLET, JENJANG (TIER), DAN POSISI
@@ -1106,11 +1159,11 @@ export default function AssessmentBatterySection({
                     <button
                       type="submit"
                       data-testid="battery-save-btn"
-                      disabled={isSaving || !activeStudent}
+                      disabled={isSaving || !activeStudent || isSuperAdminAccount}
                       className="rounded-xl bg-emerald-600 px-5 py-2.5 text-sm font-bold text-white shadow-xs hover:bg-emerald-700 disabled:opacity-50 transition flex items-center gap-2 min-h-[44px]"
                     >
                       <ClipboardCheck className="h-4 w-4" />
-                      <span>{isSaving ? 'Menyimpan...' : 'Simpan Hasil Pengukuran Mentah'}</span>
+                      <span>{isSaving ? 'Menyimpan ke Database...' : 'Simpan Hasil Pengukuran Mentah'}</span>
                     </button>
                   </div>
                 </form>
@@ -1174,7 +1227,23 @@ export default function AssessmentBatterySection({
           </div>
         </div>
 
-        {displayedHistory.length === 0 ? (
+        {historyLoadError ? (
+          <div
+            data-testid="battery-history-db-error"
+            className="rounded-xl border border-rose-300 bg-rose-50 p-4 text-xs text-rose-950 flex items-start gap-3"
+          >
+            <AlertTriangle className="h-5 w-5 text-rose-700 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <div className="font-bold text-sm text-rose-900">
+                Gagal Memuat Riwayat dari Database Supabase
+              </div>
+              <p className="text-rose-800">{historyLoadError}</p>
+              <p className="text-[11px] text-rose-700">
+                Sistem tidak mengalihkan pembacaan/penyimpanan mode tenant riil ke localStorage browser untuk menjaga integritas data lintas perangkat.
+              </p>
+            </div>
+          </div>
+        ) : displayedHistory.length === 0 ? (
           <div
             data-testid="battery-history-empty"
             className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center space-y-1"

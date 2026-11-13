@@ -289,8 +289,14 @@ const DEMO_PREVIEW_CLASSES = [
   }
 ];
 
+export const isExplicitDemoTenant = (tenantId) =>
+  String(tenantId || '').trim() === 'demo-tenant-1';
+
 export async function getAcademies(tenantId) {
   if (!tenantId) return [];
+  if (isExplicitDemoTenant(tenantId)) {
+    return DEMO_PREVIEW_ACADEMIES.map(mapAcademyFromSupabase);
+  }
   try {
     const { data, error } = await supabase
       .from('academies')
@@ -300,17 +306,12 @@ export async function getAcademies(tenantId) {
 
     if (error) {
       console.warn('[Supabase getAcademies Error]:', error);
-      if (tenantId === 'demo-tenant-1') return DEMO_PREVIEW_ACADEMIES.map(mapAcademyFromSupabase);
       return [];
     }
     const rows = data || [];
-    if (rows.length === 0 && tenantId === 'demo-tenant-1') {
-      return DEMO_PREVIEW_ACADEMIES.map(mapAcademyFromSupabase);
-    }
     return rows.map(mapAcademyFromSupabase);
   } catch (err) {
     console.warn('[Supabase getAcademies Catch]:', err);
-    if (tenantId === 'demo-tenant-1') return DEMO_PREVIEW_ACADEMIES.map(mapAcademyFromSupabase);
     return [];
   }
 }
@@ -412,6 +413,14 @@ export async function getClasses(tenantId, academyId = null, coachId = null, opt
   if (!tenantId) return [];
 
   const { includeArchived = false, onlyArchived = false } = (typeof options === 'object' && options !== null) ? options : {};
+  const safeAcademyId = toUuidOrNull(academyId);
+
+  if (isExplicitDemoTenant(tenantId)) {
+    if (onlyArchived) return [];
+    return DEMO_PREVIEW_CLASSES
+      .filter((c) => !safeAcademyId || c.academy_id === safeAcademyId)
+      .map(mapClassFromSupabase);
+  }
 
   let query = supabase
     .from('academy_classes')
@@ -419,7 +428,6 @@ export async function getClasses(tenantId, academyId = null, coachId = null, opt
     .eq('tenant_id', tenantId)
     .order('class_name', { ascending: true });
 
-  const safeAcademyId = toUuidOrNull(academyId);
   if (safeAcademyId) {
     query = query.eq('academy_id', safeAcademyId);
   }
@@ -439,19 +447,9 @@ export async function getClasses(tenantId, academyId = null, coachId = null, opt
   const { data, error } = await query;
   if (error) {
     console.error('[Supabase getClasses Error]:', error);
-    if (tenantId === 'demo-tenant-1' && !onlyArchived) {
-      return DEMO_PREVIEW_CLASSES
-        .filter((c) => !safeAcademyId || c.academy_id === safeAcademyId)
-        .map(mapClassFromSupabase);
-    }
     return [];
   }
   const rows = data || [];
-  if (rows.length === 0 && tenantId === 'demo-tenant-1' && !onlyArchived) {
-    return DEMO_PREVIEW_CLASSES
-      .filter((c) => !safeAcademyId || c.academy_id === safeAcademyId)
-      .map(mapClassFromSupabase);
-  }
   return rows.map(mapClassFromSupabase);
 }
 
@@ -906,6 +904,15 @@ const DEMO_PREVIEW_STUDENTS = [
 export async function getStudents(tenantId, academyId = null, classId = null) {
   if (!tenantId) return [];
 
+  const safeAcademyId = toUuidOrNull(academyId);
+  const safeClassId = toUuidOrNull(classId);
+
+  if (isExplicitDemoTenant(tenantId)) {
+    return DEMO_PREVIEW_STUDENTS
+      .filter((s) => (!safeAcademyId || s.academy_id === safeAcademyId) && (!safeClassId || s.class_id === safeClassId))
+      .map(mapStudentFromSupabase);
+  }
+
   // PENTING: Gunakan select('*') tanpa FK join academy_classes(...)
   // agar query tidak error jika class_id bertipe TEXT tanpa FK constraint
   let query = supabase
@@ -914,11 +921,9 @@ export async function getStudents(tenantId, academyId = null, classId = null) {
     .eq('tenant_id', tenantId)
     .order('student_name', { ascending: true });
 
-  const safeAcademyId = toUuidOrNull(academyId);
   if (safeAcademyId) {
     query = query.eq('academy_id', safeAcademyId);
   }
-  const safeClassId = toUuidOrNull(classId);
   if (safeClassId) {
     query = query.eq('class_id', safeClassId);
   }
@@ -926,19 +931,9 @@ export async function getStudents(tenantId, academyId = null, classId = null) {
   const { data, error } = await query;
   if (error) {
     console.error('[Supabase getStudents Error]:', error);
-    if (tenantId === 'demo-tenant-1') {
-      return DEMO_PREVIEW_STUDENTS
-        .filter((s) => (!safeAcademyId || s.academy_id === safeAcademyId) && (!safeClassId || s.class_id === safeClassId))
-        .map(mapStudentFromSupabase);
-    }
     return [];
   }
   const rows = data || [];
-  if (rows.length === 0 && tenantId === 'demo-tenant-1') {
-    return DEMO_PREVIEW_STUDENTS
-      .filter((s) => (!safeAcademyId || s.academy_id === safeAcademyId) && (!safeClassId || s.class_id === safeClassId))
-      .map(mapStudentFromSupabase);
-  }
   return rows.map(mapStudentFromSupabase);
 }
 

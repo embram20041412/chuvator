@@ -250,6 +250,7 @@ export default function EvaluationSection({
   selectedClass,
   students = [],
   tenantId,
+  userProfile = null,
   activeAcademy,
   isMobile = false,
   initialAssessmentView = 'assessment'
@@ -611,7 +612,10 @@ export default function EvaluationSection({
       {/* SUB-VIEW 1B: FIELD TEST BATTERY / SCOUTING COMBINE (18 OBJECTIVE TESTS) */}
       {assessmentView === 'test_battery' && (
         <AssessmentBatterySection
-          userProfile={{ tenantId }}
+          userProfile={{
+            ...(userProfile || {}),
+            tenantId: tenantId || userProfile?.tenantId || userProfile?.tenant_id
+          }}
           activeAcademy={activeAcademy}
           selectedClass={effectiveSelectedClass}
           students={classStudents}

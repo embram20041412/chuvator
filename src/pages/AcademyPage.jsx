@@ -2206,6 +2206,7 @@ export default function AcademyPage({ userProfile }) {
                           selectedClass={currentClass}
                           students={filteredStudents.filter((s) => s.classId === currentClass.id || s.className === currentClass.className)}
                           tenantId={tenantId}
+                          userProfile={userProfile}
                           activeAcademy={activeAcademy}
                           isMobile={false}
                           initialAssessmentView={subTabParam === 'analitik' || subTabParam === 'analytics' ? 'analytics' : 'assessment'}
