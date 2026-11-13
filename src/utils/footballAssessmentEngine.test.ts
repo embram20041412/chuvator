@@ -5,7 +5,10 @@ import {
   calculateAssessmentScore,
   convertRubricLevelToScore,
   aggregateIndicatorScores,
-  getMasterTestsForContext
+  getMasterTestsForContext,
+  buildWizardResumeStorageKey,
+  computeWizardSessionProgress,
+  resolveWizardStepTransition
 } from './footballAssessmentEngine.js';
 
 test('calculateAssessmentScore returns null for blank inputs and never returns PENDING_CALIBRATION', () => {
@@ -169,3 +172,53 @@ test('all 38 tests in MASTER_FOOTBALL_TESTS_CATALOG produce valid 1-100 integer 
   const tier4Tests = getMasterTestsForContext({ tier: 4, category: 'ALL' });
   assert.ok(tier4Tests.length > tier1Tests.length);
 });
+
+test('computeWizardSessionProgress & resolveWizardStepTransition manage Step-by-Step Test Wizard state', () => {
+  const storageKey = buildWizardResumeStorageKey('demo-tenant-1', 'athlete-99');
+  assert.equal(storageKey, 'chuvator_football_wizard_resume_demo-tenant-1_athlete-99');
+
+  const sampleTests = getMasterTestsForContext({ tier: 2, category: 'Fisik' });
+  assert.ok(sampleTests.length >= 5);
+
+  const progress1 = computeWizardSessionProgress({
+    wizardTests: sampleTests,
+    inputsByCode: {
+      PHY01: { raw_value_1: '1.90', raw_value_2: '', errors_count: '0' }
+    },
+    completedTestCodes: ['PHY01'],
+    skippedTestCodes: ['PHY03'],
+    currentStepIndex: 0,
+    tier: 2
+  });
+
+  assert.equal(progress1.currentStepNumber, 1);
+  assert.equal(progress1.currentTest?.test_code, 'PHY01');
+  assert.ok(progress1.currentLiveScore !== null && progress1.currentLiveScore >= 80);
+  assert.equal(progress1.completedCount, 1);
+  assert.equal(progress1.skippedCount, 1);
+
+  const stepAfterSave = resolveWizardStepTransition({
+    currentStepIndex: 0,
+    totalSteps: sampleTests.length,
+    testCode: 'PHY01',
+    action: 'save_next',
+    completedTestCodes: [],
+    skippedTestCodes: ['PHY01']
+  });
+  assert.equal(stepAfterSave.nextStepIndex, 1);
+  assert.equal(stepAfterSave.isCompletedAllSteps, false);
+  assert.deepEqual(stepAfterSave.completedTestCodes, ['PHY01']);
+  assert.deepEqual(stepAfterSave.skippedTestCodes, []);
+
+  const stepAfterSkip = resolveWizardStepTransition({
+    currentStepIndex: 1,
+    totalSteps: sampleTests.length,
+    testCode: sampleTests[1].test_code,
+    action: 'skip',
+    completedTestCodes: stepAfterSave.completedTestCodes,
+    skippedTestCodes: stepAfterSave.skippedTestCodes
+  });
+  assert.equal(stepAfterSkip.nextStepIndex, 2);
+  assert.ok(stepAfterSkip.skippedTestCodes.includes(sampleTests[1].test_code));
+});
+

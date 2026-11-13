@@ -5,7 +5,8 @@ import {
   calculateAssessmentScore,
   aggregateIndicatorScores,
   resolveMasterFootballTest,
-  getMasterTestsForContext
+  getMasterTestsForContext,
+  buildWizardResumeStorageKey
 } from '../utils/footballAssessmentEngine';
 
 const DEMO_INDICATOR_STORAGE_PREFIX = 'chuvator_demo_combine_indicators_';
@@ -360,11 +361,67 @@ export async function saveMasterAssessmentSessionAndSync({
   };
 }
 
+/**
+ * Load saved Step-by-Step Test Wizard Resume State for an athlete.
+ */
+export function loadWizardResumeState(tenantId, athleteId) {
+  if (!athleteId) return null;
+  const key = buildWizardResumeStorageKey(tenantId || 'demo-tenant-1', athleteId);
+  const state = readLocalJson(key, null);
+  if (!state || typeof state !== 'object') return null;
+  return state;
+}
+
+/**
+ * Save Step-by-Step Test Wizard Resume State for an athlete so coaches can resume later.
+ */
+export function saveWizardResumeState(tenantId, athleteId, resumePayload = {}) {
+  if (!athleteId) return null;
+  const key = buildWizardResumeStorageKey(tenantId || 'demo-tenant-1', athleteId);
+  const nextState = {
+    tenantId: tenantId || 'demo-tenant-1',
+    athleteId,
+    currentStepIndex: Math.max(0, Number(resumePayload.currentStepIndex) || 0),
+    wizardCategory: resumePayload.wizardCategory || 'ALL',
+    testingDate: resumePayload.testingDate || new Date().toISOString().split('T')[0],
+    tier: Math.max(1, Math.min(4, Number(resumePayload.tier) || 2)),
+    inputsByCode: resumePayload.inputsByCode || {},
+    completedTestCodes: Array.isArray(resumePayload.completedTestCodes)
+      ? resumePayload.completedTestCodes
+      : [],
+    skippedTestCodes: Array.isArray(resumePayload.skippedTestCodes)
+      ? resumePayload.skippedTestCodes
+      : [],
+    status: resumePayload.status || 'paused_resume_ready',
+    updatedAt: new Date().toISOString()
+  };
+  writeLocalJson(key, nextState);
+  return nextState;
+}
+
+/**
+ * Clear saved Wizard Resume State for an athlete.
+ */
+export function clearWizardResumeState(tenantId, athleteId) {
+  if (!athleteId) return;
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    const key = buildWizardResumeStorageKey(tenantId || 'demo-tenant-1', athleteId);
+    window.localStorage.removeItem(key);
+  } catch (err) {
+    console.warn('[scoutingCombineService] clearWizardResumeState error:', err);
+  }
+}
+
 const scoutingCombineService = {
   getMasterFootballCatalog,
   getAthleteIndicatorScores,
   getAthleteTestSessions,
-  saveMasterAssessmentSessionAndSync
+  saveMasterAssessmentSessionAndSync,
+  loadWizardResumeState,
+  saveWizardResumeState,
+  clearWizardResumeState
 };
 
 export default scoutingCombineService;
+

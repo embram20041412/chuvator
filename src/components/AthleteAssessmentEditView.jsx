@@ -73,8 +73,12 @@ export default function AthleteAssessmentEditView({
   onCancel,
   isArchived = false,
   tierLabel = '',
-  isMobile = false
+  isMobile = false,
+  lockedToMasterLibrary = false,
+  measuredIndicatorMap = {},
+  onOpenMasterLibrary = null
 }) {
+  const isLockedToMaster = Boolean(lockedToMasterLibrary || sportType === 'football');
   // Draft state for indicator scores
   const [draftScores, setDraftScores] = useState(() => ({ ...initialScores }));
   // Draft state for position & tactical role configuration
@@ -426,53 +430,55 @@ export default function AthleteAssessmentEditView({
           </div>
         )}
 
-        {/* 3. COMPACT GLOBAL PRESET BAR */}
-        <div className="chua-m-eval-card space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-[12px] font-bold text-[#17233D] flex items-center gap-1.5">
-              <Sliders className="w-3.5 h-3.5 text-[#2455E8]" />
-              <span>Preset Cepat (Semua Kategori)</span>
-            </span>
-            <span className="text-[11px] font-medium text-[#68758B]">
-              {evaluatedCount}/{totalIndicators} terisi
-            </span>
-          </div>
+        {/* 3. COMPACT GLOBAL PRESET BAR (HIDDEN WHEN LOCKED TO MASTER LIBRARY) */}
+        {!isLockedToMaster && (
+          <div className="chua-m-eval-card space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[12px] font-bold text-[#17233D] flex items-center gap-1.5">
+                <Sliders className="w-3.5 h-3.5 text-[#2455E8]" />
+                <span>Preset Cepat (Semua Kategori)</span>
+              </span>
+              <span className="text-[11px] font-medium text-[#68758B]">
+                {evaluatedCount}/{totalIndicators} terisi
+              </span>
+            </div>
 
-          <div className="grid grid-cols-4 gap-1.5">
-            <button
-              type="button"
-              disabled={isArchived}
-              onClick={() => handleDraftGlobalPreset(0)}
-              className="chua-m-eval-preset-btn bg-rose-50 text-rose-700 border border-rose-200 disabled:opacity-50"
-            >
-              Reset
-            </button>
-            <button
-              type="button"
-              disabled={isArchived}
-              onClick={() => handleDraftGlobalPreset(50)}
-              className="chua-m-eval-preset-btn bg-[#F5F7FC] text-[#17233D] border border-[#E7EBF2] disabled:opacity-50"
-            >
-              Standard
-            </button>
-            <button
-              type="button"
-              disabled={isArchived}
-              onClick={() => handleDraftGlobalPreset(75)}
-              className="chua-m-eval-preset-btn bg-blue-50 text-[#2455E8] border border-blue-200 disabled:opacity-50"
-            >
-              Good
-            </button>
-            <button
-              type="button"
-              disabled={isArchived}
-              onClick={() => handleDraftGlobalPreset(90)}
-              className="chua-m-eval-preset-btn bg-emerald-50 text-[#16A779] border border-emerald-200 disabled:opacity-50"
-            >
-              Elite
-            </button>
+            <div className="grid grid-cols-4 gap-1.5">
+              <button
+                type="button"
+                disabled={isArchived}
+                onClick={() => handleDraftGlobalPreset(0)}
+                className="chua-m-eval-preset-btn bg-rose-50 text-rose-700 border border-rose-200 disabled:opacity-50"
+              >
+                Reset
+              </button>
+              <button
+                type="button"
+                disabled={isArchived}
+                onClick={() => handleDraftGlobalPreset(50)}
+                className="chua-m-eval-preset-btn bg-[#F5F7FC] text-[#17233D] border border-[#E7EBF2] disabled:opacity-50"
+              >
+                Standard
+              </button>
+              <button
+                type="button"
+                disabled={isArchived}
+                onClick={() => handleDraftGlobalPreset(75)}
+                className="chua-m-eval-preset-btn bg-blue-50 text-[#2455E8] border border-blue-200 disabled:opacity-50"
+              >
+                Good
+              </button>
+              <button
+                type="button"
+                disabled={isArchived}
+                onClick={() => handleDraftGlobalPreset(90)}
+                className="chua-m-eval-preset-btn bg-emerald-50 text-[#16A779] border border-emerald-200 disabled:opacity-50"
+              >
+                Elite
+              </button>
+            </div>
           </div>
-        </div>
+        )}
 
         {/* 4. 7-CATEGORY PROGRESSIVE DISCLOSURE ACCORDION */}
         <AssessmentIndicatorsAccordion
@@ -480,11 +486,14 @@ export default function AthleteAssessmentEditView({
           scores={draftScores}
           onScoreChange={handleDraftScoreChange}
           onAdjustScore={handleDraftAdjustScore}
-          onSetCategoryPreset={handleDraftCategoryPreset}
+          onSetCategoryPreset={isLockedToMaster ? undefined : handleDraftCategoryPreset}
           activeCategoryKey={activeCategoryKey}
           isArchived={isArchived}
           tierLabel={tierLabel}
           isMobile={true}
+          lockedToMasterLibrary={isLockedToMaster}
+          measuredIndicatorMap={measuredIndicatorMap}
+          onOpenMasterLibrary={onOpenMasterLibrary}
         />
 
         {/* 5. STICKY BOTTOM ACTION BAR: BATAL & SIMPAN PERUBAHAN */}
@@ -763,50 +772,52 @@ export default function AthleteAssessmentEditView({
         </div>
       )}
 
-      {/* 3. PRESET PENILAIAN CEPAT */}
-      <div className="bg-white rounded-2xl sm:rounded-3xl p-3.5 sm:px-5 sm:py-3.5 border border-slate-200/90 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-        <span className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
-          <Sliders className="w-4 h-4 text-emerald-600 shrink-0" />
-          <span>Preset Penilaian Cepat</span>
-        </span>
+      {/* 3. PRESET PENILAIAN CEPAT (HIDDEN WHEN LOCKED TO MASTER LIBRARY) */}
+      {!isLockedToMaster && (
+        <div className="bg-white rounded-2xl sm:rounded-3xl p-3.5 sm:px-5 sm:py-3.5 border border-slate-200/90 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <span className="text-xs font-extrabold text-slate-800 flex items-center gap-1.5">
+            <Sliders className="w-4 h-4 text-emerald-600 shrink-0" />
+            <span>Preset Penilaian Cepat</span>
+          </span>
 
-        <div className="grid grid-cols-4 gap-1.5 w-full sm:w-auto">
-          <button
-            type="button"
-            disabled={isArchived}
-            onClick={() => handleDraftGlobalPreset(0)}
-            className="min-h-[44px] px-3 py-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-200 transition-all cursor-pointer disabled:opacity-50"
-            title="Reset semua indikator ke 0"
-          >
-            <RotateCcw className="w-3.5 h-3.5 shrink-0" />
-            <span>Reset</span>
-          </button>
-          <button
-            type="button"
-            disabled={isArchived}
-            onClick={() => handleDraftGlobalPreset(50)}
-            className="min-h-[44px] px-3 py-2 text-xs font-bold rounded-xl flex items-center justify-center bg-slate-100 hover:bg-slate-700 hover:text-white text-slate-800 border border-slate-200 transition-all cursor-pointer disabled:opacity-50"
-          >
-            Standard
-          </button>
-          <button
-            type="button"
-            disabled={isArchived}
-            onClick={() => handleDraftGlobalPreset(75)}
-            className="min-h-[44px] px-3 py-2 text-xs font-bold rounded-xl flex items-center justify-center bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-800 border border-blue-200 transition-all cursor-pointer disabled:opacity-50"
-          >
-            Good
-          </button>
-          <button
-            type="button"
-            disabled={isArchived}
-            onClick={() => handleDraftGlobalPreset(90)}
-            className="min-h-[44px] px-3 py-2 text-xs font-bold rounded-xl flex items-center justify-center bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-800 border border-emerald-200 transition-all cursor-pointer disabled:opacity-50"
-          >
-            Elite
-          </button>
+          <div className="grid grid-cols-4 gap-1.5 w-full sm:w-auto">
+            <button
+              type="button"
+              disabled={isArchived}
+              onClick={() => handleDraftGlobalPreset(0)}
+              className="min-h-[44px] px-3 py-2 text-xs font-bold rounded-xl flex items-center justify-center gap-1 bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-200 transition-all cursor-pointer disabled:opacity-50"
+              title="Reset semua indikator ke 0"
+            >
+              <RotateCcw className="w-3.5 h-3.5 shrink-0" />
+              <span>Reset</span>
+            </button>
+            <button
+              type="button"
+              disabled={isArchived}
+              onClick={() => handleDraftGlobalPreset(50)}
+              className="min-h-[44px] px-3 py-2 text-xs font-bold rounded-xl flex items-center justify-center bg-slate-100 hover:bg-slate-700 hover:text-white text-slate-800 border border-slate-200 transition-all cursor-pointer disabled:opacity-50"
+            >
+              Standard
+            </button>
+            <button
+              type="button"
+              disabled={isArchived}
+              onClick={() => handleDraftGlobalPreset(75)}
+              className="min-h-[44px] px-3 py-2 text-xs font-bold rounded-xl flex items-center justify-center bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-800 border border-blue-200 transition-all cursor-pointer disabled:opacity-50"
+            >
+              Good
+            </button>
+            <button
+              type="button"
+              disabled={isArchived}
+              onClick={() => handleDraftGlobalPreset(90)}
+              className="min-h-[44px] px-3 py-2 text-xs font-bold rounded-xl flex items-center justify-center bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-800 border border-emerald-200 transition-all cursor-pointer disabled:opacity-50"
+            >
+              Elite
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 4. LEMBAR PENILAIAN INDIKATOR (7 KATEGORI ACCORDION) */}
       <AssessmentIndicatorsAccordion
@@ -814,10 +825,13 @@ export default function AthleteAssessmentEditView({
         scores={draftScores}
         onScoreChange={handleDraftScoreChange}
         onAdjustScore={handleDraftAdjustScore}
-        onSetCategoryPreset={handleDraftCategoryPreset}
+        onSetCategoryPreset={isLockedToMaster ? undefined : handleDraftCategoryPreset}
         activeCategoryKey={activeCategoryKey}
         isArchived={isArchived}
         tierLabel={tierLabel}
+        lockedToMasterLibrary={isLockedToMaster}
+        measuredIndicatorMap={measuredIndicatorMap}
+        onOpenMasterLibrary={onOpenMasterLibrary}
       />
 
       {/* 5. RINGKASAN ESTIMASI SKOR */}

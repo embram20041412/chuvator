@@ -1562,3 +1562,174 @@ export function getMasterTestsForContext({
     return true;
   });
 }
+
+export const WIZARD_RESUME_STORAGE_PREFIX = 'chuvator_football_wizard_resume_';
+
+/**
+ * Buat kunci penyimpanan progres Wizard (Resume State) unik per tenant & atlet.
+ */
+export function buildWizardResumeStorageKey(tenantId = 'demo-tenant-1', athleteId = 'default') {
+  const safeTenant = String(tenantId || 'demo-tenant-1').trim();
+  const safeAthlete = String(athleteId || 'default').trim();
+  return `${WIZARD_RESUME_STORAGE_PREFIX}${safeTenant}_${safeAthlete}`;
+}
+
+/**
+ * Hitung ringkasan progres sesi Step-by-Step Test Wizard secara murni (pure function).
+ * @param {any} [options]
+ */
+export function computeWizardSessionProgress(options = {}) {
+  const {
+    wizardTests = [],
+    inputsByCode = {},
+    completedTestCodes = [],
+    skippedTestCodes = [],
+    currentStepIndex = 0,
+    tier = 2
+  } = options;
+  const totalSteps = Array.isArray(wizardTests) ? wizardTests.length : 0;
+  if (totalSteps === 0) {
+    return {
+      totalSteps: 0,
+      safeStepIndex: 0,
+      currentStepNumber: 0,
+      currentTest: null,
+      currentLiveScore: null,
+      completedCount: 0,
+      skippedCount: 0,
+      remainingCount: 0,
+      progressPercent: 0
+    };
+  }
+
+  const safeStepIndex = Math.max(0, Math.min(totalSteps - 1, Number(currentStepIndex) || 0));
+  const currentTest = wizardTests[safeStepIndex] || null;
+
+  const completedSet = new Set(Array.isArray(completedTestCodes) ? completedTestCodes : []);
+  const skippedSet = new Set(Array.isArray(skippedTestCodes) ? skippedTestCodes : []);
+
+  let completedCount = 0;
+  let skippedCount = 0;
+
+  wizardTests.forEach((test) => {
+    const raw = inputsByCode?.[test.test_code];
+    const hasScore =
+      raw &&
+      raw.raw_value_1 !== '' &&
+      raw.raw_value_1 !== null &&
+      raw.raw_value_1 !== undefined &&
+      calculateAssessmentScore({
+        testCode: test.test_code,
+        tier,
+        rawValues: raw,
+        testMeta: test
+      }) !== null;
+
+    if (hasScore || completedSet.has(test.test_code)) {
+      completedCount += 1;
+    } else if (skippedSet.has(test.test_code)) {
+      skippedCount += 1;
+    }
+  });
+
+  let currentLiveScore = null;
+  if (currentTest) {
+    const raw = inputsByCode?.[currentTest.test_code];
+    if (raw && raw.raw_value_1 !== '' && raw.raw_value_1 !== null && raw.raw_value_1 !== undefined) {
+      currentLiveScore = calculateAssessmentScore({
+        testCode: currentTest.test_code,
+        tier,
+        rawValues: {
+          raw_value_1: raw.raw_value_1,
+          raw_value_2:
+            raw.raw_value_2 !== '' && raw.raw_value_2 !== undefined
+              ? raw.raw_value_2
+              : currentTest.measurement_type === 'ACCURACY'
+                ? currentTest.defaultTotal || 10
+                : '',
+          errors_count: raw.errors_count || 0
+        },
+        testMeta: currentTest
+      });
+    }
+  }
+
+  const remainingCount = Math.max(0, totalSteps - completedCount);
+  const progressPercent = Math.round((completedCount / totalSteps) * 100);
+
+  return {
+    totalSteps,
+    safeStepIndex,
+    currentStepNumber: safeStepIndex + 1,
+    currentTest,
+    currentLiveScore,
+    completedCount,
+    skippedCount,
+    remainingCount,
+    progressPercent
+  };
+}
+
+/**
+ * Resolusi transisi langkah Wizard ('save_next' | 'skip' | 'prev' | 'goto').
+ * @param {any} [options]
+ */
+export function resolveWizardStepTransition(options = {}) {
+  const {
+    currentStepIndex = 0,
+    totalSteps = 1,
+    testCode = '',
+    action = 'save_next',
+    targetStepIndex = 0,
+    completedTestCodes = [],
+    skippedTestCodes = []
+  } = options;
+  const safeTotal = Math.max(1, Number(totalSteps) || 1);
+  const safeCurrent = Math.max(0, Math.min(safeTotal - 1, Number(currentStepIndex) || 0));
+  const completedSet = new Set(Array.isArray(completedTestCodes) ? completedTestCodes : []);
+  const skippedSet = new Set(Array.isArray(skippedTestCodes) ? skippedTestCodes : []);
+
+  if (action === 'save_next') {
+    if (testCode) {
+      completedSet.add(testCode);
+      skippedSet.delete(testCode);
+    }
+    const isLastStep = safeCurrent >= safeTotal - 1;
+    return {
+      nextStepIndex: isLastStep ? safeCurrent : safeCurrent + 1,
+      isCompletedAllSteps: isLastStep,
+      completedTestCodes: Array.from(completedSet),
+      skippedTestCodes: Array.from(skippedSet)
+    };
+  }
+
+  if (action === 'skip') {
+    if (testCode && !completedSet.has(testCode)) {
+      skippedSet.add(testCode);
+    }
+    const isLastStep = safeCurrent >= safeTotal - 1;
+    return {
+      nextStepIndex: isLastStep ? safeCurrent : safeCurrent + 1,
+      isCompletedAllSteps: isLastStep,
+      completedTestCodes: Array.from(completedSet),
+      skippedTestCodes: Array.from(skippedSet)
+    };
+  }
+
+  if (action === 'prev') {
+    return {
+      nextStepIndex: Math.max(0, safeCurrent - 1),
+      isCompletedAllSteps: false,
+      completedTestCodes: Array.from(completedSet),
+      skippedTestCodes: Array.from(skippedSet)
+    };
+  }
+
+  const clampedTarget = Math.max(0, Math.min(safeTotal - 1, Number(targetStepIndex) || 0));
+  return {
+    nextStepIndex: clampedTarget,
+    isCompletedAllSteps: false,
+    completedTestCodes: Array.from(completedSet),
+    skippedTestCodes: Array.from(skippedSet)
+  };
+}

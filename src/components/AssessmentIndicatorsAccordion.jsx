@@ -9,7 +9,9 @@ import {
   Minus, 
   Plus, 
   Star,
-  Target
+  Target,
+  Lock,
+  Sparkles
 } from 'lucide-react';
 import { getCategoryTheme } from './ScoutingPolarAreaPanel';
 
@@ -21,36 +23,58 @@ export function AccordionIndicatorCard({
   value = 0,
   isSpecial = false,
   isMeasuredFromTest = false,
+  lockedToMasterLibrary = false,
   onScoreChange,
   onAdjust,
   isArchived = false,
   accentColor = '#10B981'
 }) {
   const numVal = Math.max(0, Math.min(100, Number(value) || 0));
+  const isReadOnly = Boolean(isArchived || lockedToMasterLibrary);
 
   return (
-    <div className={`p-3 bg-white border ${isSpecial ? 'border-indigo-200/90' : isMeasuredFromTest ? 'border-emerald-300/90' : 'border-slate-200/90'} rounded-2xl space-y-2 shadow-2xs`}>
+    <div
+      data-testid={`indicator-card-${title}`}
+      className={`p-3 bg-white border ${
+        isSpecial
+          ? 'border-indigo-200/90'
+          : isMeasuredFromTest
+            ? 'border-emerald-300/90'
+            : 'border-slate-200/90'
+      } rounded-2xl space-y-2 shadow-2xs`}
+    >
       <div className="flex items-center justify-between text-xs font-bold gap-2">
-        <div className="min-w-0 flex flex-col gap-0.5">
+        <div className="min-w-0 flex flex-col gap-1">
           <span className="text-slate-800 truncate" title={title}>
             {isSpecial && <Star className="w-3 h-3 text-indigo-500 fill-indigo-200 inline mr-1" />}
             {title}
           </span>
-          {isMeasuredFromTest && (
-            <span className="inline-flex items-center gap-1 w-fit px-1.5 py-0.2 rounded text-[9px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              Terukur via Tes
-            </span>
-          )}
+          <div className="flex flex-wrap items-center gap-1">
+            {lockedToMasterLibrary && (
+              <span
+                data-testid="badge-linked-master-library"
+                className="inline-flex items-center gap-1 w-fit px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-slate-100 text-slate-700 border border-slate-200"
+              >
+                <Lock className="w-2.5 h-2.5 text-emerald-700 shrink-0" />
+                <span>Terhubung ke Master Test Library</span>
+              </span>
+            )}
+            {isMeasuredFromTest && (
+              <span className="inline-flex items-center gap-1 w-fit px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                Terukur via Tes
+              </span>
+            )}
+          </div>
         </div>
 
-        {/* Stepper Buttons (-5 / +5) with 44px touch target */}
+        {/* Stepper Buttons (-5 / +5) with 44px touch target (Read-Only when lockedToMasterLibrary) */}
         <div className="flex items-center gap-1 shrink-0">
           <button
             type="button"
-            disabled={isArchived}
-            onClick={() => onAdjust(-5)}
+            disabled={isReadOnly}
+            onClick={() => !isReadOnly && onAdjust && onAdjust(-5)}
             className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-black flex items-center justify-center text-xs transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Kurangi 5"
+            title={lockedToMasterLibrary ? 'Terkunci: Diperbarui otomatis via Master Test Library' : 'Kurangi 5'}
             aria-label={`Kurangi 5 ${title}`}
           >
             <Minus className="w-3.5 h-3.5" />
@@ -65,10 +89,10 @@ export function AccordionIndicatorCard({
 
           <button
             type="button"
-            disabled={isArchived}
-            onClick={() => onAdjust(5)}
+            disabled={isReadOnly}
+            onClick={() => !isReadOnly && onAdjust && onAdjust(5)}
             className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-black flex items-center justify-center text-xs transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Tambah 5"
+            title={lockedToMasterLibrary ? 'Terkunci: Diperbarui otomatis via Master Test Library' : 'Tambah 5'}
             aria-label={`Tambah 5 ${title}`}
           >
             <Plus className="w-3.5 h-3.5" />
@@ -76,15 +100,16 @@ export function AccordionIndicatorCard({
         </div>
       </div>
 
-      {/* Slider Input */}
+      {/* Slider Input (Read-Only / Disabled when lockedToMasterLibrary) */}
       <input
         type="range"
         min="0"
         max="100"
         step="1"
-        disabled={isArchived}
+        disabled={isReadOnly}
+        readOnly={isReadOnly}
         value={numVal}
-        onChange={(e) => onScoreChange(e.target.value)}
+        onChange={(e) => !isReadOnly && onScoreChange && onScoreChange(e.target.value)}
         className="w-full cursor-pointer h-2 bg-slate-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
         style={{ accentColor }}
         aria-label={`Skor ${title}`}
@@ -105,7 +130,12 @@ export function AccordionIndicatorCard({
  *   onSetCategoryPreset?: (key: string, val: number) => void,
  *   activeCategoryKey?: string | null,
  *   isArchived?: boolean,
- *   tierLabel?: string
+ *   tierLabel?: string,
+ *   isMobile?: boolean,
+ *   defaultOpenFirst?: boolean,
+ *   measuredIndicatorMap?: Record<string, any>,
+ *   lockedToMasterLibrary?: boolean,
+ *   onOpenMasterLibrary?: (() => void) | null
  * }} props
  */
 export default function AssessmentIndicatorsAccordion({
@@ -119,7 +149,9 @@ export default function AssessmentIndicatorsAccordion({
   tierLabel = '',
   isMobile = false,
   defaultOpenFirst = true,
-  measuredIndicatorMap = {}
+  measuredIndicatorMap = {},
+  lockedToMasterLibrary = false,
+  onOpenMasterLibrary = null
 }) {
   // Open only the focused category or the first category by default (avoid opening all at once)
   const [openKeys, setOpenKeys] = useState(() => {
@@ -181,14 +213,27 @@ export default function AssessmentIndicatorsAccordion({
         <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-[#E7EBF2]">
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-8 h-8 rounded-[10px] bg-[#101D38] text-white flex items-center justify-center shrink-0">
-              <SlidersHorizontal className="w-4 h-4 text-[#16A779]" />
+              {lockedToMasterLibrary ? (
+                <Lock className="w-4 h-4 text-[#16A779]" />
+              ) : (
+                <SlidersHorizontal className="w-4 h-4 text-[#16A779]" />
+              )}
             </div>
             <div className="min-w-0">
-              <h3 className="font-bold text-[13px] text-[#17233D] leading-tight truncate my-0">
-                7 Indikator Penilaian
-              </h3>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h3 className="font-bold text-[13px] text-[#17233D] leading-tight truncate my-0">
+                  7 Indikator Penilaian
+                </h3>
+                {lockedToMasterLibrary && (
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                    Read-Only • Master Test Library
+                  </span>
+                )}
+              </div>
               <p className="text-[11px] text-[#68758B] font-medium leading-tight truncate my-0 mt-0.5">
-                {tierLabel || 'Ketuk kategori untuk membuka rincian indikator'}
+                {lockedToMasterLibrary
+                  ? 'Skor terkunci & diperbarui otomatis dari Master Test Library'
+                  : tierLabel || 'Ketuk kategori untuk membuka rincian indikator'}
               </p>
             </div>
           </div>
@@ -290,8 +335,8 @@ export default function AssessmentIndicatorsAccordion({
                       transition={{ duration: 0.16 }}
                       className="p-3 bg-[#FFFFFF] space-y-2.5"
                     >
-                      {/* Category Quick Presets inside open body */}
-                      {!isArchived && onSetCategoryPreset && (
+                      {/* Category Quick Presets inside open body (hidden when lockedToMasterLibrary) */}
+                      {!isArchived && !lockedToMasterLibrary && onSetCategoryPreset && (
                         <div className="bg-[#F5F7FC] p-2 rounded-[12px] border border-[#E7EBF2] space-y-1.5">
                           <span className="text-[10px] font-bold uppercase tracking-wider text-[#68758B] block">
                             Preset Cepat Kategori Ini:
@@ -342,8 +387,9 @@ export default function AssessmentIndicatorsAccordion({
                               value={scores[indName] !== undefined ? scores[indName] : 0}
                               isSpecial={cat.isSpecial}
                               isMeasuredFromTest={measuredIndicatorMap?.[indName]?.source === 'battery_test'}
-                              onScoreChange={(val) => onScoreChange(indName, val)}
-                              onAdjust={(delta) => onAdjustScore(indName, delta)}
+                              lockedToMasterLibrary={lockedToMasterLibrary}
+                              onScoreChange={(val) => onScoreChange && onScoreChange(indName, val)}
+                              onAdjust={(delta) => onAdjustScore && onAdjustScore(indName, delta)}
                               isArchived={isArchived}
                               accentColor={theme.color}
                             />
@@ -364,31 +410,59 @@ export default function AssessmentIndicatorsAccordion({
   return (
     <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 p-3.5 sm:p-5 space-y-3 shadow-xs">
       {/* HEADER & TOGGLE ALL BAR */}
-      <div className="flex items-center justify-between gap-2 border-b border-slate-100 pb-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold shrink-0">
-            <SlidersHorizontal className="w-4 h-4 text-emerald-400" />
+            {lockedToMasterLibrary ? (
+              <Lock className="w-4 h-4 text-emerald-400" />
+            ) : (
+              <SlidersHorizontal className="w-4 h-4 text-emerald-400" />
+            )}
           </div>
           <div className="min-w-0">
-            <h3 className="font-extrabold text-xs sm:text-sm text-slate-900 tracking-tight truncate">
-              Lembar Penilaian Indikator (7 Kategori)
-            </h3>
-            {tierLabel && (
-              <p className="text-[10px] text-slate-500 font-medium truncate">
-                {tierLabel}
-              </p>
-            )}
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-extrabold text-xs sm:text-sm text-slate-900 tracking-tight truncate">
+                Lembar Penilaian Indikator (7 Kategori)
+              </h3>
+              {lockedToMasterLibrary && (
+                <span
+                  data-testid="accordion-locked-master-badge"
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200"
+                >
+                  <Lock className="w-3 h-3 text-emerald-700" />
+                  <span>Read-Only • Terhubung ke Master Test Library</span>
+                </span>
+              )}
+            </div>
+            <p className="text-[10px] text-slate-500 font-medium truncate">
+              {lockedToMasterLibrary
+                ? 'Input manual dikunci. Seluruh skor indikator mutlak dikonversi otomatis dari Master Test Library.'
+                : tierLabel}
+            </p>
           </div>
         </div>
 
-        <button
-          type="button"
-          onClick={handleToggleAll}
-          className="min-h-[44px] px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border shrink-0 bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200 flex items-center gap-1.5"
-        >
-          <LayoutGrid className="w-3.5 h-3.5" />
-          <span className="hidden sm:inline">{isAllOpen ? 'Tutup Semua' : 'Buka Semua'}</span>
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          {lockedToMasterLibrary && typeof onOpenMasterLibrary === 'function' && (
+            <button
+              type="button"
+              onClick={onOpenMasterLibrary}
+              data-testid="accordion-open-master-library-btn"
+              className="min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-extrabold bg-[#354944] hover:bg-[#2B3D38] text-white border border-[#C89D32]/50 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-[#C89D32]" />
+              <span>Input via Master Test Library</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={handleToggleAll}
+            className="min-h-[44px] px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border shrink-0 bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200 flex items-center gap-1.5"
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">{isAllOpen ? 'Tutup Semua' : 'Buka Semua'}</span>
+          </button>
+        </div>
       </div>
 
       {/* ACCORDION ITEMS */}
@@ -459,7 +533,7 @@ export default function AssessmentIndicatorsAccordion({
                     <span className="text-[10px] font-bold text-slate-400">/100</span>
                   </div>
 
-                  {!isArchived && onSetCategoryPreset && (
+                  {!isArchived && !lockedToMasterLibrary && onSetCategoryPreset && (
                     <div className="flex items-center gap-1">
                       <button
                         type="button"
@@ -531,8 +605,9 @@ export default function AssessmentIndicatorsAccordion({
                             value={scores[indName] !== undefined ? scores[indName] : 0}
                             isSpecial={cat.isSpecial}
                             isMeasuredFromTest={measuredIndicatorMap?.[indName]?.source === 'battery_test'}
-                            onScoreChange={(val) => onScoreChange(indName, val)}
-                            onAdjust={(delta) => onAdjustScore(indName, delta)}
+                            lockedToMasterLibrary={lockedToMasterLibrary}
+                            onScoreChange={(val) => onScoreChange && onScoreChange(indName, val)}
+                            onAdjust={(delta) => onAdjustScore && onAdjustScore(indName, delta)}
                             isArchived={isArchived}
                             accentColor={theme.color}
                           />

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Timer,
@@ -16,7 +17,17 @@ import {
   Activity,
   RotateCcw,
   Award,
-  ShieldCheck
+  ShieldCheck,
+  Rocket,
+  Play,
+  ArrowRight,
+  ArrowLeft,
+  SkipForward,
+  Save,
+  X,
+  Lock,
+  Minus,
+  Plus
 } from 'lucide-react';
 import {
   FOOTBALL_ASSESSMENT_TIERS,
@@ -26,11 +37,16 @@ import {
   FOOTBALL_RUBRIC_ANCHORS,
   calculateAssessmentScore,
   aggregateIndicatorScores,
-  getAssessmentClassification
+  getAssessmentClassification,
+  computeWizardSessionProgress,
+  resolveWizardStepTransition
 } from '../utils/footballAssessmentEngine';
 import {
   getMasterFootballCatalog,
-  saveMasterAssessmentSessionAndSync
+  saveMasterAssessmentSessionAndSync,
+  loadWizardResumeState,
+  saveWizardResumeState,
+  clearWizardResumeState
 } from '../services/scoutingCombineService';
 
 const CATEGORY_STYLES = {
@@ -108,6 +124,14 @@ export default function FootballAssessmentHub({
   const [isSaving, setIsSaving] = useState(false);
   const [feedback, setFeedback] = useState(null);
 
+  // State Step-by-Step Test Wizard (Focus Mode) & Persistence (Resume State)
+  const [isWizardOpen, setIsWizardOpen] = useState(false);
+  const [wizardStepIndex, setWizardStepIndex] = useState(0);
+  const [completedTestCodes, setCompletedTestCodes] = useState([]);
+  const [skippedTestCodes, setSkippedTestCodes] = useState([]);
+  const [savedResumeMeta, setSavedResumeMeta] = useState(null);
+  const [wizardFeedback, setWizardFeedback] = useState(null);
+
   const activeAthleteId = selectedAthleteId || internalAthleteId;
   const activeTier = Number(selectedTier || internalTier) || 2;
 
@@ -151,9 +175,60 @@ export default function FootballAssessmentHub({
     };
   }, [tenantId, activeTier, selectedPosition]);
 
+  // Pulihkan Resume State (Progres Tes Atlet) dari LocalStorage saat atlet berganti
+  useEffect(() => {
+    if (!activeAthleteId) {
+      setInputsByCode({});
+      setCompletedTestCodes([]);
+      setSkippedTestCodes([]);
+      setWizardStepIndex(0);
+      setSavedResumeMeta(null);
+      return;
+    }
+
+    const resumeData = loadWizardResumeState(tenantId, activeAthleteId);
+    if (resumeData && typeof resumeData === 'object') {
+      setInputsByCode(resumeData.inputsByCode || {});
+      setCompletedTestCodes(Array.isArray(resumeData.completedTestCodes) ? resumeData.completedTestCodes : []);
+      setSkippedTestCodes(Array.isArray(resumeData.skippedTestCodes) ? resumeData.skippedTestCodes : []);
+      setWizardStepIndex(Math.max(0, Number(resumeData.currentStepIndex) || 0));
+      if (resumeData.wizardCategory) {
+        setActiveCategory(resumeData.wizardCategory);
+      }
+      if (resumeData.testingDate) {
+        setTestingDate(resumeData.testingDate);
+      }
+      setSavedResumeMeta(resumeData);
+    } else {
+      setInputsByCode({});
+      setCompletedTestCodes([]);
+      setSkippedTestCodes([]);
+      setWizardStepIndex(0);
+      setSavedResumeMeta(null);
+    }
+  }, [tenantId, activeAthleteId]);
+
+  const persistResumeSnapshot = (overrides = {}) => {
+    if (!activeAthleteId) return null;
+    const payload = {
+      currentStepIndex: overrides.currentStepIndex ?? wizardStepIndex,
+      wizardCategory: overrides.wizardCategory ?? activeCategory,
+      testingDate: overrides.testingDate ?? testingDate,
+      tier: activeTier,
+      inputsByCode: overrides.inputsByCode ?? inputsByCode,
+      completedTestCodes: overrides.completedTestCodes ?? completedTestCodes,
+      skippedTestCodes: overrides.skippedTestCodes ?? skippedTestCodes,
+      status: overrides.status || 'in_progress'
+    };
+    const saved = saveWizardResumeState(tenantId, activeAthleteId, payload);
+    setSavedResumeMeta(saved);
+    return saved;
+  };
+
   const handleAthleteChange = (newId) => {
     setInternalAthleteId(newId);
     setFeedback(null);
+    setWizardFeedback(null);
     if (typeof onSelectAthlete === 'function') {
       onSelectAthlete(newId);
     }
@@ -169,25 +244,48 @@ export default function FootballAssessmentHub({
 
   const updateTestInput = (testObj, field, value) => {
     setFeedback(null);
+    setWizardFeedback(null);
     setInputsByCode((prev) => {
       const current = prev[testObj.test_code] || {
         raw_value_1: '',
         raw_value_2: testObj.measurement_type === 'ACCURACY' ? String(testObj.defaultTotal || 10) : '',
         errors_count: '0'
       };
-      return {
+      const nextInputs = {
         ...prev,
         [testObj.test_code]: {
           ...current,
           [field]: value
         }
       };
+      if (activeAthleteId) {
+        const saved = saveWizardResumeState(tenantId, activeAthleteId, {
+          currentStepIndex: wizardStepIndex,
+          wizardCategory: activeCategory,
+          testingDate,
+          tier: activeTier,
+          inputsByCode: nextInputs,
+          completedTestCodes,
+          skippedTestCodes,
+          status: 'in_progress'
+        });
+        setSavedResumeMeta(saved);
+      }
+      return nextInputs;
     });
   };
 
   const handleResetAll = () => {
     setInputsByCode({});
+    setCompletedTestCodes([]);
+    setSkippedTestCodes([]);
+    setWizardStepIndex(0);
+    setSavedResumeMeta(null);
     setFeedback(null);
+    setWizardFeedback(null);
+    if (activeAthleteId) {
+      clearWizardResumeState(tenantId, activeAthleteId);
+    }
   };
 
   // Hitung skor instan (1-100) untuk setiap tes tanpa PENDING_CALIBRATION
@@ -219,12 +317,30 @@ export default function FootballAssessmentHub({
     return result;
   }, [catalogTests, inputsByCode, activeTier]);
 
-  const readySessionEntries = useMemo(() => {
+  const buildSessionEntriesFromInputs = (customInputs = inputsByCode) => {
     return catalogTests
       .map((test) => {
-        const score = liveScoreMap[test.test_code];
+        const raw = customInputs[test.test_code];
+        if (!raw || raw.raw_value_1 === '' || raw.raw_value_1 === null || raw.raw_value_1 === undefined) {
+          return null;
+        }
+        const effectiveRaw = {
+          raw_value_1: raw.raw_value_1,
+          raw_value_2:
+            raw.raw_value_2 !== '' && raw.raw_value_2 !== undefined
+              ? raw.raw_value_2
+              : test.measurement_type === 'ACCURACY'
+                ? test.defaultTotal || 10
+                : '',
+          errors_count: raw.errors_count || 0
+        };
+        const score = calculateAssessmentScore({
+          testCode: test.test_code,
+          tier: activeTier,
+          rawValues: effectiveRaw,
+          testMeta: test
+        });
         if (score === null || score === undefined) return null;
-        const raw = inputsByCode[test.test_code] || {};
         return {
           test_code: test.test_code,
           test_name: test.test_name,
@@ -243,7 +359,11 @@ export default function FootballAssessmentHub({
         };
       })
       .filter(Boolean);
-  }, [catalogTests, liveScoreMap, inputsByCode]);
+  };
+
+  const readySessionEntries = useMemo(() => {
+    return buildSessionEntriesFromInputs(inputsByCode);
+  }, [catalogTests, inputsByCode, activeTier]);
 
   // Agregasi multi-tes per indikator secara real-time (cth: Dribbling dari TEC05 + TEC06)
   const liveAggregatedIndicators = useMemo(() => {
@@ -262,6 +382,177 @@ export default function FootballAssessmentHub({
     });
     return counts;
   }, [catalogTests]);
+
+  // Wizard Progress & Active Step Calculation
+  const wizardProgress = useMemo(() => {
+    return computeWizardSessionProgress({
+      wizardTests: filteredTests,
+      inputsByCode,
+      completedTestCodes,
+      skippedTestCodes,
+      currentStepIndex: wizardStepIndex,
+      tier: activeTier
+    });
+  }, [filteredTests, inputsByCode, completedTestCodes, skippedTestCodes, wizardStepIndex, activeTier]);
+
+  const handleOpenWizard = (resumeExisting = false) => {
+    setWizardFeedback(null);
+    if (resumeExisting && savedResumeMeta) {
+      const targetIdx = Math.max(
+        0,
+        Math.min(Math.max(0, filteredTests.length - 1), Number(savedResumeMeta.currentStepIndex) || 0)
+      );
+      setWizardStepIndex(targetIdx);
+    } else if (!resumeExisting && wizardStepIndex >= filteredTests.length) {
+      setWizardStepIndex(0);
+    }
+    setIsWizardOpen(true);
+  };
+
+  // Sinkronisasi langsung ke Supabase & Grafik Polar Area
+  const syncEntriesToReportAndDatabase = async (entriesToSync) => {
+    if (!activeAthleteId || !Array.isArray(entriesToSync) || entriesToSync.length === 0) {
+      return null;
+    }
+    const response = await saveMasterAssessmentSessionAndSync({
+      tenantId,
+      athleteId: activeAthleteId,
+      evaluatorId,
+      testingDate,
+      tier: activeTier,
+      sessionEntries: entriesToSync
+    });
+    if (typeof onSyncedToReport === 'function') {
+      onSyncedToReport(response.indicatorScoresMap, response.savedSessions);
+    }
+    return response;
+  };
+
+  // WIZARD ACTION 1: [ Simpan & Lanjut ➔ ]
+  const handleWizardSaveAndNext = async () => {
+    const currentTest = wizardProgress.currentTest;
+    if (!currentTest) return;
+
+    const currentScore = wizardProgress.currentLiveScore;
+    if (currentScore === null || currentScore === undefined) {
+      setWizardFeedback({
+        type: 'error',
+        message: `Masukkan nilai mentah untuk "${currentTest.test_name}" terlebih dahulu, atau tekan "Lewati Tes Ini".`
+      });
+      return;
+    }
+
+    setIsSaving(true);
+    setWizardFeedback(null);
+    try {
+      const entriesToSync = buildSessionEntriesFromInputs(inputsByCode);
+      const response = await syncEntriesToReportAndDatabase(entriesToSync);
+
+      const transition = resolveWizardStepTransition({
+        currentStepIndex: wizardProgress.safeStepIndex,
+        totalSteps: wizardProgress.totalSteps,
+        testCode: currentTest.test_code,
+        action: 'save_next',
+        completedTestCodes,
+        skippedTestCodes
+      });
+
+      setCompletedTestCodes(transition.completedTestCodes);
+      setSkippedTestCodes(transition.skippedTestCodes);
+      setWizardStepIndex(transition.nextStepIndex);
+
+      persistResumeSnapshot({
+        currentStepIndex: transition.nextStepIndex,
+        completedTestCodes: transition.completedTestCodes,
+        skippedTestCodes: transition.skippedTestCodes,
+        status: transition.isCompletedAllSteps ? 'completed' : 'in_progress'
+      });
+
+      const aggItem = response?.aggregatedIndicators?.[currentTest.indicator_key];
+      const syncedScoreText = aggItem ? `${aggItem.indicator_label}: ${aggItem.score}/100` : `${currentScore}/100`;
+
+      if (transition.isCompletedAllSteps) {
+        setFeedback({
+          type: 'success',
+          message: `Seluruh langkah Wizard selesai! ${entriesToSync.length} tes lapangan telah disinkronkan ke Grafik Polar Area.`
+        });
+        setIsWizardOpen(false);
+      } else {
+        setWizardFeedback({
+          type: 'success',
+          message: `Tersimpan & disinkronkan ke Polar Area (${syncedScoreText}). Lanjut ke Step ${transition.nextStepIndex + 1}.`
+        });
+      }
+    } catch (err) {
+      setWizardFeedback({
+        type: 'error',
+        message: err?.message || 'Gagal menyimpan dan menyinkronkan tes.'
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // WIZARD ACTION 2: [ ➔ Lewati Tes Ini ]
+  const handleWizardSkipStep = () => {
+    const currentTest = wizardProgress.currentTest;
+    if (!currentTest) return;
+
+    const transition = resolveWizardStepTransition({
+      currentStepIndex: wizardProgress.safeStepIndex,
+      totalSteps: wizardProgress.totalSteps,
+      testCode: currentTest.test_code,
+      action: 'skip',
+      completedTestCodes,
+      skippedTestCodes
+    });
+
+    setCompletedTestCodes(transition.completedTestCodes);
+    setSkippedTestCodes(transition.skippedTestCodes);
+    setWizardStepIndex(transition.nextStepIndex);
+    setWizardFeedback(null);
+
+    persistResumeSnapshot({
+      currentStepIndex: transition.nextStepIndex,
+      completedTestCodes: transition.completedTestCodes,
+      skippedTestCodes: transition.skippedTestCodes,
+      status: 'in_progress'
+    });
+  };
+
+  // WIZARD ACTION 3: [ 💾 Simpan Sesi & Berhenti (Lanjutkan Nanti) ]
+  const handleWizardSaveAndStop = async () => {
+    setIsSaving(true);
+    setWizardFeedback(null);
+    try {
+      const entriesToSync = buildSessionEntriesFromInputs(inputsByCode);
+      if (entriesToSync.length > 0) {
+        await syncEntriesToReportAndDatabase(entriesToSync);
+      }
+
+      const saved = persistResumeSnapshot({
+        currentStepIndex: wizardProgress.safeStepIndex,
+        completedTestCodes,
+        skippedTestCodes,
+        status: 'paused_resume_ready'
+      });
+
+      setIsWizardOpen(false);
+      setFeedback({
+        type: 'success',
+        message: `Progres sesi tes disimpan pada Step ${wizardProgress.currentStepNumber} dari ${wizardProgress.totalSteps} (${entriesToSync.length} tes tersinkronkan ke Grafik Polar). Anda dapat melanjutkan kapan saja.`
+      });
+      return saved;
+    } catch (err) {
+      setWizardFeedback({
+        type: 'error',
+        message: err?.message || 'Gagal menyimpan sesi progres tes.'
+      });
+      return null;
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const handleSaveAndSync = async () => {
     if (!activeAthleteId) {
@@ -282,16 +573,13 @@ export default function FootballAssessmentHub({
     setIsSaving(true);
     setFeedback(null);
     try {
-      const response = await saveMasterAssessmentSessionAndSync({
-        tenantId,
-        athleteId: activeAthleteId,
-        evaluatorId,
-        testingDate,
-        tier: activeTier,
-        sessionEntries: readySessionEntries
+      const response = await syncEntriesToReportAndDatabase(readySessionEntries);
+
+      persistResumeSnapshot({
+        status: 'synced'
       });
 
-      const syncedLabels = Object.values(response.aggregatedIndicators || {})
+      const syncedLabels = Object.values(response?.aggregatedIndicators || {})
         .map((item) => `${item.indicator_label} (${item.score})`)
         .join(', ');
 
@@ -299,10 +587,6 @@ export default function FootballAssessmentHub({
         type: 'success',
         message: `${readySessionEntries.length} tes lapangan tersimpan & disinkronkan ke Grafik Polar Area: ${syncedLabels}.`
       });
-
-      if (typeof onSyncedToReport === 'function') {
-        onSyncedToReport(response.indicatorScoresMap, response.savedSessions);
-      }
     } catch (err) {
       setFeedback({
         type: 'error',
@@ -320,16 +604,507 @@ export default function FootballAssessmentHub({
 
   const isControlledByParent = Boolean(selectedAthleteId && typeof onSelectAthlete !== 'function');
 
+  const hasResumableSession = Boolean(
+    savedResumeMeta &&
+      (Object.keys(savedResumeMeta.inputsByCode || {}).length > 0 ||
+        (savedResumeMeta.currentStepIndex || 0) > 0 ||
+        (savedResumeMeta.skippedTestCodes || []).length > 0)
+  );
+
+  // Render Modal Wizard Step-by-Step (Focus Mode 1 Tes per Layar)
+  const renderStepByStepWizardModal = () => {
+    if (!isWizardOpen) return null;
+    const currentTest = wizardProgress.currentTest;
+    if (!currentTest) return null;
+
+    const raw = inputsByCode[currentTest.test_code] || {
+      raw_value_1: '',
+      raw_value_2:
+        currentTest.measurement_type === 'ACCURACY' ? String(currentTest.defaultTotal || 10) : '',
+      errors_count: '0'
+    };
+    const liveScore = wizardProgress.currentLiveScore;
+    const savedEntry = existingIndicatorScores[currentTest.indicator_key];
+    const displayScore = liveScore !== null ? liveScore : savedEntry?.score ?? null;
+    const classification = getAssessmentClassification(displayScore);
+    const benchmark = FOOTBALL_TEST_BENCHMARKS[currentTest.test_code]?.[activeTier];
+    const catStyle = CATEGORY_STYLES[currentTest.category] || CATEGORY_STYLES.Teknik;
+    const typeMeta = getMeasurementTypeMeta(currentTest.measurement_type);
+    const TypeIcon = typeMeta.icon;
+    const rubricAnchors = FOOTBALL_RUBRIC_ANCHORS[currentTest.indicator_key];
+    const selectedRubricLevel =
+      currentTest.measurement_type === 'RUBRIC' && raw.raw_value_1 !== ''
+        ? Number(raw.raw_value_1)
+        : null;
+
+    const wizardNode = (
+      <div
+        data-testid="football-test-wizard-modal"
+        className="fixed inset-0 z-[9999] bg-slate-950/80 backdrop-blur-xs flex flex-col justify-between overflow-y-auto p-2 sm:p-4 lg:p-6"
+      >
+        <div className="w-full max-w-3xl mx-auto my-auto bg-white dark:bg-[#161B22] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[95vh]">
+          {/* 1. WIZARD TOP HEADER & PROGRESS TRACKER */}
+          <div className="p-4 sm:px-6 sm:py-4 bg-slate-900 text-white border-b border-slate-800 shrink-0 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-400/30">
+                    <Rocket size={12} /> Wizard Sesi Tes Terpandu
+                  </span>
+                  <span
+                    data-testid="wizard-step-counter"
+                    className="px-2.5 py-0.5 rounded-md text-xs font-extrabold bg-[#C89D32] text-slate-950"
+                  >
+                    Step {wizardProgress.currentStepNumber} dari {wizardProgress.totalSteps}
+                  </span>
+                </div>
+                <h3 className="text-sm sm:text-base font-extrabold text-white truncate mt-1">
+                  {activeAthleteName} • {FOOTBALL_ASSESSMENT_TIERS[activeTier]?.shortLabel}
+                </h3>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleWizardSaveAndStop}
+                data-testid="wizard-close-top-btn"
+                className="min-h-[40px] px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold border border-slate-700 flex items-center gap-1.5 cursor-pointer shrink-0"
+                title="Simpan progres dan tutup Wizard"
+              >
+                <X size={15} />
+                <span className="hidden sm:inline">Tutup & Simpan Progres</span>
+              </button>
+            </div>
+
+            {/* Progress Bar & Step Pills */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-[11px] text-slate-300 font-semibold">
+                <span>
+                  Step {wizardProgress.currentStepNumber} dari {wizardProgress.totalSteps}:{' '}
+                  <strong className="text-white">{currentTest.test_name}</strong>
+                </span>
+                <span className="font-mono text-emerald-300">
+                  {wizardProgress.completedCount}/{wizardProgress.totalSteps} Terisi ({wizardProgress.progressPercent}%)
+                </span>
+              </div>
+              <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 transition-all duration-300 rounded-full"
+                  style={{
+                    width: `${Math.max(
+                      5,
+                      Math.round((wizardProgress.currentStepNumber / wizardProgress.totalSteps) * 100)
+                    )}%`
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Step Jump Pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5">
+              {filteredTests.map((t, idx) => {
+                const isCurrent = idx === wizardProgress.safeStepIndex;
+                const hasVal = liveScoreMap[t.test_code] !== null && liveScoreMap[t.test_code] !== undefined;
+                const isSkipped = skippedTestCodes.includes(t.test_code) && !hasVal;
+                return (
+                  <button
+                    key={t.test_code}
+                    type="button"
+                    onClick={() => {
+                      setWizardStepIndex(idx);
+                      setWizardFeedback(null);
+                      persistResumeSnapshot({ currentStepIndex: idx });
+                    }}
+                    data-testid={`wizard-step-pill-${idx + 1}`}
+                    className={`min-h-[32px] px-2.5 py-1 rounded-lg text-[11px] font-extrabold whitespace-nowrap border transition-all cursor-pointer flex items-center gap-1 shrink-0 ${
+                      isCurrent
+                        ? 'bg-[#C89D32] text-slate-950 border-[#C89D32] shadow-xs'
+                        : hasVal
+                          ? 'bg-emerald-950/90 text-emerald-300 border-emerald-700'
+                          : isSkipped
+                            ? 'bg-amber-950/60 text-amber-300 border-amber-800/80'
+                            : 'bg-slate-800/90 text-slate-400 border-slate-700 hover:text-white'
+                    }`}
+                  >
+                    <span>#{idx + 1}</span>
+                    <span>{t.test_code}</span>
+                    {hasVal && <CheckCircle2 size={11} className="text-emerald-400 shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* 2. WIZARD FOCUS BODY: SINGLE ACTIVE TEST CARD */}
+          <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
+            {wizardFeedback && (
+              <div
+                className={`p-3 rounded-xl border flex items-start gap-2 text-xs sm:text-sm font-bold ${
+                  wizardFeedback.type === 'success'
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    : 'bg-rose-50 border-rose-200 text-rose-800'
+                }`}
+              >
+                {wizardFeedback.type === 'success' ? (
+                  <CheckCircle2 size={16} className="text-emerald-600 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle size={16} className="text-rose-600 shrink-0 mt-0.5" />
+                )}
+                <span>{wizardFeedback.message}</span>
+              </div>
+            )}
+
+            <div
+              data-testid="wizard-active-test-card"
+              className={`rounded-2xl border-2 border-slate-200 dark:border-slate-800 border-l-8 ${catStyle.accentBorder} bg-white dark:bg-slate-900 p-4 sm:p-6 space-y-5 shadow-xs`}
+            >
+              {/* Test Metadata & Live Automated Score */}
+              <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+                <div className="space-y-1.5">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="px-2.5 py-1 rounded-md text-xs font-black uppercase bg-slate-900 text-white">
+                      {currentTest.test_code}
+                    </span>
+                    <span className={`px-2.5 py-1 rounded-md text-xs font-bold border ${catStyle.badge}`}>
+                      Kategori: {currentTest.category}
+                    </span>
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200">
+                      <TypeIcon size={13} />
+                      <span>Indikator Rapor: {currentTest.indicator_label}</span>
+                    </span>
+                  </div>
+                  <h4
+                    data-testid="wizard-active-test-title"
+                    className="text-lg sm:text-xl font-black text-slate-900 dark:text-white leading-snug"
+                  >
+                    {currentTest.test_name}
+                  </h4>
+                  <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
+                    {currentTest.description}
+                  </p>
+                </div>
+
+                {/* Big Live Score Box */}
+                <div
+                  data-testid="wizard-live-score-box"
+                  className={`shrink-0 px-4 py-3 rounded-2xl border text-center min-w-[140px] ${
+                    liveScore !== null
+                      ? classification.badgeClass
+                      : 'bg-slate-50 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-500'
+                  }`}
+                >
+                  <span className="block text-[10px] font-extrabold uppercase tracking-wider">
+                    Skor Konversi (1–100)
+                  </span>
+                  <div className="font-mono text-2xl sm:text-3xl font-black tabular-nums mt-0.5">
+                    {liveScore !== null ? `${liveScore}` : savedEntry?.score ? `${savedEntry.score}` : '—'}
+                    <span className="text-xs font-bold opacity-75">/100</span>
+                  </div>
+                  <span className="inline-block text-[11px] font-bold mt-0.5">
+                    {liveScore !== null
+                      ? `Otomatis • ${classification.label}`
+                      : savedEntry?.score
+                        ? 'Skor Tersimpan'
+                        : 'Menunggu Input'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Benchmark Norms Banner for Objective Tests */}
+              {benchmark && currentTest.measurement_type !== 'RUBRIC' && (
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <span className="font-bold text-slate-600 dark:text-slate-300">
+                    Target Norma {FOOTBALL_ASSESSMENT_TIERS[activeTier]?.label}:
+                  </span>
+                  <div className="flex flex-wrap items-center gap-3 font-mono text-xs">
+                    <span className="px-2 py-0.5 rounded bg-amber-50 text-amber-800 border border-amber-200 font-bold">
+                      Cukup: {benchmark.fair}
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-teal-50 text-teal-800 border border-teal-200 font-bold">
+                      Baik: {benchmark.good}
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold">
+                      Elit: {benchmark.elite} {currentTest.measurement_type === 'ACCURACY' ? '%' : currentTest.unit}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Large Mobile-First Field Input Controls */}
+              {currentTest.measurement_type === 'RUBRIC' ? (
+                <div className="space-y-2.5">
+                  <label className="block text-xs font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                    Pilih Level Observasi Perilaku Atlet (Rubrik 1–5):
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+                    {[1, 2, 3, 4, 5].map((lv) => {
+                      const anchoredScore = RUBRIC_ANCHORED_SCORES[lv];
+                      const isSelected = selectedRubricLevel === lv;
+                      const anchorMeta = rubricAnchors?.[lv];
+                      return (
+                        <button
+                          key={lv}
+                          type="button"
+                          disabled={isArchived}
+                          onClick={() => updateTestInput(currentTest, 'raw_value_1', String(lv))}
+                          data-testid={`wizard-rubric-btn-${lv}`}
+                          className={`min-h-[64px] p-3 rounded-xl border-2 text-left sm:text-center transition-all cursor-pointer flex sm:flex-col items-center sm:justify-center justify-between gap-2 ${
+                            isSelected
+                              ? 'bg-emerald-700 text-white border-emerald-700 shadow-md'
+                              : 'bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                          }`}
+                        >
+                          <div>
+                            <span className="text-sm font-black block">
+                              Level {lv} ({anchoredScore} pts)
+                            </span>
+                            {anchorMeta?.label && (
+                              <span
+                                className={`text-xs font-bold block mt-0.5 ${
+                                  isSelected ? 'text-emerald-100' : 'text-slate-500 dark:text-slate-400'
+                                }`}
+                              >
+                                {anchorMeta.label}
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {selectedRubricLevel && rubricAnchors?.[selectedRubricLevel] && (
+                    <div className="p-3.5 rounded-xl bg-emerald-50/90 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 text-xs sm:text-sm">
+                      <span className="font-extrabold text-emerald-900 dark:text-emerald-300">
+                        Deskripsi Level {selectedRubricLevel} ({rubricAnchors[selectedRubricLevel].label} — Skor {RUBRIC_ANCHORED_SCORES[selectedRubricLevel]}):
+                      </span>{' '}
+                      <span className="text-slate-800 dark:text-slate-200">
+                        {rubricAnchors[selectedRubricLevel].desc}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : currentTest.measurement_type === 'ACCURACY' ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200">
+                      {currentTest.inputLabel1 || 'Percobaan Sukses (Target Masuk)'}
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={isArchived}
+                        onClick={() => {
+                          const curr = Math.max(0, Number(raw.raw_value_1) || 0);
+                          updateTestInput(currentTest, 'raw_value_1', String(Math.max(0, curr - 1)));
+                        }}
+                        className="w-12 h-12 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 flex items-center justify-center font-black text-slate-700 cursor-pointer"
+                      >
+                        <Minus size={16} />
+                      </button>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        disabled={isArchived}
+                        placeholder="cth: 8"
+                        value={raw.raw_value_1}
+                        onChange={(e) => updateTestInput(currentTest, 'raw_value_1', e.target.value)}
+                        data-testid="wizard-input-1"
+                        className="flex-1 min-h-[52px] px-4 py-2.5 bg-white dark:bg-slate-900 border-2 border-emerald-500/70 rounded-xl text-lg font-black text-center text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                      />
+                      <button
+                        type="button"
+                        disabled={isArchived}
+                        onClick={() => {
+                          const curr = Math.max(0, Number(raw.raw_value_1) || 0);
+                          updateTestInput(currentTest, 'raw_value_1', String(curr + 1));
+                        }}
+                        className="w-12 h-12 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 flex items-center justify-center font-black text-slate-700 cursor-pointer"
+                      >
+                        <Plus size={16} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
+                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-200">
+                      {currentTest.inputLabel2 || 'Total Percobaan Dilakukan'}
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      step="1"
+                      disabled={isArchived}
+                      placeholder={String(currentTest.defaultTotal || 10)}
+                      value={raw.raw_value_2}
+                      onChange={(e) => updateTestInput(currentTest, 'raw_value_2', e.target.value)}
+                      data-testid="wizard-input-2"
+                      className="w-full min-h-[52px] px-4 py-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-lg font-bold text-center text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                    />
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5">
+                    <label className="block text-xs font-extrabold text-slate-800 dark:text-slate-200">
+                      {currentTest.inputLabel1 || `Hasil Utama (${currentTest.unit})`}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step={currentTest.measurement_type === 'TIME' ? '0.01' : '1'}
+                      disabled={isArchived}
+                      placeholder={currentTest.measurement_type === 'TIME' ? 'cth: 1.95' : '0'}
+                      value={raw.raw_value_1}
+                      onChange={(e) => updateTestInput(currentTest, 'raw_value_1', e.target.value)}
+                      data-testid="wizard-input-1"
+                      className="w-full min-h-[52px] px-3.5 py-2.5 bg-white dark:bg-slate-900 border-2 border-emerald-500/70 rounded-xl text-lg font-black text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                    />
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5">
+                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300">
+                      {currentTest.inputLabel2 || 'Trial 2 (Opsional)'}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step={currentTest.measurement_type === 'TIME' ? '0.01' : '1'}
+                      disabled={isArchived}
+                      placeholder="Opsional"
+                      value={raw.raw_value_2}
+                      onChange={(e) => updateTestInput(currentTest, 'raw_value_2', e.target.value)}
+                      data-testid="wizard-input-2"
+                      className="w-full min-h-[52px] px-3.5 py-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-lg font-bold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                    />
+                  </div>
+
+                  <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-1.5">
+                    <label className="block text-xs font-extrabold text-slate-700 dark:text-slate-300">
+                      Penalti Cone / Error
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={isArchived}
+                        onClick={() => {
+                          const curr = Math.max(0, parseInt(raw.errors_count || 0, 10) || 0);
+                          updateTestInput(currentTest, 'errors_count', String(Math.max(0, curr - 1)));
+                        }}
+                        className="w-12 h-[52px] rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 flex items-center justify-center font-black text-slate-700 cursor-pointer"
+                      >
+                        <Minus size={15} />
+                      </button>
+                      <input
+                        type="number"
+                        min="0"
+                        step="1"
+                        disabled={isArchived}
+                        placeholder="0"
+                        value={raw.errors_count}
+                        onChange={(e) => updateTestInput(currentTest, 'errors_count', e.target.value)}
+                        data-testid="wizard-errors-input"
+                        className="w-full min-h-[52px] px-2 py-2.5 bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl text-lg font-bold text-center text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-600"
+                      />
+                      <button
+                        type="button"
+                        disabled={isArchived}
+                        onClick={() => {
+                          const curr = Math.max(0, parseInt(raw.errors_count || 0, 10) || 0);
+                          updateTestInput(currentTest, 'errors_count', String(curr + 1));
+                        }}
+                        className="w-12 h-[52px] rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 flex items-center justify-center font-black text-slate-700 cursor-pointer"
+                      >
+                        <Plus size={15} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 3. WIZARD STICKY FOOTER NAVIGATION */}
+          <div className="p-4 sm:px-6 sm:py-4 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 shrink-0 flex flex-col gap-2.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {/* Tombol 1: Simpan Sesi & Berhenti (Lanjutkan Nanti) */}
+              <button
+                type="button"
+                disabled={isSaving}
+                onClick={handleWizardSaveAndStop}
+                data-testid="wizard-save-stop-btn"
+                className="min-h-[48px] px-3.5 py-2.5 rounded-xl text-xs font-extrabold text-slate-800 dark:text-slate-200 bg-white dark:bg-slate-800 hover:bg-slate-100 border border-slate-300 dark:border-slate-700 flex items-center justify-center gap-1.5 transition-all cursor-pointer order-3 sm:order-1"
+              >
+                <span>💾 Simpan Sesi & Berhenti (Lanjutkan Nanti)</span>
+              </button>
+
+              {/* Tombol 2: Lewati Tes Ini */}
+              <div className="flex items-center gap-1.5 order-2">
+                {wizardProgress.safeStepIndex > 0 && (
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={() => {
+                      const prevIdx = Math.max(0, wizardProgress.safeStepIndex - 1);
+                      setWizardStepIndex(prevIdx);
+                      setWizardFeedback(null);
+                      persistResumeSnapshot({ currentStepIndex: prevIdx });
+                    }}
+                    data-testid="wizard-prev-btn"
+                    className="min-h-[48px] px-3 py-2.5 rounded-xl text-xs font-bold text-slate-700 bg-white border border-slate-300 hover:bg-slate-100 flex items-center justify-center gap-1 cursor-pointer shrink-0"
+                    title="Tes Sebelumnya"
+                  >
+                    <ArrowLeft size={15} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  disabled={isSaving}
+                  onClick={handleWizardSkipStep}
+                  data-testid="wizard-skip-btn"
+                  className="flex-1 min-h-[48px] px-3.5 py-2.5 rounded-xl text-xs font-extrabold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <span>➔ Lewati Tes Ini</span>
+                </button>
+              </div>
+
+              {/* Tombol 3: Simpan & Lanjut ➔ */}
+              <button
+                type="button"
+                disabled={isSaving || isArchived}
+                onClick={handleWizardSaveAndNext}
+                data-testid="wizard-save-next-btn"
+                className="min-h-[48px] px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black text-white bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer order-1 sm:order-3"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 size={16} className="animate-spin" />
+                    <span>Menyinkronkan...</span>
+                  </>
+                ) : (
+                  <span>Simpan & Lanjut ➔</span>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+
+    return typeof document !== 'undefined' ? createPortal(wizardNode, document.body) : wizardNode;
+  };
+
   return (
     <div
       className="bg-white dark:bg-[#161B22] rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden"
       data-testid="football-assessment-hub"
     >
+      {renderStepByStepWizardModal()}
+
       {/* Top Header & Context Bar */}
       <div className="p-4 sm:p-5 bg-slate-50/90 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-800">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-bold uppercase tracking-wider bg-emerald-50 text-emerald-800 border border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800">
                 <Sparkles size={12} /> Master Test Library & Assessment Engine
               </span>
@@ -345,18 +1120,52 @@ export default function FootballAssessmentHub({
             </p>
           </div>
 
-          <div className="flex items-center gap-2 self-start lg:self-center">
+          <div className="flex flex-wrap items-center gap-2 self-start lg:self-center">
+            <button
+              type="button"
+              disabled={isArchived || filteredTests.length === 0}
+              onClick={() => handleOpenWizard(false)}
+              data-testid="start-wizard-mode-btn"
+              className="min-h-[44px] inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black text-white bg-[#354944] hover:bg-[#2B3D38] border-b-2 border-[#C89D32] shadow-xs transition-all cursor-pointer disabled:opacity-50"
+            >
+              <span>🚀 Mulai Sesi Tes Terpandu (Wizard Mode)</span>
+            </button>
+
             {readySessionEntries.length > 0 && (
               <button
                 type="button"
                 onClick={handleResetAll}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                className="min-h-[44px] inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
               >
-                <RotateCcw size={13} /> Reset Input ({readySessionEntries.length})
+                <RotateCcw size={13} /> Reset Sesi ({readySessionEntries.length})
               </button>
             )}
           </div>
         </div>
+
+        {/* Resume Saved Wizard Session Banner */}
+        {hasResumableSession && (
+          <div
+            data-testid="wizard-resume-banner"
+            className="mt-3 p-3 rounded-xl bg-amber-50/90 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+          >
+            <div className="text-xs text-amber-900 dark:text-amber-200">
+              <span className="font-extrabold">Progres Sesi Tes Tersimpan ({activeAthleteName}):</span>{' '}
+              Posisi terakhir di <strong>Step {wizardProgress.currentStepNumber} dari {wizardProgress.totalSteps}</strong> ({wizardProgress.completedCount} tes selesai, {wizardProgress.skippedCount} dilewati).
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => handleOpenWizard(true)}
+                data-testid="resume-wizard-mode-btn"
+                className="min-h-[38px] px-3.5 py-1.5 rounded-lg text-xs font-extrabold bg-emerald-700 hover:bg-emerald-800 text-white flex items-center gap-1.5 cursor-pointer shadow-2xs"
+              >
+                <Play size={13} />
+                <span>Lanjutkan Sesi (Step {wizardProgress.currentStepNumber})</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Selector Controls */}
         {isControlledByParent ? (
@@ -470,7 +1279,10 @@ export default function FootballAssessmentHub({
               <button
                 key={cat.key}
                 type="button"
-                onClick={() => setActiveCategory(cat.key)}
+                onClick={() => {
+                  setActiveCategory(cat.key);
+                  setWizardStepIndex(0);
+                }}
                 data-testid={`master-category-tab-${cat.key}`}
                 className={`px-3 py-1.5 rounded-lg text-xs font-bold whitespace-nowrap border transition-all cursor-pointer flex items-center gap-1.5 ${
                   isSelected
@@ -553,7 +1365,7 @@ export default function FootballAssessmentHub({
           </div>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {filteredTests.map((test) => {
+            {filteredTests.map((test, idx) => {
               const raw = inputsByCode[test.test_code] || {
                 raw_value_1: '',
                 raw_value_2: test.measurement_type === 'ACCURACY' ? String(test.defaultTotal || 10) : '',
@@ -594,11 +1406,17 @@ export default function FootballAssessmentHub({
                             <TypeIcon size={11} />
                             {test.indicator_label}
                           </span>
-                          {test.position_code && (
-                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/60 dark:text-rose-300">
-                              Posisi: {test.position_code}
-                            </span>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setWizardStepIndex(idx);
+                              setIsWizardOpen(true);
+                            }}
+                            className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 cursor-pointer"
+                            title="Buka tes ini di Mode Fokus Wizard"
+                          >
+                            Fokus Wizard ↗
+                          </button>
                         </div>
                         <h5 className="text-sm font-bold text-slate-900 dark:text-white leading-snug">
                           {test.test_name}
