@@ -8,7 +8,12 @@ import {
   getMasterTestsForContext,
   buildWizardResumeStorageKey,
   computeWizardSessionProgress,
-  resolveWizardStepTransition
+  resolveWizardStepTransition,
+  convertAttendanceRateToScore,
+  calculateAthleteAttendanceMetrics,
+  normalizeIndicatorKey,
+  resolveIndicatorScore,
+  buildBaselineIndicatorScoresForAthlete
 } from './footballAssessmentEngine.js';
 
 test('calculateAssessmentScore returns null for blank inputs and never returns PENDING_CALIBRATION', () => {
@@ -221,4 +226,90 @@ test('computeWizardSessionProgress & resolveWizardStepTransition manage Step-by-
   assert.equal(stepAfterSkip.nextStepIndex, 2);
   assert.ok(stepAfterSkip.skippedTestCodes.includes(sampleTests[1].test_code));
 });
+
+test('convertAttendanceRateToScore, calculateAthleteAttendanceMetrics, and buildBaselineIndicatorScoresForAthlete ensure zero empty indicators', () => {
+  assert.equal(convertAttendanceRateToScore(92), 95);
+  assert.equal(convertAttendanceRateToScore(40), 40);
+
+  const sampleAttendance = [
+    {
+      date: '2025-05-01',
+      records: [{ studentId: 'demo-student-1', studentName: 'Rafa Pratama', status: 'Hadir' }]
+    },
+    {
+      date: '2025-05-03',
+      records: [{ studentId: 'demo-student-1', studentName: 'Rafa Pratama', status: 'Hadir' }]
+    },
+    {
+      date: '2025-05-05',
+      records: [{ studentId: 'demo-student-1', studentName: 'Rafa Pratama', status: 'Hadir' }]
+    },
+    {
+      date: '2025-05-07',
+      records: [{ studentId: 'demo-student-1', studentName: 'Rafa Pratama', status: 'Hadir' }]
+    },
+    {
+      date: '2025-05-09',
+      records: [{ studentId: 'demo-student-1', studentName: 'Rafa Pratama', status: 'Hadir' }]
+    },
+    {
+      date: '2025-05-11',
+      records: [{ studentId: 'demo-student-1', studentName: 'Rafa Pratama', status: 'Hadir' }]
+    },
+    {
+      date: '2025-05-13',
+      records: [{ studentId: 'demo-student-1', studentName: 'Rafa Pratama', status: 'Hadir' }]
+    },
+    {
+      date: '2025-05-15',
+      records: [{ studentId: 'demo-student-1', studentName: 'Rafa Pratama', status: 'Hadir' }]
+    },
+    {
+      date: '2025-05-17',
+      records: [{ studentId: 'demo-student-1', studentName: 'Rafa Pratama', status: 'Hadir' }]
+    },
+    {
+      date: '2025-05-19',
+      records: [{ studentId: 'demo-student-1', studentName: 'Rafa Pratama', status: 'Izin' }]
+    }
+  ];
+
+  const metrics = calculateAthleteAttendanceMetrics(
+    sampleAttendance,
+    'demo-student-1',
+    'Rafa Pratama'
+  );
+  assert.equal(metrics.attendancePercentage, 90);
+  assert.equal(metrics.badgeText, 'Terhubung Otomatis ke Modul Presensi (90%)');
+  assert.equal(metrics.indicators.kehadiran_latihan.score, 95);
+  assert.ok(metrics.indicators.kepatuhan_program.score >= 90);
+  assert.ok(metrics.indicators.konsistensi_kehadiran.score >= 85);
+
+  assert.equal(normalizeIndicatorKey('Kehadiran Latihan'), 'kehadiran_latihan');
+  assert.equal(normalizeIndicatorKey('Kontrol Bola'), 'kontrol_bola');
+  assert.equal(normalizeIndicatorKey('Posisi Bertahan'), 'posisi_bertahan');
+
+  const baseline = buildBaselineIndicatorScoresForAthlete({
+    athleteId: 'demo-student-1',
+    athleteName: 'Rafa Pratama',
+    tier: 1,
+    attendanceRows: sampleAttendance
+  });
+
+  // Verify every indicator in baseline is > 0 and resolveIndicatorScore works with both snake_case and label
+  const flatScores: Record<string, number> = {};
+  Object.entries(baseline).forEach(([k, v]: [string, any]) => {
+    assert.ok(v.score >= 1 && v.score <= 100, `Indicator ${k} invalid score: ${v.score}`);
+    flatScores[k] = v.score;
+  });
+
+  assert.equal(resolveIndicatorScore(flatScores, 'Kehadiran Latihan'), 95);
+  assert.equal(resolveIndicatorScore(flatScores, 'kehadiran_latihan'), 95);
+  assert.ok(resolveIndicatorScore(flatScores, 'Akselerasi') > 0);
+  assert.ok(resolveIndicatorScore(flatScores, 'Kontrol Bola') > 0);
+  assert.ok(resolveIndicatorScore(flatScores, 'Posisi Bertahan') > 0);
+  assert.ok(resolveIndicatorScore(flatScores, 'Fokus') > 0);
+  assert.ok(resolveIndicatorScore(flatScores, 'Komunikasi Verbal') > 0);
+});
+
 

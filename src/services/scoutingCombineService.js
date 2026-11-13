@@ -1,12 +1,15 @@
 import { supabase } from '../config/supabase';
-import { toUuidOrNull, toDateOrNull } from './supabaseAcademyService';
+import { toUuidOrNull, toDateOrNull, getAttendance } from './supabaseAcademyService';
 import {
   MASTER_INDICATOR_KEY_TO_LABEL,
   calculateAssessmentScore,
   aggregateIndicatorScores,
   resolveMasterFootballTest,
   getMasterTestsForContext,
-  buildWizardResumeStorageKey
+  buildWizardResumeStorageKey,
+  calculateAthleteAttendanceMetrics,
+  buildBaselineIndicatorScoresForAthlete,
+  normalizeIndicatorKey
 } from '../utils/footballAssessmentEngine';
 
 const DEMO_INDICATOR_STORAGE_PREFIX = 'chuvator_demo_combine_indicators_';
@@ -106,15 +109,134 @@ export async function getMasterFootballCatalog({
 }
 
 /**
- * Fetch latest indicator scores from `public.athlete_indicator_scores`.
+ * Automatically query `academy_attendance` records for the athlete and convert
+ * their real attendance percentage into `Perkembangan Atlet` indicator scores:
+ * - `kehadiran_latihan` (DEV01: Kehadiran Latihan)
+ * - `kepatuhan_program` (DEV02: Kepatuhan Program)
+ * - `konsistensi_kehadiran` (DEV03: Konsistensi Kehadiran)
+ */
+export async function syncAthleteAttendanceToDevelopmentIndicators({
+  tenantId,
+  classId = null,
+  athleteId,
+  athleteName = ''
+} = {}) {
+  if (!tenantId || !athleteId) return null;
+
+  let attendanceRows = [];
+  try {
+    attendanceRows = await getAttendance(tenantId, classId, 120);
+  } catch (err) {
+    console.warn('[scoutingCombineService] getAttendance fallback:', err);
+  }
+
+  const attendanceMetrics = calculateAthleteAttendanceMetrics(
+    attendanceRows,
+    athleteId,
+    athleteName
+  );
+  const nowIso = new Date().toISOString();
+  const syncedIndicators = {};
+
+  Object.entries(attendanceMetrics.indicators).forEach(([indKey, rec]) => {
+    syncedIndicators[indKey] = {
+      id: `att-ind-${indKey}`,
+      tenant_id: tenantId,
+      athlete_id: athleteId,
+      indicator_key: indKey,
+      indicator_label: rec.indicator_label,
+      test_code: rec.test_code,
+      score: rec.score,
+      source: 'attendance_sync',
+      attendance_percentage: attendanceMetrics.attendancePercentage,
+      badge_text: attendanceMetrics.badgeText,
+      updated_at: nowIso
+    };
+  });
+
+  if (isDemoAssessmentContext(tenantId, athleteId)) {
+    const indicatorsKey = `${DEMO_INDICATOR_STORAGE_PREFIX}${tenantId}_${athleteId}`;
+    const existing = readLocalJson(indicatorsKey, {});
+    const merged = { ...existing, ...syncedIndicators };
+    writeLocalJson(indicatorsKey, merged);
+  } else {
+    try {
+      const payload = Object.values(syncedIndicators).map((item) => ({
+        tenant_id: tenantId,
+        athlete_id: athleteId,
+        indicator_key: item.indicator_key,
+        score: item.score,
+        source: 'attendance_sync',
+        updated_at: nowIso
+      }));
+      await supabase
+        .from('athlete_indicator_scores')
+        .upsert(payload, { onConflict: 'tenant_id,athlete_id,indicator_key' });
+    } catch (err) {
+      console.warn('[scoutingCombineService] attendance_sync upsert warning:', err);
+    }
+  }
+
+  return {
+    attendanceMetrics,
+    indicators: syncedIndicators
+  };
+}
+
+/**
+ * Fetch latest indicator scores from `public.athlete_indicator_scores`, merged with
+ * baseline field test scores and live automated attendance indicators so zero indicators are 0/empty.
  * Returns map keyed by `indicator_key`: { [key]: { indicator_key, indicator_label, score, source, updated_at } }
  */
-export async function getAthleteIndicatorScores(tenantId, athleteId) {
+export async function getAthleteIndicatorScores(tenantId, athleteId, options = {}) {
   if (!tenantId || !athleteId) return {};
+
+  const classId = options.classId || null;
+  const athleteName = options.athleteName || '';
+  const tier = Math.max(1, Math.min(4, Number(options.tier) || 2));
+
+  let attendanceRows = [];
+  try {
+    attendanceRows = await getAttendance(tenantId, classId, 120);
+  } catch {
+    attendanceRows = [];
+  }
+
+  const baselineMap = buildBaselineIndicatorScoresForAthlete({
+    athleteId,
+    athleteName,
+    tier,
+    attendanceRows
+  });
 
   if (isDemoAssessmentContext(tenantId, athleteId)) {
     const key = `${DEMO_INDICATOR_STORAGE_PREFIX}${tenantId}_${athleteId}`;
-    return readLocalJson(key, {});
+    const storedMap = readLocalJson(key, {});
+    const merged = { ...baselineMap };
+
+    Object.entries(storedMap || {}).forEach(([rawKey, rec]) => {
+      if (!rec) return;
+      const canonicalKey = normalizeIndicatorKey(rawKey);
+      if (!canonicalKey) return;
+      // Preserve live attendance_sync calculation for development indicators
+      if (merged[canonicalKey]?.source === 'attendance_sync' && rec.source !== 'attendance_sync') {
+        return;
+      }
+      const numScore = Number(rec.score);
+      if (Number.isFinite(numScore) && numScore > 0) {
+        merged[canonicalKey] = {
+          ...merged[canonicalKey],
+          ...rec,
+          indicator_key: canonicalKey,
+          indicator_label:
+            MASTER_INDICATOR_KEY_TO_LABEL[canonicalKey] || rec.indicator_label || canonicalKey,
+          score: Math.max(1, Math.min(100, Math.round(numScore)))
+        };
+      }
+    });
+
+    writeLocalJson(key, merged);
+    return merged;
   }
 
   const { data, error } = await supabase
@@ -125,19 +247,29 @@ export async function getAthleteIndicatorScores(tenantId, athleteId) {
 
   if (error) {
     console.warn('[scoutingCombineService] getAthleteIndicatorScores error:', error);
-    return {};
+    return baselineMap;
   }
 
-  const map = {};
+  const map = { ...baselineMap };
   (data || []).forEach((row) => {
-    map[row.indicator_key] = {
-      id: row.id,
-      indicator_key: row.indicator_key,
-      indicator_label: MASTER_INDICATOR_KEY_TO_LABEL[row.indicator_key] || row.indicator_key,
-      score: Math.max(1, Math.min(100, Number(row.score) || 1)),
-      source: row.source || 'coach_manual',
-      updated_at: row.updated_at
-    };
+    const canonicalKey = normalizeIndicatorKey(row.indicator_key);
+    if (!canonicalKey) return;
+    if (map[canonicalKey]?.source === 'attendance_sync' && row.source !== 'attendance_sync') {
+      return;
+    }
+    const numScore = Number(row.score);
+    if (Number.isFinite(numScore) && numScore > 0) {
+      map[canonicalKey] = {
+        ...map[canonicalKey],
+        id: row.id,
+        indicator_key: canonicalKey,
+        indicator_label:
+          MASTER_INDICATOR_KEY_TO_LABEL[canonicalKey] || row.indicator_key,
+        score: Math.max(1, Math.min(100, Math.round(numScore))),
+        source: row.source || 'battery_test',
+        updated_at: row.updated_at
+      };
+    }
   });
   return map;
 }
@@ -266,7 +398,7 @@ export async function saveMasterAssessmentSessionAndSync({
     }));
     writeLocalJson(sessionsKey, [...newSessionRows, ...existingSessions].slice(0, 150));
 
-    const existingIndicators = readLocalJson(indicatorsKey, {});
+    const existingIndicators = await getAthleteIndicatorScores(tenantId, athleteId, { tier });
     const updatedIndicators = { ...existingIndicators };
     aggregatedList.forEach((agg) => {
       updatedIndicators[agg.indicator_key] = {
@@ -336,7 +468,7 @@ export async function saveMasterAssessmentSessionAndSync({
     throw upsertError;
   }
 
-  const latestMap = await getAthleteIndicatorScores(tenantId, athleteId);
+  const latestMap = await getAthleteIndicatorScores(tenantId, athleteId, { tier });
   (upsertedIndicators || []).forEach((row) => {
     const aggMeta = aggregatedIndicatorsMap[row.indicator_key];
     latestMap[row.indicator_key] = {
@@ -418,6 +550,7 @@ const scoutingCombineService = {
   getAthleteIndicatorScores,
   getAthleteTestSessions,
   saveMasterAssessmentSessionAndSync,
+  syncAthleteAttendanceToDevelopmentIndicators,
   loadWizardResumeState,
   saveWizardResumeState,
   clearWizardResumeState

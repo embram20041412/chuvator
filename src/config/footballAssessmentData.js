@@ -56,116 +56,77 @@ export const FOOTBALL_POSITIONS = [
     label: 'GK — Penjaga Gawang (Kiper)',
     shortLabel: 'Penjaga Gawang (GK)',
     specializations: ['Shot-stopper', 'Sweeper-keeper'],
-    indicators: [
-      'Refleks', 'Posisi Kiper', 'Tangkapan', 'Menepis Bola', 'Duel Satu Lawan Satu',
-      'Distribusi Tangan', 'Distribusi Kaki', 'Bola Udara', 'Sweeping', 'Komunikasi Pertahanan',
-      'Antisipasi Tembakan', 'Posisi Awal', 'Penalti', 'Keputusan Keluar', 'Build-up Kiper'
-    ]
+    indicators: ['Refleks', 'Distribusi Kaki']
   },
   {
     code: 'CB',
     label: 'CB — Bek Tengah (CB)',
     shortLabel: 'Bek Tengah (CB)',
     specializations: ['Stopper', 'Ball-playing defender'],
-    indicators: [
-      'Duel Bertahan', 'Duel Udara', 'Interception', 'Timing Tekel', 'Penjagaan Lawan',
-      'Cover Pertahanan', 'Posisi Garis Belakang', 'Antisipasi Lari', 'Clearance', 'Umpan Progresif',
-      'Build-up', 'Transisi Bertahan'
-    ]
+    indicators: ['Duel Bertahan', 'Posisi Bertahan', 'Kontrol Bola']
   },
   {
     code: 'LB/RB',
     label: 'LB/RB — Bek Sayap (LB/RB)',
     shortLabel: 'Bek Sayap (LB/RB)',
     specializations: ['Defensive fullback', 'Attacking fullback'],
-    indicators: [
-      'Duel Sayap', 'Bertahan Satu Lawan Satu', 'Overlap', 'Underlap', 'Akurasi Crossing',
-      'Progresi Sayap', 'Recovery Run', 'Cover Sisi', 'Kombinasi Sayap', 'Transisi Sisi'
-    ]
+    indicators: ['Overlap', 'Kelincahan', 'Passing Pendek']
   },
   {
     code: 'WB',
     label: 'WB — Wingback',
     shortLabel: 'Wingback (WB)',
     specializations: ['Wide runner', 'Attacking wingback'],
-    indicators: [
-      'Daya Jelajah', 'Overlap', 'Underlap', 'Crossing', 'Duel Sayap',
-      'Recovery Run', 'Transisi Sayap', 'Kontrol Lebar', 'Dukungan Serangan', 'Ketahanan Sisi'
-    ]
+    indicators: ['Overlap', 'Akselerasi', 'Dribbling']
   },
   {
     code: 'DM',
     label: 'DM — Gelandang Bertahan (DM)',
     shortLabel: 'Gelandang Bertahan (DM)',
     specializations: ['Ball-winner', 'Deep-lying playmaker'],
-    indicators: [
-      'Proteksi Lini', 'Interception', 'Duel Tengah', 'Screening', 'Sirkulasi Bola',
-      'Umpan Progresif', 'Orientasi Tubuh', 'Kontrol Tempo', 'Cover Gelandang', 'Transisi Bertahan',
-      'Build-up', 'Disiplin Posisi'
-    ]
+    indicators: ['Distribusi Bola', 'Posisi Bertahan', 'Passing Pendek']
   },
   {
     code: 'CM',
     label: 'CM — Gelandang Tengah (CM)',
     shortLabel: 'Gelandang Tengah (CM)',
     specializations: ['Box-to-box', 'Playmaker'],
-    indicators: [
-      'Distribusi Bola', 'Progresi Bola', 'Umpan Terobosan', 'Kontrol Tempo', 'Gerak Tanpa Bola',
-      'Box-to-Box', 'Duel Tengah', 'Pressing Tengah', 'Dukungan Serangan', 'Recovery Bertahan',
-      'Orientasi Tubuh', 'Keputusan Progresif'
-    ]
+    indicators: ['Distribusi Bola', 'Passing Pendek', 'Sentuhan Pertama']
   },
   {
     code: 'AM',
     label: 'AM — Gelandang Serang (AM)',
     shortLabel: 'Gelandang Serang (AM)',
     specializations: ['Creator', 'Advanced playmaker'],
-    indicators: [
-      'Visi Umpan', 'Umpan Kunci', 'Umpan Terobosan', 'Kontrol Ruang Antarlini', 'Kreativitas',
-      'Dribbling Ofensif', 'Finishing', 'Gerak Antarlini', 'Kombinasi Serangan', 'Pressing Depan',
-      'Keputusan Final', 'Kontribusi Gol'
-    ]
+    indicators: ['Distribusi Bola', 'Membuka Ruang', 'Finishing']
   },
   {
     code: 'LM/RM',
     label: 'LM/RM — Gelandang Sayap (LM/RM)',
     shortLabel: 'Gelandang Sayap (LM/RM)',
     specializations: ['Wide creator', 'Tracking winger'],
-    indicators: [
-      'Kontrol Sisi', 'Crossing', 'Dribbling Sayap', 'Kombinasi Sisi', 'Umpan ke Dalam',
-      'Tracking Back', 'Lebar Permainan', 'Transisi Sayap', 'Duel 1 on 1', 'Keputusan Crossing'
-    ]
+    indicators: ['Cut Inside', 'Dribbling', 'Passing Pendek']
   },
   {
     code: 'WFR/WFL',
     label: 'WFR/WFL — Sayap / Winger (WFR/WFL)',
     shortLabel: 'Winger / Sayap (WFR/WFL)',
     specializations: ['Inverted winger', 'Touchline winger'],
-    indicators: [
-      'Akselerasi Sayap', 'Dribbling Ofensif', 'Cut Inside', 'Crossing', 'Finishing Sayap',
-      'Umpan Kunci', 'Lari ke Ruang', 'Duel 1 on 1', 'Pressing Sayap', 'Keputusan Akhir'
-    ]
+    indicators: ['Cut Inside', 'Dribbling', 'Akselerasi']
   },
   {
     code: 'SS',
     label: 'SS — Second Striker / Penyerang Kedua (SS)',
     shortLabel: 'Second Striker (SS)',
     specializations: ['Link-up forward', 'Shadow striker'],
-    indicators: [
-      'Link-up Play', 'Gerak Antarlini', 'Umpan Kunci', 'Finishing', 'Lari Tanpa Bola',
-      'Kombinasi Penyerang', 'Dribbling Ofensif', 'Tekanan Depan', 'Rebound', 'Keputusan Final'
-    ]
+    indicators: ['Gerak di Kotak Penalti', 'Finishing', 'Membuka Ruang']
   },
   {
     code: 'ST',
     label: 'ST — Striker (ST)',
     shortLabel: 'Striker (ST)',
     specializations: ['Target man', 'Poacher', 'Pressing forward'],
-    indicators: [
-      'Finishing', 'Penempatan Posisi', 'Lari di Belakang Bek', 'Duel Udara', 'Hold-up Play',
-      'Link-up Play', 'Gerak di Kotak Penalti', 'First-time Shot', 'Tekanan Depan', 'Peluang Menjadi Gol',
-      'Serangan Tiang Dekat', 'Serangan Tiang Jauh'
-    ]
+    indicators: ['Gerak di Kotak Penalti', 'Finishing', 'Posisi Menyerang']
   }
 ];
 
@@ -174,25 +135,13 @@ export const TIER_1_POSITIONS = [
     code: 'OUTFIELD_SSB',
     label: 'Eksplorasi Pemain Lapangan (Rotasi Multi-Posisi)',
     shortLabel: 'Eksplorasi Pemain Lapangan',
-    indicators: [
-      'Keberanian Menguasai Bola',
-      'Koordinasi Mata-Kaki',
-      'Ketangkasan Fun Game',
-      'Semangat Mencoba Posisi Baru',
-      'Kesenangan Bermain'
-    ]
+    indicators: ['Distribusi Bola', 'Kontrol Bola', 'Dribbling']
   },
   {
     code: 'GK_SSB',
     label: 'Pengenalan Penjaga Gawang (GK Dasar)',
     shortLabel: 'Pengenalan Kiper',
-    indicators: [
-      'Keberanian Menangkap Bola',
-      'Koordinasi Tangan-Mata',
-      'Ketangkasan Gerak Dasar',
-      'Distribusi Bola Dasar',
-      'Kesenangan Bermain'
-    ]
+    indicators: ['Refleks', 'Distribusi Kaki']
   }
 ];
 
@@ -220,7 +169,7 @@ export const FOOTBALL_PLAYING_STYLES = [
   { code: 'STY14', name: 'Shadow Striker', desc: 'Gelandang serang yang masuk ke area gol' }
 ];
 
-// KAMUS 6 KATEGORI DENGAN minTier (1 s.d. 4)
+// KAMUS 6 KATEGORI DENGAN minTier (1 s.d. 4) & snake_case indicator_key 100% SELARAS DENGAN MASTER TEST LIBRARY
 export const FOOTBALL_CORE_CATEGORIES = {
   fisik: {
     key: 'fisik',
@@ -228,22 +177,17 @@ export const FOOTBALL_CORE_CATEGORIES = {
     shortTitle: 'Fisik',
     badgeColor: 'bg-rose-50 text-rose-800 border-rose-200',
     indicators: [
-      { name: 'Akselerasi', minTier: 1 },
-      { name: 'Kelincahan', minTier: 1 },
-      { name: 'Keseimbangan', minTier: 1 },
-      { name: 'Mobilitas', minTier: 1 },
-      { name: 'Koordinasi Tubuh', minTier: 1 },
-      { name: 'Kecepatan Maksimal', minTier: 2 },
-      { name: 'Reaksi', minTier: 2 },
-      { name: 'Lompatan', minTier: 2 },
-      { name: 'Perubahan Arah', minTier: 2 },
-      { name: 'Daya Tahan', minTier: 3 },
-      { name: 'Daya Ledak', minTier: 3 },
-      { name: 'Kekuatan Tubuh', minTier: 3 },
-      { name: 'Kekuatan Inti', minTier: 3 },
-      { name: 'Sprint Berulang', minTier: 4 },
-      { name: 'Pemulihan', minTier: 4 },
-      { name: 'Intensitas Kerja', minTier: 4 }
+      { key: 'akselerasi', name: 'Akselerasi', minTier: 1 },
+      { key: 'kelincahan', name: 'Kelincahan', minTier: 1 },
+      { key: 'keseimbangan', name: 'Keseimbangan', minTier: 1 },
+      { key: 'kecepatan_maksimal', name: 'Kecepatan Maksimal', minTier: 2 },
+      { key: 'perubahan_arah', name: 'Perubahan Arah', minTier: 2 },
+      { key: 'reaksi', name: 'Reaksi', minTier: 2 },
+      { key: 'lompatan', name: 'Lompatan', minTier: 2 },
+      { key: 'daya_tahan', name: 'Daya Tahan', minTier: 3 },
+      { key: 'daya_ledak', name: 'Daya Ledak', minTier: 3 },
+      { key: 'kekuatan_tubuh', name: 'Kekuatan Tubuh', minTier: 3 },
+      { key: 'pemulihan', name: 'Pemulihan', minTier: 4 }
     ]
   },
   teknik: {
@@ -252,26 +196,16 @@ export const FOOTBALL_CORE_CATEGORIES = {
     shortTitle: 'Teknik',
     badgeColor: 'bg-blue-50 text-blue-800 border-blue-200',
     indicators: [
-      { name: 'Kontrol Bola', minTier: 1 },
-      { name: 'Sentuhan Pertama', minTier: 1 },
-      { name: 'Passing Pendek', minTier: 1 },
-      { name: 'Dribbling', minTier: 1 },
-      { name: 'Finishing', minTier: 1 },
-      { name: 'Passing Jauh', minTier: 2 },
-      { name: 'Kekuatan Tembakan', minTier: 2 },
-      { name: 'Tackling', minTier: 2 },
-      { name: 'Interception', minTier: 2 },
-      { name: 'Clearance', minTier: 2 },
-      { name: 'Kaki Lemah', minTier: 2 },
-      { name: 'Umpan Terobosan', minTier: 3 },
-      { name: 'Proteksi Bola', minTier: 3 },
-      { name: 'Heading', minTier: 3 },
-      { name: 'Crossing', minTier: 3 },
-      { name: 'Bola Mati', minTier: 3 },
-      { name: 'First Touch Bertekanan', minTier: 4 },
-      { name: 'Duel Udara', minTier: 4 },
-      { name: 'Umpan Satu Sentuhan', minTier: 4 },
-      { name: 'Kontrol di Ruang Sempit', minTier: 4 }
+      { key: 'kontrol_bola', name: 'Kontrol Bola', minTier: 1 },
+      { key: 'sentuhan_pertama', name: 'Sentuhan Pertama', minTier: 1 },
+      { key: 'passing_pendek', name: 'Passing Pendek', minTier: 1 },
+      { key: 'dribbling', name: 'Dribbling', minTier: 1 },
+      { key: 'finishing', name: 'Finishing', minTier: 1 },
+      { key: 'passing_jauh', name: 'Passing Jauh', minTier: 2 },
+      { key: 'tackling', name: 'Tackling', minTier: 2 },
+      { key: 'kaki_lemah', name: 'Kaki Lemah', minTier: 2 },
+      { key: 'crossing', name: 'Crossing', minTier: 3 },
+      { key: 'heading', name: 'Heading', minTier: 3 }
     ]
   },
   taktik: {
@@ -280,26 +214,13 @@ export const FOOTBALL_CORE_CATEGORIES = {
     shortTitle: 'Taktik',
     badgeColor: 'bg-purple-50 text-purple-800 border-purple-200',
     indicators: [
-      { name: 'Posisi Bertahan', minTier: 1 },
-      { name: 'Posisi Menyerang', minTier: 1 },
-      { name: 'Membuka Ruang', minTier: 1 },
-      { name: 'Membaca Permainan', minTier: 2 },
-      { name: 'Pengambilan Keputusan', minTier: 2 },
-      { name: 'Gerak Tanpa Bola', minTier: 2 },
-      { name: 'Cover Rekan', minTier: 2 },
-      { name: 'Disiplin Formasi', minTier: 2 },
-      { name: 'Transisi Menyerang', minTier: 3 },
-      { name: 'Transisi Bertahan', minTier: 3 },
-      { name: 'Pressing', minTier: 3 },
-      { name: 'Menutup Ruang', minTier: 3 },
-      { name: 'Progresi Bola', minTier: 3 },
-      { name: 'Serangan Balik', minTier: 3 },
-      { name: 'Counter-Pressing', minTier: 4 },
-      { name: 'Jarak Antarlini', minTier: 4 },
-      { name: 'Sirkulasi Bola', minTier: 4 },
-      { name: 'Menjaga Kedalaman', minTier: 4 },
-      { name: 'Adaptasi Taktik', minTier: 4 },
-      { name: 'Keputusan di Bawah Tekanan', minTier: 4 }
+      { key: 'posisi_bertahan', name: 'Posisi Bertahan', minTier: 1 },
+      { key: 'posisi_menyerang', name: 'Posisi Menyerang', minTier: 1 },
+      { key: 'membuka_ruang', name: 'Membuka Ruang', minTier: 1 },
+      { key: 'membaca_permainan', name: 'Membaca Permainan', minTier: 2 },
+      { key: 'pengambilan_keputusan', name: 'Pengambilan Keputusan', minTier: 2 },
+      { key: 'pressing', name: 'Pressing', minTier: 3 },
+      { key: 'transisi_menyerang', name: 'Transisi Menyerang', minTier: 3 }
     ]
   },
   mental: {
@@ -308,16 +229,10 @@ export const FOOTBALL_CORE_CATEGORIES = {
     shortTitle: 'Mental',
     badgeColor: 'bg-emerald-50 text-emerald-800 border-emerald-200',
     indicators: [
-      { name: 'Fokus', minTier: 1 },
-      { name: 'Percaya Diri', minTier: 1 },
-      { name: 'Disiplin', minTier: 1 },
-      { name: 'Orientasi Tim', minTier: 1 },
-      { name: 'Kontrol Emosi', minTier: 2 },
-      { name: 'Daya Juang', minTier: 2 },
-      { name: 'Respons Kesalahan', minTier: 3 },
-      { name: 'Tahan Tekanan', minTier: 3 },
-      { name: 'Konsistensi Mental', minTier: 3 },
-      { name: 'Keberanian Duel', minTier: 3 }
+      { key: 'fokus', name: 'Fokus', minTier: 1 },
+      { key: 'percaya_diri', name: 'Percaya Diri', minTier: 1 },
+      { key: 'daya_juang', name: 'Daya Juang', minTier: 2 },
+      { key: 'tahan_tekanan', name: 'Tahan Tekanan', minTier: 3 }
     ]
   },
   komunikasi: {
@@ -326,14 +241,9 @@ export const FOOTBALL_CORE_CATEGORIES = {
     shortTitle: 'Komunikasi',
     badgeColor: 'bg-amber-50 text-amber-800 border-amber-200',
     indicators: [
-      { name: 'Komunikasi Verbal', minTier: 1 },
-      { name: 'Dukungan Rekan', minTier: 1 },
-      { name: 'Komunikasi Nonverbal', minTier: 2 },
-      { name: 'Respons Instruksi', minTier: 2 },
-      { name: 'Koordinasi Lini', minTier: 3 },
-      { name: 'Kepemimpinan', minTier: 3 },
-      { name: 'Koordinasi Pressing', minTier: 3 },
-      { name: 'Koordinasi Bertahan', minTier: 3 }
+      { key: 'komunikasi_verbal', name: 'Komunikasi Verbal', minTier: 1 },
+      { key: 'dukungan_rekan', name: 'Dukungan Rekan', minTier: 1 },
+      { key: 'kepemimpinan', name: 'Kepemimpinan', minTier: 3 }
     ]
   },
   perkembangan: {
@@ -342,16 +252,9 @@ export const FOOTBALL_CORE_CATEGORIES = {
     shortTitle: 'Perkembangan',
     badgeColor: 'bg-cyan-50 text-cyan-800 border-cyan-200',
     indicators: [
-      { name: 'Kehadiran Latihan', minTier: 1 },
-      { name: 'Respons Latihan', minTier: 1 },
-      { name: 'Progres Teknik', minTier: 1 },
-      { name: 'Kepatuhan Program', minTier: 2 },
-      { name: 'Progres Fisik', minTier: 2 },
-      { name: 'Progres Taktik', minTier: 3 },
-      { name: 'Pencapaian Target', minTier: 3 },
-      { name: 'Kesiapan Bertanding', minTier: 3 },
-      { name: 'Evaluasi Mandiri', minTier: 3 },
-      { name: 'Konsistensi Performa', minTier: 3 }
+      { key: 'kehadiran_latihan', name: 'Kehadiran Latihan', minTier: 1 },
+      { key: 'kepatuhan_program', name: 'Kepatuhan Program', minTier: 1 },
+      { key: 'konsistensi_kehadiran', name: 'Konsistensi Kehadiran', minTier: 1 }
     ]
   }
 };
@@ -377,19 +280,13 @@ export function getPositionIndicatorsForTier(code, activeTier) {
       code: ssbPos.code,
       label: ssbPos.label,
       shortLabel: ssbPos.shortLabel,
-      tabTitle: 'Gerak Dasar & Fun Game (5)',
+      tabTitle: `Gerak Dasar & Posisi (${ssbPos.indicators.length})`,
       indicators: ssbPos.indicators
     };
   }
 
   const posCfg = getPositionConfig(code);
-  let sliced = posCfg.indicators;
-
-  if (activeTier === 2) {
-    sliced = posCfg.indicators.slice(0, 6);
-  } else if (activeTier === 3) {
-    sliced = posCfg.indicators.slice(0, 8);
-  }
+  const sliced = posCfg.indicators;
 
   return {
     code: posCfg.code,

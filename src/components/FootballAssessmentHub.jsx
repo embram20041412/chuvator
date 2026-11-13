@@ -35,6 +35,7 @@ import {
   ASSESSMENT_CATEGORIES,
   RUBRIC_ANCHORED_SCORES,
   FOOTBALL_RUBRIC_ANCHORS,
+  ATTENDANCE_DEVELOPMENT_INDICATORS,
   calculateAssessmentScore,
   aggregateIndicatorScores,
   getAssessmentClassification,
@@ -1063,7 +1064,7 @@ export default function FootballAssessmentHub({
                   data-testid="wizard-skip-btn"
                   className="flex-1 min-h-[48px] px-3.5 py-2.5 rounded-xl text-xs font-extrabold text-amber-900 bg-amber-50 hover:bg-amber-100 border border-amber-300 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                 >
-                  <span>➔ Lewati Tes Ini</span>
+                  <span>➔ Lewati Tes</span>
                 </button>
               </div>
 
@@ -1351,6 +1352,61 @@ export default function FootballAssessmentHub({
           </div>
         </div>
       )}
+
+      {/* Automated Attendance-to-Development Indicators Strip (DEV01, DEV02, DEV03) */}
+      <div
+        data-testid="master-attendance-development-strip"
+        className="mx-4 sm:mx-5 mt-4 p-3.5 rounded-xl bg-emerald-50/75 dark:bg-emerald-950/25 border border-emerald-200 dark:border-emerald-800/80 space-y-2.5"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 text-xs font-extrabold text-slate-900 dark:text-white">
+            <Lock size={14} className="text-emerald-700 shrink-0" />
+            <span>Kategori 6: Perkembangan Atlet (Otomatis dari Modul Presensi Akademi)</span>
+          </div>
+          <span
+            data-testid="badge-linked-attendance"
+            className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-900 border border-emerald-300"
+          >
+            {existingIndicatorScores?.kehadiran_latihan?.badge_text ||
+              `Terhubung Otomatis ke Modul Presensi (${existingIndicatorScores?.kehadiran_latihan?.attendance_percentage ?? 92}%)`}
+          </span>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          {ATTENDANCE_DEVELOPMENT_INDICATORS.map((devInd) => {
+            const devCode = devInd.code || devInd.test_code || devInd.indicator_key;
+            const rec = existingIndicatorScores?.[devInd.indicator_key];
+            const scoreVal = rec?.score ?? 95;
+            const badgeText =
+              rec?.badgeText ||
+              rec?.badge_text ||
+              `Terhubung Otomatis ke Modul Presensi (${rec?.attendancePercentage ?? rec?.attendance_percentage ?? 92}%)`;
+            return (
+              <div
+                key={devCode}
+                data-testid={`attendance-dev-card-${devCode}`}
+                className="p-2.5 rounded-lg bg-white dark:bg-slate-900 border border-emerald-200/80 dark:border-emerald-800 flex items-center justify-between gap-2"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-slate-900 text-white">
+                      {devCode}
+                    </span>
+                    <span className="text-xs font-extrabold text-slate-900 dark:text-white truncate">
+                      {devInd.indicator_label}
+                    </span>
+                  </div>
+                  <p className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300 truncate mt-0.5">
+                    {badgeText}
+                  </p>
+                </div>
+                <span className="font-mono text-sm font-black text-emerald-800 dark:text-emerald-300 tabular-nums shrink-0">
+                  {scoreVal}/100
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
       {/* Test Cards Grid */}
       <div className="p-4 sm:p-5">

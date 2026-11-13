@@ -324,6 +324,85 @@ function isDemoTenant(tenantId) {
   return tenantId === 'demo-tenant-1';
 }
 
+const DEMO_ATTENDANCE_STORAGE_KEY = 'chuvator_demo_academy_attendance_v1';
+
+const DEMO_ATTENDANCE_SESSIONS = [
+  '2026-11-12',
+  '2026-11-10',
+  '2026-11-05',
+  '2026-11-03',
+  '2026-10-29',
+  '2026-10-27',
+  '2026-10-22',
+  '2026-10-20',
+  '2026-10-15',
+  '2026-10-13',
+  '2026-10-08',
+  '2026-10-06'
+].map((dateStr, idx) => ({
+  id: `demo-att-u12-${idx + 1}`,
+  tenant_id: 'demo-tenant-1',
+  academy_id: DEMO_ACADEMY_ID,
+  class_id: DEMO_CLASS_U12_ID,
+  date: dateStr,
+  coachName: 'Coach Bima Sakti',
+  coachAttended: true,
+  coach_attended: true,
+  notes: idx === 0 ? 'Latihan taktik 7v7 & penyelesaian akhir.' : 'Sesi rutin kurikulum Skill Phase.',
+  students_data: [
+    {
+      studentId: 'demo-student-fc-1',
+      studentName: 'Rafa Pratama',
+      status: idx === 5 ? 'Izin' : 'Hadir' // 11/12 Hadir = 92%
+    },
+    {
+      studentId: 'demo-student-fc-2',
+      studentName: 'Naufal Hakim',
+      status: idx === 3 || idx === 8 ? 'Izin' : 'Hadir' // 10/12 Hadir = 83%
+    }
+  ],
+  students: [
+    {
+      studentId: 'demo-student-fc-1',
+      studentName: 'Rafa Pratama',
+      status: idx === 5 ? 'Izin' : 'Hadir'
+    },
+    {
+      studentId: 'demo-student-fc-2',
+      studentName: 'Naufal Hakim',
+      status: idx === 3 || idx === 8 ? 'Izin' : 'Hadir'
+    }
+  ],
+  summary: {
+    hadir: idx === 5 || idx === 3 || idx === 8 ? 1 : 2,
+    izin: idx === 5 || idx === 3 || idx === 8 ? 1 : 0,
+    sakit: 0,
+    alpa: 0
+  },
+  created_at: `${dateStr}T09:00:00.000Z`
+}));
+
+function readDemoAttendance() {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return DEMO_ATTENDANCE_SESSIONS;
+    const raw = window.localStorage.getItem(DEMO_ATTENDANCE_STORAGE_KEY);
+    if (!raw) return DEMO_ATTENDANCE_SESSIONS;
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEMO_ATTENDANCE_SESSIONS;
+  } catch {
+    return DEMO_ATTENDANCE_SESSIONS;
+  }
+}
+
+function writeDemoAttendance(list) {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    window.localStorage.setItem(DEMO_ATTENDANCE_STORAGE_KEY, JSON.stringify(list));
+  } catch {
+    // ignore storage errors
+  }
+}
+
 function readDemoEvals() {
   try {
     if (typeof window === 'undefined' || !window.localStorage) return [];
@@ -1418,6 +1497,15 @@ export async function deleteEvaluation(evaluationId) {
 export async function getAttendance(tenantId, classId, date = null) {
   if (!tenantId) return [];
 
+  if (isDemoTenant(tenantId)) {
+    const allDemo = readDemoAttendance();
+    return allDemo.filter((row) => {
+      const classOk = !classId || row.class_id === classId || row.classId === classId;
+      const dateOk = !date || row.date === date;
+      return classOk && dateOk;
+    });
+  }
+
   let query = supabase
     .from('academy_attendance')
     .select('*')
@@ -1483,7 +1571,7 @@ export async function recordAttendanceSession({
   const sessionRow = {
     tenant_id: tenantId,
     academy_id: toUuidOrNull(academyId),
-    class_id: toUuidOrNull(classId),
+    class_id: toUuidOrNull(classId) || classId,
     date: toDateOrNull(date) || new Date().toISOString().split('T')[0],
     coach_attended: coachAttended,
     notes: notes || '',
@@ -1491,6 +1579,19 @@ export async function recordAttendanceSession({
     summary: summary || {},
     created_at: new Date().toISOString()
   };
+
+  if (isDemoTenant(tenantId)) {
+    const newRow = {
+      id: `att_${Date.now()}`,
+      ...sessionRow,
+      coachName,
+      coachAttended,
+      students: recordsPayload || []
+    };
+    const existing = readDemoAttendance();
+    writeDemoAttendance([newRow, ...existing.filter((r) => !(r.class_id === classId && r.date === sessionRow.date))]);
+    return newRow;
+  }
 
   const { data, error } = await supabase
     .from('academy_attendance')
@@ -1517,6 +1618,11 @@ export async function recordAttendanceSession({
 
 export async function deleteAttendanceSession(id) {
   if (!id) return;
+  if (String(id).startsWith('demo-att-') || String(id).startsWith('att_')) {
+    const existing = readDemoAttendance();
+    writeDemoAttendance(existing.filter((r) => r.id !== id));
+    return;
+  }
   const { error } = await supabase
     .from('academy_attendance')
     .delete()

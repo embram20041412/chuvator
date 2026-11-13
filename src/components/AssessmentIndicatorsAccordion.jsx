@@ -14,6 +14,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { getCategoryTheme } from './ScoutingPolarAreaPanel';
+import { normalizeIndicatorKey, resolveIndicatorScore } from '../utils/footballAssessmentEngine';
 
 // ============================================================================
 // SINGLE INDICATOR CARD (SLIDER + STEPPER, MOBILE-FIRST 44PX TOUCH TARGETS)
@@ -24,13 +25,14 @@ export function AccordionIndicatorCard({
   isSpecial = false,
   isMeasuredFromTest = false,
   lockedToMasterLibrary = false,
+  attendanceBadgeText = null,
   onScoreChange,
   onAdjust,
   isArchived = false,
   accentColor = '#10B981'
 }) {
   const numVal = Math.max(0, Math.min(100, Number(value) || 0));
-  const isReadOnly = Boolean(isArchived || lockedToMasterLibrary);
+  const isReadOnly = Boolean(isArchived || lockedToMasterLibrary || attendanceBadgeText);
 
   return (
     <div
@@ -38,7 +40,7 @@ export function AccordionIndicatorCard({
       className={`p-3 bg-white border ${
         isSpecial
           ? 'border-indigo-200/90'
-          : isMeasuredFromTest
+          : attendanceBadgeText || isMeasuredFromTest
             ? 'border-emerald-300/90'
             : 'border-slate-200/90'
       } rounded-2xl space-y-2 shadow-2xs`}
@@ -50,16 +52,26 @@ export function AccordionIndicatorCard({
             {title}
           </span>
           <div className="flex flex-wrap items-center gap-1">
-            {lockedToMasterLibrary && (
+            {attendanceBadgeText ? (
               <span
-                data-testid="badge-linked-master-library"
-                className="inline-flex items-center gap-1 w-fit px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-slate-100 text-slate-700 border border-slate-200"
+                data-testid="badge-linked-attendance"
+                className="inline-flex items-center gap-1 w-fit px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-300"
               >
                 <Lock className="w-2.5 h-2.5 text-emerald-700 shrink-0" />
-                <span>Terhubung ke Master Test Library</span>
+                <span>{attendanceBadgeText}</span>
               </span>
+            ) : (
+              lockedToMasterLibrary && (
+                <span
+                  data-testid="badge-linked-master-library"
+                  className="inline-flex items-center gap-1 w-fit px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-slate-100 text-slate-700 border border-slate-200"
+                >
+                  <Lock className="w-2.5 h-2.5 text-emerald-700 shrink-0" />
+                  <span>Terhubung ke Master Test Library</span>
+                </span>
+              )
             )}
-            {isMeasuredFromTest && (
+            {isMeasuredFromTest && !attendanceBadgeText && (
               <span className="inline-flex items-center gap-1 w-fit px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200">
                 Terukur via Tes
               </span>
@@ -74,7 +86,13 @@ export function AccordionIndicatorCard({
             disabled={isReadOnly}
             onClick={() => !isReadOnly && onAdjust && onAdjust(-5)}
             className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-black flex items-center justify-center text-xs transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            title={lockedToMasterLibrary ? 'Terkunci: Diperbarui otomatis via Master Test Library' : 'Kurangi 5'}
+            title={
+              attendanceBadgeText
+                ? attendanceBadgeText
+                : lockedToMasterLibrary
+                  ? 'Terkunci: Diperbarui otomatis via Master Test Library'
+                  : 'Kurangi 5'
+            }
             aria-label={`Kurangi 5 ${title}`}
           >
             <Minus className="w-3.5 h-3.5" />
@@ -92,7 +110,13 @@ export function AccordionIndicatorCard({
             disabled={isReadOnly}
             onClick={() => !isReadOnly && onAdjust && onAdjust(5)}
             className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-black flex items-center justify-center text-xs transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            title={lockedToMasterLibrary ? 'Terkunci: Diperbarui otomatis via Master Test Library' : 'Tambah 5'}
+            title={
+              attendanceBadgeText
+                ? attendanceBadgeText
+                : lockedToMasterLibrary
+                  ? 'Terkunci: Diperbarui otomatis via Master Test Library'
+                  : 'Tambah 5'
+            }
             aria-label={`Tambah 5 ${title}`}
           >
             <Plus className="w-3.5 h-3.5" />
@@ -192,11 +216,31 @@ export default function AssessmentIndicatorsAccordion({
     }
   };
 
+  const resolveMeasuredEntry = (indName) => {
+    if (!measuredIndicatorMap) return null;
+    if (measuredIndicatorMap[indName]) return measuredIndicatorMap[indName];
+    const normKey = normalizeIndicatorKey(indName);
+    return normKey ? measuredIndicatorMap[normKey] || null : null;
+  };
+
+  const resolveAttendanceBadge = (indName, catKey) => {
+    const rec = resolveMeasuredEntry(indName);
+    const normKey = normalizeIndicatorKey(indName);
+    const isAttendanceIndicator =
+      rec?.source === 'attendance_sync' ||
+      catKey === 'perkembangan' ||
+      ['kehadiran_latihan', 'kepatuhan_program', 'konsistensi_kehadiran'].includes(normKey);
+    if (!isAttendanceIndicator) return null;
+    if (rec?.badge_text) return rec.badge_text;
+    const pct = rec?.attendance_percentage ?? 92;
+    return `Terhubung Otomatis ke Modul Presensi (${pct}%)`;
+  };
+
   const getCategoryStats = (indicators = []) => {
     const total = indicators.length;
     if (total === 0) return { total: 0, rated: 0, isCompleted: true };
     const rated = indicators.filter((ind) => {
-      const s = scores[ind];
+      const s = resolveIndicatorScore(scores, ind);
       return s !== undefined && s !== null && s > 0;
     }).length;
     return {
@@ -380,20 +424,24 @@ export default function AssessmentIndicatorsAccordion({
                         </div>
                       ) : (
                         <div className="space-y-2">
-                          {indicators.map((indName) => (
-                            <AccordionIndicatorCard
-                              key={indName}
-                              title={indName}
-                              value={scores[indName] !== undefined ? scores[indName] : 0}
-                              isSpecial={cat.isSpecial}
-                              isMeasuredFromTest={measuredIndicatorMap?.[indName]?.source === 'battery_test'}
-                              lockedToMasterLibrary={lockedToMasterLibrary}
-                              onScoreChange={(val) => onScoreChange && onScoreChange(indName, val)}
-                              onAdjust={(delta) => onAdjustScore && onAdjustScore(indName, delta)}
-                              isArchived={isArchived}
-                              accentColor={theme.color}
-                            />
-                          ))}
+                          {indicators.map((indName) => {
+                            const measuredRec = resolveMeasuredEntry(indName);
+                            return (
+                              <AccordionIndicatorCard
+                                key={indName}
+                                title={indName}
+                                value={resolveIndicatorScore(scores, indName)}
+                                isSpecial={cat.isSpecial}
+                                isMeasuredFromTest={measuredRec?.source === 'battery_test'}
+                                lockedToMasterLibrary={lockedToMasterLibrary}
+                                attendanceBadgeText={resolveAttendanceBadge(indName, cat.key)}
+                                onScoreChange={(val) => onScoreChange && onScoreChange(indName, val)}
+                                onAdjust={(delta) => onAdjustScore && onAdjustScore(indName, delta)}
+                                isArchived={isArchived}
+                                accentColor={theme.color}
+                              />
+                            );
+                          })}
                         </div>
                       )}
                     </motion.div>
@@ -598,20 +646,24 @@ export default function AssessmentIndicatorsAccordion({
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                        {indicators.map((indName) => (
-                          <AccordionIndicatorCard
-                            key={indName}
-                            title={indName}
-                            value={scores[indName] !== undefined ? scores[indName] : 0}
-                            isSpecial={cat.isSpecial}
-                            isMeasuredFromTest={measuredIndicatorMap?.[indName]?.source === 'battery_test'}
-                            lockedToMasterLibrary={lockedToMasterLibrary}
-                            onScoreChange={(val) => onScoreChange && onScoreChange(indName, val)}
-                            onAdjust={(delta) => onAdjustScore && onAdjustScore(indName, delta)}
-                            isArchived={isArchived}
-                            accentColor={theme.color}
-                          />
-                        ))}
+                        {indicators.map((indName) => {
+                          const measuredRec = resolveMeasuredEntry(indName);
+                          return (
+                            <AccordionIndicatorCard
+                              key={indName}
+                              title={indName}
+                              value={resolveIndicatorScore(scores, indName)}
+                              isSpecial={cat.isSpecial}
+                              isMeasuredFromTest={measuredRec?.source === 'battery_test'}
+                              lockedToMasterLibrary={lockedToMasterLibrary}
+                              attendanceBadgeText={resolveAttendanceBadge(indName, cat.key)}
+                              onScoreChange={(val) => onScoreChange && onScoreChange(indName, val)}
+                              onAdjust={(delta) => onAdjustScore && onAdjustScore(indName, delta)}
+                              isArchived={isArchived}
+                              accentColor={theme.color}
+                            />
+                          );
+                        })}
                       </div>
                     )}
                   </motion.div>

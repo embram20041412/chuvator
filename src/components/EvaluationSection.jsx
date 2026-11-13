@@ -115,7 +115,11 @@ import AssessmentIndicatorsAccordion from './AssessmentIndicatorsAccordion';
 import AthleteAssessmentEditView from './AthleteAssessmentEditView';
 import FootballAssessmentHub from './FootballAssessmentHub';
 import scoutingCombineService from '../services/scoutingCombineService';
-import { MASTER_INDICATOR_KEY_TO_LABEL } from '../utils/footballAssessmentEngine';
+import {
+  MASTER_INDICATOR_KEY_TO_LABEL,
+  normalizeIndicatorKey,
+  resolveIndicatorScore
+} from '../utils/footballAssessmentEngine';
 
 const ALL_FOOTBALL_INDICATOR_LABELS = {
   ...MASTER_INDICATOR_KEY_TO_LABEL
@@ -3055,24 +3059,32 @@ function FootballAssessmentView({
   const [successMsg, setSuccessMsg] = useState(null);
   const [errorMsg, setErrorMsg] = useState(null);
 
-  // Map raw indicator_key records -> CHUVATOR display label records for Polar Area & Accordion
+  // Map raw indicator_key records -> CHUVATOR display label & snake_case records for Polar Area & Accordion
   const measuredIndicatorMap = useMemo(() => {
     const mapped = {};
     Object.entries(athleteIndicatorRecords || {}).forEach(([key, rec]) => {
       if (!rec) return;
-      const label = rec.indicator_label || ALL_FOOTBALL_INDICATOR_LABELS[key] || key;
-      mapped[label] = {
+      const canonicalKey = normalizeIndicatorKey(key) || key;
+      const label = rec.indicator_label || ALL_FOOTBALL_INDICATOR_LABELS[canonicalKey] || key;
+      const entry = {
         ...rec,
-        indicator_key: key,
+        indicator_key: canonicalKey,
         indicator_label: label
       };
+      mapped[label] = entry;
+      mapped[canonicalKey] = entry;
     });
     return mapped;
   }, [athleteIndicatorRecords]);
 
   const measuredBatteryEntries = useMemo(() => {
-    return Object.values(measuredIndicatorMap).filter((rec) => rec && rec.source === 'battery_test');
-  }, [measuredIndicatorMap]);
+    const seen = new Set();
+    return Object.values(athleteIndicatorRecords || {}).filter((rec) => {
+      if (!rec || !rec.indicator_key || seen.has(rec.indicator_key)) return false;
+      seen.add(rec.indicator_key);
+      return rec.source === 'battery_test' || rec.source === 'attendance_sync';
+    });
+  }, [athleteIndicatorRecords]);
 
   const measuredAvgScore = useMemo(() => {
     if (!measuredBatteryEntries || measuredBatteryEntries.length === 0) return null;
@@ -3092,9 +3104,14 @@ function FootballAssessmentView({
       const merged = { ...prev };
       Object.entries(nextMap).forEach(([key, rec]) => {
         if (!rec) return;
-        const label = rec.indicator_label || ALL_FOOTBALL_INDICATOR_LABELS[key];
-        if (label && Number.isFinite(Number(rec.score))) {
-          merged[label] = Math.max(1, Math.min(100, Math.round(Number(rec.score))));
+        const canonicalKey = normalizeIndicatorKey(key) || key;
+        const label = rec.indicator_label || ALL_FOOTBALL_INDICATOR_LABELS[canonicalKey];
+        if (Number.isFinite(Number(rec.score))) {
+          const clamped = Math.max(1, Math.min(100, Math.round(Number(rec.score))));
+          merged[canonicalKey] = clamped;
+          if (label) {
+            merged[label] = clamped;
+          }
         }
       });
       return merged;
@@ -3194,10 +3211,14 @@ function FootballAssessmentView({
       setSelectedStyleCode(selectedStudent.styleCode || 'STY07');
     }
 
-    // Fetch live scores synced from Scouting Combine / Rubric (`athlete_indicator_scores`)
+    // Fetch live scores synced from Master Test Library + Automated Attendance (`athlete_indicator_scores`)
     if (tenantId) {
       scoutingCombineService
-        .getAthleteIndicatorScores(tenantId, selectedStudent.id)
+        .getAthleteIndicatorScores(tenantId, selectedStudent.id, {
+          classId: selectedClass?.id || null,
+          athleteName: selectedStudent.studentName || selectedStudent.name || '',
+          tier: activeTier
+        })
         .then((indicatorMap) => {
           if (!isMounted || !indicatorMap) return;
           setAthleteIndicatorRecords(indicatorMap);
@@ -3205,9 +3226,14 @@ function FootballAssessmentView({
             const merged = { ...prev };
             Object.entries(indicatorMap).forEach(([key, rec]) => {
               if (!rec) return;
-              const label = rec.indicator_label || ALL_FOOTBALL_INDICATOR_LABELS[key];
-              if (label && Number.isFinite(Number(rec.score))) {
-                merged[label] = Math.max(1, Math.min(100, Math.round(Number(rec.score))));
+              const canonicalKey = normalizeIndicatorKey(key) || key;
+              const label = rec.indicator_label || ALL_FOOTBALL_INDICATOR_LABELS[canonicalKey];
+              if (Number.isFinite(Number(rec.score))) {
+                const clamped = Math.max(1, Math.min(100, Math.round(Number(rec.score))));
+                merged[canonicalKey] = clamped;
+                if (label) {
+                  merged[label] = clamped;
+                }
               }
             });
             return merged;
@@ -3221,7 +3247,7 @@ function FootballAssessmentView({
     return () => {
       isMounted = false;
     };
-  }, [selectedStudent?.id, latestEvalDoc?.id, tenantId]);
+  }, [selectedStudent?.id, selectedStudent?.studentName, latestEvalDoc?.id, tenantId, selectedClass?.id, activeTier]);
 
   const handlePositionChange = (newCode) => {
     setSelectedPosition(newCode);
@@ -3250,7 +3276,7 @@ function FootballAssessmentView({
     const calcCategoryAvg = (indicatorList) => {
       if (!indicatorList || indicatorList.length === 0) return 0;
       const total = indicatorList.reduce((sum, ind) => {
-        const val = scores[ind] !== undefined ? scores[ind] : 0;
+        const val = resolveIndicatorScore(scores, ind);
         return sum + val;
       }, 0);
       return Math.round(total / indicatorList.length);
@@ -3428,7 +3454,7 @@ function FootballAssessmentView({
 
     const finalScores = {};
     activeIndicators.forEach((ind) => {
-      finalScores[ind] = scores[ind] !== undefined ? scores[ind] : 0;
+      finalScores[ind] = resolveIndicatorScore(scores, ind);
     });
 
     const styleObj = getStyleConfig(selectedStyleCode);
