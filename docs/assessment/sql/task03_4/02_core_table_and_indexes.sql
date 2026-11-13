@@ -1,14 +1,18 @@
 -- =============================================================================
--- CHUVATOR — TASK 03.4: SUPABASE DATABASE MIGRATION READINESS
--- 02_core_table_and_indexes.sql (IDEMPOTENT CORE TABLE, COLUMNS & INDEXES)
+-- CHUVATOR — TASK 03.4.3: SUPABASE DATABASE MIGRATION READINESS (REMEDIATED)
+-- 02_core_table_and_indexes.sql (TRANSACTIONAL, FAIL-CLOSED CORE TABLE & INDEXES)
 -- =============================================================================
 -- PRINSIP:
---   1. Idempoten & Non-Destruktif (CREATE TABLE IF NOT EXISTS, ADD COLUMN IF NOT EXISTS).
---   2. Mempertahankan kompatibilitas penuh dengan Task 03, 03.1, 03.2, 03.3.
---   3. Menambahkan kolom konteks terindeks opsional (measurement_method,
---      age_years_at_test, age_group, test_period) tanpa menduplikasi tabel students.
---   4. Tidak membatasi riwayat longitudinal (berbagai sesi tanggal & metode tersimpan terpisah).
+--   1. Transaksional (BEGIN ... COMMIT), Idempoten & Non-Destruktif.
+--   2. Fail-Closed sejak detik pembuatan tabel: ENABLE + FORCE ROW LEVEL SECURITY
+--      dan REVOKE ALL FROM PUBLIC, anon, authenticated diterapkan LANGSUNG setelah
+--      CREATE TABLE IF NOT EXISTS sehingga tidak ada jendela tabel tanpa RLS.
+--   3. Mempertahankan kompatibilitas penuh dengan Task 03, 03.1, 03.2, 03.3.
+--   4. Sanitasi aman nilai whitespace/kosong pada kolom konteks data eksisting
+--      tanpa mengubah fakta pengukuran mentah maupun kolom audit `updated_at`.
 -- =============================================================================
+
+BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS "pgcrypto" WITH SCHEMA extensions;
 
@@ -98,6 +102,11 @@ CREATE TABLE IF NOT EXISTS public.athlete_test_results (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- 2A. FAIL-CLOSED LOCKDOWN SEJAK PEMBUATAN TABEL (Menutup jendela eksekusi modular 02..04)
+ALTER TABLE public.athlete_test_results ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.athlete_test_results FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.athlete_test_results FROM PUBLIC, anon, authenticated;
+
 -- 3. Penambahan Kolom Konteks Opsional (Idempoten jika tabel Task 03 sudah ada sebelumnya)
 ALTER TABLE public.athlete_test_results
     ADD COLUMN IF NOT EXISTS measurement_method TEXT NULL;
@@ -107,6 +116,42 @@ ALTER TABLE public.athlete_test_results
     ADD COLUMN IF NOT EXISTS age_group TEXT NULL;
 ALTER TABLE public.athlete_test_results
     ADD COLUMN IF NOT EXISTS test_period TEXT NULL;
+
+-- 3A. Lepas Trigger Lama Sementara Bila Ada Sebelum Sanitasi Konteks Agar updated_at Historis Utuh
+DROP TRIGGER IF EXISTS trg_protect_athlete_test_results_columns ON public.athlete_test_results;
+DROP TRIGGER IF EXISTS trg_validate_and_protect_athlete_test_results ON public.athlete_test_results;
+
+-- 3B. Sanitasi Aman Nilai Legacy Kosong / Whitespace / Non-Kanonik pada Kolom Konteks Sebelum Constraint
+UPDATE public.athlete_test_results
+SET
+    measurement_method = CASE
+        WHEN measurement_method IS NULL OR trim(measurement_method) = '' THEN NULL
+        WHEN test_id = 'TST-SPR-10M'
+             AND UPPER(trim(measurement_method)) IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO')
+            THEN UPPER(trim(measurement_method))
+        WHEN test_id = 'TST-SPR-10M' THEN NULL
+        ELSE UPPER(trim(measurement_method))
+    END,
+    age_group = CASE
+        WHEN age_group IS NULL OR trim(age_group) = '' THEN NULL
+        ELSE trim(age_group)
+    END
+WHERE (
+    measurement_method IS NOT NULL AND (
+        trim(measurement_method) = ''
+        OR measurement_method IS DISTINCT FROM UPPER(trim(measurement_method))
+        OR (
+            test_id = 'TST-SPR-10M'
+            AND UPPER(trim(measurement_method)) NOT IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO')
+        )
+    )
+)
+   OR (
+    age_group IS NOT NULL AND (
+        trim(age_group) = ''
+        OR age_group IS DISTINCT FROM trim(age_group)
+    )
+);
 
 -- 4. Constraints Non-Destruktif untuk Kolom Konteks Tambahan
 DO $$
@@ -164,3 +209,5 @@ CREATE INDEX IF NOT EXISTS idx_athlete_test_results_norms_recap
 
 CREATE INDEX IF NOT EXISTS idx_athlete_test_results_calibration_status
     ON public.athlete_test_results (tenant_id, test_id, calibration_status);
+
+COMMIT;

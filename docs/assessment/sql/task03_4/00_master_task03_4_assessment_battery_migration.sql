@@ -1,16 +1,16 @@
 -- =============================================================================
--- CHUVATOR — TASK 03.4: CONSOLIDATED MASTER MIGRATION SQL
+-- CHUVATOR — TASK 03.4.3: CONSOLIDATED MASTER MIGRATION SQL (REMEDIATED)
 -- 00_master_task03_4_assessment_battery_migration.sql
 -- =============================================================================
 -- TARGET        : Supabase PostgreSQL CHUVATOR (`public.athlete_test_results`)
 -- STATUS        : READY FOR ADMIN EXECUTION (JANGAN DIEKSEKUSI OTOMATIS OLEH APP)
 -- SIFAT         : Transaksional (BEGIN ... COMMIT), Idempoten, Non-Destruktif,
---                 Backward-Compatible dengan Task 03 / 03.1 / 03.2 / 03.3.
+--                 Fail-Closed 100%, Backward-Compatible dengan Task 03 / 03.1 / 03.2 / 03.3.
 -- URUTAN MODUL  :
 --   [1] Dependency Preflight Gate (halting if core tables missing)
---   [2] Core Table, Indexed Context Columns & Performance Indexes
---   [3] Hardened Security Functions, Anti-Spoofing Coach Scope, Trigger & Function Grants
---   [4] Strict RLS Policies (ENABLE + FORCE RLS) & Table Grants
+--   [2] Core Table (Immediate Fail-Closed RLS + REVOKE), Legacy Sanitization & Indexes
+--   [3] Hardened Fail-Closed Security Functions, OWNER TO postgres, Anti-Spoofing Trigger & Safe Backfill
+--   [4] Strict RLS Policies (Scope-Restricted Coach SELECT/WRITE) & Table Grants
 --   [5] Calibration Consistency & Longitudinal Compatibility Checks
 -- =============================================================================
 
@@ -49,7 +49,7 @@ BEGIN
 END $$;
 
 -- -----------------------------------------------------------------------------
--- [2] CORE TABLE, OPTIONAL INDEXED CONTEXT COLUMNS & INDEXES
+-- [2] CORE TABLE, FAIL-CLOSED LOCKDOWN, OPTIONAL INDEXED CONTEXT COLUMNS & INDEXES
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.athlete_test_results (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -108,6 +108,11 @@ CREATE TABLE IF NOT EXISTS public.athlete_test_results (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Fail-closed lockdown langsung setelah pembuatan tabel
+ALTER TABLE public.athlete_test_results ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.athlete_test_results FORCE ROW LEVEL SECURITY;
+REVOKE ALL ON TABLE public.athlete_test_results FROM PUBLIC, anon, authenticated;
+
 -- Upgrade idempoten jika tabel sudah ada dari Task 03
 ALTER TABLE public.athlete_test_results
     ADD COLUMN IF NOT EXISTS measurement_method TEXT NULL;
@@ -117,6 +122,42 @@ ALTER TABLE public.athlete_test_results
     ADD COLUMN IF NOT EXISTS age_group TEXT NULL;
 ALTER TABLE public.athlete_test_results
     ADD COLUMN IF NOT EXISTS test_period TEXT NULL;
+
+-- Lepas trigger lama sementara bila ada sebelum sanitasi konteks agar updated_at historis utuh
+DROP TRIGGER IF EXISTS trg_protect_athlete_test_results_columns ON public.athlete_test_results;
+DROP TRIGGER IF EXISTS trg_validate_and_protect_athlete_test_results ON public.athlete_test_results;
+
+-- Sanitasi aman nilai legacy kosong / whitespace / non-kanonik pada kolom konteks sebelum constraint
+UPDATE public.athlete_test_results
+SET
+    measurement_method = CASE
+        WHEN measurement_method IS NULL OR trim(measurement_method) = '' THEN NULL
+        WHEN test_id = 'TST-SPR-10M'
+             AND UPPER(trim(measurement_method)) IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO')
+            THEN UPPER(trim(measurement_method))
+        WHEN test_id = 'TST-SPR-10M' THEN NULL
+        ELSE UPPER(trim(measurement_method))
+    END,
+    age_group = CASE
+        WHEN age_group IS NULL OR trim(age_group) = '' THEN NULL
+        ELSE trim(age_group)
+    END
+WHERE (
+    measurement_method IS NOT NULL AND (
+        trim(measurement_method) = ''
+        OR measurement_method IS DISTINCT FROM UPPER(trim(measurement_method))
+        OR (
+            test_id = 'TST-SPR-10M'
+            AND UPPER(trim(measurement_method)) NOT IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO')
+        )
+    )
+)
+   OR (
+    age_group IS NOT NULL AND (
+        trim(age_group) = ''
+        OR age_group IS DISTINCT FROM trim(age_group)
+    )
+);
 
 DO $$
 BEGIN
@@ -174,7 +215,7 @@ CREATE INDEX IF NOT EXISTS idx_athlete_test_results_calibration_status
     ON public.athlete_test_results (tenant_id, test_id, calibration_status);
 
 -- -----------------------------------------------------------------------------
--- [3] HARDENED SECURITY FUNCTIONS, TRIGGERS & FUNCTION GRANTS
+-- [3] HARDENED SECURITY FUNCTIONS, OWNER, TRIGGER & SAFE BACKFILL
 -- -----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.get_strict_tenant_member_role(check_tenant_id TEXT)
 RETURNS TEXT
@@ -215,7 +256,7 @@ BEGIN
         WHERE (t.tenant_id::text = trim(check_tenant_id) OR t.id::text = trim(check_tenant_id))
           AND t.owner_uid::text = v_caller_uid
           AND COALESCE((to_jsonb(t)->>'is_active')::boolean, TRUE) = TRUE
-          AND LOWER(COALESCE(t.status, 'active')) IN ('active', 'aktif')
+          AND LOWER(COALESCE(NULLIF(trim(t.status), ''), 'active')) IN ('active', 'aktif')
     ) THEN
         RETURN 'owner';
     END IF;
@@ -225,12 +266,12 @@ BEGIN
     WHERE s.tenant_id::text = trim(check_tenant_id)
       AND s.uid::text = v_caller_uid
       AND COALESCE((to_jsonb(s)->>'is_active')::boolean, FALSE) = TRUE
-      AND LOWER(COALESCE(s.status, 'inactive')) IN ('active', 'aktif')
+      AND LOWER(COALESCE(NULLIF(trim(s.status), ''), 'inactive')) IN ('active', 'aktif')
       AND EXISTS (
           SELECT 1 FROM public.tenants t
           WHERE (t.tenant_id::text = trim(check_tenant_id) OR t.id::text = trim(check_tenant_id))
             AND COALESCE((to_jsonb(t)->>'is_active')::boolean, TRUE) = TRUE
-            AND LOWER(COALESCE(t.status, 'active')) IN ('active', 'aktif')
+            AND LOWER(COALESCE(NULLIF(trim(t.status), ''), 'active')) IN ('active', 'aktif')
       )
     LIMIT 1;
 
@@ -259,10 +300,27 @@ SECURITY DEFINER
 SET search_path = public, extensions, pg_temp
 AS $$
 DECLARE
+    v_caller_role TEXT;
+    v_caller_uid TEXT;
+    v_coach_id UUID;
+    v_coach_academy_id UUID;
     v_student_record RECORD;
+    v_class_record RECORD;
 BEGIN
     IF check_student_id IS NULL OR check_tenant_id IS NULL OR trim(check_tenant_id) = '' THEN
         RETURN FALSE;
+    END IF;
+
+    -- Cegah pemanggilan anonim dan cegah enumerasi RPC lintas-tenant dari klien terautentikasi
+    IF current_user = 'anon' THEN
+        RETURN FALSE;
+    END IF;
+
+    IF auth.uid() IS NOT NULL OR current_user = 'authenticated' THEN
+        v_caller_role := public.get_strict_tenant_member_role(check_tenant_id);
+        IF v_caller_role IS NULL THEN
+            RETURN FALSE;
+        END IF;
     END IF;
 
     SELECT s.id, s.tenant_id::text AS tenant_id, s.class_id, s.academy_id
@@ -279,21 +337,71 @@ BEGIN
         RETURN FALSE;
     END IF;
 
-    IF check_class_id IS NOT NULL THEN
-        IF NOT EXISTS (
-            SELECT 1 FROM public.academy_classes c
-            WHERE c.id = check_class_id
-              AND trim(c.tenant_id::text) = trim(check_tenant_id)
-        ) THEN
-            RETURN FALSE;
-        END IF;
-    END IF;
-
     IF check_academy_id IS NOT NULL THEN
         IF NOT EXISTS (
             SELECT 1 FROM public.academies a
             WHERE a.id = check_academy_id
               AND trim(a.tenant_id::text) = trim(check_tenant_id)
+        ) THEN
+            RETURN FALSE;
+        END IF;
+
+        IF v_student_record.academy_id IS NOT NULL AND check_academy_id IS DISTINCT FROM v_student_record.academy_id THEN
+            RETURN FALSE;
+        END IF;
+    END IF;
+
+    IF check_class_id IS NOT NULL THEN
+        SELECT c.id, c.tenant_id::text AS tenant_id, c.academy_id
+        INTO v_class_record
+        FROM public.academy_classes c
+        WHERE c.id = check_class_id
+          AND trim(c.tenant_id::text) = trim(check_tenant_id)
+        LIMIT 1;
+
+        IF v_class_record.id IS NULL THEN
+            RETURN FALSE;
+        END IF;
+
+        IF check_academy_id IS NOT NULL AND v_class_record.academy_id IS NOT NULL AND v_class_record.academy_id IS DISTINCT FROM check_academy_id THEN
+            RETURN FALSE;
+        END IF;
+
+        IF v_student_record.academy_id IS NOT NULL AND v_class_record.academy_id IS NOT NULL AND v_class_record.academy_id IS DISTINCT FROM v_student_record.academy_id THEN
+            RETURN FALSE;
+        END IF;
+    END IF;
+
+    -- Untuk pemanggilan RPC langsung oleh Coach, batasi probing ke siswa dalam kelas aktif miliknya
+    IF v_caller_role = 'coach' THEN
+        v_caller_uid := auth.uid()::text;
+        SELECT c.id, c.academy_id
+        INTO v_coach_id, v_coach_academy_id
+        FROM public.coaches c
+        WHERE trim(c.tenant_id::text) = trim(check_tenant_id)
+          AND NULLIF(trim(to_jsonb(c)->>'auth_uid'), '') = v_caller_uid
+          AND COALESCE((to_jsonb(c)->>'is_active')::boolean, TRUE) = TRUE
+          AND LOWER(COALESCE(NULLIF(trim(c.status), ''), 'active')) IN ('active', 'aktif')
+        LIMIT 1;
+
+        IF v_coach_id IS NULL OR v_student_record.class_id IS NULL THEN
+            RETURN FALSE;
+        END IF;
+
+        IF v_coach_academy_id IS NOT NULL AND v_student_record.academy_id IS NOT NULL AND v_coach_academy_id <> v_student_record.academy_id THEN
+            RETURN FALSE;
+        END IF;
+
+        IF check_class_id IS NOT NULL AND check_class_id IS DISTINCT FROM v_student_record.class_id THEN
+            RETURN FALSE;
+        END IF;
+
+        IF NOT EXISTS (
+            SELECT 1 FROM public.academy_classes cls
+            WHERE cls.id = v_student_record.class_id
+              AND trim(cls.tenant_id::text) = trim(check_tenant_id)
+              AND cls.coach_id = v_coach_id
+              AND COALESCE((to_jsonb(cls)->>'is_archived')::boolean, FALSE) = FALSE
         ) THEN
             RETURN FALSE;
         END IF;
@@ -320,7 +428,6 @@ DECLARE
     v_coach_academy_id UUID;
     v_student_academy_id UUID;
     v_student_class_id UUID;
-    v_has_assigned_classes BOOLEAN := FALSE;
 BEGIN
     v_role := public.get_strict_tenant_member_role(check_tenant_id);
     IF v_role IS NULL THEN
@@ -340,16 +447,22 @@ BEGIN
     END IF;
 
     v_caller_uid := auth.uid()::text;
+    IF v_caller_uid IS NULL OR trim(v_caller_uid) = '' THEN
+        RETURN FALSE;
+    END IF;
 
+    -- Pelatih wajib memiliki profil aktif tertaut via auth_uid pada public.coaches (FAIL-CLOSED)
     SELECT c.id, c.academy_id
     INTO v_coach_id, v_coach_academy_id
     FROM public.coaches c
     WHERE trim(c.tenant_id::text) = trim(check_tenant_id)
-      AND (to_jsonb(c)->>'auth_uid') = v_caller_uid
+      AND NULLIF(trim(to_jsonb(c)->>'auth_uid'), '') = v_caller_uid
+      AND COALESCE((to_jsonb(c)->>'is_active')::boolean, TRUE) = TRUE
+      AND LOWER(COALESCE(NULLIF(trim(c.status), ''), 'active')) IN ('active', 'aktif')
     LIMIT 1;
 
     IF v_coach_id IS NULL THEN
-        RETURN TRUE;
+        RETURN FALSE;
     END IF;
 
     SELECT s.academy_id, s.class_id
@@ -365,37 +478,22 @@ BEGIN
         END IF;
     END IF;
 
-    SELECT EXISTS (
+    IF v_student_class_id IS NULL THEN
+        RETURN FALSE;
+    END IF;
+
+    IF check_class_id IS NOT NULL AND check_class_id IS DISTINCT FROM v_student_class_id THEN
+        RETURN FALSE;
+    END IF;
+
+    IF NOT EXISTS (
         SELECT 1 FROM public.academy_classes cls
-        WHERE trim(cls.tenant_id::text) = trim(check_tenant_id)
+        WHERE cls.id = v_student_class_id
+          AND trim(cls.tenant_id::text) = trim(check_tenant_id)
           AND cls.coach_id = v_coach_id
           AND COALESCE((to_jsonb(cls)->>'is_archived')::boolean, FALSE) = FALSE
-    ) INTO v_has_assigned_classes;
-
-    IF v_has_assigned_classes THEN
-        IF v_student_class_id IS NULL THEN
-            RETURN FALSE;
-        END IF;
-
-        IF NOT EXISTS (
-            SELECT 1 FROM public.academy_classes cls
-            WHERE cls.id = v_student_class_id
-              AND trim(cls.tenant_id::text) = trim(check_tenant_id)
-              AND cls.coach_id = v_coach_id
-        ) THEN
-            RETURN FALSE;
-        END IF;
-
-        IF check_class_id IS NOT NULL AND check_class_id <> v_student_class_id THEN
-            IF NOT EXISTS (
-                SELECT 1 FROM public.academy_classes cls
-                WHERE cls.id = check_class_id
-                  AND trim(cls.tenant_id::text) = trim(check_tenant_id)
-                  AND cls.coach_id = v_coach_id
-            ) THEN
-                RETURN FALSE;
-            END IF;
-        END IF;
+    ) THEN
+        RETURN FALSE;
     END IF;
 
     RETURN TRUE;
@@ -409,10 +507,21 @@ SECURITY DEFINER
 SET search_path = public, extensions, pg_temp
 AS $$
 DECLARE
+    v_caller_role TEXT;
+    v_caller_uid TEXT;
+    v_caller_coach_id UUID;
+    v_student_birth_date DATE;
+    v_student_computed_age INTEGER;
     v_ctx_age_text TEXT;
     v_parsed_age INTEGER;
+    v_raw_top_method TEXT;
     v_ctx_method TEXT;
+    v_raw_age_group TEXT;
     v_ctx_age_group TEXT;
+    v_json_changed BOOLEAN;
+    v_method_json_changed BOOLEAN;
+    v_age_group_json_changed BOOLEAN;
+    v_age_years_json_changed BOOLEAN;
 BEGIN
     IF TG_OP = 'UPDATE' THEN
         IF NEW.id IS DISTINCT FROM OLD.id THEN
@@ -427,8 +536,11 @@ BEGIN
         IF NEW.created_at IS DISTINCT FROM OLD.created_at THEN
             RAISE EXCEPTION 'Mutasi created_at pada athlete_test_results dilarang.' USING ERRCODE = '42501';
         END IF;
-        IF OLD.recorded_by_user_id IS NOT NULL AND NEW.recorded_by_user_id IS DISTINCT FROM OLD.recorded_by_user_id THEN
+        IF NEW.recorded_by_user_id IS DISTINCT FROM OLD.recorded_by_user_id THEN
             RAISE EXCEPTION 'Mutasi recorded_by_user_id pada athlete_test_results dilarang.' USING ERRCODE = '42501';
+        END IF;
+        IF NEW.recorded_by_name IS DISTINCT FROM OLD.recorded_by_name THEN
+            RAISE EXCEPTION 'Mutasi recorded_by_name pada athlete_test_results dilarang.' USING ERRCODE = '42501';
         END IF;
         IF NEW.test_id IS DISTINCT FROM OLD.test_id THEN
             RAISE EXCEPTION 'Mutasi test_id pada baris hasil tes yang sudah tersimpan dilarang.' USING ERRCODE = '42501';
@@ -445,6 +557,62 @@ BEGIN
             USING ERRCODE = '42501';
     END IF;
 
+    -- Validasi kepemilikan tenant dan status aktif untuk coach_id (anti spoofing lintas-tenant / lintas-pelatih)
+    IF NEW.coach_id IS NOT NULL THEN
+        IF TG_OP = 'INSERT' OR (NEW.coach_id IS DISTINCT FROM OLD.coach_id) THEN
+            IF NOT EXISTS (
+                SELECT 1 FROM public.coaches c
+                WHERE c.id = NEW.coach_id
+                  AND trim(c.tenant_id::text) = trim(NEW.tenant_id)
+                  AND COALESCE((to_jsonb(c)->>'is_active')::boolean, TRUE) = TRUE
+                  AND LOWER(COALESCE(NULLIF(trim(c.status), ''), 'active')) IN ('active', 'aktif')
+            ) THEN
+                RAISE EXCEPTION 'Pelanggaran Integritas Multi-Tenant (42501): coach_id % tidak aktif atau bukan milik tenant %.',
+                    NEW.coach_id, NEW.tenant_id
+                    USING ERRCODE = '42501';
+            END IF;
+        ELSE
+            IF NOT EXISTS (
+                SELECT 1 FROM public.coaches c
+                WHERE c.id = NEW.coach_id
+                  AND trim(c.tenant_id::text) = trim(NEW.tenant_id)
+            ) THEN
+                RAISE EXCEPTION 'Pelanggaran Integritas Multi-Tenant (42501): coach_id % bukan milik tenant %.',
+                    NEW.coach_id, NEW.tenant_id
+                    USING ERRCODE = '42501';
+            END IF;
+        END IF;
+    END IF;
+
+    -- Jika pemanggil adalah pengguna terautentikasi dengan peran coach, ikat/validasi coach_id miliknya sendiri
+    IF auth.uid() IS NOT NULL THEN
+        v_caller_role := public.get_strict_tenant_member_role(NEW.tenant_id);
+        IF v_caller_role = 'coach' THEN
+            v_caller_uid := auth.uid()::text;
+            SELECT c.id INTO v_caller_coach_id
+            FROM public.coaches c
+            WHERE trim(c.tenant_id::text) = trim(NEW.tenant_id)
+              AND NULLIF(trim(to_jsonb(c)->>'auth_uid'), '') = v_caller_uid
+              AND COALESCE((to_jsonb(c)->>'is_active')::boolean, TRUE) = TRUE
+              AND LOWER(COALESCE(NULLIF(trim(c.status), ''), 'active')) IN ('active', 'aktif')
+            LIMIT 1;
+
+            IF v_caller_coach_id IS NULL THEN
+                RAISE EXCEPTION 'Akses ditolak (42501): Akun coach tidak memiliki profil aktif pada public.coaches.' USING ERRCODE = '42501';
+            END IF;
+
+            IF TG_OP = 'INSERT' THEN
+                IF NEW.coach_id IS NULL THEN
+                    NEW.coach_id := v_caller_coach_id;
+                ELSIF NEW.coach_id <> v_caller_coach_id THEN
+                    RAISE EXCEPTION 'Pelanggaran Keamanan (42501): Coach dilarang menyisipkan coach_id milik pelatih lain.' USING ERRCODE = '42501';
+                END IF;
+            ELSIF TG_OP = 'UPDATE' AND (NEW.coach_id IS DISTINCT FROM OLD.coach_id) THEN
+                RAISE EXCEPTION 'Pelanggaran Keamanan (42501): Coach dilarang mengubah coach_id pada data hasil tes.' USING ERRCODE = '42501';
+            END IF;
+        END IF;
+    END IF;
+
     IF TG_OP = 'INSERT' AND auth.uid() IS NOT NULL THEN
         NEW.recorded_by_user_id := auth.uid();
     END IF;
@@ -453,40 +621,103 @@ BEGIN
         NEW.test_period := to_char(NEW.test_date, 'YYYY-MM');
     END IF;
 
-    -- Sinkronkan measurement_method secara non-destruktif dari derived_metrics / auxiliary_inputs
-    IF NEW.measurement_method IS NULL OR trim(NEW.measurement_method) = '' THEN
-        v_ctx_method := COALESCE(
-            NULLIF(trim(NEW.derived_metrics->>'measurementMethod'), ''),
-            NULLIF(trim(NEW.derived_metrics->'athleteTestContext'->>'measurementMethod'), ''),
-            NULLIF(trim(NEW.auxiliary_inputs->>'measurementMethod'), '')
-        );
-        IF v_ctx_method IS NOT NULL THEN
-            IF NEW.test_id = 'TST-SPR-10M' THEN
-                IF UPPER(v_ctx_method) IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO') THEN
-                    NEW.measurement_method := UPPER(v_ctx_method);
-                END IF;
+    -- Normalisasi & Sinkronisasi measurement_method (INSERT maupun UPDATE saat derived_metrics/auxiliary_inputs berubah)
+    v_raw_top_method := NULLIF(UPPER(trim(COALESCE(NEW.measurement_method, ''))), '');
+    v_ctx_method := COALESCE(
+        NULLIF(UPPER(trim(COALESCE(NEW.derived_metrics->>'measurementMethod', ''))), ''),
+        NULLIF(UPPER(trim(COALESCE(NEW.derived_metrics->'athleteTestContext'->>'measurementMethod', ''))), ''),
+        NULLIF(UPPER(trim(COALESCE(NEW.auxiliary_inputs->>'measurementMethod', ''))), '')
+    );
+    v_json_changed := (TG_OP = 'INSERT')
+        OR (NEW.derived_metrics IS DISTINCT FROM OLD.derived_metrics)
+        OR (NEW.auxiliary_inputs IS DISTINCT FROM OLD.auxiliary_inputs);
+    v_method_json_changed := (TG_OP = 'UPDATE') AND (
+        NULLIF(UPPER(trim(COALESCE(OLD.derived_metrics->>'measurementMethod', ''))), '') IS DISTINCT FROM NULLIF(UPPER(trim(COALESCE(NEW.derived_metrics->>'measurementMethod', ''))), '')
+        OR NULLIF(UPPER(trim(COALESCE(OLD.derived_metrics->'athleteTestContext'->>'measurementMethod', ''))), '') IS DISTINCT FROM NULLIF(UPPER(trim(COALESCE(NEW.derived_metrics->'athleteTestContext'->>'measurementMethod', ''))), '')
+        OR NULLIF(UPPER(trim(COALESCE(OLD.auxiliary_inputs->>'measurementMethod', ''))), '') IS DISTINCT FROM NULLIF(UPPER(trim(COALESCE(NEW.auxiliary_inputs->>'measurementMethod', ''))), '')
+    );
+
+    IF TG_OP = 'UPDATE' AND (NEW.measurement_method IS DISTINCT FROM OLD.measurement_method) THEN
+        NEW.measurement_method := v_raw_top_method;
+    ELSIF v_method_json_changed THEN
+        IF NEW.test_id = 'TST-SPR-10M' THEN
+            IF v_ctx_method IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO') THEN
+                NEW.measurement_method := v_ctx_method;
             ELSE
-                NEW.measurement_method := UPPER(v_ctx_method);
+                NEW.measurement_method := NULL;
             END IF;
+        ELSE
+            NEW.measurement_method := v_ctx_method;
+        END IF;
+    ELSIF v_raw_top_method IS NOT NULL THEN
+        NEW.measurement_method := v_raw_top_method;
+    ELSIF v_json_changed AND v_ctx_method IS NOT NULL THEN
+        IF NEW.test_id = 'TST-SPR-10M' THEN
+            IF v_ctx_method IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO') THEN
+                NEW.measurement_method := v_ctx_method;
+            ELSE
+                NEW.measurement_method := NULL;
+            END IF;
+        ELSE
+            NEW.measurement_method := v_ctx_method;
         END IF;
     ELSE
-        NEW.measurement_method := UPPER(trim(NEW.measurement_method));
+        NEW.measurement_method := NULL;
     END IF;
 
-    -- Sinkronkan age_group secara non-destruktif dari derived_metrics->'athleteTestContext'
-    IF NEW.age_group IS NULL OR trim(NEW.age_group) = '' THEN
-        v_ctx_age_group := NULLIF(trim(NEW.derived_metrics->'athleteTestContext'->>'ageGroup'), '');
-        IF v_ctx_age_group IS NOT NULL THEN
-            NEW.age_group := v_ctx_age_group;
+    -- Normalisasi & Sinkronisasi age_group (INSERT maupun UPDATE saat derived_metrics berubah)
+    v_raw_age_group := NULLIF(trim(COALESCE(NEW.age_group, '')), '');
+    v_ctx_age_group := NULLIF(trim(COALESCE(NEW.derived_metrics->'athleteTestContext'->>'ageGroup', '')), '');
+    v_age_group_json_changed := (TG_OP = 'UPDATE') AND (
+        NULLIF(trim(COALESCE(OLD.derived_metrics->'athleteTestContext'->>'ageGroup', '')), '')
+        IS DISTINCT FROM v_ctx_age_group
+    );
+
+    IF TG_OP = 'UPDATE' AND (NEW.age_group IS DISTINCT FROM OLD.age_group) THEN
+        NEW.age_group := v_raw_age_group;
+    ELSIF v_age_group_json_changed THEN
+        NEW.age_group := v_ctx_age_group;
+    ELSIF v_raw_age_group IS NOT NULL THEN
+        NEW.age_group := v_raw_age_group;
+    ELSE
+        NEW.age_group := v_ctx_age_group;
+    END IF;
+
+    -- Sinkronisasi age_years_at_test (prioritas konteks eksplisit 3..65 -> fallback students.birth_date pada test_date)
+    v_ctx_age_text := NULLIF(trim(COALESCE(NEW.derived_metrics->'athleteTestContext'->>'ageYearsAtTest', '')), '');
+    v_parsed_age := NULL;
+    IF v_ctx_age_text IS NOT NULL AND v_ctx_age_text ~ '^\d{1,2}$' THEN
+        IF v_ctx_age_text::integer BETWEEN 3 AND 65 THEN
+            v_parsed_age := v_ctx_age_text::integer;
         END IF;
     END IF;
 
-    -- Sinkronkan age_years_at_test secara non-destruktif bila tersedia integer valid (3..65)
-    IF NEW.age_years_at_test IS NULL THEN
-        v_ctx_age_text := NULLIF(trim(NEW.derived_metrics->'athleteTestContext'->>'ageYearsAtTest'), '');
-        IF v_ctx_age_text IS NOT NULL AND v_ctx_age_text ~ '^\d{1,2}$' THEN
-            v_parsed_age := v_ctx_age_text::integer;
-            IF v_parsed_age >= 3 AND v_parsed_age <= 65 THEN
+    v_age_years_json_changed := (TG_OP = 'UPDATE') AND (
+        NULLIF(trim(COALESCE(OLD.derived_metrics->'athleteTestContext'->>'ageYearsAtTest', '')), '')
+        IS DISTINCT FROM v_ctx_age_text
+    );
+
+    IF TG_OP = 'UPDATE' AND (NEW.age_years_at_test IS DISTINCT FROM OLD.age_years_at_test) THEN
+        NULL;
+    ELSIF v_age_years_json_changed THEN
+        NEW.age_years_at_test := v_parsed_age;
+    ELSIF NEW.age_years_at_test IS NULL OR (TG_OP = 'UPDATE' AND NEW.test_date IS DISTINCT FROM OLD.test_date) THEN
+        IF v_parsed_age IS NOT NULL AND NOT (TG_OP = 'UPDATE' AND NEW.test_date IS DISTINCT FROM OLD.test_date) THEN
+            NEW.age_years_at_test := v_parsed_age;
+        ELSE
+            SELECT s.birth_date INTO v_student_birth_date
+            FROM public.students s
+            WHERE s.id = NEW.student_id
+            LIMIT 1;
+
+            IF v_student_birth_date IS NOT NULL AND NEW.test_date IS NOT NULL THEN
+                v_student_computed_age := EXTRACT(YEAR FROM age(NEW.test_date, v_student_birth_date))::integer;
+                IF v_student_computed_age BETWEEN 3 AND 65 THEN
+                    NEW.age_years_at_test := v_student_computed_age;
+                ELSE
+                    NEW.age_years_at_test := v_parsed_age;
+                END IF;
+            ELSE
                 NEW.age_years_at_test := v_parsed_age;
             END IF;
         END IF;
@@ -496,13 +727,20 @@ BEGIN
 END;
 $$;
 
-DROP TRIGGER IF EXISTS trg_protect_athlete_test_results_columns ON public.athlete_test_results;
-DROP TRIGGER IF EXISTS trg_validate_and_protect_athlete_test_results ON public.athlete_test_results;
-
-CREATE TRIGGER trg_validate_and_protect_athlete_test_results
-    BEFORE INSERT OR UPDATE ON public.athlete_test_results
-    FOR EACH ROW
-    EXECUTE FUNCTION public.validate_and_protect_athlete_test_results();
+-- Kepemilikan eksplisit fungsi SECURITY DEFINER & pembatasan hak eksekusi
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'postgres') THEN
+        BEGIN
+            ALTER FUNCTION public.get_strict_tenant_member_role(TEXT) OWNER TO postgres;
+            ALTER FUNCTION public.athlete_belongs_to_tenant(UUID, TEXT, UUID, UUID) OWNER TO postgres;
+            ALTER FUNCTION public.coach_can_manage_student(TEXT, UUID, UUID) OWNER TO postgres;
+            ALTER FUNCTION public.validate_and_protect_athlete_test_results() OWNER TO postgres;
+        EXCEPTION WHEN insufficient_privilege THEN
+            RAISE NOTICE 'Catatan Admin: Role eksekutor (%) bukan anggota role postgres; pastikan fungsi SECURITY DEFINER dijalankan oleh role berkemampuan BYPASSRLS.', current_user;
+        END;
+    END IF;
+END $$;
 
 REVOKE ALL ON FUNCTION public.get_strict_tenant_member_role(TEXT) FROM PUBLIC, anon;
 REVOKE ALL ON FUNCTION public.athlete_belongs_to_tenant(UUID, TEXT, UUID, UUID) FROM PUBLIC, anon;
@@ -513,12 +751,16 @@ GRANT EXECUTE ON FUNCTION public.get_strict_tenant_member_role(TEXT) TO authenti
 GRANT EXECUTE ON FUNCTION public.athlete_belongs_to_tenant(UUID, TEXT, UUID, UUID) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.coach_can_manage_student(TEXT, UUID, UUID) TO authenticated;
 
--- Backfill aman konteks terindeks untuk baris eksisting
+-- Lepas trigger SEBELUM backfill agar updated_at historis tidak pernah tertimpa
+DROP TRIGGER IF EXISTS trg_protect_athlete_test_results_columns ON public.athlete_test_results;
+DROP TRIGGER IF EXISTS trg_validate_and_protect_athlete_test_results ON public.athlete_test_results;
+
+-- Backfill aman konteks terindeks untuk baris eksisting (memakai nested CASE untuk safety cast integer)
 UPDATE public.athlete_test_results
 SET
     test_period = COALESCE(test_period, to_char(test_date, 'YYYY-MM')),
     measurement_method = COALESCE(
-        measurement_method,
+        NULLIF(UPPER(trim(measurement_method)), ''),
         CASE
             WHEN test_id = 'TST-SPR-10M' THEN
                 CASE
@@ -539,15 +781,18 @@ SET
         END
     ),
     age_group = COALESCE(
-        age_group,
+        NULLIF(trim(age_group), ''),
         NULLIF(trim(derived_metrics->'athleteTestContext'->>'ageGroup'), '')
     ),
     age_years_at_test = COALESCE(
         age_years_at_test,
         CASE
-            WHEN (derived_metrics->'athleteTestContext'->>'ageYearsAtTest') ~ '^\d{1,2}$'
-             AND (derived_metrics->'athleteTestContext'->>'ageYearsAtTest')::integer BETWEEN 3 AND 65
-            THEN (derived_metrics->'athleteTestContext'->>'ageYearsAtTest')::integer
+            WHEN NULLIF(trim(derived_metrics->'athleteTestContext'->>'ageYearsAtTest'), '') ~ '^\d{1,2}$' THEN
+                CASE
+                    WHEN NULLIF(trim(derived_metrics->'athleteTestContext'->>'ageYearsAtTest'), '')::integer BETWEEN 3 AND 65
+                    THEN NULLIF(trim(derived_metrics->'athleteTestContext'->>'ageYearsAtTest'), '')::integer
+                    ELSE NULL
+                END
             ELSE NULL
         END
     )
@@ -557,11 +802,19 @@ WHERE test_period IS NULL
        OR derived_metrics->'athleteTestContext' ? 'measurementMethod'
        OR auxiliary_inputs ? 'measurementMethod'
    ))
+   OR (measurement_method IS NOT NULL AND trim(measurement_method) = '')
    OR (age_group IS NULL AND derived_metrics->'athleteTestContext' ? 'ageGroup')
+   OR (age_group IS NOT NULL AND trim(age_group) = '')
    OR (age_years_at_test IS NULL AND derived_metrics->'athleteTestContext' ? 'ageYearsAtTest');
 
+-- Pasang trigger proteksi SETELAH backfill selesai
+CREATE TRIGGER trg_validate_and_protect_athlete_test_results
+    BEFORE INSERT OR UPDATE ON public.athlete_test_results
+    FOR EACH ROW
+    EXECUTE FUNCTION public.validate_and_protect_athlete_test_results();
+
 -- -----------------------------------------------------------------------------
--- [4] RLS POLICIES & LEAST-PRIVILEGE TABLE GRANTS
+-- [4] STRICT RLS POLICIES & LEAST-PRIVILEGE TABLE GRANTS
 -- -----------------------------------------------------------------------------
 ALTER TABLE public.athlete_test_results ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.athlete_test_results FORCE ROW LEVEL SECURITY;
@@ -575,8 +828,15 @@ CREATE POLICY athlete_test_results_select_policy
     FOR SELECT
     TO authenticated
     USING (
-        public.get_strict_tenant_member_role(tenant_id::text) IN ('owner', 'admin', 'coach', 'staff', 'kasir')
-        AND public.athlete_belongs_to_tenant(student_id, tenant_id::text, class_id, academy_id)
+        (
+            public.get_strict_tenant_member_role(tenant_id::text) IN ('owner', 'admin', 'staff', 'kasir')
+            AND public.athlete_belongs_to_tenant(student_id, tenant_id::text, class_id, academy_id)
+        )
+        OR (
+            public.get_strict_tenant_member_role(tenant_id::text) = 'coach'
+            AND public.athlete_belongs_to_tenant(student_id, tenant_id::text, class_id, academy_id)
+            AND public.coach_can_manage_student(tenant_id::text, student_id, class_id)
+        )
     );
 
 DROP POLICY IF EXISTS athlete_test_results_insert_policy ON public.athlete_test_results;

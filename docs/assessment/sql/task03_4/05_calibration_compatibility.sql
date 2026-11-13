@@ -1,19 +1,22 @@
 -- =============================================================================
--- CHUVATOR — TASK 03.4: SUPABASE DATABASE MIGRATION READINESS
+-- CHUVATOR — TASK 03.4.3: SUPABASE DATABASE MIGRATION READINESS (REMEDIATED)
 -- 05_calibration_compatibility.sql (CALIBRATION & SCORE ENGINE COMPATIBILITY)
 -- =============================================================================
 -- PRINSIP TASK 03.2 & 03.3:
---   1. Data mentah (`final_raw_value`, `trials`) adalah fakta utama dan TIDAK pernah
+--   1. Transaksional (BEGIN ... COMMIT) dan idempoten.
+--   2. Data mentah (`final_raw_value`, `trials`) adalah fakta utama dan TIDAK pernah
 --      diubah oleh status kalibrasi maupun konversi skor.
---   2. Selama norma performa resmi belum tersedia, hasil tes berstatus
+--   3. Selama norma performa resmi belum tersedia, hasil tes berstatus
 --      `PENDING_CALIBRATION` (atau `READY_FOR_CALIBRATION` / `NEEDS_FURTHER_DESIGN`)
 --      dengan `converted_score IS NULL` — DILARANG menyimpan skor fiktif.
---   3. Saat parameter kalibrasi tersedia di masa depan, baris dapat memiliki
+--   4. Saat parameter kalibrasi tersedia di masa depan, baris dapat memiliki
 --      `calibration_status = 'CALIBRATED'` dan `converted_score BETWEEN 1 AND 100`.
---   4. Tidak ada constraint UNIQUE pada `(tenant_id, student_id, test_id, test_date)`
+--   5. Tidak ada constraint UNIQUE pada `(tenant_id, student_id, test_id, test_date)`
 --      agar pengukuran longitudinal multi-tanggal maupun perbandingan metode
 --      (`STOPWATCH_MANUAL` vs `SMARTPHONE_VIDEO`) tidak saling menimpa.
 -- =============================================================================
+
+BEGIN;
 
 DO $$
 DECLARE
@@ -62,3 +65,5 @@ BEGIN
             );
     END IF;
 END $$;
+
+COMMIT;
