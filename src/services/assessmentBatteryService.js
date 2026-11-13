@@ -36,7 +36,8 @@ import {
   buildStandardizedAthleteTestContext,
   extractRecordMeasurementMethod,
   extractRecordAgeGroup,
-  recapitulateSprint10mRawData
+  recapitulateSprint10mRawData,
+  recapitulateAssessmentBatteryRawData
 } from './sprint10mNormsAnalytics.js';
 
 export const EXPLICIT_DEMO_TENANT_ID = 'demo-tenant-1';
@@ -534,6 +535,15 @@ export async function saveAthleteTestResult(authContext, entryPayload, options =
       ? crypto.randomUUID()
       : `atr-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
+  const resolvedCalibrationStatus =
+    conversionResult.calibrationStatus || SCORE_CALIBRATION_STATUS.PENDING_CALIBRATION;
+  const resolvedConvertedScore =
+    resolvedCalibrationStatus === SCORE_CALIBRATION_STATUS.CALIBRATED &&
+    conversionResult.convertedScore !== null &&
+    conversionResult.convertedScore !== undefined
+      ? conversionResult.convertedScore
+      : null;
+
   const dbRow = {
     id: generatedId,
     tenant_id: verifiedTenantId,
@@ -550,6 +560,7 @@ export async function saveAthleteTestResult(authContext, entryPayload, options =
     category_id: norm.categoryId,
     development_tier: athleteTestContext.developmentTier || null,
     position_code: athleteTestContext.positionCode || null,
+    measurement_method: norm.measurementMethod || null,
 
     test_date: norm.testDate,
     input_schema_type: norm.inputSchemaType,
@@ -563,10 +574,8 @@ export async function saveAthleteTestResult(authContext, entryPayload, options =
     derived_metrics: enrichedDerivedMetrics,
 
     attempt_status: norm.attemptStatus,
-    calibration_status:
-      conversionResult.calibrationStatus || SCORE_CALIBRATION_STATUS.PENDING_CALIBRATION,
-    converted_score:
-      conversionResult.convertedScore !== undefined ? conversionResult.convertedScore : null,
+    calibration_status: resolvedCalibrationStatus,
+    converted_score: resolvedConvertedScore,
 
     notes: typeof entryPayload.notes === 'string' ? entryPayload.notes.trim() : '',
     surface_condition:
@@ -794,6 +803,88 @@ export async function getTenantSprint10mNormsRecapitulation(
   const records = await getTenantSprint10mTestRecords(authContext, options);
   return recapitulateSprint10mRawData(records, {
     ...filterOptions,
+    expectedTenantId: verifiedTenantId
+  });
+}
+
+/**
+ * Mengambil seluruh hasil tes Assessment Battery pada cakupan tenant aktif (opsional difilter testId).
+ */
+export async function getTenantAssessmentTestRecords(authContext, options = {}) {
+  const verifiedTenantId = verifyAndResolveTenantId(authContext, options?.tenantId, {
+    requireWritePermission: false
+  });
+  const filterTestId = options?.testId && options.testId !== 'ALL' ? String(options.testId).trim() : null;
+  const isDemoMode = isExplicitDemoSession(authContext, verifiedTenantId);
+
+  if (isDemoMode) {
+    const demoRows = readDemoOnlyLocalStore().filter((row) => {
+      if (!row || row.tenant_id !== EXPLICIT_DEMO_TENANT_ID) return false;
+      if (filterTestId && row.test_id !== filterTestId) return false;
+      return true;
+    });
+
+    const sortedDemo = demoRows.sort((a, b) => {
+      const dateCompare = String(b.test_date || '').localeCompare(String(a.test_date || ''));
+      if (dateCompare !== 0) return dateCompare;
+      return String(b.created_at || '').localeCompare(String(a.created_at || ''));
+    });
+
+    return sortedDemo.map((r) => mapTestResultRowToModel(r, 'DEMO_LOCAL_STORAGE', options));
+  }
+
+  const dbClient = options.supabaseClient || supabase;
+  if (!dbClient) {
+    throw formatDatabasePersistenceError(
+      { code: 'NO_SUPABASE_CLIENT', message: 'Klien database Supabase tidak terinisialisasi.' },
+      'memuat rekapitulasi data mentah Assessment Battery'
+    );
+  }
+
+  let query = dbClient
+    .from('athlete_test_results')
+    .select('*')
+    .eq('tenant_id', verifiedTenantId)
+    .order('test_date', { ascending: false })
+    .order('created_at', { ascending: false });
+
+  if (filterTestId) {
+    query = query.eq('test_id', filterTestId);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    throw formatDatabasePersistenceError(error, 'memuat rekapitulasi data mentah Assessment Battery');
+  }
+
+  const safeRows = (Array.isArray(data) ? data : []).filter((row) => {
+    if (!row || String(row.tenant_id).trim() !== verifiedTenantId) return false;
+    if (filterTestId && String(row.test_id).trim() !== filterTestId) return false;
+    return true;
+  });
+
+  return safeRows.map((r) => mapTestResultRowToModel(r, 'SUPABASE_DB', options));
+}
+
+/**
+ * Menghasilkan rekapitulasi data mentah tergeneralisasi untuk seluruh 18 tes Assessment Battery.
+ */
+export async function getTenantAssessmentNormsRecapitulation(
+  authContext,
+  filterOptions = {},
+  options = {}
+) {
+  const verifiedTenantId = verifyAndResolveTenantId(authContext, filterOptions?.tenantId || options?.tenantId, {
+    requireWritePermission: false
+  });
+  const targetTestId = filterOptions?.testId || options?.testId || 'ALL';
+  const records = await getTenantAssessmentTestRecords(authContext, {
+    ...options,
+    testId: targetTestId
+  });
+  return recapitulateAssessmentBatteryRawData(records, {
+    ...filterOptions,
+    testId: targetTestId,
     expectedTenantId: verifiedTenantId
   });
 }

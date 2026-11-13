@@ -8,7 +8,9 @@
 import {
   TEST_INPUT_SCHEMA_TYPES,
   BLEEP_LEVEL_SHUTTLES,
+  MEASUREMENT_METHODS,
   SPRINT_MEASUREMENT_METHODS,
+  isStandardMeasurementMethod,
   getTestDefinitionById
 } from '../config/footballTestBatteryCatalog.js';
 
@@ -150,9 +152,10 @@ export function createInitialTestEntryDraft(testId, existingDate = null) {
     });
   }
 
-  const defaultMeasurementMethod = testDef.requiresMeasurementMethod
-    ? testDef.defaultMeasurementMethod || SPRINT_MEASUREMENT_METHODS.STOPWATCH_MANUAL
-    : null;
+  const defaultMeasurementMethod =
+    testDef.defaultMeasurementMethod ||
+    testDef.supportedMeasurementMethods?.[0] ||
+    MEASUREMENT_METHODS.STOPWATCH_MANUAL;
 
   return {
     testId: testDef.testId,
@@ -179,7 +182,7 @@ export function createInitialTestEntryDraft(testId, existingDate = null) {
  *    diisi nilainya ATAU ditandai tidak valid beserta alasannya (tidak boleh dibiarkan setengah jalan).
  * 6. Nilai mentah pada setiap percobaan tidak boleh diubah secara diam-diam.
  */
-export function validateAndComputeTestBatteryEntry(payload) {
+export function validateAndComputeTestBatteryEntry(payload, options = {}) {
   const errors = [];
   const fieldErrors = {};
 
@@ -217,41 +220,49 @@ export function validateAndComputeTestBatteryEntry(payload) {
     fieldErrors.testDate = 'Tanggal tes tidak valid.';
   }
 
-  // Validasi metode pengukuran wajib untuk tes yang mensyaratkan pembedaan alat (mis. TST-SPR-10M: STOPWATCH_MANUAL vs SMARTPHONE_VIDEO)
+  // Validasi metode pengukuran standar untuk seluruh 18 tes Assessment Battery (Task 03.5)
   let resolvedMeasurementMethod = null;
-  if (testDef.requiresMeasurementMethod) {
-    const supportedMethods = Array.isArray(testDef.supportedMeasurementMethods)
+  const supportedMethods =
+    Array.isArray(testDef.supportedMeasurementMethods) && testDef.supportedMeasurementMethods.length > 0
       ? testDef.supportedMeasurementMethods
-      : [SPRINT_MEASUREMENT_METHODS.STOPWATCH_MANUAL, SPRINT_MEASUREMENT_METHODS.SMARTPHONE_VIDEO];
+      : [testDef.defaultMeasurementMethod || SPRINT_MEASUREMENT_METHODS.STOPWATCH_MANUAL];
 
-    const rawMethod =
-      payload.measurementMethod !== undefined
-        ? payload.measurementMethod
-        : payload.auxiliaryInputs?.measurementMethod !== undefined
-          ? payload.auxiliaryInputs.measurementMethod
-          : undefined;
+  const rawMethod =
+    payload.measurementMethod !== undefined
+      ? payload.measurementMethod
+      : payload.auxiliaryInputs?.measurementMethod !== undefined
+        ? payload.auxiliaryInputs.measurementMethod
+        : undefined;
 
-    if (rawMethod === undefined && payload.requireExplicitMeasurementMethod !== true) {
-      resolvedMeasurementMethod =
-        testDef.defaultMeasurementMethod || SPRINT_MEASUREMENT_METHODS.STOPWATCH_MANUAL;
-    } else if (isRawInputEmpty(rawMethod)) {
+  const mustExplicitlySpecify = Boolean(
+    testDef.requiresMeasurementMethod &&
+      (payload.requireExplicitMeasurementMethod === true || options?.requireExplicitMeasurementMethod === true)
+  );
+
+  if (rawMethod === undefined) {
+    if (mustExplicitlySpecify) {
       errors.push(
-        `Metode pengukuran waktu wajib dipilih untuk ${testDef.shortName} (${supportedMethods.join(' atau ')}).`
+        `Metode pengukuran wajib dipilih untuk ${testDef.shortName} (${supportedMethods.join(' atau ')}).`
       );
       fieldErrors.measurementMethod = 'Metode pengukuran wajib dipilih.';
     } else {
-      const normalizedMethod = String(rawMethod).trim().toUpperCase();
-      if (!supportedMethods.includes(normalizedMethod)) {
-        errors.push(
-          `Metode pengukuran "${rawMethod}" tidak didukung untuk ${testDef.shortName}. Pilih salah satu: ${supportedMethods.join(', ')}.`
-        );
-        fieldErrors.measurementMethod = `Metode harus salah satu dari: ${supportedMethods.join(', ')}.`;
-      } else {
-        resolvedMeasurementMethod = normalizedMethod;
-      }
+      resolvedMeasurementMethod = testDef.defaultMeasurementMethod || supportedMethods[0];
     }
-  } else if (payload.measurementMethod && typeof payload.measurementMethod === 'string') {
-    resolvedMeasurementMethod = payload.measurementMethod.trim().toUpperCase();
+  } else if (isRawInputEmpty(rawMethod)) {
+    errors.push(
+      `Metode pengukuran wajib diisi untuk ${testDef.shortName} (${supportedMethods.join(', ')}).`
+    );
+    fieldErrors.measurementMethod = 'Metode pengukuran tidak boleh kosong.';
+  } else {
+    const normalizedMethod = String(rawMethod).trim().toUpperCase();
+    if (!isStandardMeasurementMethod(normalizedMethod) || !supportedMethods.includes(normalizedMethod)) {
+      errors.push(
+        `Metode pengukuran "${rawMethod}" tidak didukung untuk ${testDef.shortName}. Metode yang diizinkan sesuai protokol: ${supportedMethods.join(', ')}.`
+      );
+      fieldErrors.measurementMethod = `Metode harus salah satu dari: ${supportedMethods.join(', ')}.`;
+    } else {
+      resolvedMeasurementMethod = normalizedMethod;
+    }
   }
 
   const schemaType = testDef.inputSchemaType;
@@ -311,11 +322,13 @@ export function validateAndComputeTestBatteryEntry(payload) {
         indicatorName: testDef.indicatorName,
         categoryId: testDef.categoryId,
         testDate,
+        measurementMethod: resolvedMeasurementMethod,
         inputSchemaType: schemaType,
         trials: normalizedTrials,
         auxiliaryInputs: {
           levelReached: bleepCalc.level,
-          shuttleReached: bleepCalc.shuttle
+          shuttleReached: bleepCalc.shuttle,
+          ...(resolvedMeasurementMethod ? { measurementMethod: resolvedMeasurementMethod } : {})
         },
         finalRawValue: bleepCalc.cumulativeDistanceMeters,
         finalUnit: testDef.unit,
@@ -325,7 +338,8 @@ export function validateAndComputeTestBatteryEntry(payload) {
           levelReached: bleepCalc.level,
           shuttleReached: bleepCalc.shuttle,
           cumulativeShuttles: bleepCalc.cumulativeShuttles,
-          cumulativeDistanceMeters: bleepCalc.cumulativeDistanceMeters
+          cumulativeDistanceMeters: bleepCalc.cumulativeDistanceMeters,
+          ...(resolvedMeasurementMethod ? { measurementMethod: resolvedMeasurementMethod } : {})
         },
         attemptStatus: 'VALID',
         calibrationStatus: 'PENDING_CALIBRATION',
@@ -674,7 +688,10 @@ export function validateAndComputeTestBatteryEntry(payload) {
       inputSchemaType: schemaType,
       trials: normalizedTrials,
       auxiliaryInputs: schemaType === TEST_INPUT_SCHEMA_TYPES.VERTICAL_JUMP_DELTA
-        ? { standingReachCm }
+        ? {
+            standingReachCm,
+            ...(resolvedMeasurementMethod ? { measurementMethod: resolvedMeasurementMethod } : {})
+          }
         : resolvedMeasurementMethod
           ? { measurementMethod: resolvedMeasurementMethod }
           : {},

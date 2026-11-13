@@ -132,10 +132,24 @@ UPDATE public.athlete_test_results
 SET
     measurement_method = CASE
         WHEN measurement_method IS NULL OR trim(measurement_method) = '' THEN NULL
-        WHEN test_id = 'TST-SPR-10M'
+        WHEN test_id IN ('TST-SPR-10M', 'TST-SPR-30M')
              AND UPPER(trim(measurement_method)) IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO')
             THEN UPPER(trim(measurement_method))
-        WHEN test_id = 'TST-SPR-10M' THEN NULL
+        WHEN test_id IN ('TST-AGL-ARW', 'TST-BAL-STK', 'TST-COD-505', 'TST-COR-PLK', 'TST-RSA-630', 'TST-SSB-GK-03', 'TST-WF-TLA')
+             AND UPPER(trim(measurement_method)) = 'STOPWATCH_MANUAL'
+            THEN 'STOPWATCH_MANUAL'
+        WHEN test_id IN ('TST-MOB-SAR', 'TST-RXN-RLR', 'TST-JMP-VER', 'TST-PWR-SBJ', 'TST-SHT-DST')
+             AND UPPER(trim(measurement_method)) = 'PHYSICAL_MEASURING_TOOL'
+            THEN 'PHYSICAL_MEASURING_TOOL'
+        WHEN test_id IN ('TST-END-BLP', 'TST-STR-PU1', 'TST-SSB-WAP', 'TST-SSB-GK-02')
+             AND UPPER(trim(measurement_method)) = 'MANUAL_COUNT'
+            THEN 'MANUAL_COUNT'
+        WHEN test_id IN (
+            'TST-SPR-10M', 'TST-SPR-30M',
+            'TST-AGL-ARW', 'TST-BAL-STK', 'TST-COD-505', 'TST-COR-PLK', 'TST-RSA-630', 'TST-SSB-GK-03', 'TST-WF-TLA',
+            'TST-MOB-SAR', 'TST-RXN-RLR', 'TST-JMP-VER', 'TST-PWR-SBJ', 'TST-SHT-DST',
+            'TST-END-BLP', 'TST-STR-PU1', 'TST-SSB-WAP', 'TST-SSB-GK-02'
+        ) THEN NULL
         ELSE UPPER(trim(measurement_method))
     END,
     age_group = CASE
@@ -147,8 +161,20 @@ WHERE (
         trim(measurement_method) = ''
         OR measurement_method IS DISTINCT FROM UPPER(trim(measurement_method))
         OR (
-            test_id = 'TST-SPR-10M'
+            test_id IN ('TST-SPR-10M', 'TST-SPR-30M')
             AND UPPER(trim(measurement_method)) NOT IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO')
+        )
+        OR (
+            test_id IN ('TST-AGL-ARW', 'TST-BAL-STK', 'TST-COD-505', 'TST-COR-PLK', 'TST-RSA-630', 'TST-SSB-GK-03', 'TST-WF-TLA')
+            AND UPPER(trim(measurement_method)) <> 'STOPWATCH_MANUAL'
+        )
+        OR (
+            test_id IN ('TST-MOB-SAR', 'TST-RXN-RLR', 'TST-JMP-VER', 'TST-PWR-SBJ', 'TST-SHT-DST')
+            AND UPPER(trim(measurement_method)) <> 'PHYSICAL_MEASURING_TOOL'
+        )
+        OR (
+            test_id IN ('TST-END-BLP', 'TST-STR-PU1', 'TST-SSB-WAP', 'TST-SSB-GK-02')
+            AND UPPER(trim(measurement_method)) <> 'MANUAL_COUNT'
         )
     )
 )
@@ -192,6 +218,33 @@ BEGIN
                 test_id <> 'TST-SPR-10M'
                 OR measurement_method IS NULL
                 OR measurement_method IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO')
+            );
+    END IF;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'chk_athlete_test_results_measurement_method_compatibility'
+          AND conrelid = 'public.athlete_test_results'::regclass
+    ) THEN
+        ALTER TABLE public.athlete_test_results
+            ADD CONSTRAINT chk_athlete_test_results_measurement_method_compatibility
+            CHECK (
+                measurement_method IS NULL
+                OR (
+                    measurement_method IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO', 'PHYSICAL_MEASURING_TOOL', 'MANUAL_COUNT')
+                    AND (
+                        (test_id IN ('TST-SPR-10M', 'TST-SPR-30M') AND measurement_method IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO'))
+                        OR (test_id IN ('TST-AGL-ARW', 'TST-BAL-STK', 'TST-COD-505', 'TST-COR-PLK', 'TST-RSA-630', 'TST-SSB-GK-03', 'TST-WF-TLA') AND measurement_method = 'STOPWATCH_MANUAL')
+                        OR (test_id IN ('TST-MOB-SAR', 'TST-RXN-RLR', 'TST-JMP-VER', 'TST-PWR-SBJ', 'TST-SHT-DST') AND measurement_method = 'PHYSICAL_MEASURING_TOOL')
+                        OR (test_id IN ('TST-END-BLP', 'TST-STR-PU1', 'TST-SSB-WAP', 'TST-SSB-GK-02') AND measurement_method = 'MANUAL_COUNT')
+                        OR (test_id NOT IN (
+                            'TST-SPR-10M', 'TST-SPR-30M',
+                            'TST-AGL-ARW', 'TST-BAL-STK', 'TST-COD-505', 'TST-COR-PLK', 'TST-RSA-630', 'TST-SSB-GK-03', 'TST-WF-TLA',
+                            'TST-MOB-SAR', 'TST-RXN-RLR', 'TST-JMP-VER', 'TST-PWR-SBJ', 'TST-SHT-DST',
+                            'TST-END-BLP', 'TST-STR-PU1', 'TST-SSB-WAP', 'TST-SSB-GK-02'
+                        ))
+                    )
+                )
             );
     END IF;
 END $$;
@@ -516,6 +569,7 @@ DECLARE
     v_parsed_age INTEGER;
     v_raw_top_method TEXT;
     v_ctx_method TEXT;
+    v_default_single_method TEXT;
     v_raw_age_group TEXT;
     v_ctx_age_group TEXT;
     v_json_changed BOOLEAN;
@@ -621,6 +675,17 @@ BEGIN
         NEW.test_period := to_char(NEW.test_date, 'YYYY-MM');
     END IF;
 
+    -- Default metode tunggal standar untuk 16 tes non-dual-method saat INSERT jika tidak diisi (Task 03.5)
+    v_default_single_method := CASE
+        WHEN NEW.test_id IN ('TST-AGL-ARW', 'TST-BAL-STK', 'TST-COD-505', 'TST-COR-PLK', 'TST-RSA-630', 'TST-SSB-GK-03', 'TST-WF-TLA')
+            THEN 'STOPWATCH_MANUAL'
+        WHEN NEW.test_id IN ('TST-MOB-SAR', 'TST-RXN-RLR', 'TST-JMP-VER', 'TST-PWR-SBJ', 'TST-SHT-DST')
+            THEN 'PHYSICAL_MEASURING_TOOL'
+        WHEN NEW.test_id IN ('TST-END-BLP', 'TST-STR-PU1', 'TST-SSB-WAP', 'TST-SSB-GK-02')
+            THEN 'MANUAL_COUNT'
+        ELSE NULL
+    END;
+
     -- Normalisasi & Sinkronisasi measurement_method (INSERT maupun UPDATE saat derived_metrics/auxiliary_inputs berubah)
     v_raw_top_method := NULLIF(UPPER(trim(COALESCE(NEW.measurement_method, ''))), '');
     v_ctx_method := COALESCE(
@@ -640,7 +705,7 @@ BEGIN
     IF TG_OP = 'UPDATE' AND (NEW.measurement_method IS DISTINCT FROM OLD.measurement_method) THEN
         NEW.measurement_method := v_raw_top_method;
     ELSIF v_method_json_changed THEN
-        IF NEW.test_id = 'TST-SPR-10M' THEN
+        IF NEW.test_id IN ('TST-SPR-10M', 'TST-SPR-30M') THEN
             IF v_ctx_method IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO') THEN
                 NEW.measurement_method := v_ctx_method;
             ELSE
@@ -652,7 +717,7 @@ BEGIN
     ELSIF v_raw_top_method IS NOT NULL THEN
         NEW.measurement_method := v_raw_top_method;
     ELSIF v_json_changed AND v_ctx_method IS NOT NULL THEN
-        IF NEW.test_id = 'TST-SPR-10M' THEN
+        IF NEW.test_id IN ('TST-SPR-10M', 'TST-SPR-30M') THEN
             IF v_ctx_method IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO') THEN
                 NEW.measurement_method := v_ctx_method;
             ELSE
@@ -661,6 +726,8 @@ BEGIN
         ELSE
             NEW.measurement_method := v_ctx_method;
         END IF;
+    ELSIF TG_OP = 'INSERT' AND NEW.measurement_method IS NULL AND v_ctx_method IS NULL AND v_default_single_method IS NOT NULL THEN
+        NEW.measurement_method := v_default_single_method;
     ELSE
         NEW.measurement_method := NULL;
     END IF;

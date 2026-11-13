@@ -15,9 +15,16 @@
  * ============================================================================
  */
 
-import { SPRINT_MEASUREMENT_METHODS } from '../config/footballTestBatteryCatalog.js';
+import {
+  MEASUREMENT_METHODS,
+  SPRINT_MEASUREMENT_METHODS,
+  getTestDefinitionById,
+  isStandardMeasurementMethod
+} from '../config/footballTestBatteryCatalog.js';
 import { roundToDecimals } from '../utils/testBatteryValidator.js';
 import { normalizeAgeGroupCode } from './assessmentScoreConverter.js';
+
+export const UNSPECIFIED_MEASUREMENT_METHOD = 'UNSPECIFIED';
 
 /**
  * Menghitung usia atlet (tahun bulat) pada saat tanggal pelaksanaan tes (`testDate`)
@@ -136,25 +143,34 @@ export function buildStandardizedAthleteTestContext({
 export function extractRecordMeasurementMethod(record) {
   if (!record || typeof record !== 'object') return null;
   const raw =
-    record.measurementMethod ||
-    record.measurement_method ||
-    record.derivedMetrics?.measurementMethod ||
-    record.derived_metrics?.measurementMethod ||
-    record.derivedMetrics?.athleteTestContext?.measurementMethod ||
-    record.derived_metrics?.athleteTestContext?.measurementMethod ||
-    record.auxiliaryInputs?.measurementMethod ||
-    record.auxiliary_inputs?.measurementMethod ||
+    record.measurementMethod ??
+    record.measurement_method ??
+    record.derivedMetrics?.measurementMethod ??
+    record.derived_metrics?.measurementMethod ??
+    record.derivedMetrics?.athleteTestContext?.measurementMethod ??
+    record.derived_metrics?.athleteTestContext?.measurementMethod ??
+    record.auxiliaryInputs?.measurementMethod ??
+    record.auxiliary_inputs?.measurementMethod ??
     null;
 
-  if (!raw) return null;
-  const upper = String(raw).trim().toUpperCase();
-  if (
-    upper === SPRINT_MEASUREMENT_METHODS.STOPWATCH_MANUAL ||
-    upper === SPRINT_MEASUREMENT_METHODS.SMARTPHONE_VIDEO
-  ) {
-    return upper;
-  }
+  if (!raw || typeof raw !== 'string') return null;
+  const upper = raw.trim().toUpperCase();
+  if (!upper) return null;
   return upper;
+}
+
+/**
+ * Memeriksa apakah dua sesi pengukuran memiliki metode yang kompatibel untuk perbandingan longitudinal.
+ * Aturan keras (Task 03.5):
+ * - Hanya metode standar yang valid & terisi eksplisit yang boleh dibandingkan.
+ * - Nilai NULL / UNSPECIFIED / non-standar tidak pernah kompatibel untuk dihitung delta-nya,
+ *   baik terhadap STOPWATCH_MANUAL maupun sesama record NULL yang tidak terverifikasi.
+ */
+export function areMeasurementMethodsCompatible(methodA, methodB) {
+  if (!isStandardMeasurementMethod(methodA) || !isStandardMeasurementMethod(methodB)) {
+    return false;
+  }
+  return String(methodA).trim().toUpperCase() === String(methodB).trim().toUpperCase();
 }
 
 /**
@@ -228,26 +244,39 @@ export function buildSprint10mLongitudinalProgress(records = []) {
   };
 
   let immediatePreviousMethod = null;
+  let hasUnverifiedLegacyRecords = false;
 
   const entries = chronological.map((rec, index) => {
     const rawSec = Number(rec.finalRawValue ?? rec.final_raw_value);
-    const method =
-      extractRecordMeasurementMethod(rec) || SPRINT_MEASUREMENT_METHODS.STOPWATCH_MANUAL;
-    methodsSet.add(method);
+    const extractedMethod = extractRecordMeasurementMethod(rec);
+    const isMethodSpecified = isStandardMeasurementMethod(extractedMethod);
+    const method = isMethodSpecified ? extractedMethod : null;
+
+    if (isMethodSpecified) {
+      methodsSet.add(method);
+    } else {
+      hasUnverifiedLegacyRecords = true;
+    }
+
     const testDate = rec.testDate || rec.test_date || '';
+    const comparableKey = isMethodSpecified ? method : null;
 
     const methodSwitchedFromImmediatePrevious =
-      immediatePreviousMethod !== null && immediatePreviousMethod !== method;
-    immediatePreviousMethod = method;
+      immediatePreviousMethod !== null &&
+      comparableKey !== null &&
+      immediatePreviousMethod !== comparableKey;
+    if (comparableKey !== null) {
+      immediatePreviousMethod = comparableKey;
+    }
 
-    const prevSameMethod = lastSeenByMethod[method] || null;
-    const baseSameMethod = baselineByMethod[method] || null;
+    const prevSameMethod = comparableKey ? lastSeenByMethod[comparableKey] || null : null;
+    const baseSameMethod = comparableKey ? baselineByMethod[comparableKey] || null : null;
 
     let deltaFromPrevSameMethodSec = null;
     let deltaFromBaselineSameMethodSec = null;
-    let progressionDirection = 'BASELINE'; // 'BASELINE' | 'IMPROVED' | 'SLOWER' | 'UNCHANGED'
+    let progressionDirection = isMethodSpecified ? 'BASELINE' : 'UNSPECIFIED_METHOD';
 
-    if (prevSameMethod) {
+    if (prevSameMethod && areMeasurementMethodsCompatible(method, prevSameMethod.measurementMethod)) {
       deltaFromPrevSameMethodSec = roundToDecimals(rawSec - prevSameMethod.rawSec, 2);
       if (deltaFromPrevSameMethodSec < 0) {
         progressionDirection = 'IMPROVED';
@@ -258,24 +287,36 @@ export function buildSprint10mLongitudinalProgress(records = []) {
       }
     }
 
-    if (baseSameMethod) {
+    if (baseSameMethod && areMeasurementMethodsCompatible(method, baseSameMethod.measurementMethod)) {
       deltaFromBaselineSameMethodSec = roundToDecimals(rawSec - baseSameMethod.rawSec, 2);
     }
 
-    if (!baselineByMethod[method]) {
-      baselineByMethod[method] = { rawSec, testDate, id: rec.id };
-    }
-    lastSeenByMethod[method] = { rawSec, testDate, id: rec.id };
-
-    const currentBest = personalBestByMethod[method];
-    if (!currentBest || rawSec < currentBest.finalRawValue) {
-      personalBestByMethod[method] = {
-        id: rec.id,
+    if (comparableKey) {
+      if (!baselineByMethod[comparableKey]) {
+        baselineByMethod[comparableKey] = {
+          rawSec,
+          testDate,
+          id: rec.id,
+          measurementMethod: comparableKey
+        };
+      }
+      lastSeenByMethod[comparableKey] = {
+        rawSec,
         testDate,
-        finalRawValue: rawSec,
-        finalDisplayValue: `${rawSec} s`,
-        measurementMethod: method
+        id: rec.id,
+        measurementMethod: comparableKey
       };
+
+      const currentBest = personalBestByMethod[comparableKey];
+      if (!currentBest || rawSec < currentBest.finalRawValue) {
+        personalBestByMethod[comparableKey] = {
+          id: rec.id,
+          testDate,
+          finalRawValue: rawSec,
+          finalDisplayValue: `${rawSec} s`,
+          measurementMethod: comparableKey
+        };
+      }
     }
 
     return {
@@ -286,6 +327,7 @@ export function buildSprint10mLongitudinalProgress(records = []) {
       tenantId: rec.tenantId || rec.tenant_id,
       testDate,
       measurementMethod: method,
+      isMethodSpecified,
       finalRawValue: rawSec,
       finalUnit: 's',
       finalDisplayValue: rec.finalDisplayValue || `${rawSec} s`,
@@ -301,9 +343,11 @@ export function buildSprint10mLongitudinalProgress(records = []) {
       progressionDirection,
       trendDirection: progressionDirection,
       methodSwitchedFromImmediatePrevious,
-      methodComparisonNote: methodSwitchedFromImmediatePrevious
-        ? `Metode berubah ke ${method}. Selisih waktu dihitung terhadap sesi ${method} sebelumnya (tidak dicampur lintas metode).`
-        : null
+      methodComparisonNote: !isMethodSpecified
+        ? 'Catatan legacy belum memiliki metode pengukuran (NULL). Tidak dibandingkan dengan data STOPWATCH_MANUAL atau SMARTPHONE_VIDEO.'
+        : methodSwitchedFromImmediatePrevious
+          ? `Metode berubah ke ${method}. Selisih waktu dihitung terhadap sesi ${method} sebelumnya (tidak dicampur lintas metode).`
+          : null
     };
   });
 
@@ -314,6 +358,149 @@ export function buildSprint10mLongitudinalProgress(records = []) {
     indicatorId: 'FTB-UNI-PHY-01',
     totalSessions: entries.length,
     hasMixedMethods: methodsUsed.length > 1,
+    hasUnverifiedLegacyRecords,
+    methodsUsed,
+    entries,
+    timeline: entries,
+    personalBestByMethod
+  };
+}
+
+/**
+ * Analisis perkembangan longitudinal umum untuk tes apa pun dari 18 katalog Assessment Battery.
+ * Memastikan:
+ * - Tidak pernah mencampur metode pengukuran yang berbeda (mis. STOPWATCH_MANUAL vs SMARTPHONE_VIDEO).
+ * - Record legacy dengan measurement_method NULL tidak dihitung delta-nya terhadap record lain.
+ * - Arah perkembangan menghormati `LOWER_IS_BETTER` vs `HIGHER_IS_BETTER`.
+ */
+export function buildTestLongitudinalProgress(records = [], testId = 'TST-SPR-10M') {
+  const testDef = getTestDefinitionById(testId);
+  const direction = testDef?.direction || 'LOWER_IS_BETTER';
+  const decimals = typeof testDef?.valueConstraints?.decimals === 'number'
+    ? testDef.valueConstraints.decimals
+    : 2;
+  const unit = testDef?.unit || '';
+
+  const testRecords = (Array.isArray(records) ? records : []).filter((r) => {
+    const tId = String(r?.testId || r?.test_id || '').trim();
+    const rawVal = Number(r?.finalRawValue ?? r?.final_raw_value);
+    return tId === testId && Number.isFinite(rawVal) && rawVal > 0;
+  });
+
+  const chronological = [...testRecords].sort((a, b) => {
+    const dateA = String(a.testDate || a.test_date || '');
+    const dateB = String(b.testDate || b.test_date || '');
+    const cmpDate = dateA.localeCompare(dateB);
+    if (cmpDate !== 0) return cmpDate;
+    const createdA = String(a.createdAt || a.created_at || '');
+    const createdB = String(b.createdAt || b.created_at || '');
+    return createdA.localeCompare(createdB);
+  });
+
+  const lastSeenByMethod = {};
+  const baselineByMethod = {};
+  const methodsSet = new Set();
+  const personalBestByMethod = {};
+  let hasUnverifiedLegacyRecords = false;
+  let immediatePreviousMethod = null;
+
+  const entries = chronological.map((rec, index) => {
+    const rawVal = Number(rec.finalRawValue ?? rec.final_raw_value);
+    const extractedMethod = extractRecordMeasurementMethod(rec);
+    const isMethodSpecified = isStandardMeasurementMethod(extractedMethod);
+    const method = isMethodSpecified ? extractedMethod : null;
+
+    if (isMethodSpecified) {
+      methodsSet.add(method);
+    } else {
+      hasUnverifiedLegacyRecords = true;
+    }
+
+    const testDate = rec.testDate || rec.test_date || '';
+    const comparableKey = isMethodSpecified ? method : null;
+
+    const methodSwitchedFromImmediatePrevious =
+      immediatePreviousMethod !== null &&
+      comparableKey !== null &&
+      immediatePreviousMethod !== comparableKey;
+    if (comparableKey !== null) {
+      immediatePreviousMethod = comparableKey;
+    }
+
+    const prevSameMethod = comparableKey ? lastSeenByMethod[comparableKey] || null : null;
+    const baseSameMethod = comparableKey ? baselineByMethod[comparableKey] || null : null;
+
+    let deltaFromPrevSameMethod = null;
+    let deltaFromBaselineSameMethod = null;
+    let progressionDirection = isMethodSpecified ? 'BASELINE' : 'UNSPECIFIED_METHOD';
+
+    if (prevSameMethod && areMeasurementMethodsCompatible(method, prevSameMethod.measurementMethod)) {
+      deltaFromPrevSameMethod = roundToDecimals(rawVal - prevSameMethod.rawVal, decimals);
+      if (deltaFromPrevSameMethod === 0) {
+        progressionDirection = 'UNCHANGED';
+      } else if (direction === 'LOWER_IS_BETTER') {
+        progressionDirection = deltaFromPrevSameMethod < 0 ? 'IMPROVED' : 'SLOWER';
+      } else {
+        progressionDirection = deltaFromPrevSameMethod > 0 ? 'IMPROVED' : 'DECLINED';
+      }
+    }
+
+    if (baseSameMethod && areMeasurementMethodsCompatible(method, baseSameMethod.measurementMethod)) {
+      deltaFromBaselineSameMethod = roundToDecimals(rawVal - baseSameMethod.rawVal, decimals);
+    }
+
+    if (comparableKey) {
+      if (!baselineByMethod[comparableKey]) {
+        baselineByMethod[comparableKey] = { rawVal, testDate, id: rec.id, measurementMethod: comparableKey };
+      }
+      lastSeenByMethod[comparableKey] = { rawVal, testDate, id: rec.id, measurementMethod: comparableKey };
+
+      const currentBest = personalBestByMethod[comparableKey];
+      const isBetter =
+        !currentBest ||
+        (direction === 'LOWER_IS_BETTER'
+          ? rawVal < currentBest.finalRawValue
+          : rawVal > currentBest.finalRawValue);
+      if (isBetter) {
+        personalBestByMethod[comparableKey] = {
+          id: rec.id,
+          testDate,
+          finalRawValue: rawVal,
+          finalDisplayValue: rec.finalDisplayValue || `${rawVal} ${unit}`.trim(),
+          measurementMethod: comparableKey
+        };
+      }
+    }
+
+    return {
+      sessionOrder: index + 1,
+      id: rec.id,
+      testId,
+      studentId: rec.studentId || rec.student_id,
+      tenantId: rec.tenantId || rec.tenant_id,
+      testDate,
+      measurementMethod: method,
+      isMethodSpecified,
+      finalRawValue: rawVal,
+      finalUnit: rec.finalUnit || rec.final_unit || unit,
+      finalDisplayValue: rec.finalDisplayValue || `${rawVal} ${unit}`.trim(),
+      prevSameMethodDate: prevSameMethod ? prevSameMethod.testDate : null,
+      deltaFromPrevSameMethod,
+      deltaFromBaselineSameMethod,
+      progressionDirection,
+      methodSwitchedFromImmediatePrevious
+    };
+  });
+
+  const methodsUsed = Array.from(methodsSet);
+  return {
+    testId,
+    indicatorId: testDef?.indicatorId || null,
+    unit,
+    direction,
+    totalSessions: entries.length,
+    hasMixedMethods: methodsUsed.length > 1,
+    hasUnverifiedLegacyRecords,
     methodsUsed,
     entries,
     timeline: entries,
@@ -374,10 +561,16 @@ export function recapitulateSprint10mRawData(records = [], options = {}) {
     const rawVal = Number(rec.finalRawValue ?? rec.final_raw_value);
     if (!Number.isFinite(rawVal) || rawVal <= 0) return false;
 
-    const recMethod =
-      extractRecordMeasurementMethod(rec) || SPRINT_MEASUREMENT_METHODS.STOPWATCH_MANUAL;
-    if (measurementMethod && measurementMethod !== 'ALL' && recMethod !== measurementMethod) {
-      return false;
+    const extractedMethod = extractRecordMeasurementMethod(rec);
+    const recMethod = extractedMethod || UNSPECIFIED_MEASUREMENT_METHOD;
+    if (measurementMethod && measurementMethod !== 'ALL') {
+      const normalizedFilterMethod =
+        String(measurementMethod).trim().toUpperCase() === 'NULL'
+          ? UNSPECIFIED_MEASUREMENT_METHOD
+          : String(measurementMethod).trim().toUpperCase();
+      if (recMethod !== normalizedFilterMethod) {
+        return false;
+      }
     }
 
     const recTier = String(rec.developmentTier || rec.development_tier || 'UNSPECIFIED_TIER').trim();
@@ -413,7 +606,7 @@ export function recapitulateSprint10mRawData(records = [], options = {}) {
   });
 
   // 2. Kelompokkan berdasarkan: tenantId + ageGroup + developmentTier + measurementMethod + testPeriod
-  // Catatan Penting: STOPWATCH_MANUAL dan SMARTPHONE_VIDEO selalu berada pada bucket berbeda!
+  // Catatan Penting: STOPWATCH_MANUAL, SMARTPHONE_VIDEO, dan UNSPECIFIED (legacy NULL) selalu dipisah!
   const bucketMap = new Map();
 
   for (const rec of safeRecords) {
@@ -422,8 +615,7 @@ export function recapitulateSprint10mRawData(records = [], options = {}) {
     const fallbackStudent = studentsByIdMap?.[stuId] || null;
     const recAgeGroup = extractRecordAgeGroup(rec, fallbackStudent);
     const recTier = String(rec.developmentTier || rec.development_tier || 'UNSPECIFIED_TIER').trim();
-    const recMethod =
-      extractRecordMeasurementMethod(rec) || SPRINT_MEASUREMENT_METHODS.STOPWATCH_MANUAL;
+    const recMethod = extractRecordMeasurementMethod(rec) || UNSPECIFIED_MEASUREMENT_METHOD;
     const recDate = String(rec.testDate || rec.test_date || '').trim();
     const recPeriod = recDate.length >= 7 ? recDate.slice(0, 7) : 'UNKNOWN_PERIOD';
     const rawVal = Number(rec.finalRawValue ?? rec.final_raw_value);
@@ -498,6 +690,186 @@ export function recapitulateSprint10mRawData(records = [], options = {}) {
     indicatorId: 'FTB-UNI-PHY-01',
     totalMatchingRecords: safeRecords.length,
     totalRecordsMatched: safeRecords.length,
+    totalGroups: groups.length,
+    groups
+  };
+}
+
+/**
+ * Rekapitulasi data mentah tergeneralisasi untuk seluruh 18 tes Assessment Battery (Task 03.5).
+ * Memisahkan secara ketat berdasarkan `tenantId`, `testId`, `ageGroup`, `developmentTier`,
+ * `measurementMethod` (STOPWATCH_MANUAL / SMARTPHONE_VIDEO / PHYSICAL_MEASURING_TOOL / MANUAL_COUNT / UNSPECIFIED),
+ * dan `testPeriod`, serta tidak pernah mengarang skor kalibrasi.
+ */
+export function recapitulateAssessmentBatteryRawData(records = [], options = {}) {
+  const {
+    expectedTenantId = null,
+    testId = 'ALL',
+    ageGroup = 'ALL',
+    developmentTier = 'ALL',
+    measurementMethod = 'ALL',
+    testPeriod = 'ALL',
+    dateFrom = null,
+    dateTo = null,
+    studentsByIdMap = {}
+  } = options;
+
+  const normalizedFilterAgeGroup =
+    ageGroup && ageGroup !== 'ALL' ? deriveStandardAgeGroup({ ageGroup }) : 'ALL';
+  const normalizedFilterMethod =
+    measurementMethod && measurementMethod !== 'ALL'
+      ? String(measurementMethod).trim().toUpperCase() === 'NULL'
+        ? UNSPECIFIED_MEASUREMENT_METHOD
+        : String(measurementMethod).trim().toUpperCase()
+      : 'ALL';
+
+  const safeRecords = (Array.isArray(records) ? records : []).filter((rec) => {
+    if (!rec || typeof rec !== 'object') return false;
+    const recTenant = String(rec.tenantId || rec.tenant_id || '').trim();
+    if (expectedTenantId && recTenant !== String(expectedTenantId).trim()) {
+      return false;
+    }
+
+    const recTestId = String(rec.testId || rec.test_id || '').trim();
+    if (!recTestId) return false;
+    if (testId && testId !== 'ALL' && recTestId !== testId) {
+      return false;
+    }
+
+    const rawVal = Number(rec.finalRawValue ?? rec.final_raw_value);
+    if (!Number.isFinite(rawVal) || rawVal <= 0) return false;
+
+    const recMethod = extractRecordMeasurementMethod(rec) || UNSPECIFIED_MEASUREMENT_METHOD;
+    if (normalizedFilterMethod !== 'ALL' && recMethod !== normalizedFilterMethod) {
+      return false;
+    }
+
+    const recTier = String(rec.developmentTier || rec.development_tier || 'UNSPECIFIED_TIER').trim();
+    if (developmentTier && developmentTier !== 'ALL' && recTier !== developmentTier) {
+      return false;
+    }
+
+    const stuId = String(rec.studentId || rec.student_id || '').trim();
+    const fallbackStudent = studentsByIdMap?.[stuId] || null;
+    const recAgeGroup = extractRecordAgeGroup(rec, fallbackStudent);
+    if (
+      normalizedFilterAgeGroup &&
+      normalizedFilterAgeGroup !== 'ALL' &&
+      recAgeGroup !== normalizedFilterAgeGroup
+    ) {
+      return false;
+    }
+
+    const recDate = String(rec.testDate || rec.test_date || '').trim();
+    const recPeriod = recDate.length >= 7 ? recDate.slice(0, 7) : 'UNKNOWN_PERIOD';
+    if (testPeriod && testPeriod !== 'ALL' && recPeriod !== testPeriod) {
+      return false;
+    }
+
+    if (dateFrom && recDate && recDate < String(dateFrom).trim()) {
+      return false;
+    }
+    if (dateTo && recDate && recDate > String(dateTo).trim()) {
+      return false;
+    }
+
+    return true;
+  });
+
+  const bucketMap = new Map();
+
+  for (const rec of safeRecords) {
+    const recTenant = String(rec.tenantId || rec.tenant_id || 'UNKNOWN_TENANT').trim();
+    const recTestId = String(rec.testId || rec.test_id || '').trim();
+    const testDef = getTestDefinitionById(recTestId);
+    const stuId = String(rec.studentId || rec.student_id || '').trim();
+    const fallbackStudent = studentsByIdMap?.[stuId] || null;
+    const recAgeGroup = extractRecordAgeGroup(rec, fallbackStudent);
+    const recTier = String(rec.developmentTier || rec.development_tier || 'UNSPECIFIED_TIER').trim();
+    const recMethod = extractRecordMeasurementMethod(rec) || UNSPECIFIED_MEASUREMENT_METHOD;
+    const recDate = String(rec.testDate || rec.test_date || '').trim();
+    const recPeriod = recDate.length >= 7 ? recDate.slice(0, 7) : 'UNKNOWN_PERIOD';
+    const rawVal = Number(rec.finalRawValue ?? rec.final_raw_value);
+
+    const groupKey = `${recTenant}::${recTestId}::${recAgeGroup}::${recTier}::${recMethod}::${recPeriod}`;
+
+    if (!bucketMap.has(groupKey)) {
+      bucketMap.set(groupKey, {
+        groupKey,
+        testId: recTestId,
+        indicatorId: rec.indicatorId || rec.indicator_id || testDef?.indicatorId || null,
+        unit: rec.finalUnit || rec.final_unit || testDef?.unit || '',
+        direction: testDef?.direction || 'LOWER_IS_BETTER',
+        decimals: typeof testDef?.valueConstraints?.decimals === 'number'
+          ? testDef.valueConstraints.decimals
+          : 2,
+        tenantId: recTenant,
+        ageGroup: recAgeGroup,
+        developmentTier: recTier,
+        measurementMethod: recMethod,
+        testPeriod: recPeriod,
+        rawValues: [],
+        athleteIdsSet: new Set(),
+        records: []
+      });
+    }
+
+    const bucket = bucketMap.get(groupKey);
+    bucket.rawValues.push(rawVal);
+    if (stuId) bucket.athleteIdsSet.add(stuId);
+    bucket.records.push({
+      id: rec.id,
+      studentId: stuId,
+      testId: recTestId,
+      testDate: recDate,
+      finalRawValue: rawVal,
+      measurementMethod: recMethod,
+      positionCode: rec.positionCode || rec.position_code || null,
+      recordedByName: rec.recordedByName || rec.recorded_by_name || 'Pelatih SSB'
+    });
+  }
+
+  const groups = Array.from(bucketMap.values())
+    .map((b) => {
+      const sortedVals = [...b.rawValues].sort((x, y) => x - y);
+      const sum = sortedVals.reduce((acc, v) => acc + v, 0);
+      const mean = sortedVals.length > 0 ? roundToDecimals(sum / sortedVals.length, 2) : null;
+      const median = computeSortedMedian(sortedVals);
+      const minVal = sortedVals.length > 0 ? sortedVals[0] : null;
+      const maxVal = sortedVals.length > 0 ? sortedVals[sortedVals.length - 1] : null;
+      const bestVal = b.direction === 'LOWER_IS_BETTER' ? minVal : maxVal;
+      const worstVal = b.direction === 'LOWER_IS_BETTER' ? maxVal : minVal;
+
+      return {
+        groupKey: b.groupKey,
+        testId: b.testId,
+        indicatorId: b.indicatorId,
+        tenantId: b.tenantId,
+        ageGroup: b.ageGroup,
+        developmentTier: b.developmentTier,
+        measurementMethod: b.measurementMethod,
+        isMethodSpecified: b.measurementMethod !== UNSPECIFIED_MEASUREMENT_METHOD,
+        testPeriod: b.testPeriod,
+        unit: b.unit,
+        direction: b.direction,
+        sampleCount: sortedVals.length,
+        uniqueStudentCount: b.athleteIdsSet.size,
+        minRawValue: minVal,
+        maxRawValue: maxVal,
+        bestRawValue: bestVal,
+        worstRawValue: worstVal,
+        meanRawValue: mean,
+        medianRawValue: median,
+        rawValues: sortedVals,
+        records: b.records,
+        calibrationStatus: 'PENDING_CALIBRATION'
+      };
+    })
+    .sort((a, b) => a.groupKey.localeCompare(b.groupKey));
+
+  return {
+    testId,
+    totalMatchingRecords: safeRecords.length,
     totalGroups: groups.length,
     groups
   };

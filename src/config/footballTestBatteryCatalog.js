@@ -68,27 +68,31 @@ export const BLEEP_LEVEL_SHUTTLES = {
 };
 
 /**
- * Metode pengukuran waktu standar untuk TST-SPR-10M (Task 03.3).
- * PENTING: STOPWATCH_MANUAL dan SMARTPHONE_VIDEO menghasilkan karakteristik bias waktu
- * yang berbeda (reaksi visual-motorik manusia ±0.15–0.24s vs frame-to-frame video),
- * sehingga TIDAK BOLEH dianggap identik atau dicampur dalam satu kelompok norma.
+ * Kategori metode pengukuran standar untuk seluruh Assessment Battery (Task 03.5).
+ * Setiap tes wajib menggunakan metode pengukuran yang sesuai dengan prosedur aktualnya:
+ * - STOPWATCH_MANUAL: pengukuran waktu menggunakan stopwatch manual
+ * - SMARTPHONE_VIDEO: pengukuran waktu melalui analisis video smartphone (hanya untuk tes yang mendukung)
+ * - PHYSICAL_MEASURING_TOOL: pengukuran menggunakan alat ukur fisik (meteran, pita ukur, mistar)
+ * - MANUAL_COUNT: penghitungan repetisi / balikan secara manual
  */
-export const SPRINT_MEASUREMENT_METHODS = Object.freeze({
+export const MEASUREMENT_METHODS = Object.freeze({
   STOPWATCH_MANUAL: 'STOPWATCH_MANUAL',
-  SMARTPHONE_VIDEO: 'SMARTPHONE_VIDEO'
+  SMARTPHONE_VIDEO: 'SMARTPHONE_VIDEO',
+  PHYSICAL_MEASURING_TOOL: 'PHYSICAL_MEASURING_TOOL',
+  MANUAL_COUNT: 'MANUAL_COUNT'
 });
 
-export const SPRINT_MEASUREMENT_METHOD_SPECS = Object.freeze({
+export const MEASUREMENT_METHOD_SPECS = Object.freeze({
   STOPWATCH_MANUAL: Object.freeze({
     code: 'STOPWATCH_MANUAL',
     label: 'Stopwatch Manual (0.01s)',
     shortLabel: 'Stopwatch Manual',
     description:
-      'Pencatatan waktu menggunakan stopwatch digital genggam (0.01s) oleh pelatih di garis Finish 10m. Memiliki latensi reaksi visual-motorik manusia ±0.15–0.24 detik.',
+      'Pencatatan waktu menggunakan stopwatch digital genggam (0.01s) oleh pelatih di lapangan. Memiliki latensi reaksi visual-motorik manusia ±0.15–0.24 detik.',
     precisionNote:
-      'Memiliki latensi reaksi visual-motorik manusia ±0.15–0.24 detik. Pencatat waktu wajib berdiri sejajar garis Finish 10m dan tidak boleh digabung dengan data kamera video.',
+      'Memiliki latensi reaksi visual-motorik manusia ±0.15–0.24 detik. Tidak boleh digabung langsung dengan data analisis video smartphone.',
     timingProcedure:
-      'Pencatat waktu berdiri tepat sejajar garis Finish (10m). Tekan START tepat saat kaki belakang atlet terangkat dari tanah (first foot release) dan tekan STOP tepat saat dada/torso atlet memotong garis Finish 10m.'
+      'Pencatat waktu berdiri tepat sejajar garis Finish / titik pengukuran. Tekan START tepat saat gerakan/tolakan dimulai dan tekan STOP tepat saat kriteria penyelesaian tercapai.'
   }),
   SMARTPHONE_VIDEO: Object.freeze({
     code: 'SMARTPHONE_VIDEO',
@@ -99,8 +103,46 @@ export const SPRINT_MEASUREMENT_METHOD_SPECS = Object.freeze({
     precisionNote:
       'Presisi tinggi berbasis frame video (±0.008–0.016 detik pada 60/120fps) tanpa bias reaksi jari. Tidak boleh digabung langsung dengan data Stopwatch Manual.',
     timingProcedure:
-      'Tempatkan smartphone secara stabil tegak lurus lintasan (sekitar titik 5m–10m, jarak ±8–10m ke samping) agar garis Start (0m) dan Finish (10m) masuk dalam satu frame. Hitung selisih waktu frame saat kaki belakang terangkat (t_start) hingga torso memotong garis Finish (t_finish).'
+      'Tempatkan smartphone secara stabil tegak lurus lintasan agar garis Start dan Finish masuk dalam satu frame. Hitung selisih waktu frame saat kaki belakang terangkat (t_start) hingga torso memotong garis Finish (t_finish).'
+  }),
+  PHYSICAL_MEASURING_TOOL: Object.freeze({
+    code: 'PHYSICAL_MEASURING_TOOL',
+    label: 'Alat Ukur Fisik (Meteran / Mistar)',
+    shortLabel: 'Alat Ukur Fisik',
+    description:
+      'Pengukuran jarak atau jangkauan secara langsung menggunakan alat ukur fisik standar (pita ukur lantai/dinding, meteran gulung, atau penggaris/mistar skala cm/m).',
+    precisionNote:
+      'Pembacaan skala dilakukan langsung pada titik acuan fisik yang ditetapkan protokol (mis. garis tumit, titik sentuh kapur, batas atas ibu jari, atau titik jatuh pertama bola).',
+    timingProcedure:
+      'Pastikan titik nol alat ukur sejajar tepat dengan garis acuan protokol dan baca skala tegak lurus mata (hindari paralaks).'
+  }),
+  MANUAL_COUNT: Object.freeze({
+    code: 'MANUAL_COUNT',
+    label: 'Penghitungan Manual (Repetisi / Shuttle)',
+    shortLabel: 'Hitung Manual',
+    description:
+      'Penghitungan jumlah repetisi gerak atau balikan shuttle yang sah secara langsung oleh pelatih/pencatat (termasuk tes repetisi berbatas waktu/audio).',
+    precisionNote:
+      'Hanya repetisi/shuttle yang memenuhi kriteria teknik, batas garis, dan batas waktu protokol yang dihitung sebagai skor sah.',
+    timingProcedure:
+      'Amati setiap repetisi secara langsung dan hitung hanya pengulangan yang memenuhi syarat sah hingga waktu/audio tes berakhir.'
   })
+});
+
+/**
+ * Metode pengukuran waktu standar untuk TST-SPR-10M (Task 03.3 — backward-compatible alias).
+ * PENTING: STOPWATCH_MANUAL dan SMARTPHONE_VIDEO menghasilkan karakteristik bias waktu
+ * yang berbeda (reaksi visual-motorik manusia ±0.15–0.24s vs frame-to-frame video),
+ * sehingga TIDAK BOLEH dianggap identik atau dicampur dalam satu kelompok norma.
+ */
+export const SPRINT_MEASUREMENT_METHODS = Object.freeze({
+  STOPWATCH_MANUAL: MEASUREMENT_METHODS.STOPWATCH_MANUAL,
+  SMARTPHONE_VIDEO: MEASUREMENT_METHODS.SMARTPHONE_VIDEO
+});
+
+export const SPRINT_MEASUREMENT_METHOD_SPECS = Object.freeze({
+  STOPWATCH_MANUAL: MEASUREMENT_METHOD_SPECS.STOPWATCH_MANUAL,
+  SMARTPHONE_VIDEO: MEASUREMENT_METHOD_SPECS.SMARTPHONE_VIDEO
 });
 
 /**
@@ -232,6 +274,9 @@ export const FOOTBALL_TEST_BATTERY_CATALOG = [
     trialSides: ['LEFT', 'RIGHT'],
     valueConstraints: { min: 4.0, max: 30.0, step: 0.01, decimals: 2 },
     restBetweenTrialsSec: 180,
+    requiresMeasurementMethod: false,
+    supportedMeasurementMethods: [MEASUREMENT_METHODS.STOPWATCH_MANUAL],
+    defaultMeasurementMethod: MEASUREMENT_METHODS.STOPWATCH_MANUAL,
     equipment: [
       'Meteran gulung',
       '6 kerucut (cone): 2 di gerbang Start/Finish, 1 di titik tengah A (10m), 1 di kiri B (5m), 1 di kanan C (5m), 1 di ujung depan D (15m dari Start)',
@@ -282,6 +327,9 @@ export const FOOTBALL_TEST_BATTERY_CATALOG = [
     trialSides: ['RIGHT', 'LEFT'],
     valueConstraints: { min: 0.5, max: 60.0, step: 0.1, decimals: 1 },
     restBetweenTrialsSec: 45,
+    requiresMeasurementMethod: false,
+    supportedMeasurementMethods: [MEASUREMENT_METHODS.STOPWATCH_MANUAL],
+    defaultMeasurementMethod: MEASUREMENT_METHODS.STOPWATCH_MANUAL,
     equipment: [
       'Stopwatch digital',
       'Permukaan lantai atau lapangan datar dan keras (tanpa sepatu berpul tinggi saat tes atau di atas alas datar)'
@@ -331,6 +379,9 @@ export const FOOTBALL_TEST_BATTERY_CATALOG = [
     trialLabels: ['Percobaan 1', 'Percobaan 2'],
     valueConstraints: { min: 0.5, max: 65.0, step: 0.5, decimals: 1 },
     restBetweenTrialsSec: 30,
+    requiresMeasurementMethod: false,
+    supportedMeasurementMethods: [MEASUREMENT_METHODS.PHYSICAL_MEASURING_TOOL],
+    defaultMeasurementMethod: MEASUREMENT_METHODS.PHYSICAL_MEASURING_TOOL,
     equipment: [
       'Meteran lantai / pita ukur 60 cm',
       'Lakban penanda garis tumit pada angka 25.0 cm',
@@ -381,6 +432,12 @@ export const FOOTBALL_TEST_BATTERY_CATALOG = [
     trialLabels: ['Percobaan 1', 'Percobaan 2'],
     valueConstraints: { min: 3.0, max: 15.0, step: 0.01, decimals: 2 },
     restBetweenTrialsSec: 180,
+    requiresMeasurementMethod: false,
+    supportedMeasurementMethods: [
+      MEASUREMENT_METHODS.STOPWATCH_MANUAL,
+      MEASUREMENT_METHODS.SMARTPHONE_VIDEO
+    ],
+    defaultMeasurementMethod: MEASUREMENT_METHODS.STOPWATCH_MANUAL,
     equipment: [
       'Meteran gulung 30m+',
       '4 kerucut (cone) untuk gerbang Start (0m) & Finish (30m)',
@@ -430,6 +487,9 @@ export const FOOTBALL_TEST_BATTERY_CATALOG = [
     trialLabels: ['Percobaan 1', 'Percobaan 2', 'Percobaan 3'],
     valueConstraints: { min: 1.0, max: 50.0, step: 0.5, decimals: 1 },
     restBetweenTrialsSec: 15,
+    requiresMeasurementMethod: false,
+    supportedMeasurementMethods: [MEASUREMENT_METHODS.PHYSICAL_MEASURING_TOOL],
+    defaultMeasurementMethod: MEASUREMENT_METHODS.PHYSICAL_MEASURING_TOOL,
     equipment: [
       'Penggaris kaku / mistar kayu atau plastik panjang 50 cm (skala mm/cm jelas)',
       'Meja atau tumpuan lengan agar tangan atlet stabil'
@@ -491,6 +551,9 @@ export const FOOTBALL_TEST_BATTERY_CATALOG = [
     ],
     valueConstraints: { min: 105.0, max: 360.0, step: 0.5, decimals: 1 },
     restBetweenTrialsSec: 60,
+    requiresMeasurementMethod: false,
+    supportedMeasurementMethods: [MEASUREMENT_METHODS.PHYSICAL_MEASURING_TOOL],
+    defaultMeasurementMethod: MEASUREMENT_METHODS.PHYSICAL_MEASURING_TOOL,
     equipment: [
       'Dinding rata minimal tinggi 3.5 meter',
       'Meteran pita ditempel vertikal di dinding',
@@ -540,6 +603,9 @@ export const FOOTBALL_TEST_BATTERY_CATALOG = [
     trialSides: ['RIGHT', 'LEFT'],
     valueConstraints: { min: 1.5, max: 10.0, step: 0.01, decimals: 2 },
     restBetweenTrialsSec: 120,
+    requiresMeasurementMethod: false,
+    supportedMeasurementMethods: [MEASUREMENT_METHODS.STOPWATCH_MANUAL],
+    defaultMeasurementMethod: MEASUREMENT_METHODS.STOPWATCH_MANUAL,
     equipment: [
       'Meteran gulung',
       '6 kerucut (cone): Garis Awal (0m), Garis Timing (10m), dan Garis Putar Balik (15m)',
@@ -612,6 +678,9 @@ export const FOOTBALL_TEST_BATTERY_CATALOG = [
     ],
     valueConstraints: { min: 20, max: 4940, step: 20, decimals: 0 },
     restBetweenTrialsSec: 0,
+    requiresMeasurementMethod: false,
+    supportedMeasurementMethods: [MEASUREMENT_METHODS.MANUAL_COUNT],
+    defaultMeasurementMethod: MEASUREMENT_METHODS.MANUAL_COUNT,
     equipment: [
       'Meteran gulung 20m',
       'Kerucut (cone) pembatas jalur lari bolak-balik 20 meter',
@@ -662,6 +731,9 @@ export const FOOTBALL_TEST_BATTERY_CATALOG = [
     trialLabels: ['Percobaan 1', 'Percobaan 2'],
     valueConstraints: { min: 50.0, max: 350.0, step: 1.0, decimals: 1 },
     restBetweenTrialsSec: 60,
+    requiresMeasurementMethod: false,
+    supportedMeasurementMethods: [MEASUREMENT_METHODS.PHYSICAL_MEASURING_TOOL],
+    defaultMeasurementMethod: MEASUREMENT_METHODS.PHYSICAL_MEASURING_TOOL,
     equipment: [
       'Meteran pita minimal 3.5 meter ditempel di lantai/rumput datar',
       'Garis batas tolakan (lakban atau cone)'
@@ -710,6 +782,9 @@ export const FOOTBALL_TEST_BATTERY_CATALOG = [
     trialLabels: ['Total Repetisi Sah (60 Detik)'],
     valueConstraints: { min: 1, max: 120, step: 1, decimals: 0 },
     restBetweenTrialsSec: 0,
+    requiresMeasurementMethod: false,
+    supportedMeasurementMethods: [MEASUREMENT_METHODS.MANUAL_COUNT],
+    defaultMeasurementMethod: MEASUREMENT_METHODS.MANUAL_COUNT,
     equipment: [
       'Stopwatch digital (timer 60 detik)',
       'Kerucut kecil (tinggi ~8–10 cm) atau kepalan tangan asisten tepat di bawah tulang dada (sternum) atlet sebagai target kedalaman',
@@ -759,6 +834,9 @@ export const FOOTBALL_TEST_BATTERY_CATALOG = [
     trialLabels: ['Durasi Tahan Plank Sah (Detik)'],
     valueConstraints: { min: 1, max: 240, step: 1, decimals: 0 },
     restBetweenTrialsSec: 0,
+    requiresMeasurementMethod: false,
+    supportedMeasurementMethods: [MEASUREMENT_METHODS.STOPWATCH_MANUAL],
+    defaultMeasurementMethod: MEASUREMENT_METHODS.STOPWATCH_MANUAL,
     equipment: [
       'Stopwatch digital',
       'Matras olahraga atau rumput datar'
@@ -815,6 +893,9 @@ export const FOOTBALL_TEST_BATTERY_CATALOG = [
     ],
     valueConstraints: { min: 3.0, max: 15.0, step: 0.01, decimals: 2 },
     restBetweenTrialsSec: 25,
+    requiresMeasurementMethod: false,
+    supportedMeasurementMethods: [MEASUREMENT_METHODS.STOPWATCH_MANUAL],
+    defaultMeasurementMethod: MEASUREMENT_METHODS.STOPWATCH_MANUAL,
     equipment: [
       'Meteran gulung 30m',
       'Kerucut (cone) untuk Gerbang A (0m) dan Gerbang B (30m)',
@@ -866,6 +947,9 @@ export const FOOTBALL_TEST_BATTERY_CATALOG = [
     trialLabels: ['Percobaan 1 (Titik Jatuh Pertama)', 'Percobaan 2 (Titik Jatuh Pertama)'],
     valueConstraints: { min: 3.0, max: 85.0, step: 0.5, decimals: 1 },
     restBetweenTrialsSec: 60,
+    requiresMeasurementMethod: false,
+    supportedMeasurementMethods: [MEASUREMENT_METHODS.PHYSICAL_MEASURING_TOOL],
+    defaultMeasurementMethod: MEASUREMENT_METHODS.PHYSICAL_MEASURING_TOOL,
     equipment: [
       'Bola sepak sesuai standar usia (Size 4 untuk U9–U12, Size 5 untuk U13+) dengan tekanan standar',
       'Meteran gulung 50–100m dan kerucut penanda koridor setiap 5 meter'
@@ -916,6 +1000,9 @@ export const FOOTBALL_TEST_BATTERY_CATALOG = [
     trialLabels: ['Percobaan 1 (30 Detik)', 'Percobaan 2 (30 Detik)'],
     valueConstraints: { min: 1, max: 60, step: 1, decimals: 0 },
     restBetweenTrialsSec: 60,
+    requiresMeasurementMethod: false,
+    supportedMeasurementMethods: [MEASUREMENT_METHODS.MANUAL_COUNT],
+    defaultMeasurementMethod: MEASUREMENT_METHODS.MANUAL_COUNT,
     equipment: [
       'Bola sepak Size 3 atau Size 4 (sesuai usia Grassroots) + 1 bola cadangan di sisi kotak',
       'Dinding rata atau papan pantul (rebounder) lebar minimal 2 meter',
@@ -966,6 +1053,9 @@ export const FOOTBALL_TEST_BATTERY_CATALOG = [
     trialLabels: ['Percobaan 1 (30 Detik)', 'Percobaan 2 (30 Detik)'],
     valueConstraints: { min: 1, max: 60, step: 1, decimals: 0 },
     restBetweenTrialsSec: 60,
+    requiresMeasurementMethod: false,
+    supportedMeasurementMethods: [MEASUREMENT_METHODS.MANUAL_COUNT],
+    defaultMeasurementMethod: MEASUREMENT_METHODS.MANUAL_COUNT,
     equipment: [
       'Bola sepak Size 3 atau Size 4',
       'Dinding rata',
@@ -1014,6 +1104,9 @@ export const FOOTBALL_TEST_BATTERY_CATALOG = [
     trialLabels: ['Percobaan 1', 'Percobaan 2'],
     valueConstraints: { min: 2.0, max: 25.0, step: 0.01, decimals: 2 },
     restBetweenTrialsSec: 90,
+    requiresMeasurementMethod: false,
+    supportedMeasurementMethods: [MEASUREMENT_METHODS.STOPWATCH_MANUAL],
+    defaultMeasurementMethod: MEASUREMENT_METHODS.STOPWATCH_MANUAL,
     equipment: [
       '3 kerucut (cone): Cone Tengah (0m), Cone Kiri (2m), dan Cone Kanan (2m)',
       'Meteran gulung',
@@ -1062,6 +1155,9 @@ export const FOOTBALL_TEST_BATTERY_CATALOG = [
     trialLabels: ['Percobaan 1 (Sisi Sayap Dominan)', 'Percobaan 2 (Sisi Sayap Dominan)'],
     valueConstraints: { min: 2.0, max: 12.0, step: 0.01, decimals: 2 },
     restBetweenTrialsSec: 120,
+    requiresMeasurementMethod: false,
+    supportedMeasurementMethods: [MEASUREMENT_METHODS.STOPWATCH_MANUAL],
+    defaultMeasurementMethod: MEASUREMENT_METHODS.STOPWATCH_MANUAL,
     equipment: [
       'Meteran gulung 20m',
       '6 kerucut (cone): Garis Start menghadap dalam, Cone Belok pada jarak 5m (sudut 45° ke koridor tepi), dan Gerbang Finish pada jarak 20m sejajar garis tepi (touchline)',
@@ -1115,6 +1211,42 @@ export function getTestDefinitionById(testId) {
 export function getTestDefinitionByIndicatorId(indicatorId) {
   if (!indicatorId) return null;
   return TEST_CATALOG_BY_INDICATOR_ID[indicatorId] || null;
+}
+
+/**
+ * Ambil daftar metode pengukuran yang didukung oleh sebuah tes.
+ */
+export function getSupportedMeasurementMethodsForTest(testId) {
+  const def = getTestDefinitionById(testId);
+  if (!def || !Array.isArray(def.supportedMeasurementMethods)) return [];
+  return [...def.supportedMeasurementMethods];
+}
+
+/**
+ * Ambil metode pengukuran default sesuai protokol tes.
+ */
+export function getDefaultMeasurementMethodForTest(testId) {
+  const def = getTestDefinitionById(testId);
+  if (!def) return null;
+  return def.defaultMeasurementMethod || def.supportedMeasurementMethods?.[0] || null;
+}
+
+/**
+ * Periksa apakah kode metode pengukuran termasuk dalam 4 kategori standar.
+ */
+export function isStandardMeasurementMethod(method) {
+  if (!method || typeof method !== 'string') return false;
+  const upper = method.trim().toUpperCase();
+  return Object.values(MEASUREMENT_METHODS).includes(upper);
+}
+
+/**
+ * Periksa apakah metode pengukuran valid dan didukung oleh tes tertentu.
+ */
+export function isMeasurementMethodSupportedForTest(testId, method) {
+  if (!isStandardMeasurementMethod(method)) return false;
+  const supported = getSupportedMeasurementMethodsForTest(testId);
+  return supported.includes(method.trim().toUpperCase());
 }
 
 const TIER_NUMBER_TO_KEY = {

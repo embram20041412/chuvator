@@ -27,6 +27,8 @@ import {
   DEVELOPMENT_TIERS,
   FOOTBALL_POSITIONS,
   TIER_1_POSITIONS,
+  MEASUREMENT_METHODS,
+  MEASUREMENT_METHOD_SPECS,
   SPRINT_MEASUREMENT_METHODS,
   SPRINT_MEASUREMENT_METHOD_SPECS,
   getTestDefinitionById,
@@ -58,6 +60,7 @@ import {
 import {
   deriveStandardAgeGroup,
   buildSprint10mLongitudinalProgress,
+  buildTestLongitudinalProgress,
   recapitulateSprint10mRawData
 } from '../services/sprint10mNormsAnalytics.js';
 
@@ -327,6 +330,12 @@ export default function AssessmentBatterySection({
   const athleteSprint10mLongitudinal = useMemo(
     () => buildSprint10mLongitudinalProgress(athleteHistory),
     [athleteHistory]
+  );
+
+  // Perkembangan Longitudinal Tes Aktif Saat Ini (Task 03.5)
+  const activeTestLongitudinal = useMemo(
+    () => buildTestLongitudinalProgress(athleteHistory, activeTestDef?.testId || 'TST-SPR-10M'),
+    [athleteHistory, activeTestDef?.testId]
   );
 
   // Rekapitulasi Data Mentah TST-SPR-10M untuk Penyusunan Norma (Task 03.3)
@@ -1099,8 +1108,9 @@ export default function AssessmentBatterySection({
                     </div>
                   </div>
 
-                  {/* Pemilih Metode Pengukuran Waktu Wajib (Task 03.3: TST-SPR-10M) */}
-                  {activeTestDef.requiresMeasurementMethod && (
+                  {/* Metode Pengukuran Standar Berbasis Karakteristik Protokol Tes (Task 03.5) */}
+                  {Array.isArray(activeTestDef.supportedMeasurementMethods) &&
+                  activeTestDef.supportedMeasurementMethods.length > 1 ? (
                     <div
                       data-testid="battery-measurement-method-box"
                       className="rounded-xl border border-cyan-300 bg-cyan-50/60 p-3.5 space-y-2.5"
@@ -1110,7 +1120,7 @@ export default function AssessmentBatterySection({
                           htmlFor="battery-measurement-method-select"
                           className="text-xs font-bold uppercase tracking-wider text-cyan-950"
                         >
-                          Metode Pencatatan Waktu Sprint (Wajib Tercatat) <span className="text-rose-600">*</span>
+                          Metode Pencatatan Waktu Sprint ({activeTestDef.requiresMeasurementMethod ? 'Wajib Tercatat' : 'Pilih Sesuai Alat'}) <span className="text-rose-600">*</span>
                         </label>
                         <span className="rounded bg-cyan-200/80 px-2 py-0.5 font-mono text-[10px] font-bold text-cyan-950">
                           Data Tidak Dianggap Identik
@@ -1120,7 +1130,11 @@ export default function AssessmentBatterySection({
                       <select
                         id="battery-measurement-method-select"
                         data-testid="battery-measurement-method-select"
-                        value={entryDraft.measurementMethod || SPRINT_MEASUREMENT_METHODS.STOPWATCH_MANUAL}
+                        value={
+                          entryDraft.measurementMethod ||
+                          activeTestDef.defaultMeasurementMethod ||
+                          MEASUREMENT_METHODS.STOPWATCH_MANUAL
+                        }
                         onChange={(e) => {
                           setValidationErrors([]);
                           setFieldErrors({});
@@ -1131,21 +1145,52 @@ export default function AssessmentBatterySection({
                         }}
                         className="w-full rounded-xl border border-cyan-400 bg-white px-3.5 py-2.5 text-sm font-bold text-slate-900 focus:border-emerald-600 focus:outline-none min-h-[44px]"
                       >
-                        {Object.values(SPRINT_MEASUREMENT_METHOD_SPECS).map((spec) => (
-                          <option key={spec.code} value={spec.code}>
-                            {spec.code} — {spec.label}
-                          </option>
-                        ))}
+                        {activeTestDef.supportedMeasurementMethods.map((methodCode) => {
+                          const spec =
+                            MEASUREMENT_METHOD_SPECS[methodCode] ||
+                            SPRINT_MEASUREMENT_METHOD_SPECS[methodCode];
+                          return (
+                            <option key={methodCode} value={methodCode}>
+                              {methodCode} — {spec?.label || methodCode}
+                            </option>
+                          );
+                        })}
                       </select>
 
                       <p className="text-[11px] text-cyan-950 leading-relaxed">
                         {
-                          SPRINT_MEASUREMENT_METHOD_SPECS[
-                            entryDraft.measurementMethod || SPRINT_MEASUREMENT_METHODS.STOPWATCH_MANUAL
+                          MEASUREMENT_METHOD_SPECS[
+                            entryDraft.measurementMethod ||
+                              activeTestDef.defaultMeasurementMethod ||
+                              MEASUREMENT_METHODS.STOPWATCH_MANUAL
                           ]?.description
                         }{' '}
                         <strong>Catatan Metodologi:</strong> Hasil <code>STOPWATCH_MANUAL</code> dan{' '}
                         <code>SMARTPHONE_VIDEO</code> dipisahkan secara ketat pada analisis longitudinal dan rekapitulasi norma.
+                      </p>
+                    </div>
+                  ) : (
+                    <div
+                      data-testid="battery-measurement-method-readonly"
+                      className="rounded-xl border border-slate-200 bg-slate-50/90 p-3.5 space-y-1.5"
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                          Metode Pengukuran Standar Protokol (Otomatis)
+                        </span>
+                        <span
+                          data-testid="battery-measurement-method-badge"
+                          className="rounded bg-emerald-100 border border-emerald-300 px-2 py-0.5 font-mono text-[11px] font-bold text-emerald-900"
+                        >
+                          {activeTestDef.defaultMeasurementMethod}
+                        </span>
+                      </div>
+                      <div className="text-xs font-semibold text-slate-800">
+                        {MEASUREMENT_METHOD_SPECS[activeTestDef.defaultMeasurementMethod]?.label ||
+                          activeTestDef.defaultMeasurementMethod}
+                      </div>
+                      <p className="text-[11px] text-slate-600 leading-relaxed">
+                        {MEASUREMENT_METHOD_SPECS[activeTestDef.defaultMeasurementMethod]?.description}
                       </p>
                     </div>
                   )}
@@ -1480,6 +1525,18 @@ export default function AssessmentBatterySection({
           </div>
         )}
 
+        {athleteSprint10mLongitudinal.hasUnverifiedLegacyRecords && (
+          <div
+            data-testid="sprint10m-unverified-legacy-warning"
+            className="rounded-xl border border-amber-300 bg-amber-50/80 p-3 text-xs text-amber-950 flex items-start gap-2"
+          >
+            <AlertTriangle className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
+            <div>
+              <strong>Catatan Data Historis (Legacy NULL):</strong> Terdapat catatan lama tanpa metode pengukuran tercatat. Sistem tidak mengasumsikan catatan tersebut sebagai <code>STOPWATCH_MANUAL</code> dan tidak menghitung selisih longitudinal terhadap metode lain.
+            </div>
+          </div>
+        )}
+
         {athleteSprint10mLongitudinal.totalSessions === 0 ? (
           <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-4 text-center text-xs text-slate-500">
             Belum ada catatan longitudinal <strong>TST-SPR-10M (Sprint 10 Meter)</strong> untuk atlet ini.
@@ -1496,8 +1553,14 @@ export default function AssessmentBatterySection({
                   <span className="font-mono text-xs font-bold text-slate-700">
                     Sesi #{entry.sessionOrder} • {entry.testDate}
                   </span>
-                  <span className="rounded bg-cyan-100 border border-cyan-300 px-1.5 py-0.5 font-mono text-[10px] font-bold text-cyan-900">
-                    {entry.measurementMethod}
+                  <span
+                    className={`rounded border px-1.5 py-0.5 font-mono text-[10px] font-bold ${
+                      entry.measurementMethod
+                        ? 'bg-cyan-100 border-cyan-300 text-cyan-900'
+                        : 'bg-amber-100 border-amber-300 text-amber-900'
+                    }`}
+                  >
+                    {entry.measurementMethod || 'METODE BELUM TERCATAT'}
                   </span>
                 </div>
                 <div className="flex items-baseline justify-between gap-2">
@@ -1505,6 +1568,9 @@ export default function AssessmentBatterySection({
                     {entry.finalDisplayValue}
                   </div>
                   <div className="text-xs font-bold">
+                    {entry.progressionDirection === 'UNSPECIFIED_METHOD' && (
+                      <span className="text-amber-700">Legacy NULL (Tidak Dibandingkan)</span>
+                    )}
                     {entry.progressionDirection === 'BASELINE' && (
                       <span className="text-slate-500">Baseline Awal ({entry.measurementMethod})</span>
                     )}
@@ -1533,6 +1599,27 @@ export default function AssessmentBatterySection({
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {activeTestDef?.testId !== 'TST-SPR-10M' && activeTestLongitudinal.totalSessions > 0 && (
+          <div
+            data-testid="active-test-longitudinal-summary"
+            className="rounded-xl border border-slate-200 bg-slate-50/70 p-3 space-y-2"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <span className="font-bold text-slate-800">
+                Perkembangan {activeTestDef.shortName} ({activeTestDef.testId}) — {activeTestLongitudinal.totalSessions} Sesi
+              </span>
+              <span className="font-mono text-[11px] text-slate-600">
+                Metode Tercatat: {activeTestLongitudinal.methodsUsed.join(', ') || 'Belum Tercatat (Legacy)'}
+              </span>
+            </div>
+            {(activeTestLongitudinal.hasMixedMethods || activeTestLongitudinal.hasUnverifiedLegacyRecords) && (
+              <div className="text-[11px] text-amber-800">
+                Perbandingan progres hanya dihitung antar-sesi dengan metode pengukuran standar yang identik.
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1636,12 +1723,19 @@ export default function AssessmentBatterySection({
                       </span>
                       <span className="font-mono text-xs text-slate-500">{item.testId}</span>
                       <span className="text-xs font-semibold text-slate-500">• {item.testDate}</span>
-                      {item.measurementMethod && (
+                      {item.measurementMethod ? (
                         <span
                           data-testid={`history-measurement-method-${item.testId}`}
                           className="rounded bg-cyan-100 border border-cyan-300 px-2 py-0.5 font-mono text-[10px] font-bold text-cyan-900"
                         >
                           {item.measurementMethod}
+                        </span>
+                      ) : (
+                        <span
+                          data-testid={`history-measurement-method-unspecified-${item.testId}`}
+                          className="rounded bg-amber-100 border border-amber-300 px-2 py-0.5 font-mono text-[10px] font-bold text-amber-900"
+                        >
+                          METODE BELUM TERCATAT (LEGACY)
                         </span>
                       )}
                       {item.ageGroup && (
@@ -1814,6 +1908,7 @@ export default function AssessmentBatterySection({
               <option value="ALL">Semua Metode (Dipisah per Grup)</option>
               <option value="STOPWATCH_MANUAL">STOPWATCH_MANUAL</option>
               <option value="SMARTPHONE_VIDEO">SMARTPHONE_VIDEO</option>
+              <option value="UNSPECIFIED">Belum Tercatat (Legacy NULL)</option>
             </select>
           </div>
 

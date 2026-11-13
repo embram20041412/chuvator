@@ -345,6 +345,7 @@ DECLARE
     v_parsed_age INTEGER;
     v_raw_top_method TEXT;
     v_ctx_method TEXT;
+    v_default_single_method TEXT;
     v_raw_age_group TEXT;
     v_ctx_age_group TEXT;
     v_json_changed BOOLEAN;
@@ -453,6 +454,17 @@ BEGIN
         NEW.test_period := to_char(NEW.test_date, 'YYYY-MM');
     END IF;
 
+    -- Default metode tunggal standar untuk 16 tes non-dual-method saat INSERT jika tidak diisi (Task 03.5)
+    v_default_single_method := CASE
+        WHEN NEW.test_id IN ('TST-AGL-ARW', 'TST-BAL-STK', 'TST-COD-505', 'TST-COR-PLK', 'TST-RSA-630', 'TST-SSB-GK-03', 'TST-WF-TLA')
+            THEN 'STOPWATCH_MANUAL'
+        WHEN NEW.test_id IN ('TST-MOB-SAR', 'TST-RXN-RLR', 'TST-JMP-VER', 'TST-PWR-SBJ', 'TST-SHT-DST')
+            THEN 'PHYSICAL_MEASURING_TOOL'
+        WHEN NEW.test_id IN ('TST-END-BLP', 'TST-STR-PU1', 'TST-SSB-WAP', 'TST-SSB-GK-02')
+            THEN 'MANUAL_COUNT'
+        ELSE NULL
+    END;
+
     -- Normalisasi & Sinkronisasi measurement_method (INSERT maupun UPDATE saat derived_metrics/auxiliary_inputs berubah)
     v_raw_top_method := NULLIF(UPPER(trim(COALESCE(NEW.measurement_method, ''))), '');
     v_ctx_method := COALESCE(
@@ -472,7 +484,7 @@ BEGIN
     IF TG_OP = 'UPDATE' AND (NEW.measurement_method IS DISTINCT FROM OLD.measurement_method) THEN
         NEW.measurement_method := v_raw_top_method;
     ELSIF v_method_json_changed THEN
-        IF NEW.test_id = 'TST-SPR-10M' THEN
+        IF NEW.test_id IN ('TST-SPR-10M', 'TST-SPR-30M') THEN
             IF v_ctx_method IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO') THEN
                 NEW.measurement_method := v_ctx_method;
             ELSE
@@ -484,7 +496,7 @@ BEGIN
     ELSIF v_raw_top_method IS NOT NULL THEN
         NEW.measurement_method := v_raw_top_method;
     ELSIF v_json_changed AND v_ctx_method IS NOT NULL THEN
-        IF NEW.test_id = 'TST-SPR-10M' THEN
+        IF NEW.test_id IN ('TST-SPR-10M', 'TST-SPR-30M') THEN
             IF v_ctx_method IN ('STOPWATCH_MANUAL', 'SMARTPHONE_VIDEO') THEN
                 NEW.measurement_method := v_ctx_method;
             ELSE
@@ -493,6 +505,8 @@ BEGIN
         ELSE
             NEW.measurement_method := v_ctx_method;
         END IF;
+    ELSIF TG_OP = 'INSERT' AND NEW.measurement_method IS NULL AND v_ctx_method IS NULL AND v_default_single_method IS NOT NULL THEN
+        NEW.measurement_method := v_default_single_method;
     ELSE
         NEW.measurement_method := NULL;
     END IF;
