@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   MASTER_FOOTBALL_TESTS_CATALOG,
+  FOOTBALL_TEST_BENCHMARKS,
+  FOOTBALL_RUBRIC_ANCHORS,
+  resolveMasterFootballTest,
   calculateAssessmentScore,
   convertRubricLevelToScore,
   aggregateIndicatorScores,
@@ -336,6 +339,70 @@ test('convertAttendanceRateToScore, calculateAthleteAttendanceMetrics, and build
   assert.equal(resolveIndicatorScore(flatScores, 'Akselerasi'), 0);
   assert.equal(resolveIndicatorScore(flatScores, 'Kontrol Bola'), 0);
 });
+
+test('6 newly added tests (PHY12, TEC13, TAC08, MEN05, COM04, POS_CM02) have valid catalog entries, benchmarks, and rubric anchors', () => {
+  const newCodes = ['PHY12', 'TEC13', 'TAC08', 'MEN05', 'COM04', 'POS_CM02'];
+  for (const code of newCodes) {
+    const meta = resolveMasterFootballTest(code);
+    assert.ok(meta, `Missing test ${code} in MASTER_FOOTBALL_TESTS_CATALOG`);
+  }
+
+  // PHY12: TIME (Higher is better) with exact benchmarks per tier
+  assert.deepEqual(FOOTBALL_TEST_BENCHMARKS.PHY12, {
+    1: { poor: 15, fair: 25, good: 40, elite: 60 },
+    2: { poor: 25, fair: 40, good: 60, elite: 90 },
+    3: { poor: 35, fair: 55, good: 80, elite: 120 },
+    4: { poor: 45, fair: 70, good: 100, elite: 150 }
+  });
+  // Tier 2 good anchor = 60s -> score 80, elite anchor = 90s -> score 96
+  assert.equal(
+    calculateAssessmentScore({ testCode: 'PHY12', tier: 2, rawValues: { raw_value_1: 60 } }),
+    80
+  );
+  assert.equal(
+    calculateAssessmentScore({ testCode: 'PHY12', tier: 2, rawValues: { raw_value_1: 90 } }),
+    96
+  );
+
+  // TEC13 matches TEC02 benchmarks
+  assert.deepEqual(FOOTBALL_TEST_BENCHMARKS.TEC13, FOOTBALL_TEST_BENCHMARKS.TEC02);
+  assert.equal(
+    calculateAssessmentScore({
+      testCode: 'TEC13',
+      tier: 1,
+      rawValues: { raw_value_1: 7, raw_value_2: 10 }
+    }),
+    80
+  );
+
+  // POS_CM02 matches POS_CM01 benchmarks and position CM
+  const posCm02 = resolveMasterFootballTest('POS_CM02');
+  assert.equal(posCm02?.position_code, 'CM');
+  assert.deepEqual(FOOTBALL_TEST_BENCHMARKS.POS_CM02, FOOTBALL_TEST_BENCHMARKS.POS_CM01);
+  assert.equal(
+    calculateAssessmentScore({
+      testCode: 'POS_CM02',
+      tier: 3,
+      rawValues: { raw_value_1: 10, raw_value_2: 10 }
+    }),
+    100
+  );
+
+  // TAC08, MEN05, COM04 RUBRIC 1-5 & FOOTBALL_RUBRIC_ANCHORS
+  const rubricKeys = ['membuka_ruang', 'percaya_diri', 'dukungan_rekan'] as const;
+  const levels = [1, 2, 3, 4, 5] as const;
+  for (const rubricKey of rubricKeys) {
+    const anchors = FOOTBALL_RUBRIC_ANCHORS[rubricKey];
+    assert.ok(anchors, `Missing rubric anchors for ${rubricKey}`);
+    for (const level of levels) {
+      assert.ok(anchors[level]?.label && anchors[level]?.desc, `Missing level ${level} for ${rubricKey}`);
+    }
+  }
+  assert.equal(calculateAssessmentScore({ testCode: 'TAC08', tier: 1, rawValues: { raw_value_1: 5 } }), 95);
+  assert.equal(calculateAssessmentScore({ testCode: 'MEN05', tier: 2, rawValues: { raw_value_1: 4 } }), 84);
+  assert.equal(calculateAssessmentScore({ testCode: 'COM04', tier: 3, rawValues: { raw_value_1: 1 } }), 35);
+});
+
 
 
 

@@ -102,7 +102,12 @@ export async function getMasterFootballCatalog({
       return fallbackList;
     }
 
-    return data.map(enrichMasterCatalogRow);
+    const enrichedRemote = data.map(enrichMasterCatalogRow);
+    const remoteCodes = new Set(enrichedRemote.map((row) => String(row.test_code || '').toUpperCase()));
+    const missingFromRemote = fallbackList.filter(
+      (item) => !remoteCodes.has(String(item.test_code || '').toUpperCase())
+    );
+    return [...enrichedRemote, ...missingFromRemote];
   } catch {
     return fallbackList;
   }

@@ -264,6 +264,24 @@ export const MASTER_FOOTBALL_TESTS_CATALOG = [
     min_tier: 4,
     description: 'Selisih penurunan detak jantung (BPM) 1 menit setelah latihan intensitas puncak.'
   },
+  {
+    id: '22222222-2222-4222-8222-000000000012',
+    test_code: 'PHY12',
+    test_name: 'Dynamic Balance Test',
+    category: 'Fisik',
+    indicator_key: 'keseimbangan',
+    indicator_label: 'Keseimbangan',
+    position_code: null,
+    measurement_type: 'TIME',
+    unit: 'detik',
+    is_lower_better: false,
+    errorPenalty: 1,
+    weight: 1.0,
+    inputLabel1: 'Durasi Stabil 1 (detik)',
+    inputLabel2: 'Durasi Stabil 2 (opsional)',
+    min_tier: 1,
+    description: 'Tes keseimbangan dinamis satu kaki dengan transisi gerak (semakin lama durasi bertahan, semakin baik).'
+  },
 
   // ======================== 2. TEKNIK (TECHNICAL) ========================
   {
@@ -482,6 +500,24 @@ export const MASTER_FOOTBALL_TESTS_CATALOG = [
     min_tier: 3,
     description: 'Ketepatan mengarahkan sundulan dari umpan lambung ke zona target.'
   },
+  {
+    id: '22222222-2222-4222-8222-000000000113',
+    test_code: 'TEC13',
+    test_name: 'First Touch Box Trap',
+    category: 'Teknik',
+    indicator_key: 'sentuhan_pertama',
+    indicator_label: 'Sentuhan Pertama',
+    position_code: null,
+    measurement_type: 'ACCURACY',
+    unit: 'sukses/percobaan',
+    is_lower_better: false,
+    defaultTotal: 10,
+    weight: 1.0,
+    inputLabel1: 'Trap Dalam Kotak Sukses',
+    inputLabel2: 'Total Percobaan',
+    min_tier: 1,
+    description: 'Kontrol sentuhan pertama menghentikan bola di dalam area kotak target dalam satu sentuhan bersih.'
+  },
 
   // ======================== 3. TAKTIK (TACTICAL) ========================
   {
@@ -592,6 +628,21 @@ export const MASTER_FOOTBALL_TESTS_CATALOG = [
     min_tier: 3,
     description: 'Kecepatan eksploitasi ruang depan sesaat setelah tim berhasil merebut bola.'
   },
+  {
+    id: '22222222-2222-4222-8222-000000000208',
+    test_code: 'TAC08',
+    test_name: 'Space Creation Observation',
+    category: 'Taktik',
+    indicator_key: 'membuka_ruang',
+    indicator_label: 'Membuka Ruang',
+    position_code: null,
+    measurement_type: 'RUBRIC',
+    unit: 'level 1-5',
+    is_lower_better: false,
+    weight: 1.0,
+    min_tier: 1,
+    description: 'Observasi kemampuan manipulasi ruang tanpa bola, menciptakan celah passing, dan timing pergerakan.'
+  },
 
   // ======================== 4. MENTAL (RUBRIC 1-5) ========================
   {
@@ -654,6 +705,21 @@ export const MASTER_FOOTBALL_TESTS_CATALOG = [
     min_tier: 3,
     description: 'Ketenangan emosional & kejelasan eksekusi saat ditekan lawan di area krusial.'
   },
+  {
+    id: '22222222-2222-4222-8222-000000000305',
+    test_code: 'MEN05',
+    test_name: 'Pressure Performance Test',
+    category: 'Mental',
+    indicator_key: 'percaya_diri',
+    indicator_label: 'Percaya Diri',
+    position_code: null,
+    measurement_type: 'RUBRIC',
+    unit: 'level 1-5',
+    is_lower_better: false,
+    weight: 1.0,
+    min_tier: 1,
+    description: 'Observasi keberanian meminta bola di bawah tekanan tinggi dan keyakinan mengambil keputusan.'
+  },
 
   // ======================== 5. KOMUNIKASI (RUBRIC 1-5) ========================
   {
@@ -700,6 +766,21 @@ export const MASTER_FOOTBALL_TESTS_CATALOG = [
     weight: 1.0,
     min_tier: 3,
     description: 'Kepemimpinan mengorganisasi lini permainan dan menjaga standar kerja tim.'
+  },
+  {
+    id: '22222222-2222-4222-8222-000000000404',
+    test_code: 'COM04',
+    test_name: 'Partner Support Observation',
+    category: 'Komunikasi',
+    indicator_key: 'dukungan_rekan',
+    indicator_label: 'Dukungan Rekan',
+    position_code: null,
+    measurement_type: 'RUBRIC',
+    unit: 'level 1-5',
+    is_lower_better: false,
+    weight: 1.0,
+    min_tier: 1,
+    description: 'Observasi konsistensi memberi apresiasi vokal, bahasa tubuh positif, dan dukungan kolektif antarpemain.'
   },
 
   // ======================== 6. SPESIFIK POSISI ========================
@@ -792,6 +873,24 @@ export const MASTER_FOOTBALL_TESTS_CATALOG = [
     inputLabel2: 'Total Percobaan',
     min_tier: 1,
     description: '[Khusus DM/CM/AM] Ketepatan umpan progresif membelah blok lawan di lini tengah.'
+  },
+  {
+    id: '22222222-2222-4222-8222-000000000508',
+    test_code: 'POS_CM02',
+    test_name: 'Targeted Ball Distribution',
+    category: 'Spesifik Posisi',
+    indicator_key: 'distribusi_bola',
+    indicator_label: 'Distribusi Bola',
+    position_code: 'CM',
+    measurement_type: 'ACCURACY',
+    unit: 'tepat/percobaan',
+    is_lower_better: false,
+    defaultTotal: 10,
+    weight: 1.0,
+    inputLabel1: 'Distribusi Tepat Target',
+    inputLabel2: 'Total Percobaan',
+    min_tier: 1,
+    description: '[Khusus DM/CM/AM] Akurasi distribusi bola ke zona sasaran sayap dan antar-lini di bawah tempo.'
   },
   {
     id: '22222222-2222-4222-8222-000000000506',
@@ -903,6 +1002,12 @@ export const FOOTBALL_TEST_BENCHMARKS = {
     3: { poor: 18, fair: 28, good: 38, elite: 50 },
     4: { poor: 22, fair: 32, good: 44, elite: 56 }
   },
+  PHY12: {
+    1: { poor: 15, fair: 25, good: 40, elite: 60 },
+    2: { poor: 25, fair: 40, good: 60, elite: 90 },
+    3: { poor: 35, fair: 55, good: 80, elite: 120 },
+    4: { poor: 45, fair: 70, good: 100, elite: 150 }
+  },
 
   // TEKNIK
   TEC01: {
@@ -977,6 +1082,12 @@ export const FOOTBALL_TEST_BENCHMARKS = {
     3: { poor: 35, fair: 58, good: 76, elite: 90 },
     4: { poor: 45, fair: 66, good: 82, elite: 94 }
   },
+  TEC13: {
+    1: { poor: 25, fair: 48, good: 70, elite: 88 },
+    2: { poor: 35, fair: 58, good: 78, elite: 92 },
+    3: { poor: 45, fair: 68, good: 84, elite: 95 },
+    4: { poor: 55, fair: 75, good: 88, elite: 97 }
+  },
 
   // TAKTIK (Objective Rondo Test)
   TAC05: {
@@ -1012,6 +1123,12 @@ export const FOOTBALL_TEST_BENCHMARKS = {
     4: { poor: 48, fair: 68, good: 84, elite: 95 }
   },
   POS_CM01: {
+    1: { poor: 25, fair: 45, good: 68, elite: 85 },
+    2: { poor: 35, fair: 56, good: 76, elite: 90 },
+    3: { poor: 45, fair: 66, good: 84, elite: 94 },
+    4: { poor: 55, fair: 75, good: 88, elite: 96 }
+  },
+  POS_CM02: {
     1: { poor: 25, fair: 45, good: 68, elite: 85 },
     2: { poor: 35, fair: 56, good: 76, elite: 90 },
     3: { poor: 45, fair: 66, good: 84, elite: 94 },
@@ -1195,11 +1312,11 @@ export const FOOTBALL_RUBRIC_ANCHORS = {
     5: { label: 'Proaktif Membongkar Blok', desc: 'Selalu berada di posisi progresif untuk mempercepat tempo serangan.' }
   },
   membuka_ruang: {
-    1: { label: 'Bergerombol Dekat Bola', desc: 'Ikut mengejar bola sehingga mempersempit ruang bermain tim.' },
+    1: { label: 'Bergerombol dengan Bola', desc: 'Bergerombol mengikuti bola sehingga mempersempit ruang bermain tim.' },
     2: { label: 'Lari Satu Arah', desc: 'Pergerakan tanpa bola mudah ditebak dan kurang tepat waktu.' },
-    3: { label: 'Menjaga Lebar & Kedalaman', desc: 'Mempertahankan bentuk lapangan agar sirkulasi bola lancar.' },
+    3: { label: 'Menjaga Lebar & Kedalaman', desc: 'Mempertahankan bentuk lapangan agar sirkulasi bola tetap lancar.' },
     4: { label: 'Timing Lari Cerdas', desc: 'Menarik bek lawan keluar posisi untuk membuka ruang bagi rekan.' },
-    5: { label: 'Manipulasi Ruang Elit', desc: 'Eksploitasi blind-side lawan secara konstan dengan timing sempurna.' }
+    5: { label: 'Manipulasi Ruang Elit & Timing Sempurna', desc: 'Manipulasi ruang elit dengan eksploitasi blind-side lawan dan timing sempurna.' }
   },
   membaca_permainan: {
     1: { label: 'Tanpa Scanning', desc: 'Menerima bola tanpa menoleh lebih dulu sehingga mudah kehilangan bola.' },
@@ -1230,11 +1347,11 @@ export const FOOTBALL_RUBRIC_ANCHORS = {
     5: { label: 'Konsentrasi Penuh 90 Menit', desc: 'Tajam dan disiplin menjaga detail taktis sepanjang sesi.' }
   },
   percaya_diri: {
-    1: { label: 'Menghindari Bola', desc: 'Ragu-ragu meminta bola dan takut melakukan kesalahan.' },
-    2: { label: 'Hanya Nyaman Tanpa Tekanan', desc: 'Tampil berani hanya ketika tidak dijaga lawan.' },
-    3: { label: 'Percaya Diri Standar', desc: 'Berani menerima dan mengalirkan bola sesuai instruksi.' },
-    4: { label: 'Inisiatif Kuat', desc: 'Berani melewati lawan 1v1 dan mencoba umpan terobosan.' },
-    5: { label: 'Mentalitas Penentu', desc: 'Selalu meminta bola di situasi sulit dan mengangkat kepercayaan tim.' }
+    1: { label: 'Ragu / Takut Minta Bola', desc: 'Ragu atau takut meminta bola serta menghindari inisiatif saat ditekan.' },
+    2: { label: 'Hanya Nyaman Tanpa Tekanan', desc: 'Tampil berani hanya ketika berada di ruang bebas tanpa kawalan lawan.' },
+    3: { label: 'Percaya Diri Standar', desc: 'Berani menerima dan mengalirkan bola sesuai instruksi tim.' },
+    4: { label: 'Inisiatif Kuat', desc: 'Berani meminta bola, melewati lawan 1v1, dan mencoba umpan terobosan.' },
+    5: { label: 'Berani di Tekanan Tinggi & Pengambil Keputusan', desc: 'Berani meminta bola di tekanan tinggi dan menjadi pengambil keputusan utama tim.' }
   },
   daya_juang: {
     1: { label: 'Mudah Menyerah', desc: 'Berhenti mengejar setelah kalah duel atau salah mengumpan.' },
@@ -1258,11 +1375,11 @@ export const FOOTBALL_RUBRIC_ANCHORS = {
     5: { label: 'Proaktif & Vokal', desc: 'Mengatur organisasi lini secara lantang, tepat waktu, dan konstruktif.' }
   },
   dukungan_rekan: {
-    1: { label: 'Menyalahkan Rekan', desc: 'Menunjukkan gestur negatif ketika rekan melakukan kesalahan.' },
-    2: { label: 'Individualistis', desc: 'Kurang peduli pada keberhasilan atau kesulitan rekan setim.' },
+    1: { label: 'Individualis / Menyalahkan Teman', desc: 'Bersikap individualis dan menyalahkan teman ketika terjadi kesalahan.' },
+    2: { label: 'Kurang Peduli Sekitar', desc: 'Kurang memberi respons suportif pada keberhasilan atau kesulitan rekan setim.' },
     3: { label: 'Kooperatif', desc: 'Memberi apresiasi dan bekerja sama dengan baik di dalam tim.' },
     4: { label: 'Suportif & Membangun', desc: 'Aktif menyemangati rekan agar segera bangkit dari kesalahan.' },
-    5: { label: 'Perekat Kolektivitas Tim', desc: 'Menciptakan atmosfer positif dan menjaga kekompakan seluruh pemain.' }
+    5: { label: 'Pemersatu Tim & Vokal Memberi Apresiasi', desc: 'Pemersatu tim yang konsisten menjaga atmosfer positif dan vokal memberi apresiasi.' }
   },
   kepemimpinan: {
     1: { label: 'Pasif Mengikuti Arus', desc: 'Selalu menunggu instruksi pemain lain untuk bergerak.' },
