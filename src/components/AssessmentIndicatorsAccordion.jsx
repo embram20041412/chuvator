@@ -79,7 +79,10 @@ export default function AssessmentIndicatorsAccordion({
   defaultOpenFirst = true,
   measuredIndicatorMap = {},
   lockedToMasterLibrary = false,
-  onOpenMasterLibrary
+  onOpenMasterLibrary,
+  singleDomainMode = false,
+  selectedDomainKey = null,
+  onCloseDomain
 }) {
   const [openKey, setOpenKey] = useState(() => {
     if (activeCategoryKey) return activeCategoryKey;
@@ -183,6 +186,347 @@ export default function AssessmentIndicatorsAccordion({
   const handleToggleCategory = (key) => {
     setOpenKey((prev) => (prev === key ? null : key));
   };
+
+  // ============================================================================
+  // SINGLE DOMAIN COLLAPSIBLE MODE (Triggered by 'Detail' button in Domain Summary)
+  // ============================================================================
+  if (singleDomainMode) {
+    if (!selectedDomainKey) return null;
+    const selectedCategory = (categoryList || []).find((c) => c.key === selectedDomainKey);
+    if (!selectedCategory) return null;
+
+    const theme = getCategoryTheme(selectedCategory.key);
+    const catIndicators = selectedCategory.indicators || [];
+    const resolvedList = catIndicators.map((ind) => resolveIndicatorInfo(ind));
+    const catMeasuredCount = resolvedList.filter((item) => item.isMeasured).length;
+    const catScore = Math.max(0, Math.min(100, Math.round(Number(selectedCategory.score) || 0)));
+    const catGrade = getScoreBadge(catScore);
+
+    if (isMobile) {
+      return (
+        <div
+          id={`domain-accordion-${selectedCategory.key}`}
+          data-testid={`rincian-indikator-domain-${selectedCategory.key}`}
+          className="w-full pt-3 mt-2.5 border-t border-[#E7EBF2] space-y-2.5"
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <Sliders className="w-3.5 h-3.5 text-[#2455E8] shrink-0" />
+              <span className="text-[12px] font-bold text-[#17233D] truncate">
+                Rincian Indikator Domain
+              </span>
+              {lockedToMasterLibrary && (
+                <span data-testid="accordion-readonly-badge" className="sr-only">
+                  Master Test Library
+                </span>
+              )}
+            </div>
+            <span className="text-[11px] font-bold text-[#68758B] tabular-nums shrink-0">
+              {catMeasuredCount}/{catIndicators.length} Terukur
+            </span>
+          </div>
+
+          {resolvedList.length === 0 ? (
+            <div className="p-3 text-center text-[12px] text-[#68758B] bg-[#FFFFFF] rounded-xl border border-[#E7EBF2]">
+              Belum ada indikator dalam domain ini.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {resolvedList.map((info) => {
+                const attendancePct =
+                  info.measuredRec?.attendanceRate !== undefined
+                    ? Math.round(Number(info.measuredRec.attendanceRate))
+                    : info.score;
+
+                return (
+                  <div
+                    key={`m-single-ind-${selectedCategory.key}-${info.rawKey}`}
+                    className="w-full bg-[#FFFFFF] border border-[#E7EBF2] rounded-xl p-3 space-y-2 shadow-[0_1px_3px_rgba(16,29,56,0.03)]"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[13px] font-bold text-[#17233D] leading-snug my-0">
+                          {info.displayLabel}
+                        </p>
+                        <p className="text-[11px] text-[#68758B] font-medium mt-0.5 truncate my-0">
+                          Referensi: {info.referenceTestName}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span
+                          data-testid={`indicator-score-${info.canonicalKey}`}
+                          className="font-mono text-[15px] font-extrabold tabular-nums"
+                          style={{
+                            color: info.isMeasured ? theme.color : '#68758B'
+                          }}
+                        >
+                          {info.isMeasured ? info.score : '—'}
+                        </span>
+                        {info.isMeasured && (
+                          <span className="text-[11px] font-semibold text-[#68758B] font-mono">
+                            {' '}
+                            / 100
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="w-full h-1.5 bg-[#E7EBF2] rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-300"
+                        style={{
+                          width: `${info.isMeasured ? info.score : 0}%`,
+                          backgroundColor: info.isMeasured ? theme.color : 'transparent'
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 pt-0.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {info.isAttendanceSync ? (
+                          <span
+                            data-testid="attendance-synced-badge"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#2455E8]/10 text-[#2455E8] text-[10px] font-bold"
+                          >
+                            <CalendarCheck className="w-3 h-3 shrink-0" />
+                            {info.isMeasured
+                              ? `Presensi ${attendancePct}%`
+                              : 'Belum Ada Presensi'}
+                          </span>
+                        ) : info.isMeasured ? (
+                          <span
+                            data-testid="indicator-measured-badge"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#16A779]/10 text-[#16A779] text-[10px] font-bold"
+                          >
+                            <CheckCircle2 className="w-3 h-3 shrink-0" />
+                            Terukur
+                          </span>
+                        ) : (
+                          <span
+                            data-testid="indicator-unmeasured-badge"
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#F5F7FC] text-[#68758B] border border-[#E7EBF2] text-[10px] font-semibold"
+                          >
+                            <Clock className="w-3 h-3 shrink-0" />
+                            Belum Diukur
+                          </span>
+                        )}
+                        {lockedToMasterLibrary && (
+                          <span data-testid="indicator-locked-badge" className="sr-only">
+                            Master Test Library
+                          </span>
+                        )}
+                      </div>
+
+                      {!info.isAttendanceSync && onOpenMasterLibrary && !isArchived && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onOpenMasterLibrary(selectedCategory.key, info.canonicalKey)
+                          }
+                          className="min-h-[36px] px-2.5 py-1 rounded-lg bg-[#F5F7FC] hover:bg-[#2455E8] text-[#2455E8] hover:text-white border border-[#E7EBF2] text-[11px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                        >
+                          <span>{info.isMeasured ? 'Lihat Tes' : 'Input Tes'}</span>
+                          <ArrowUpRight className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Desktop Single-Domain Connected Detail Panel
+    return (
+      <div
+        id={`domain-accordion-${selectedCategory.key}`}
+        data-testid={`rincian-indikator-domain-${selectedCategory.key}`}
+        className="bg-[#FFFFFF] rounded-2xl border border-[#E7EBF2] shadow-[0_4px_16px_rgba(16,29,56,0.05)] overflow-hidden transition-all"
+        style={{ borderTopWidth: '4px', borderTopColor: theme.color }}
+      >
+        <div className="px-5 py-4 border-b border-[#E7EBF2] flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#FFFFFF]">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div
+              className="w-10 h-10 rounded-xl flex items-center justify-center font-mono font-extrabold text-sm text-white shrink-0"
+              style={{ backgroundColor: theme.color }}
+            >
+              {catScore > 0 ? catScore : '—'}
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <h3 className="font-bold text-base text-[#17233D] tracking-tight">
+                  Rincian Indikator Domain — {selectedCategory.shortLabel || selectedCategory.label}
+                </h3>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#F5F7FC] border border-[#E7EBF2] text-[#17233D] text-xs font-bold tabular-nums">
+                  {catMeasuredCount} / {catIndicators.length} Indikator Terukur
+                </span>
+                {catScore > 0 && (
+                  <span
+                    className={`px-2 py-0.5 text-[10px] font-bold rounded-md border ${catGrade.badge}`}
+                  >
+                    {catGrade.grade} &bull; {catGrade.label}
+                  </span>
+                )}
+                {tierLabel && (
+                  <span className="hidden md:inline-flex items-center px-2.5 py-0.5 rounded-full bg-[#101D38]/6 text-[#17233D] text-xs font-semibold">
+                    {tierLabel}
+                  </span>
+                )}
+                {lockedToMasterLibrary && (
+                  <span data-testid="accordion-readonly-badge" className="sr-only">
+                    Master Test Library
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-[#68758B] font-medium mt-0.5">
+                Daftar indikator evaluasi dan referensi pengujian lapangan untuk domain{' '}
+                {selectedCategory.shortLabel || selectedCategory.label}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+            {onOpenMasterLibrary && !isArchived && (
+              <button
+                type="button"
+                onClick={() => onOpenMasterLibrary(selectedCategory.key)}
+                className="min-h-[40px] px-3.5 py-2 text-xs font-bold text-[#2455E8] bg-[#2455E8]/8 hover:bg-[#2455E8]/15 rounded-xl transition-colors cursor-pointer inline-flex items-center gap-1.5"
+              >
+                <span>Buka Master Test Library</span>
+                <ArrowUpRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+            {onCloseDomain && (
+              <button
+                type="button"
+                data-testid="close-domain-detail-btn"
+                onClick={() => onCloseDomain()}
+                className="min-h-[40px] px-3 py-2 text-xs font-semibold text-[#68758B] hover:text-[#17233D] bg-[#F5F7FC] hover:bg-[#E7EBF2]/60 rounded-xl border border-[#E7EBF2] transition-colors cursor-pointer"
+              >
+                Tutup Rincian
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="p-5 bg-[#F5F7FC]/50">
+          {resolvedList.length === 0 ? (
+            <div className="p-6 text-center text-xs text-[#68758B] bg-[#FFFFFF] rounded-xl border border-dashed border-[#E7EBF2]">
+              Belum ada indikator terdaftar untuk domain ini.
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              {resolvedList.map((info) => {
+                const attendancePct =
+                  info.measuredRec?.attendanceRate !== undefined
+                    ? Math.round(Number(info.measuredRec.attendanceRate))
+                    : info.score;
+
+                return (
+                  <div
+                    key={`single-ind-${selectedCategory.key}-${info.rawKey}`}
+                    className="bg-[#FFFFFF] p-4 rounded-xl border border-[#E7EBF2] shadow-[0_1px_4px_rgba(16,29,56,0.03)] flex flex-col justify-between gap-3"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <h5 className="text-sm font-bold text-[#17233D] leading-snug">
+                          {info.displayLabel}
+                        </h5>
+                        <p className="text-xs text-[#68758B] font-medium mt-0.5 truncate">
+                          Referensi: {info.referenceTestName}
+                        </p>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span
+                          data-testid={`indicator-score-${info.canonicalKey}`}
+                          className="font-mono text-base font-extrabold tabular-nums"
+                          style={{
+                            color: info.isMeasured ? theme.color : '#68758B'
+                          }}
+                        >
+                          {info.isMeasured ? info.score : '—'}
+                        </span>
+                        {info.isMeasured && (
+                          <span className="text-xs font-semibold text-[#68758B] font-mono">
+                            {' '}
+                            / 100
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="w-full h-2 bg-[#F5F7FC] border border-[#E7EBF2] rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-300"
+                        style={{
+                          width: `${info.isMeasured ? info.score : 0}%`,
+                          backgroundColor: info.isMeasured ? theme.color : 'transparent'
+                        }}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 pt-0.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {info.isAttendanceSync ? (
+                          <span
+                            data-testid="attendance-synced-badge"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#2455E8]/10 text-[#2455E8] text-[11px] font-bold"
+                          >
+                            <CalendarCheck className="w-3.5 h-3.5 shrink-0" />
+                            {info.isMeasured
+                              ? `Presensi ${attendancePct}%`
+                              : 'Belum Ada Presensi'}
+                          </span>
+                        ) : info.isMeasured ? (
+                          <span
+                            data-testid="indicator-measured-badge"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#16A779]/10 text-[#16A779] text-[11px] font-bold"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                            Terukur
+                          </span>
+                        ) : (
+                          <span
+                            data-testid="indicator-unmeasured-badge"
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#F5F7FC] border border-[#E7EBF2] text-[#68758B] text-[11px] font-semibold"
+                          >
+                            <Clock className="w-3.5 h-3.5 shrink-0" />
+                            Belum Diukur
+                          </span>
+                        )}
+                        {lockedToMasterLibrary && (
+                          <span data-testid="indicator-locked-badge" className="sr-only">
+                            Master Test Library
+                          </span>
+                        )}
+                      </div>
+
+                      {!info.isAttendanceSync && onOpenMasterLibrary && !isArchived && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            onOpenMasterLibrary(selectedCategory.key, info.canonicalKey)
+                          }
+                          className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[#F5F7FC] hover:bg-[#2455E8] text-[#2455E8] hover:text-white border border-[#E7EBF2] hover:border-[#2455E8] text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+                        >
+                          <span>{info.isMeasured ? 'Lihat Hasil Tes' : 'Uji di Library'}</span>
+                          <ArrowUpRight className="w-3.5 h-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   // ============================================================================
   // MOBILE RENDERING (<= 767px)

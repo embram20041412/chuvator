@@ -445,15 +445,36 @@ export function MobileScoreHeroCard({
 
 /**
  * 3. MobileDomainPerformanceSummary
- * Ringkasan 7 Domain Performa untuk Mobile (<= 767px)
+ * Ringkasan 7 Domain Performa untuk Mobile (<= 767px) dengan Rincian Indikator Collapsible
+ * @param {any} props
  */
 export function MobileDomainPerformanceSummary({
   categoryList = [],
   measuredIndicatorMap = {},
   scores = {},
+  expandedDomainId = null,
+  onToggleDomain,
   activeCategoryKey,
-  onSelectDomain
+  onSelectDomain,
+  onScoreChange,
+  onAdjustScore,
+  isArchived = false,
+  tierLabel = '',
+  lockedToMasterLibrary = true,
+  onOpenMasterLibrary,
+  renderDomainIndicators
 }) {
+  const currentOpenKey =
+    expandedDomainId !== undefined ? expandedDomainId : activeCategoryKey;
+
+  const handleToggle = (key) => {
+    if (onToggleDomain) {
+      onToggleDomain(key);
+    } else if (onSelectDomain) {
+      onSelectDomain(currentOpenKey === key ? null : key);
+    }
+  };
+
   return (
     <div className="chua-m-eval-card space-y-2.5">
       <div className="flex items-center justify-between gap-2 pb-2 border-b border-[#E7EBF2]">
@@ -468,7 +489,7 @@ export function MobileDomainPerformanceSummary({
         </span>
       </div>
 
-      <div className="space-y-2">
+      <div className="space-y-2.5">
         {categoryList.map((cat) => {
           const theme = getCategoryTheme(cat.key);
           const indicators = cat.indicators || [];
@@ -481,15 +502,16 @@ export function MobileDomainPerformanceSummary({
             );
           }).length;
 
-          const isSelected = activeCategoryKey === cat.key;
+          const isExpanded = currentOpenKey === cat.key;
           const catScore = Math.max(0, Math.min(100, Math.round(Number(cat.score) || 0)));
 
           return (
             <div
               key={`m-domain-summary-${cat.key}`}
-              className={`p-3 rounded-xl border transition-all ${
-                isSelected
-                  ? 'bg-[#F5F7FC] border-[#2455E8]'
+              data-testid={`mobile-domain-card-${cat.key}`}
+              className={`p-3 rounded-xl border transition-all w-full overflow-hidden ${
+                isExpanded
+                  ? 'bg-[#F5F7FC] border-[#2455E8] shadow-[0_2px_10px_rgba(36,85,232,0.08)]'
                   : 'bg-[#FFFFFF] border-[#E7EBF2]'
               }`}
             >
@@ -518,20 +540,26 @@ export function MobileDomainPerformanceSummary({
                   </span>
                   <button
                     type="button"
-                    onClick={() => {
-                      if (onSelectDomain) onSelectDomain(cat.key);
-                      const el = document.getElementById(`domain-accordion-${cat.key}`);
-                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }}
-                    className="min-h-[36px] px-2.5 py-1 rounded-lg bg-[#F5F7FC] hover:bg-[#2455E8] text-[#2455E8] hover:text-white border border-[#E7EBF2] text-[11px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
+                    data-testid={`domain-detail-btn-${cat.key}`}
+                    aria-expanded={isExpanded}
+                    onClick={() => handleToggle(cat.key)}
+                    className={`min-h-[44px] px-3 py-2 rounded-xl border text-[12px] font-bold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer shrink-0 ${
+                      isExpanded
+                        ? 'bg-[#2455E8] text-white border-[#2455E8]'
+                        : 'bg-[#F5F7FC] hover:bg-[#2455E8]/10 text-[#2455E8] border-[#E7EBF2]'
+                    }`}
                   >
                     <span>Detail</span>
-                    <ArrowRight className="w-3 h-3" />
+                    <ChevronDown
+                      className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                        isExpanded ? 'rotate-180' : ''
+                      }`}
+                    />
                   </button>
                 </div>
               </div>
 
-              <div className="w-full h-1.5 bg-[#E7EBF2] rounded-full overflow-hidden mt-2">
+              <div className="w-full h-1.5 bg-[#E7EBF2] rounded-full overflow-hidden mt-2.5">
                 <div
                   className="h-full rounded-full transition-all duration-300"
                   style={{
@@ -540,6 +568,17 @@ export function MobileDomainPerformanceSummary({
                   }}
                 />
               </div>
+
+              {isExpanded &&
+                renderDomainIndicators &&
+                renderDomainIndicators(cat.key, {
+                  onScoreChange,
+                  onAdjustScore,
+                  isArchived,
+                  tierLabel,
+                  lockedToMasterLibrary,
+                  onOpenMasterLibrary
+                })}
             </div>
           );
         })}

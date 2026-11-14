@@ -3047,9 +3047,14 @@ function FootballAssessmentView({
   const [activeTab, setActiveTab] = useState('fisik');
   const [showAllAtOnce, setShowAllAtOnce] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [activeModalCategoryKey, setActiveModalCategoryKey] = useState('fisik');
+  const [activeModalCategoryKey, setActiveModalCategoryKey] = useState(null);
+  const [expandedDomainId, setExpandedDomainId] = useState(null);
   const [showAllInline, setShowAllInline] = useState(false);
   const [isEditingIndicators, setIsEditingIndicators] = useState(false);
+
+  const handleToggleDomainDetail = useCallback((domainKey) => {
+    setExpandedDomainId((prev) => (prev === domainKey ? null : domainKey));
+  }, []);
 
   // Scores state: { [indicatorName]: number }
   const [scores, setScores] = useState({});
@@ -3183,6 +3188,7 @@ function FootballAssessmentView({
     setCoachNote('');
     setErrorMsg(null);
     setSuccessMsg(null);
+    setExpandedDomainId(null);
 
     // Reset scores to empty first; populate strictly from athlete_indicator_scores / athlete_test_sessions
     setScores({});
@@ -3313,6 +3319,20 @@ function FootballAssessmentView({
     { key: 'perkembangan', label: '6. Perkembangan Atlet', shortLabel: 'Perkembangan', count: filteredCategoryIndicators.perkembangan.length, score: axisScores.perkembangan, indicators: filteredCategoryIndicators.perkembangan },
     { key: 'posisi', label: `7. Khusus Posisi (${currentPosIndicatorsConfig.shortLabel || selectedPosition})`, shortLabel: 'Khusus Posisi', count: currentPosIndicatorsConfig.indicators.length, score: axisScores.khususPosisi, indicators: currentPosIndicatorsConfig.indicators, isSpecial: true }
   ], [filteredCategoryIndicators, currentPosIndicatorsConfig, axisScores, selectedPosition]);
+
+  // Reset or validate expandedDomainId when phase/tier or evaluation context changes
+  useEffect(() => {
+    setExpandedDomainId(null);
+  }, [activeTier, overrideTier, latestEvalDoc?.id]);
+
+  useEffect(() => {
+    if (
+      expandedDomainId &&
+      !footballCategoryList.some((cat) => cat.key === expandedDomainId)
+    ) {
+      setExpandedDomainId(null);
+    }
+  }, [expandedDomainId, footballCategoryList]);
 
   const handleSetCategoryPreset = (catKey, presetScore) => {
     const catObj = footballCategoryList.find((c) => c.key === catKey);
@@ -3744,30 +3764,32 @@ function FootballAssessmentView({
                       measuredIndicatorMap={measuredIndicatorMap}
                     />
 
-                    {/* 4. Domain Performance Summary (Mobile) */}
+                    {/* 4 & 5. Domain Performance Summary + Collapsible Indicator Details (Mobile) */}
                     <MobileDomainPerformanceSummary
                       categoryList={footballCategoryList}
                       measuredIndicatorMap={measuredIndicatorMap}
                       scores={scores}
-                      activeCategoryKey={activeModalCategoryKey}
-                      onSelectDomain={(key) => setActiveModalCategoryKey(key)}
-                    />
-
-                    {/* 5. Indicator Details (Mobile) */}
-                    <AssessmentIndicatorsAccordion
-                      categoryList={footballCategoryList}
-                      scores={scores}
-                      onScoreChange={handleScoreChange}
-                      onAdjustScore={handleAdjustScore}
-                      onSetCategoryPreset={undefined}
-                      activeCategoryKey={activeModalCategoryKey}
-                      isArchived={isArchived}
-                      tierLabel={`${detectedSport || 'Sepakbola'} • ${tierConfig.shortLabel}`}
-                      isMobile={true}
-                      defaultOpenFirst={true}
-                      measuredIndicatorMap={measuredIndicatorMap}
-                      lockedToMasterLibrary={true}
-                      onOpenMasterLibrary={() => setFootballMode('master')}
+                      expandedDomainId={expandedDomainId}
+                      onToggleDomain={handleToggleDomainDetail}
+                      renderDomainIndicators={(domainKey) => (
+                        <AssessmentIndicatorsAccordion
+                          categoryList={footballCategoryList}
+                          scores={scores}
+                          onScoreChange={handleScoreChange}
+                          onAdjustScore={handleAdjustScore}
+                          onSetCategoryPreset={undefined}
+                          isArchived={isArchived}
+                          tierLabel={`${detectedSport || 'Sepakbola'} • ${tierConfig.shortLabel}`}
+                          isMobile={true}
+                          defaultOpenFirst={false}
+                          measuredIndicatorMap={measuredIndicatorMap}
+                          lockedToMasterLibrary={true}
+                          onOpenMasterLibrary={() => setFootballMode('master')}
+                          singleDomainMode={true}
+                          selectedDomainKey={domainKey}
+                          onCloseDomain={() => setExpandedDomainId(null)}
+                        />
+                      )}
                     />
 
                     {/* 6a. Coach Notes (Mobile) */}
@@ -4299,18 +4321,19 @@ function FootballAssessmentView({
                         0,
                         Math.min(100, Math.round(Number(cat.score) || 0))
                       );
-                      const isSelected = activeModalCategoryKey === cat.key;
+                      const isExpanded = expandedDomainId === cat.key;
                       const isLastOdd =
                         footballCategoryList.length === 7 && idx === 6;
 
                       return (
                         <div
                           key={`domain-card-${cat.key}`}
+                          data-testid={`desktop-domain-card-${cat.key}`}
                           className={`p-3.5 rounded-xl border transition-all flex flex-col justify-between gap-2.5 ${
                             isLastOdd ? 'sm:col-span-2' : ''
                           } ${
-                            isSelected
-                              ? 'bg-[#F5F7FC] border-[#2455E8]'
+                            isExpanded
+                              ? 'bg-[#F5F7FC] border-[#2455E8] shadow-[0_2px_10px_rgba(36,85,232,0.08)]'
                               : 'bg-[#FFFFFF] border-[#E7EBF2] hover:border-[#2455E8]/50'
                           }`}
                         >
@@ -4341,21 +4364,21 @@ function FootballAssessmentView({
                               </span>
                               <button
                                 type="button"
-                                onClick={() => {
-                                  setActiveModalCategoryKey(cat.key);
-                                  const el = document.getElementById(
-                                    `domain-accordion-${cat.key}`
-                                  );
-                                  if (el) {
-                                    el.scrollIntoView({
-                                      behavior: 'smooth',
-                                      block: 'start'
-                                    });
-                                  }
-                                }}
-                                className="min-h-[34px] px-2.5 py-1 rounded-lg bg-[#F5F7FC] hover:bg-[#2455E8] text-[#2455E8] hover:text-white border border-[#E7EBF2] text-[11px] font-bold transition-colors cursor-pointer"
+                                data-testid={`domain-detail-btn-${cat.key}`}
+                                aria-expanded={isExpanded}
+                                onClick={() => handleToggleDomainDetail(cat.key)}
+                                className={`min-h-[36px] px-3 py-1 rounded-lg border text-[11px] font-bold inline-flex items-center gap-1 transition-all cursor-pointer ${
+                                  isExpanded
+                                    ? 'bg-[#2455E8] text-white border-[#2455E8]'
+                                    : 'bg-[#F5F7FC] hover:bg-[#2455E8]/10 text-[#2455E8] border-[#E7EBF2]'
+                                }`}
                               >
-                                Rincian
+                                <span>Detail</span>
+                                <ChevronDown
+                                  className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                                    isExpanded ? 'rotate-180' : ''
+                                  }`}
+                                />
                               </button>
                             </div>
                           </div>
@@ -4376,22 +4399,26 @@ function FootballAssessmentView({
                 </div>
               </div>
 
-              {/* 5. INDICATOR DETAILS ACCORDION */}
-              <AssessmentIndicatorsAccordion
-                categoryList={footballCategoryList}
-                scores={scores}
-                onScoreChange={handleScoreChange}
-                onAdjustScore={handleAdjustScore}
-                onSetCategoryPreset={undefined}
-                activeCategoryKey={activeModalCategoryKey}
-                isArchived={isArchived}
-                tierLabel={`${detectedSport || 'Sepakbola'} • ${tierConfig.shortLabel}`}
-                isMobile={false}
-                defaultOpenFirst={true}
-                measuredIndicatorMap={measuredIndicatorMap}
-                lockedToMasterLibrary={true}
-                onOpenMasterLibrary={() => setFootballMode('master')}
-              />
+              {/* 5. COLLAPSIBLE INDICATOR DETAILS (Only rendered when a domain's Detail button is active) */}
+              {expandedDomainId && (
+                <AssessmentIndicatorsAccordion
+                  categoryList={footballCategoryList}
+                  scores={scores}
+                  onScoreChange={handleScoreChange}
+                  onAdjustScore={handleAdjustScore}
+                  onSetCategoryPreset={undefined}
+                  isArchived={isArchived}
+                  tierLabel={`${detectedSport || 'Sepakbola'} • ${tierConfig.shortLabel}`}
+                  isMobile={false}
+                  defaultOpenFirst={false}
+                  measuredIndicatorMap={measuredIndicatorMap}
+                  lockedToMasterLibrary={true}
+                  onOpenMasterLibrary={() => setFootballMode('master')}
+                  singleDomainMode={true}
+                  selectedDomainKey={expandedDomainId}
+                  onCloseDomain={() => setExpandedDomainId(null)}
+                />
+              )}
 
               {/* 6a. COACH NOTES & SAVE ACTION */}
               <div className="p-5 rounded-2xl bg-[#FFFFFF] border border-[#E7EBF2] shadow-[0_2px_10px_rgba(16,29,56,0.04)] space-y-3.5">

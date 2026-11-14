@@ -214,5 +214,62 @@ test('AthleteAssessmentEditView: consolidates Position & Tactical Role Configura
   assert.ok(markup.includes('4. Profil Gaya Bermain Taktis (STY)'));
 });
 
+test('AssessmentIndicatorsAccordion singleDomainMode: remains hidden when closed and renders only selected domain when opened', () => {
+  const mockCategories = [
+    { key: 'fisik', label: 'Kondisi Fisik', shortLabel: 'Fisik', count: 2, score: 80, indicators: ['Daya Tahan Aerobik', 'Kecepatan Sprint'] },
+    { key: 'teknik', label: 'Kemampuan Teknik', shortLabel: 'Teknik', count: 2, score: 60, indicators: ['First Touch', 'Akurasi Passing'] }
+  ];
 
+  const mockScores = {
+    'Daya Tahan Aerobik': 85,
+    'Kecepatan Sprint': 75,
+    'First Touch': 60,
+    'Akurasi Passing': 0
+  };
 
+  // 1. Closed by default (selectedDomainKey = null) -> renders empty string
+  const closedMarkup = renderToStaticMarkup(
+    <AssessmentIndicatorsAccordion
+      singleDomainMode={true}
+      selectedDomainKey={null}
+      categoryList={mockCategories}
+      scores={mockScores}
+      tierLabel="Fase 3: U-14 & U-16"
+      isArchived={false}
+      lockedToMasterLibrary={true}
+    />
+  );
+  assert.strictEqual(closedMarkup, '', 'singleDomainMode should render nothing when selectedDomainKey is null');
+
+  // 2. Open Fisik (selectedDomainKey = "fisik") -> renders only Fisik indicators
+  const fisikMarkup = renderToStaticMarkup(
+    <AssessmentIndicatorsAccordion
+      singleDomainMode={true}
+      selectedDomainKey="fisik"
+      categoryList={mockCategories}
+      scores={mockScores}
+      tierLabel="Fase 3: U-14 & U-16"
+      isArchived={false}
+      lockedToMasterLibrary={true}
+    />
+  );
+  assert.ok(fisikMarkup.includes('rincian-indikator-domain-fisik'));
+  assert.ok(fisikMarkup.includes('Daya Tahan Aerobik'));
+  assert.strictEqual(fisikMarkup.includes('First Touch'), false, 'Should not render Teknik indicators when Fisik is selected');
+
+  // 3. Switch to Teknik (selectedDomainKey = "teknik") -> renders only Teknik indicators
+  const teknikMarkup = renderToStaticMarkup(
+    <AssessmentIndicatorsAccordion
+      singleDomainMode={true}
+      selectedDomainKey="teknik"
+      categoryList={mockCategories}
+      scores={mockScores}
+      tierLabel="Fase 3: U-14 & U-16"
+      isArchived={false}
+      lockedToMasterLibrary={true}
+    />
+  );
+  assert.ok(teknikMarkup.includes('rincian-indikator-domain-teknik'));
+  assert.ok(teknikMarkup.includes('First Touch'));
+  assert.strictEqual(teknikMarkup.includes('Daya Tahan Aerobik'), false, 'Should not render Fisik indicators when Teknik is selected');
+});
