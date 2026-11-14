@@ -258,26 +258,26 @@ export default function ScoutingPolarAreaPanel({
       <div className="chua-m-eval-card space-y-3 overflow-hidden">
         {/* MOBILE HEADER */}
         <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-[#E7EBF2]">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 rounded-[10px] bg-[#101D38] text-white flex items-center justify-center shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-9 h-9 rounded-xl bg-[#101D38] text-white flex items-center justify-center shrink-0">
               <BarChart2 className="w-4 h-4 text-[#16A779]" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5 flex-wrap">
-                <h3 className="font-bold text-[13px] text-[#17233D] leading-tight truncate my-0">
-                  Scouting Polar-Area
+                <h3 className="font-bold text-[14px] text-[#17233D] leading-tight truncate my-0">
+                  Profil Performa Polar Area
                 </h3>
                 {totalMeasuredCount > 0 && (
                   <span
                     data-testid="polar-measured-badge"
-                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#16A779]/10 text-[#16A779] whitespace-nowrap tabular-nums"
                   >
-                    Terukur via Tes ({totalMeasuredCount})
+                    {totalMeasuredCount} Indikator
                   </span>
                 )}
               </div>
               <p className="text-[11px] text-[#68758B] font-medium leading-tight truncate my-0 mt-0.5">
-                {categoryList.length} Kategori &bull; Skala 0–100
+                {categoryList.length} Domain Evaluasi &bull; Skala 1–100
               </p>
             </div>
           </div>
@@ -286,18 +286,18 @@ export default function ScoutingPolarAreaPanel({
             <button
               type="button"
               onClick={() => onOpenEdit(currentFocalKey || undefined)}
-              className="chua-m-eval-secondary-btn shrink-0 !px-2.5"
-              title="Buka halaman Edit Evaluasi"
+              className="chua-m-eval-secondary-btn shrink-0 !px-3 min-h-[44px]"
+              title="Buka rincian penilaian"
             >
               <Edit3 className="w-3.5 h-3.5 text-[#2455E8]" />
-              <span>Edit</span>
+              <span>Rincian</span>
             </button>
           )}
         </div>
 
         {/* MOBILE POLAR-AREA CHART WORKSPACE */}
-        <div className="flex flex-col items-center justify-center w-full">
-          <div className="relative w-full max-w-[340px] aspect-[508/448] flex items-center justify-center mx-auto">
+        <div className="flex flex-col items-center justify-center w-full py-1">
+          <div className="relative w-full max-w-[330px] aspect-[508/448] flex items-center justify-center mx-auto">
             <svg
               viewBox="-44 -14 508 448"
               className="w-full h-full select-none"
@@ -437,10 +437,10 @@ export default function ScoutingPolarAreaPanel({
                         textAnchor={textAnchor}
                         fontSize="9.5"
                         fontWeight="800"
-                        fill={slice.theme.color}
+                        fill={slice.score > 0 ? slice.theme.color : '#68758B'}
                         className="font-mono select-none"
                       >
-                        {slice.score}
+                        {slice.score > 0 ? slice.score : '—'}
                       </text>
                     </g>
                   );
@@ -491,7 +491,7 @@ export default function ScoutingPolarAreaPanel({
                       fill={focalTheme.color}
                       className="font-mono select-none"
                     >
-                      {currentFocalCategory.score || 0}
+                      {currentFocalCategory.score > 0 ? currentFocalCategory.score : '—'}
                     </text>
                     <text
                       x={cx}
@@ -527,7 +527,7 @@ export default function ScoutingPolarAreaPanel({
                       fill="#101D38"
                       className="font-mono select-none"
                     >
-                      {overallScore}
+                      {overallScore > 0 ? overallScore : '—'}
                     </text>
                     <text
                       x={cx}
@@ -535,10 +535,10 @@ export default function ScoutingPolarAreaPanel({
                       textAnchor="middle"
                       fontSize="8"
                       fontWeight="800"
-                      fill="#16A779"
+                      fill={overallScore > 0 ? '#16A779' : '#68758B'}
                       className="select-none"
                     >
-                      {overallGrade.grade.split(' ')[0]}
+                      {overallScore > 0 ? overallGrade.grade.split(' ')[0] : 'N/A'}
                     </text>
                   </g>
                 )}
@@ -548,7 +548,7 @@ export default function ScoutingPolarAreaPanel({
         </div>
 
         {/* 7-CATEGORY QUICK SCORE STRIP (TAPPABLE TO FOCUS CATEGORY) */}
-        <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-[#E7EBF2]">
+        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#E7EBF2]">
           {sliceData.map((slice, idx) => {
             const isSelected = activeCategoryKey === slice.key;
             const isLastOdd = sliceData.length % 2 === 1 && idx === sliceData.length - 1;
@@ -559,7 +559,7 @@ export default function ScoutingPolarAreaPanel({
                 onClick={() => {
                   if (onSelectCategory) onSelectCategory(slice.key);
                 }}
-                className={`min-h-[44px] px-2.5 py-1.5 rounded-[10px] border text-left flex items-center justify-between gap-2 transition-all cursor-pointer ${
+                className={`min-h-[44px] px-3 py-2 rounded-xl border text-left flex items-center justify-between gap-2 transition-all cursor-pointer ${
                   isLastOdd ? 'col-span-2' : ''
                 } ${
                   isSelected
@@ -567,25 +567,20 @@ export default function ScoutingPolarAreaPanel({
                     : 'bg-[#FFFFFF] border-[#E7EBF2]'
                 }`}
               >
-                <div className="flex items-center gap-1.5 min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
                   <span
                     className="w-2.5 h-2.5 rounded-full shrink-0"
                     style={{ backgroundColor: slice.theme.color }}
                   />
-                  <span className="text-[11px] font-bold text-[#17233D] truncate">
+                  <span className="text-[12px] font-bold text-[#17233D] truncate">
                     {slice.shortLabel || slice.theme.shortLabel || slice.label}
                   </span>
-                  {slice.measuredCount > 0 && (
-                    <span className="text-[9px] font-extrabold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1 rounded shrink-0">
-                      Tes
-                    </span>
-                  )}
                 </div>
                 <span
-                  className="text-[12px] font-extrabold font-mono shrink-0"
+                  className="text-[13px] font-extrabold font-mono tabular-nums shrink-0"
                   style={{ color: slice.score > 0 ? slice.theme.color : '#68758B' }}
                 >
-                  {slice.score}
+                  {slice.score > 0 ? slice.score : '—'}
                 </span>
               </button>
             );
@@ -596,96 +591,91 @@ export default function ScoutingPolarAreaPanel({
   }
 
   return (
-    <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-xs overflow-hidden transition-all">
+    <div className="bg-[#FFFFFF] rounded-2xl border border-[#E7EBF2] shadow-[0_2px_10px_rgba(16,29,56,0.04)] overflow-hidden transition-all h-full flex flex-col justify-between">
       {/* 1. HEADER PANEL BAR */}
-      <div className="px-3.5 py-3 sm:px-5 sm:py-3.5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 bg-gradient-to-r from-slate-50/80 via-white to-slate-50/50">
-        <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-xl bg-[#101D38] text-white flex items-center justify-center font-bold shrink-0 shadow-2xs border border-[#C89D32]/40">
-            <BarChart2 className="w-4 h-4 text-[#C89D32]" />
+      <div className="px-4 py-3.5 sm:px-5 sm:py-4 border-b border-[#E7EBF2] flex flex-wrap items-center justify-between gap-3 bg-[#FFFFFF]">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="w-10 h-10 rounded-xl bg-[#101D38] text-white flex items-center justify-center font-bold shrink-0">
+            <BarChart2 className="w-4 h-4 text-[#16A779]" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-extrabold text-xs sm:text-sm text-slate-900 tracking-tight">
-                Scouting Polar-Area Chart
+              <h3 className="font-bold text-sm sm:text-base text-[#17233D] tracking-tight">
+                Profil Performa Polar Area
               </h3>
-              <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#101D38]/5 text-[#101D38] border border-[#101D38]/15">
-                Opta Nightingale Rose
-              </span>
               {totalMeasuredCount > 0 && (
                 <span
                   data-testid="polar-measured-badge"
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200 tabular-nums"
+                  className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#16A779]/10 text-[#16A779] tabular-nums"
                 >
-                  Terukur via Tes ({totalMeasuredCount})
+                  {totalMeasuredCount} Indikator Terukur
                 </span>
               )}
             </div>
-            <p className="text-[10px] text-slate-500 font-medium">
-              7 pilar performa &bull; Ketuk sektor untuk edit
+            <p className="text-xs text-[#68758B] font-medium mt-0.5">
+              7 domain evaluasi performa &bull; Skala 1–100
             </p>
           </div>
         </div>
 
-        {/* Action Controls & Realtime Score Badge */}
-        <div className="flex items-center gap-2 self-end sm:self-center flex-wrap">
-          <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-100/80 rounded-xl border border-slate-200 min-h-[40px]">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+        {/* Action Controls & Score Pill */}
+        <div className="flex items-center gap-2 self-end sm:self-center">
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-[#F5F7FC] rounded-xl border border-[#E7EBF2] min-h-[44px]">
+            <span className="text-[11px] font-semibold text-[#68758B]">
               Rata-Rata:
             </span>
-            <span className="font-mono text-xs sm:text-sm font-black text-slate-900">
-              {overallScore} / 100
+            <span className="font-mono text-sm font-extrabold text-[#17233D] tabular-nums">
+              {overallScore > 0 ? `${overallScore} / 100` : '—'}
             </span>
-            <span className={`px-2 py-0.5 text-[10px] font-black rounded-md ${overallGrade.badge}`}>
-              {overallGrade.grade}
-            </span>
+            {overallScore > 0 && (
+              <span className={`px-2 py-0.5 text-[10px] font-bold rounded-md ${overallGrade.badge}`}>
+                {overallGrade.grade}
+              </span>
+            )}
           </div>
 
-          {/* Dedicated "Edit Penilaian" Navigation Button (44px touch target) */}
           {onOpenEdit && !isArchived && (
             <button
               type="button"
               onClick={() => onOpenEdit(currentFocalKey || undefined)}
-              className="min-h-[44px] px-3.5 py-2 text-xs font-black text-white bg-[#101D38] hover:bg-[#1d2d52] border border-[#C89D32]/40 rounded-xl shadow-2xs flex items-center gap-1.5 transition-all cursor-pointer"
-              title="Buka halaman Edit Penilaian"
+              className="min-h-[44px] px-3.5 py-2 text-xs font-bold text-white bg-[#2455E8] hover:bg-[#1D46C7] rounded-xl flex items-center gap-1.5 transition-all cursor-pointer"
+              title="Buka rincian penilaian"
             >
-              <Edit3 className="w-3.5 h-3.5 text-[#C89D32]" />
-              <span>Edit Penilaian</span>
+              <Edit3 className="w-3.5 h-3.5" />
+              <span>Rincian</span>
             </button>
           )}
 
-          {/* Mobile Collapse Toggle Button */}
           <button
             type="button"
             onClick={() => setShowMobileChart(!showMobileChart)}
-            className="lg:hidden min-h-[44px] px-2.5 py-2 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-xl shadow-2xs hover:bg-slate-50 flex items-center gap-1 transition-colors cursor-pointer"
+            className="lg:hidden min-h-[44px] px-3 py-2 text-xs font-bold text-[#17233D] bg-[#F5F7FC] border border-[#E7EBF2] rounded-xl hover:bg-[#E7EBF2]/60 flex items-center gap-1 transition-colors cursor-pointer"
           >
             {showMobileChart ? (
               <>
-                <ChevronUp className="w-3.5 h-3.5 text-slate-500" />
-                <span className="text-[11px]">Tutup</span>
+                <ChevronUp className="w-4 h-4 text-[#68758B]" />
+                <span>Tutup</span>
               </>
             ) : (
               <>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
-                <span className="text-[11px]">Chart</span>
+                <ChevronDown className="w-4 h-4 text-[#68758B]" />
+                <span>Grafik</span>
               </>
             )}
           </button>
         </div>
       </div>
 
-      {/* 2. MAIN WORKSPACE: FOCUSED POLAR-AREA VISUALIZATION ONLY */}
+      {/* 2. MAIN WORKSPACE: POLAR-AREA VISUALIZATION */}
       {showMobileChart && (
-        <div className="p-4 sm:p-6 lg:p-7 flex flex-col items-center justify-center w-full">
-          <div className="relative w-full max-w-[380px] sm:max-w-[440px] aspect-square flex items-center justify-center mx-auto">
-            
+        <div className="p-4 sm:p-5 flex flex-col items-center justify-between flex-1 w-full gap-4">
+          <div className="relative w-full max-w-[340px] sm:max-w-[380px] aspect-[508/448] flex items-center justify-center mx-auto">
             {/* SVG POLAR AREA VISUALIZATION */}
             <svg 
-              viewBox={`0 0 ${svgSize} ${svgSize}`} 
-              className="w-full h-full select-none overflow-visible"
+              viewBox="-44 -14 508 448" 
+              className="w-full h-full select-none"
             >
               <defs>
-                {/* Subtle drop shadows for interactive highlight */}
                 <filter id="opta-glow" x="-20%" y="-20%" width="140%" height="140%">
                   <feDropShadow dx="0" dy="2" stdDeviation="3" floodOpacity="0.25" />
                 </filter>
@@ -710,7 +700,6 @@ export default function ScoutingPolarAreaPanel({
                         strokeDasharray={lvl === 100 ? 'none' : '3 3'}
                         opacity={lvl === 100 ? 0.9 : 0.65}
                       />
-                      {/* Scale Marker Text along Top Radial Axis */}
                       <text
                         x={cx + 4}
                         y={cy - r + 9}
@@ -782,7 +771,7 @@ export default function ScoutingPolarAreaPanel({
                         if (onOpenEdit) onOpenEdit(slice.key);
                       }}
                     >
-                      <title>{`${slice.label}: ${slice.score} / 100 — Ketuk untuk edit penilaian`}</title>
+                      <title>{`${slice.label}: ${slice.score} / 100`}</title>
                     </path>
                   );
                 })}
@@ -801,7 +790,7 @@ export default function ScoutingPolarAreaPanel({
                     <g
                       key={`label-${slice.key}`}
                       className="cursor-pointer transition-opacity duration-200"
-                      opacity={isHovered ? 1 : 0.85}
+                      opacity={isHovered ? 1 : 0.88}
                       onMouseEnter={() => setHoveredKey(slice.key)}
                       onMouseLeave={() => setHoveredKey(null)}
                       onClick={() => {
@@ -809,30 +798,28 @@ export default function ScoutingPolarAreaPanel({
                         if (onOpenEdit) onOpenEdit(slice.key);
                       }}
                     >
-                      {/* Label Text */}
                       <text
                         x={pos.x}
                         y={pos.y - 3}
                         textAnchor={textAnchor}
-                        fontSize="9.5"
+                        fontSize="10"
                         fontWeight={isHovered ? '800' : '700'}
-                        fill={isHovered ? slice.theme.color : '#1E293B'}
+                        fill={isHovered ? slice.theme.color : '#17233D'}
                         className="tracking-tight select-none"
                       >
                         {slice.shortLabel || slice.label}
                       </text>
 
-                      {/* Numeric Score Tag */}
                       <text
                         x={pos.x}
                         y={pos.y + 9}
                         textAnchor={textAnchor}
-                        fontSize="9"
+                        fontSize="9.5"
                         fontWeight="800"
-                        fill={slice.theme.color}
+                        fill={slice.score > 0 ? slice.theme.color : '#68758B'}
                         className="font-mono select-none"
                       >
-                        {slice.score}
+                        {slice.score > 0 ? slice.score : '—'}
                       </text>
                     </g>
                   );
@@ -846,29 +833,26 @@ export default function ScoutingPolarAreaPanel({
                   if (onOpenEdit) onOpenEdit(currentFocalKey || undefined);
                 }}
               >
-                <title>{onOpenEdit ? "Ketuk untuk edit lembar penilaian indikator" : "Ringkasan Skor"}</title>
-                {/* Outer ring of center circle */}
+                <title>Ringkasan Skor</title>
                 <circle
                   cx={cx}
                   cy={cy}
                   r={innerRadius - 2}
                   fill="#FFFFFF"
-                  stroke={currentFocalCategory ? focalTheme.color : '#E2E8F0'}
+                  stroke={currentFocalCategory ? focalTheme.color : '#E7EBF2'}
                   strokeWidth="3"
                   filter="url(#center-shadow)"
                   className="transition-colors duration-300"
                 />
 
-                {/* Inner subtle decorative ring */}
                 <circle
                   cx={cx}
                   cy={cy}
                   r={innerRadius - 6}
-                  fill={currentFocalCategory ? `${focalTheme.color}08` : '#F8FAFC'}
+                  fill={currentFocalCategory ? `${focalTheme.color}08` : '#F5F7FC'}
                 />
 
                 {currentFocalCategory ? (
-                  // PREVIEW ON HOVER / SELECTION
                   <g className="animate-in fade-in duration-150">
                     <text
                       x={cx}
@@ -876,7 +860,7 @@ export default function ScoutingPolarAreaPanel({
                       textAnchor="middle"
                       fontSize="8"
                       fontWeight="800"
-                      fill="#64748B"
+                      fill="#68758B"
                       className="uppercase tracking-wider select-none"
                     >
                       {focalTheme.shortLabel}
@@ -890,7 +874,7 @@ export default function ScoutingPolarAreaPanel({
                       fill={focalTheme.color}
                       className="font-mono select-none"
                     >
-                      {currentFocalCategory.score || 0}
+                      {currentFocalCategory.score > 0 ? currentFocalCategory.score : '—'}
                     </text>
                     <text
                       x={cx}
@@ -901,11 +885,10 @@ export default function ScoutingPolarAreaPanel({
                       fill={focalTheme.color}
                       className="select-none"
                     >
-                      Ketuk Edit ✎
+                      Detail ▾
                     </text>
                   </g>
                 ) : (
-                  // IDLE OVERALL SCORE DISPLAY
                   <g>
                     <text
                       x={cx}
@@ -913,7 +896,7 @@ export default function ScoutingPolarAreaPanel({
                       textAnchor="middle"
                       fontSize="7.5"
                       fontWeight="800"
-                      fill="#64748B"
+                      fill="#68758B"
                       className="uppercase tracking-wider select-none"
                     >
                       OVERALL
@@ -924,10 +907,10 @@ export default function ScoutingPolarAreaPanel({
                       textAnchor="middle"
                       fontSize="19"
                       fontWeight="900"
-                      fill="#0F172A"
+                      fill="#101D38"
                       className="font-mono select-none"
                     >
-                      {overallScore}
+                      {overallScore > 0 ? overallScore : '—'}
                     </text>
                     <text
                       x={cx}
@@ -935,41 +918,57 @@ export default function ScoutingPolarAreaPanel({
                       textAnchor="middle"
                       fontSize="8"
                       fontWeight="800"
-                      fill="#059669"
+                      fill={overallScore > 0 ? '#16A779' : '#68758B'}
                       className="select-none"
                     >
-                      {overallGrade.grade.split(' ')[0]}
+                      {overallScore > 0 ? overallGrade.grade.split(' ')[0] : 'N/A'}
                     </text>
                   </g>
                 )}
               </g>
             </svg>
-
           </div>
 
-          {/* Quick Chart Hint & Measured Pillars Summary */}
-          {totalMeasuredCount > 0 && (
-            <div className="w-full mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center justify-center gap-1.5">
-              {sliceData
-                .filter((s) => s.measuredCount > 0)
-                .map((s) => (
-                  <span
-                    key={`measured-pillar-${s.key}`}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold bg-emerald-50/90 text-emerald-800 border border-emerald-200 tabular-nums"
-                  >
+          {/* COMPACT 7-DOMAIN LEGEND STRIP */}
+          <div className="w-full pt-3 border-t border-[#E7EBF2] grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {sliceData.map((slice, idx) => {
+              const isSelected = activeCategoryKey === slice.key || hoveredKey === slice.key;
+              const isLastOdd = sliceData.length === 7 && idx === 6;
+              return (
+                <button
+                  key={`d-legend-${slice.key}`}
+                  type="button"
+                  onMouseEnter={() => setHoveredKey(slice.key)}
+                  onMouseLeave={() => setHoveredKey(null)}
+                  onClick={() => {
+                    if (onSelectCategory) onSelectCategory(slice.key);
+                  }}
+                  className={`min-h-[40px] px-2.5 py-1.5 rounded-xl border text-left flex items-center justify-between gap-2 transition-all cursor-pointer ${
+                    isLastOdd ? 'col-span-2 sm:col-span-2' : ''
+                  } ${
+                    isSelected
+                      ? 'bg-[#F5F7FC] border-[#2455E8]'
+                      : 'bg-[#FFFFFF] border-[#E7EBF2] hover:bg-[#F5F7FC]'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 min-w-0">
                     <span
-                      className="w-2 h-2 rounded-full shrink-0"
-                      style={{ backgroundColor: s.theme.color }}
+                      className="w-2.5 h-2.5 rounded-full shrink-0"
+                      style={{ backgroundColor: slice.theme.color }}
                     />
-                    <span>{s.shortLabel || s.label}: Terukur via Tes ({s.measuredCount})</span>
+                    <span className="text-[11px] font-semibold text-[#17233D] truncate">
+                      {slice.shortLabel || slice.label}
+                    </span>
+                  </div>
+                  <span
+                    className="text-xs font-extrabold font-mono tabular-nums shrink-0"
+                    style={{ color: slice.score > 0 ? slice.theme.color : '#68758B' }}
+                  >
+                    {slice.score > 0 ? slice.score : '—'}
                   </span>
-                ))}
-            </div>
-          )}
-
-          <div className="flex items-center gap-1.5 mt-3 text-[11px] text-slate-500 font-medium">
-            <Sparkles className="w-3.5 h-3.5 text-[#C89D32]" />
-            <span>Arahkan kursor atau ketuk irisan pilar untuk membuka lembar edit penilaian indikator</span>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}

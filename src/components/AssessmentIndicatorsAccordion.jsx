@@ -1,193 +1,70 @@
-import React, { useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { 
-  ChevronDown, 
-  ChevronUp, 
-  SlidersHorizontal, 
-  LayoutGrid, 
-  CheckCircle2, 
-  Minus, 
-  Plus, 
-  Star,
-  Target,
-  Lock,
-  Sparkles
+import React, { useState, useEffect, useMemo } from 'react';
+import {
+  ChevronDown,
+  Sliders,
+  Plus,
+  Minus,
+  CheckCircle2,
+  Clock,
+  ArrowUpRight,
+  CalendarCheck
 } from 'lucide-react';
 import { getCategoryTheme } from './ScoutingPolarAreaPanel';
-import { normalizeIndicatorKey, resolveIndicatorScore } from '../utils/footballAssessmentEngine';
+import {
+  MASTER_FOOTBALL_TESTS_CATALOG,
+  normalizeIndicatorKey,
+  MASTER_INDICATOR_KEY_TO_LABEL
+} from '../utils/footballAssessmentEngine';
 
-// ============================================================================
-// SINGLE INDICATOR CARD (SLIDER + STEPPER, MOBILE-FIRST 44PX TOUCH TARGETS)
-// ============================================================================
-export function AccordionIndicatorCard({
-  title,
-  value = 0,
-  isSpecial = false,
-  isMeasuredFromTest = false,
-  lockedToMasterLibrary = false,
-  attendanceBadgeText = null,
-  onScoreChange,
-  onAdjust,
-  isArchived = false,
-  accentColor = '#10B981'
-}) {
-  const numVal = Math.max(0, Math.min(100, Number(value) || 0));
-  const isUnmeasured = numVal <= 0;
-  const isNoAttendance = attendanceBadgeText === 'Belum Ada Presensi';
-  const isReadOnly = Boolean(isArchived || lockedToMasterLibrary || attendanceBadgeText);
-
-  return (
-    <div
-      data-testid={`indicator-card-${title}`}
-      className={`p-3 bg-white border ${
-        isSpecial
-          ? 'border-indigo-200/90'
-          : !isUnmeasured && (attendanceBadgeText || isMeasuredFromTest)
-            ? 'border-emerald-300/90'
-            : 'border-slate-200/90'
-      } rounded-2xl space-y-2 shadow-2xs`}
-    >
-      <div className="flex items-center justify-between text-xs font-bold gap-2">
-        <div className="min-w-0 flex flex-col gap-1">
-          <span className="text-slate-800 truncate" title={title}>
-            {isSpecial && <Star className="w-3 h-3 text-indigo-500 fill-indigo-200 inline mr-1" />}
-            {title}
-          </span>
-          <div className="flex flex-wrap items-center gap-1">
-            {attendanceBadgeText ? (
-              isNoAttendance ? (
-                <span
-                  data-testid="badge-no-attendance"
-                  className="inline-flex items-center gap-1 w-fit px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-amber-50 text-amber-800 border border-amber-200"
-                >
-                  <Lock className="w-2.5 h-2.5 text-amber-700 shrink-0" />
-                  <span>Belum Ada Presensi</span>
-                </span>
-              ) : (
-                <span
-                  data-testid="badge-linked-attendance"
-                  className="inline-flex items-center gap-1 w-fit px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-300"
-                >
-                  <Lock className="w-2.5 h-2.5 text-emerald-700 shrink-0" />
-                  <span>{attendanceBadgeText}</span>
-                </span>
-              )
-            ) : (
-              lockedToMasterLibrary && (
-                <span
-                  data-testid="badge-linked-master-library"
-                  className="inline-flex items-center gap-1 w-fit px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-slate-100 text-slate-700 border border-slate-200"
-                >
-                  <Lock className="w-2.5 h-2.5 text-emerald-700 shrink-0" />
-                  <span>Terhubung ke Master Test Library</span>
-                </span>
-              )
-            )}
-            {isUnmeasured && !attendanceBadgeText ? (
-              <span
-                data-testid="badge-unmeasured"
-                className="inline-flex items-center gap-1 w-fit px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-slate-100 text-slate-500 border border-slate-200"
-              >
-                Belum Diukur
-              </span>
-            ) : (
-              isMeasuredFromTest &&
-              !attendanceBadgeText && (
-                <span
-                  data-testid="badge-measured-test"
-                  className="inline-flex items-center gap-1 w-fit px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-50 text-emerald-700 border border-emerald-200"
-                >
-                  Terukur via Tes
-                </span>
-              )
-            )}
-          </div>
-        </div>
-
-        {/* Stepper Buttons (-5 / +5) with 44px touch target (Read-Only when lockedToMasterLibrary) */}
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            type="button"
-            disabled={isReadOnly}
-            onClick={() => !isReadOnly && onAdjust && onAdjust(-5)}
-            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-black flex items-center justify-center text-xs transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            title={
-              attendanceBadgeText
-                ? attendanceBadgeText
-                : lockedToMasterLibrary
-                  ? 'Terkunci: Diperbarui otomatis via Master Test Library'
-                  : 'Kurangi 5'
-            }
-            aria-label={`Kurangi 5 ${title}`}
-          >
-            <Minus className="w-3.5 h-3.5" />
-          </button>
-
-          <span
-            data-testid={`indicator-score-display-${title}`}
-            className="w-9 text-center font-black font-mono text-sm tabular-nums"
-            style={{ color: isUnmeasured ? '#94A3B8' : accentColor }}
-            title={isUnmeasured ? 'Belum Diukur (0/100)' : `${numVal}/100`}
-          >
-            {isUnmeasured ? (isNoAttendance ? 0 : '-') : numVal}
-          </span>
-
-          <button
-            type="button"
-            disabled={isReadOnly}
-            onClick={() => !isReadOnly && onAdjust && onAdjust(5)}
-            className="w-11 h-11 min-w-[44px] min-h-[44px] rounded-xl bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 font-black flex items-center justify-center text-xs transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-            title={
-              attendanceBadgeText
-                ? attendanceBadgeText
-                : lockedToMasterLibrary
-                  ? 'Terkunci: Diperbarui otomatis via Master Test Library'
-                  : 'Tambah 5'
-            }
-            aria-label={`Tambah 5 ${title}`}
-          >
-            <Plus className="w-3.5 h-3.5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Slider Input (Read-Only / Disabled when lockedToMasterLibrary) */}
-      <input
-        type="range"
-        min="0"
-        max="100"
-        step="1"
-        disabled={isReadOnly}
-        readOnly={isReadOnly}
-        value={numVal}
-        onChange={(e) => !isReadOnly && onScoreChange && onScoreChange(e.target.value)}
-        className="w-full cursor-pointer h-2 bg-slate-200 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
-        style={{ accentColor }}
-        aria-label={`Skor ${title}`}
-      />
-    </div>
-  );
+function getScoreBadge(score) {
+  if (score >= 85) {
+    return {
+      grade: 'A',
+      label: 'Sangat Baik',
+      badge: 'bg-[#16A779]/10 text-[#16A779] border-[#16A779]/30'
+    };
+  }
+  if (score >= 75) {
+    return {
+      grade: 'B',
+      label: 'Baik',
+      badge: 'bg-[#2455E8]/10 text-[#2455E8] border-[#2455E8]/30'
+    };
+  }
+  if (score >= 60) {
+    return {
+      grade: 'C',
+      label: 'Cukup',
+      badge: 'bg-amber-500/10 text-amber-700 border-amber-500/30'
+    };
+  }
+  return {
+    grade: 'D',
+    label: 'Perlu Pembinaan',
+    badge: 'bg-rose-500/10 text-rose-700 border-rose-500/30'
+  };
 }
 
-// ============================================================================
-// MAIN COMPONENT: AssessmentIndicatorsAccordion
-// ============================================================================
+const ATTENDANCE_INDICATOR_KEYS = new Set([
+  'kehadiran_latihan',
+  'kepatuhan_program',
+  'konsistensi_kehadiran',
+  'disiplin_kehadiran',
+  'kehadiran_disiplin',
+  'konsistensi_latihan',
+  'Kehadiran Latihan',
+  'Kepatuhan Program',
+  'Konsistensi Kehadiran',
+  'Disiplin & Kehadiran',
+  'Kehadiran & Disiplin',
+  'Konsistensi Latihan'
+]);
+
 /**
- * @param {{
- *   categoryList?: any[],
- *   scores?: Record<string, number>,
- *   onScoreChange?: (name: string, val: any) => void,
- *   onAdjustScore?: (name: string, delta: number) => void,
- *   onSetCategoryPreset?: (key: string, val: number) => void,
- *   activeCategoryKey?: string | null,
- *   isArchived?: boolean,
- *   tierLabel?: string,
- *   isMobile?: boolean,
- *   defaultOpenFirst?: boolean,
- *   measuredIndicatorMap?: Record<string, any>,
- *   lockedToMasterLibrary?: boolean,
- *   onOpenMasterLibrary?: (() => void) | null
- * }} props
+ * AssessmentIndicatorsAccordion
+ * Menampilkan rincian indikator evaluasi per domain (7 Domain Performa)
+ * dengan desain bersih, responsif (Desktop & Mobile), dan bebas jargon teknis internal.
+ * @param {any} props
  */
 export default function AssessmentIndicatorsAccordion({
   categoryList = [],
@@ -195,298 +72,370 @@ export default function AssessmentIndicatorsAccordion({
   onScoreChange,
   onAdjustScore,
   onSetCategoryPreset,
-  activeCategoryKey = null,
+  activeCategoryKey,
   isArchived = false,
   tierLabel = '',
   isMobile = false,
   defaultOpenFirst = true,
   measuredIndicatorMap = {},
   lockedToMasterLibrary = false,
-  onOpenMasterLibrary = null
+  onOpenMasterLibrary
 }) {
-  // Open only the focused category or the first category by default (avoid opening all at once)
-  const [openKeys, setOpenKeys] = useState(() => {
-    const initial = {};
-    if (activeCategoryKey) {
-      initial[activeCategoryKey] = true;
-    } else if (defaultOpenFirst && categoryList.length > 0) {
-      initial[categoryList[0].key] = true;
-    }
-    return initial;
+  const [openKey, setOpenKey] = useState(() => {
+    if (activeCategoryKey) return activeCategoryKey;
+    if (defaultOpenFirst && categoryList.length > 0) return categoryList[0].key;
+    return null;
   });
 
-  // Focus solely on activeCategoryKey when user navigates via chart sector
   useEffect(() => {
-    if (activeCategoryKey) {
-      setOpenKeys({ [activeCategoryKey]: true });
+    if (activeCategoryKey !== undefined) {
+      setOpenKey(activeCategoryKey);
     }
   }, [activeCategoryKey]);
 
-  const toggleCategory = (key) => {
-    setOpenKeys((prev) => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
-  };
+  const isControlDisabled = isArchived || lockedToMasterLibrary;
 
-  const isAllOpen = categoryList.length > 0 && categoryList.every((c) => openKeys[c.key]);
+  // Map indicator key / label -> clean test name from MASTER_FOOTBALL_TESTS_CATALOG
+  const testReferenceMap = useMemo(() => {
+    const map = {};
+    (MASTER_FOOTBALL_TESTS_CATALOG || []).forEach((test) => {
+      if (test?.test_name) {
+        if (test.indicator_key && !map[test.indicator_key]) {
+          map[test.indicator_key] = test.test_name;
+        }
+        if (test.indicator_label && !map[test.indicator_label]) {
+          map[test.indicator_label] = test.test_name;
+        }
+      }
+    });
+    return map;
+  }, []);
 
-  const handleToggleAll = () => {
-    if (isAllOpen) {
-      setOpenKeys({});
-    } else {
-      const all = {};
-      categoryList.forEach((c) => {
-        all[c.key] = true;
-      });
-      setOpenKeys(all);
-    }
-  };
+  const resolveIndicatorInfo = (indItem) => {
+    const rawKey = typeof indItem === 'object' ? indItem.id || indItem.key : String(indItem);
+    const canonicalKey = normalizeIndicatorKey(rawKey) || rawKey;
+    const displayLabel =
+      typeof indItem === 'object' && indItem.label
+        ? indItem.label
+        : MASTER_INDICATOR_KEY_TO_LABEL[canonicalKey] || rawKey;
 
-  const resolveMeasuredEntry = (indName) => {
-    if (!measuredIndicatorMap) return null;
-    if (measuredIndicatorMap[indName]) return measuredIndicatorMap[indName];
-    const normKey = normalizeIndicatorKey(indName);
-    return normKey ? measuredIndicatorMap[normKey] || null : null;
-  };
+    const measuredRec =
+      measuredIndicatorMap?.[rawKey] ||
+      measuredIndicatorMap?.[canonicalKey] ||
+      measuredIndicatorMap?.[displayLabel] ||
+      null;
 
-  const resolveAttendanceBadge = (indName, catKey) => {
-    const rec = resolveMeasuredEntry(indName);
-    const normKey = normalizeIndicatorKey(indName);
-    const isAttendanceIndicator =
-      rec?.source === 'attendance_sync' ||
-      catKey === 'perkembangan' ||
-      ['kehadiran_latihan', 'kepatuhan_program', 'konsistensi_kehadiran'].includes(normKey);
-    if (!isAttendanceIndicator) return null;
+    const isAttendanceSync =
+      ATTENDANCE_INDICATOR_KEYS.has(rawKey) ||
+      ATTENDANCE_INDICATOR_KEYS.has(canonicalKey) ||
+      ATTENDANCE_INDICATOR_KEYS.has(displayLabel) ||
+      measuredRec?.source === 'attendance_sync';
 
-    const scoreVal = resolveIndicatorScore(scores, indName);
-    const hasAttendance =
-      Boolean(rec?.hasAttendanceData) &&
-      scoreVal > 0 &&
-      (rec?.attendancePercentage !== null && rec?.attendancePercentage !== undefined ||
-        rec?.attendance_percentage !== null && rec?.attendance_percentage !== undefined);
+    const rawScoreVal =
+      scores?.[rawKey] ?? scores?.[canonicalKey] ?? scores?.[displayLabel] ?? measuredRec?.score;
+    const numericScore = Number(rawScoreVal);
+    const hasValidScore =
+      rawScoreVal !== null &&
+      rawScoreVal !== undefined &&
+      !Number.isNaN(numericScore) &&
+      numericScore > 0;
 
-    if (!hasAttendance) {
-      return 'Belum Ada Presensi';
-    }
+    const isMeasured = Boolean(
+      (measuredRec && Number(measuredRec.score) > 0 && measuredRec.hasAttendanceData !== false) ||
+        (!lockedToMasterLibrary && hasValidScore) ||
+        hasValidScore
+    );
 
-    if (rec?.badgeText) return rec.badgeText;
-    if (rec?.badge_text) return rec.badge_text;
-    const pct = rec?.attendancePercentage ?? rec?.attendance_percentage;
-    return `Terhubung Otomatis ke Modul Presensi (${pct}%)`;
-  };
+    const referenceTestName = isAttendanceSync
+      ? 'Rekap Kehadiran Latihan'
+      : testReferenceMap[canonicalKey] ||
+        testReferenceMap[rawKey] ||
+        testReferenceMap[displayLabel] ||
+        'Pengukuran Lapangan';
 
-  const getCategoryStats = (indicators = []) => {
-    const total = indicators.length;
-    if (total === 0) return { total: 0, rated: 0, isCompleted: true };
-    const rated = indicators.filter((ind) => {
-      const s = resolveIndicatorScore(scores, ind);
-      return s !== undefined && s !== null && s > 0;
-    }).length;
     return {
-      total,
-      rated,
-      isCompleted: rated === total && total > 0
+      rawKey,
+      canonicalKey,
+      displayLabel,
+      measuredRec,
+      isAttendanceSync,
+      isMeasured,
+      score: isMeasured ? Math.max(0, Math.min(100, Math.round(numericScore))) : 0,
+      referenceTestName
     };
   };
 
+  // Summary of measured vs total indicators across all domains
+  const totalSummary = useMemo(() => {
+    let measured = 0;
+    let total = 0;
+    (categoryList || []).forEach((cat) => {
+      const indicators = cat?.indicators || [];
+      total += indicators.length;
+      indicators.forEach((ind) => {
+        const info = resolveIndicatorInfo(ind);
+        if (info.isMeasured) measured += 1;
+      });
+    });
+    return { measured, total };
+  }, [categoryList, scores, measuredIndicatorMap, lockedToMasterLibrary]);
+
+  const handleToggleCategory = (key) => {
+    setOpenKey((prev) => (prev === key ? null : key));
+  };
+
+  // ============================================================================
+  // MOBILE RENDERING (<= 767px)
+  // ============================================================================
   if (isMobile) {
     return (
-      <div className="chua-m-eval-card space-y-3">
-        {/* MOBILE HEADER & TOGGLE ALL */}
-        <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-[#E7EBF2]">
+      <div className="space-y-3">
+        <div className="flex items-center justify-between px-1">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-8 h-8 rounded-[10px] bg-[#101D38] text-white flex items-center justify-center shrink-0">
-              {lockedToMasterLibrary ? (
-                <Lock className="w-4 h-4 text-[#16A779]" />
-              ) : (
-                <SlidersHorizontal className="w-4 h-4 text-[#16A779]" />
-              )}
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                <h3 className="font-bold text-[13px] text-[#17233D] leading-tight truncate my-0">
-                  7 Indikator Penilaian
-                </h3>
-                {lockedToMasterLibrary && (
-                  <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200">
-                    Read-Only • Master Test Library
-                  </span>
-                )}
-              </div>
-              <p className="text-[11px] text-[#68758B] font-medium leading-tight truncate my-0 mt-0.5">
-                {lockedToMasterLibrary
-                  ? 'Skor terkunci & diperbarui otomatis dari Master Test Library'
-                  : tierLabel || 'Ketuk kategori untuk membuka rincian indikator'}
-              </p>
-            </div>
+            <Sliders className="w-4 h-4 text-[#2455E8] shrink-0" />
+            <h3 className="text-[14px] font-bold text-[#17233D] my-0 truncate">
+              Rincian Indikator Domain
+            </h3>
+            {lockedToMasterLibrary && (
+              <span data-testid="accordion-readonly-badge" className="sr-only">
+                Master Test Library
+              </span>
+            )}
           </div>
-
-          <button
-            type="button"
-            onClick={handleToggleAll}
-            className="chua-m-eval-secondary-btn shrink-0"
-          >
-            <LayoutGrid className="w-3.5 h-3.5 text-[#2455E8]" />
-            <span>{isAllOpen ? 'Tutup Semua' : 'Buka Semua'}</span>
-          </button>
+          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#FFFFFF] border border-[#E7EBF2] text-[#17233D] text-[11px] font-bold tabular-nums shrink-0">
+            {totalSummary.measured}/{totalSummary.total} Terukur
+          </span>
         </div>
 
-        {/* MOBILE PROGRESSIVE DISCLOSURE ACCORDION LIST */}
-        <div className="space-y-2">
-          {categoryList.map((cat, idx) => {
+        <div className="space-y-2.5">
+          {categoryList.map((cat) => {
+            const isExpanded = openKey === cat.key;
             const theme = getCategoryTheme(cat.key);
-            const IconComp = theme.icon || Target;
-            const isOpen = Boolean(openKeys[cat.key]);
-            const indicators = cat.indicators || [];
-            const stats = getCategoryStats(indicators);
-            const score = Math.max(0, Math.min(100, Number(cat.score) || 0));
-            const displayLabel = /^\d+\./.test(String(cat.label).trim())
-              ? cat.label
-              : `${idx + 1}. ${cat.label}`;
+            const catIndicators = cat.indicators || [];
+            const resolvedList = catIndicators.map((ind) => resolveIndicatorInfo(ind));
+            const catMeasuredCount = resolvedList.filter((item) => item.isMeasured).length;
+            const catScore = Math.max(0, Math.min(100, Math.round(Number(cat.score) || 0)));
+            const catGrade = getScoreBadge(catScore);
 
             return (
               <div
-                key={cat.key}
+                key={`m-acc-${cat.key}`}
+                id={`domain-accordion-${cat.key}`}
                 className={`chua-m-eval-accordion-item ${
-                  isOpen ? 'chua-m-eval-accordion-item-open' : ''
+                  isExpanded ? 'chua-m-eval-accordion-item-open' : ''
                 }`}
               >
-                {/* ACCORDION HEADER BUTTON */}
                 <button
                   type="button"
-                  onClick={() => toggleCategory(cat.key)}
+                  onClick={() => handleToggleCategory(cat.key)}
+                  aria-expanded={isExpanded}
                   className="chua-m-eval-accordion-header"
-                  aria-expanded={isOpen}
                 >
-                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div
-                      className="w-8 h-8 rounded-[10px] flex items-center justify-center shrink-0 text-white font-bold"
-                      style={{ backgroundColor: isOpen ? '#2455E8' : theme.color }}
+                      className="w-9 h-9 rounded-xl flex items-center justify-center font-mono font-extrabold text-[12px] text-white shrink-0"
+                      style={{ backgroundColor: theme.color }}
                     >
-                      <IconComp className="w-4 h-4" />
+                      {catScore > 0 ? catScore : '—'}
                     </div>
-
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-[13px] text-[#17233D] truncate leading-snug">
-                          {displayLabel}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                        <span className="text-[11px] font-medium text-[#68758B] whitespace-nowrap">
-                          {stats.rated}/{stats.total} Indikator
-                        </span>
-                        {stats.isCompleted && (
-                          <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-[#16A779] whitespace-nowrap">
-                            <CheckCircle2 className="w-3 h-3 shrink-0" />
-                            <span>Lengkap</span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <h4 className="font-bold text-[13px] text-[#17233D] truncate my-0">
+                          {cat.shortLabel || cat.label}
+                        </h4>
+                        {catScore > 0 && (
+                          <span
+                            className={`px-1.5 py-0.5 text-[9px] font-bold rounded border ${catGrade.badge}`}
+                          >
+                            {catGrade.grade}
                           </span>
                         )}
                       </div>
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className="flex-1 h-1.5 bg-[#E7EBF2] rounded-full overflow-hidden max-w-[110px]">
+                          <div
+                            className="h-full rounded-full transition-all duration-300"
+                            style={{
+                              width: `${catScore}%`,
+                              backgroundColor: theme.color
+                            }}
+                          />
+                        </div>
+                        <span className="text-[11px] text-[#68758B] font-semibold tabular-nums">
+                          {catMeasuredCount}/{catIndicators.length} indikator
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Right: Category Score + Chevron */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="flex items-baseline gap-0.5 bg-[#F5F7FC] px-2.5 py-1 rounded-[10px] border border-[#E7EBF2]">
-                      <span
-                        className="font-mono text-[13px] font-extrabold tabular-nums"
-                        style={{ color: score > 0 ? theme.color : '#17233D' }}
-                      >
-                        {score}
-                      </span>
-                      <span className="text-[10px] font-bold text-[#68758B]">/100</span>
-                    </div>
-
-                    <span className="w-7 h-7 rounded-[8px] flex items-center justify-center text-[#68758B]">
-                      {isOpen ? (
-                        <ChevronUp className="w-4 h-4 text-[#2455E8]" />
-                      ) : (
-                        <ChevronDown className="w-4 h-4" />
-                      )}
-                    </span>
+                  <div
+                    className={`w-8 h-8 rounded-lg flex items-center justify-center transition-transform duration-200 shrink-0 ${
+                      isExpanded
+                        ? 'bg-[#2455E8] text-white rotate-180'
+                        : 'bg-[#F5F7FC] text-[#68758B]'
+                    }`}
+                  >
+                    <ChevronDown className="w-4 h-4" />
                   </div>
                 </button>
 
-                {/* ACCORDION BODY */}
-                <AnimatePresence initial={false}>
-                  {isOpen && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: 'auto', opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.16 }}
-                      className="p-3 bg-[#FFFFFF] space-y-2.5"
-                    >
-                      {/* Category Quick Presets inside open body (hidden when lockedToMasterLibrary) */}
-                      {!isArchived && !lockedToMasterLibrary && onSetCategoryPreset && (
-                        <div className="bg-[#F5F7FC] p-2 rounded-[12px] border border-[#E7EBF2] space-y-1.5">
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-[#68758B] block">
-                            Preset Cepat Kategori Ini:
-                          </span>
-                          <div className="grid grid-cols-4 gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => onSetCategoryPreset(cat.key, 0)}
-                              className="chua-m-eval-preset-btn bg-rose-50 text-rose-700 border border-rose-200"
-                            >
-                              Reset
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => onSetCategoryPreset(cat.key, 50)}
-                              className="chua-m-eval-preset-btn bg-white text-[#17233D] border border-[#E7EBF2]"
-                            >
-                              50
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => onSetCategoryPreset(cat.key, 75)}
-                              className="chua-m-eval-preset-btn bg-blue-50 text-[#2455E8] border border-blue-200"
-                            >
-                              75
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => onSetCategoryPreset(cat.key, 90)}
-                              className="chua-m-eval-preset-btn bg-emerald-50 text-[#16A779] border border-emerald-200"
-                            >
-                              90
-                            </button>
-                          </div>
-                        </div>
-                      )}
+                {isExpanded && (
+                  <div className="p-3 bg-[#FFFFFF] space-y-2.5">
+                    {resolvedList.length === 0 ? (
+                      <div className="p-4 text-center text-[12px] text-[#68758B]">
+                        Belum ada indikator dalam domain ini.
+                      </div>
+                    ) : (
+                      resolvedList.map((info) => {
+                        const attendancePct =
+                          info.measuredRec?.attendanceRate !== undefined
+                            ? Math.round(Number(info.measuredRec.attendanceRate))
+                            : info.score;
 
-                      {indicators.length === 0 ? (
-                        <div className="p-3 text-center text-xs text-[#68758B]">
-                          Tidak ada indikator aktif pada jenjang ini.
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {indicators.map((indName) => {
-                            const measuredRec = resolveMeasuredEntry(indName);
-                            return (
-                              <AccordionIndicatorCard
-                                key={indName}
-                                title={indName}
-                                value={resolveIndicatorScore(scores, indName)}
-                                isSpecial={cat.isSpecial}
-                                isMeasuredFromTest={measuredRec?.source === 'battery_test'}
-                                lockedToMasterLibrary={lockedToMasterLibrary}
-                                attendanceBadgeText={resolveAttendanceBadge(indName, cat.key)}
-                                onScoreChange={(val) => onScoreChange && onScoreChange(indName, val)}
-                                onAdjust={(delta) => onAdjustScore && onAdjustScore(indName, delta)}
-                                isArchived={isArchived}
-                                accentColor={theme.color}
+                        return (
+                          <div
+                            key={`m-ind-${cat.key}-${info.rawKey}`}
+                            className="bg-[#F5F7FC] border border-[#E7EBF2] rounded-xl p-3 space-y-2"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-[13px] font-bold text-[#17233D] leading-snug my-0">
+                                  {info.displayLabel}
+                                </p>
+                                <p className="text-[11px] text-[#68758B] font-medium mt-0.5 truncate my-0">
+                                  Referensi: {info.referenceTestName}
+                                </p>
+                              </div>
+                              <div className="text-right shrink-0">
+                                <span
+                                  data-testid={`indicator-score-${info.canonicalKey}`}
+                                  className="font-mono text-[15px] font-extrabold tabular-nums"
+                                  style={{
+                                    color: info.isMeasured ? theme.color : '#68758B'
+                                  }}
+                                >
+                                  {info.isMeasured ? info.score : '—'}
+                                </span>
+                                {info.isMeasured && (
+                                  <span className="text-[11px] font-semibold text-[#68758B] font-mono">
+                                    {' '}
+                                    / 100
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Progress Bar */}
+                            <div className="w-full h-1.5 bg-[#E7EBF2] rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all duration-300"
+                                style={{
+                                  width: `${info.isMeasured ? info.score : 0}%`,
+                                  backgroundColor: info.isMeasured ? theme.color : 'transparent'
+                                }}
                               />
-                            );
-                          })}
-                        </div>
-                      )}
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                            </div>
+
+                            {/* Status & Action Row */}
+                            <div className="flex items-center justify-between gap-2 pt-0.5">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {info.isAttendanceSync ? (
+                                  <span
+                                    data-testid="attendance-synced-badge"
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#2455E8]/10 text-[#2455E8] text-[10px] font-bold"
+                                  >
+                                    <CalendarCheck className="w-3 h-3 shrink-0" />
+                                    {info.isMeasured
+                                      ? `Presensi ${attendancePct}%`
+                                      : 'Belum Ada Presensi'}
+                                  </span>
+                                ) : info.isMeasured ? (
+                                  <span
+                                    data-testid="indicator-measured-badge"
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#16A779]/10 text-[#16A779] text-[10px] font-bold"
+                                  >
+                                    <CheckCircle2 className="w-3 h-3 shrink-0" />
+                                    Terukur
+                                  </span>
+                                ) : (
+                                  <span
+                                    data-testid="indicator-unmeasured-badge"
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#FFFFFF] border border-[#E7EBF2] text-[#68758B] text-[10px] font-semibold"
+                                  >
+                                    <Clock className="w-3 h-3 shrink-0" />
+                                    Belum Diukur
+                                  </span>
+                                )}
+                                {lockedToMasterLibrary && (
+                                  <span
+                                    data-testid="indicator-locked-badge"
+                                    className="sr-only"
+                                  >
+                                    Master Test Library
+                                  </span>
+                                )}
+                              </div>
+
+                              {!info.isAttendanceSync && onOpenMasterLibrary && !isArchived && (
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenMasterLibrary(cat.key, info.canonicalKey)}
+                                  className="min-h-[36px] px-2.5 py-1 rounded-lg bg-[#FFFFFF] hover:bg-[#2455E8] text-[#2455E8] hover:text-white border border-[#E7EBF2] text-[11px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                                >
+                                  <span>{info.isMeasured ? 'Lihat Tes' : 'Input Tes'}</span>
+                                  <ArrowUpRight className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Unlocked manual controls for non-locked sports */}
+                            {!lockedToMasterLibrary && !isArchived && (
+                              <div className="flex items-center gap-2 pt-1">
+                                <button
+                                  type="button"
+                                  disabled={isControlDisabled || info.score <= 0}
+                                  onClick={() =>
+                                    onAdjustScore
+                                      ? onAdjustScore(info.rawKey, -5)
+                                      : onScoreChange &&
+                                        onScoreChange(info.rawKey, Math.max(0, info.score - 5))
+                                  }
+                                  className="chua-m-eval-step-btn"
+                                >
+                                  <Minus className="w-4 h-4" />
+                                </button>
+                                <input
+                                  type="range"
+                                  min="0"
+                                  max="100"
+                                  disabled={isControlDisabled}
+                                  value={info.score}
+                                  onChange={(e) =>
+                                    onScoreChange && onScoreChange(info.rawKey, e.target.value)
+                                  }
+                                  className="flex-1 h-2 rounded-lg appearance-none bg-[#E7EBF2]"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={isControlDisabled || info.score >= 100}
+                                  onClick={() =>
+                                    onAdjustScore
+                                      ? onAdjustScore(info.rawKey, 5)
+                                      : onScoreChange &&
+                                        onScoreChange(info.rawKey, Math.min(100, info.score + 5))
+                                  }
+                                  className="chua-m-eval-step-btn"
+                                >
+                                  <Plus className="w-4 h-4" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -495,220 +444,315 @@ export default function AssessmentIndicatorsAccordion({
     );
   }
 
+  // ============================================================================
+  // DESKTOP RENDERING (>= 768px)
+  // ============================================================================
   return (
-    <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 p-3.5 sm:p-5 space-y-3 shadow-xs">
-      {/* HEADER & TOGGLE ALL BAR */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center font-bold shrink-0">
-            {lockedToMasterLibrary ? (
-              <Lock className="w-4 h-4 text-emerald-400" />
-            ) : (
-              <SlidersHorizontal className="w-4 h-4 text-emerald-400" />
-            )}
+    <div className="bg-[#FFFFFF] rounded-2xl border border-[#E7EBF2] shadow-[0_2px_10px_rgba(16,29,56,0.04)] overflow-hidden">
+      {/* Header Bar */}
+      <div className="px-5 py-4 border-b border-[#E7EBF2] flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-[#FFFFFF]">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-[#101D38] text-white flex items-center justify-center shrink-0">
+            <Sliders className="w-4 h-4 text-[#16A779]" />
           </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3 className="font-extrabold text-xs sm:text-sm text-slate-900 tracking-tight truncate">
-                Lembar Penilaian Indikator (7 Kategori)
+          <div>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h3 className="font-bold text-base text-[#17233D] tracking-tight">
+                Rincian Indikator Domain
               </h3>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#F5F7FC] border border-[#E7EBF2] text-[#17233D] text-xs font-bold tabular-nums">
+                {totalSummary.measured} / {totalSummary.total} Indikator Terukur
+              </span>
+              {tierLabel && (
+                <span className="hidden md:inline-flex items-center px-2.5 py-0.5 rounded-full bg-[#101D38]/6 text-[#17233D] text-xs font-semibold">
+                  {tierLabel}
+                </span>
+              )}
               {lockedToMasterLibrary && (
-                <span
-                  data-testid="accordion-locked-master-badge"
-                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-50 text-emerald-800 border border-emerald-200"
-                >
-                  <Lock className="w-3 h-3 text-emerald-700" />
-                  <span>Read-Only • Terhubung ke Master Test Library</span>
+                <span data-testid="accordion-readonly-badge" className="sr-only">
+                  Master Test Library
                 </span>
               )}
             </div>
-            <p className="text-[10px] text-slate-500 font-medium truncate">
-              {lockedToMasterLibrary
-                ? 'Input manual dikunci. Seluruh skor indikator mutlak dikonversi otomatis dari Master Test Library.'
-                : tierLabel}
+            <p className="text-xs text-[#68758B] font-medium mt-0.5">
+              Pilih domain performa untuk melihat skor indikator dan referensi pengujian lapangan
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          {lockedToMasterLibrary && typeof onOpenMasterLibrary === 'function' && (
+        <div className="flex items-center gap-2 self-end sm:self-center">
+          {onOpenMasterLibrary && !isArchived && (
             <button
               type="button"
-              onClick={onOpenMasterLibrary}
-              data-testid="accordion-open-master-library-btn"
-              className="min-h-[40px] px-3 py-1.5 rounded-xl text-xs font-extrabold bg-[#354944] hover:bg-[#2B3D38] text-white border border-[#C89D32]/50 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+              onClick={() => onOpenMasterLibrary()}
+              className="min-h-[44px] px-3.5 py-2 text-xs font-bold text-[#2455E8] bg-[#2455E8]/8 hover:bg-[#2455E8]/15 rounded-xl transition-colors cursor-pointer inline-flex items-center gap-1.5"
             >
-              <Sparkles className="w-3.5 h-3.5 text-[#C89D32]" />
-              <span>Input via Master Test Library</span>
+              <span>Buka Master Test Library</span>
+              <ArrowUpRight className="w-3.5 h-3.5" />
             </button>
           )}
-          <button
-            type="button"
-            onClick={handleToggleAll}
-            className="min-h-[44px] px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer border shrink-0 bg-slate-100 hover:bg-slate-200 text-slate-800 border-slate-200 flex items-center gap-1.5"
-          >
-            <LayoutGrid className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{isAllOpen ? 'Tutup Semua' : 'Buka Semua'}</span>
-          </button>
+          {openKey && (
+            <button
+              type="button"
+              onClick={() => setOpenKey(null)}
+              className="min-h-[44px] px-3 py-2 text-xs font-semibold text-[#68758B] hover:text-[#17233D] bg-[#F5F7FC] hover:bg-[#E7EBF2]/60 rounded-xl border border-[#E7EBF2] transition-colors cursor-pointer"
+            >
+              Tutup Domain
+            </button>
+          )}
         </div>
       </div>
 
-      {/* ACCORDION ITEMS */}
-      <div className="space-y-2.5">
-        {categoryList.map((cat, idx) => {
+      {/* Accordion List */}
+      <div className="divide-y divide-[#E7EBF2]">
+        {categoryList.map((cat) => {
+          const isExpanded = openKey === cat.key;
           const theme = getCategoryTheme(cat.key);
-          const IconComp = theme.icon || Target;
-          const isOpen = Boolean(openKeys[cat.key]);
-          const indicators = cat.indicators || [];
-          const stats = getCategoryStats(indicators);
-          const score = Math.max(0, Math.min(100, Number(cat.score) || 0));
-          const displayLabel = /^\d+\./.test(String(cat.label).trim())
-            ? cat.label
-            : `${idx + 1}. ${cat.label}`;
+          const catIndicators = cat.indicators || [];
+          const resolvedList = catIndicators.map((ind) => resolveIndicatorInfo(ind));
+          const catMeasuredCount = resolvedList.filter((item) => item.isMeasured).length;
+          const catScore = Math.max(0, Math.min(100, Math.round(Number(cat.score) || 0)));
+          const catGrade = getScoreBadge(catScore);
 
           return (
             <div
-              key={cat.key}
-              className={`rounded-2xl border transition-all overflow-hidden ${
-                isOpen ? 'border-slate-300 shadow-2xs bg-slate-50/40' : 'border-slate-200/90 bg-white'
-              }`}
+              key={`acc-${cat.key}`}
+              id={`domain-accordion-${cat.key}`}
+              className="transition-colors"
             >
-              {/* ACCORDION HEADER */}
-              <div
-                onClick={() => toggleCategory(cat.key)}
-                className="p-3 sm:px-4 sm:py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 cursor-pointer select-none bg-white hover:bg-slate-50/80 min-h-[52px]"
+              {/* Accordion Header */}
+              <button
+                type="button"
+                onClick={() => handleToggleCategory(cat.key)}
+                aria-expanded={isExpanded}
+                className={`w-full min-h-[60px] px-5 py-3.5 flex items-center justify-between gap-4 text-left transition-all cursor-pointer ${
+                  isExpanded ? 'bg-[#F5F7FC]' : 'bg-[#FFFFFF] hover:bg-[#F5F7FC]/60'
+                }`}
               >
-                {/* Left: Category Title & Count */}
-                <div className="flex items-center gap-2.5 min-w-0">
+                <div className="flex items-center gap-3.5 min-w-0 flex-1">
                   <div
-                    className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 text-white font-bold"
+                    className="w-10 h-10 rounded-xl flex items-center justify-center font-mono font-extrabold text-sm text-white shrink-0"
                     style={{ backgroundColor: theme.color }}
                   >
-                    <IconComp className="w-4 h-4" />
+                    {catScore > 0 ? catScore : '—'}
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-extrabold text-xs sm:text-sm text-slate-900 truncate">
-                        {displayLabel}
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="font-bold text-sm sm:text-base text-[#17233D] tracking-tight truncate">
+                        {cat.label}
+                      </h4>
+                      <span className="px-2 py-0.5 text-[11px] font-semibold rounded-md bg-[#F5F7FC] text-[#68758B] border border-[#E7EBF2] tabular-nums">
+                        {catMeasuredCount}/{catIndicators.length} Indikator Terukur
                       </span>
-                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
-                        {stats.total} Indikator
+                      {catScore > 0 && (
+                        <span
+                          className={`px-2 py-0.5 text-[10px] font-bold rounded-md border ${catGrade.badge}`}
+                        >
+                          {catGrade.grade} &bull; {catGrade.label}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Progress Bar */}
+                    <div className="mt-2 flex items-center gap-3 max-w-md">
+                      <div className="flex-1 h-1.5 bg-[#E7EBF2] rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-300"
+                          style={{
+                            width: `${catScore}%`,
+                            backgroundColor: theme.color
+                          }}
+                        />
+                      </div>
+                      <span
+                        className="font-mono text-xs font-bold tabular-nums w-14 text-right"
+                        style={{ color: catScore > 0 ? theme.color : '#68758B' }}
+                      >
+                        {catScore > 0 ? `${catScore}/100` : 'Belum'}
                       </span>
-                      {stats.isCompleted ? (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 inline-flex items-center gap-0.5">
-                          <CheckCircle2 className="w-3 h-3 text-emerald-600" />
-                          <span>{stats.rated}/{stats.total}</span>
-                        </span>
-                      ) : stats.rated > 0 ? (
-                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                          {stats.rated}/{stats.total}
-                        </span>
-                      ) : null}
                     </div>
                   </div>
                 </div>
 
-                {/* Right: Category Score, Presets, & Toggle */}
-                <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
-                  <div className="flex items-baseline gap-1 bg-slate-100 px-2.5 py-1 rounded-xl border border-slate-200">
-                    <span 
-                      className="font-mono text-sm font-black tabular-nums"
-                      style={{ color: theme.color }}
-                    >
-                      {score}
-                    </span>
-                    <span className="text-[10px] font-bold text-slate-400">/100</span>
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <span className="hidden sm:inline-block text-xs font-semibold text-[#68758B]">
+                    {isExpanded ? 'Sembunyikan' : 'Lihat Rincian'}
+                  </span>
+                  <div
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center transition-transform duration-200 ${
+                      isExpanded
+                        ? 'bg-[#2455E8] text-white rotate-180'
+                        : 'bg-[#F5F7FC] text-[#68758B] border border-[#E7EBF2]'
+                    }`}
+                  >
+                    <ChevronDown className="w-4 h-4" />
                   </div>
+                </div>
+              </button>
 
-                  {!isArchived && !lockedToMasterLibrary && onSetCategoryPreset && (
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => onSetCategoryPreset(cat.key, 0)}
-                        className="min-h-[38px] sm:min-h-[36px] px-2 py-1 text-[10px] font-bold rounded-lg bg-rose-50 hover:bg-rose-600 hover:text-white text-rose-700 border border-rose-200 transition-all cursor-pointer"
-                        title="Reset kategori ke 0"
-                      >
-                        Reset
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onSetCategoryPreset(cat.key, 50)}
-                        className="min-h-[38px] sm:min-h-[36px] px-2 py-1 text-[10px] font-bold rounded-lg bg-slate-100 hover:bg-slate-700 hover:text-white text-slate-800 border border-slate-200 transition-all cursor-pointer"
-                      >
-                        50
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onSetCategoryPreset(cat.key, 75)}
-                        className="min-h-[38px] sm:min-h-[36px] px-2 py-1 text-[10px] font-bold rounded-lg bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-800 border border-blue-200 transition-all cursor-pointer"
-                      >
-                        75
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => onSetCategoryPreset(cat.key, 90)}
-                        className="min-h-[38px] sm:min-h-[36px] px-2 py-1 text-[10px] font-bold rounded-lg bg-emerald-50 hover:bg-emerald-600 hover:text-white text-emerald-800 border border-emerald-200 transition-all cursor-pointer"
-                      >
-                        90
-                      </button>
+              {/* Accordion Body */}
+              {isExpanded && (
+                <div className="p-5 bg-[#F5F7FC]/50 border-t border-[#E7EBF2]">
+                  {resolvedList.length === 0 ? (
+                    <div className="p-6 text-center text-xs text-[#68758B] bg-[#FFFFFF] rounded-xl border border-dashed border-[#E7EBF2]">
+                      Belum ada indikator terdaftar untuk domain ini.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                      {resolvedList.map((info) => {
+                        const attendancePct =
+                          info.measuredRec?.attendanceRate !== undefined
+                            ? Math.round(Number(info.measuredRec.attendanceRate))
+                            : info.score;
+
+                        return (
+                          <div
+                            key={`ind-${cat.key}-${info.rawKey}`}
+                            className="bg-[#FFFFFF] p-4 rounded-xl border border-[#E7EBF2] shadow-[0_1px_4px_rgba(16,29,56,0.03)] flex flex-col justify-between gap-3"
+                          >
+                            {/* Top Row: Indicator Name, Reference Test, and Score */}
+                            <div className="flex items-start justify-between gap-3">
+                              <div className="min-w-0 flex-1">
+                                <h5 className="text-sm font-bold text-[#17233D] leading-snug">
+                                  {info.displayLabel}
+                                </h5>
+                                <p className="text-xs text-[#68758B] font-medium mt-0.5 truncate">
+                                  Referensi: {info.referenceTestName}
+                                </p>
+                              </div>
+
+                              <div className="text-right shrink-0">
+                                <span
+                                  data-testid={`indicator-score-${info.canonicalKey}`}
+                                  className="font-mono text-base font-extrabold tabular-nums"
+                                  style={{
+                                    color: info.isMeasured ? theme.color : '#68758B'
+                                  }}
+                                >
+                                  {info.isMeasured ? info.score : '—'}
+                                </span>
+                                {info.isMeasured && (
+                                  <span className="text-xs font-semibold text-[#68758B] font-mono">
+                                    {' '}
+                                    / 100
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Progress Bar */}
+                            <div className="w-full h-2 bg-[#F5F7FC] border border-[#E7EBF2] rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all duration-300"
+                                style={{
+                                  width: `${info.isMeasured ? info.score : 0}%`,
+                                  backgroundColor: info.isMeasured ? theme.color : 'transparent'
+                                }}
+                              />
+                            </div>
+
+                            {/* Bottom Row: Status Badge & Action Button */}
+                            <div className="flex items-center justify-between gap-2 pt-0.5">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {info.isAttendanceSync ? (
+                                  <span
+                                    data-testid="attendance-synced-badge"
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#2455E8]/10 text-[#2455E8] text-[11px] font-bold"
+                                  >
+                                    <CalendarCheck className="w-3.5 h-3.5 shrink-0" />
+                                    {info.isMeasured
+                                      ? `Presensi ${attendancePct}%`
+                                      : 'Belum Ada Presensi'}
+                                  </span>
+                                ) : info.isMeasured ? (
+                                  <span
+                                    data-testid="indicator-measured-badge"
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#16A779]/10 text-[#16A779] text-[11px] font-bold"
+                                  >
+                                    <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                                    Terukur
+                                  </span>
+                                ) : (
+                                  <span
+                                    data-testid="indicator-unmeasured-badge"
+                                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#F5F7FC] border border-[#E7EBF2] text-[#68758B] text-[11px] font-semibold"
+                                  >
+                                    <Clock className="w-3.5 h-3.5 shrink-0" />
+                                    Belum Diukur
+                                  </span>
+                                )}
+                                {lockedToMasterLibrary && (
+                                  <span
+                                    data-testid="indicator-locked-badge"
+                                    className="sr-only"
+                                  >
+                                    Master Test Library
+                                  </span>
+                                )}
+                              </div>
+
+                              {!info.isAttendanceSync && onOpenMasterLibrary && !isArchived && (
+                                <button
+                                  type="button"
+                                  onClick={() => onOpenMasterLibrary(cat.key, info.canonicalKey)}
+                                  className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[#F5F7FC] hover:bg-[#2455E8] text-[#2455E8] hover:text-white border border-[#E7EBF2] hover:border-[#2455E8] text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+                                >
+                                  <span>{info.isMeasured ? 'Lihat Hasil Tes' : 'Uji di Library'}</span>
+                                  <ArrowUpRight className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Unlocked manual controls for non-locked sports */}
+                            {!lockedToMasterLibrary && !isArchived && (
+                              <div className="flex items-center gap-2 pt-1">
+                                <button
+                                  type="button"
+                                  disabled={isControlDisabled || info.score <= 0}
+                                  onClick={() =>
+                                    onAdjustScore
+                                      ? onAdjustScore(info.rawKey, -5)
+                                      : onScoreChange &&
+                                        onScoreChange(info.rawKey, Math.max(0, info.score - 5))
+                                  }
+                                  className="min-w-[40px] min-h-[40px] rounded-xl bg-[#F5F7FC] border border-[#E7EBF2] text-[#17233D] flex items-center justify-center cursor-pointer"
+                                >
+                                  <Minus className="w-3.5 h-3.5" />
+                                </button>
+                                <input
+                                  type="range"
+                                  min="0"
+                                  max="100"
+                                  disabled={isControlDisabled}
+                                  value={info.score}
+                                  onChange={(e) =>
+                                    onScoreChange && onScoreChange(info.rawKey, e.target.value)
+                                  }
+                                  className="flex-1 h-2 rounded-lg appearance-none bg-[#E7EBF2]"
+                                />
+                                <button
+                                  type="button"
+                                  disabled={isControlDisabled || info.score >= 100}
+                                  onClick={() =>
+                                    onAdjustScore
+                                      ? onAdjustScore(info.rawKey, 5)
+                                      : onScoreChange &&
+                                        onScoreChange(info.rawKey, Math.min(100, info.score + 5))
+                                  }
+                                  className="min-w-[40px] min-h-[40px] rounded-xl bg-[#F5F7FC] border border-[#E7EBF2] text-[#17233D] flex items-center justify-center cursor-pointer"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
-
-                  <button
-                    type="button"
-                    onClick={() => toggleCategory(cat.key)}
-                    className="w-10 h-10 min-w-[40px] min-h-[40px] flex items-center justify-center text-slate-500 hover:text-slate-800 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"
-                    aria-label={`Buka/tutup ${cat.label}`}
-                  >
-                    {isOpen ? (
-                      <ChevronUp className="w-4 h-4" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4" />
-                    )}
-                  </button>
                 </div>
-              </div>
-
-              {/* ACCORDION BODY */}
-              <AnimatePresence initial={false}>
-                {isOpen && (
-                  <motion.div
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.18 }}
-                    className="border-t border-slate-200/70 p-3 sm:p-4 bg-slate-50/50"
-                  >
-                    {indicators.length === 0 ? (
-                      <div className="p-3 text-center text-xs text-slate-500">
-                        Tidak ada indikator aktif pada jenjang ini.
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2.5">
-                        {indicators.map((indName) => {
-                          const measuredRec = resolveMeasuredEntry(indName);
-                          return (
-                            <AccordionIndicatorCard
-                              key={indName}
-                              title={indName}
-                              value={resolveIndicatorScore(scores, indName)}
-                              isSpecial={cat.isSpecial}
-                              isMeasuredFromTest={measuredRec?.source === 'battery_test'}
-                              lockedToMasterLibrary={lockedToMasterLibrary}
-                              attendanceBadgeText={resolveAttendanceBadge(indName, cat.key)}
-                              onScoreChange={(val) => onScoreChange && onScoreChange(indName, val)}
-                              onAdjust={(delta) => onAdjustScore && onAdjustScore(indName, delta)}
-                              isArchived={isArchived}
-                              accentColor={theme.color}
-                            />
-                          );
-                        })}
-                      </div>
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
+              )}
             </div>
           );
         })}

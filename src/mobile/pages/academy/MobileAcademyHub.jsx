@@ -119,16 +119,20 @@ export default function MobileAcademyHub({ userProfile }) {
   const handleTabChange = (tab) => {
     if (isCoachOnly && (tab === 'dasbor' || tab === 'siswa' || tab === 'pelatih')) return;
     setActiveTab(tab);
-    if (tab === 'presensi') {
-      setSearchParams({ tab, subtab: attendanceSubTab });
-    } else {
-      setSearchParams({ tab });
+    const nextParams = tab === 'presensi' ? { tab, subtab: attendanceSubTab } : { tab };
+    if (searchParams.get('demo')) {
+      nextParams.demo = searchParams.get('demo');
     }
+    setSearchParams(nextParams);
   };
 
   const handleAttendanceSubTabChange = (subTab) => {
     setAttendanceSubTab(subTab);
-    setSearchParams({ tab: 'presensi', subtab: subTab });
+    const nextParams = { tab: 'presensi', subtab: subTab };
+    if (searchParams.get('demo')) {
+      nextParams.demo = searchParams.get('demo');
+    }
+    setSearchParams(nextParams);
   };
 
   // Academies & Active Workspace

@@ -237,9 +237,20 @@ export default function AcademyPage({ userProfile }) {
     }
   }, [isCoachOnly, coachProfile?.academy_id, activeAcademyId]);
 
-  // Sync activeAcademyTab when URL tab parameter changes
+  const resolveDesktopSubTab = (raw) => {
+    if (raw === 'evaluasi') return 'evaluasi';
+    if (raw === 'antropometri' || raw === 'growth' || raw === 'perkembangan') return 'antropometri';
+    return 'presensi';
+  };
+
+  // Attendance & Evaluation State
+  const [selectedClassId, setSelectedClassId] = useState('');
+  const [attendanceSubTab, setAttendanceSubTab] = useState(() => resolveDesktopSubTab(searchParams.get('subtab'))); // 'presensi' | 'evaluasi' | 'antropometri'
+
+  // Sync activeAcademyTab and attendanceSubTab when URL parameters change
   useEffect(() => {
     const currentTab = searchParams.get('tab');
+    const currentSubTab = searchParams.get('subtab');
     if (currentTab && validTabs.includes(currentTab)) {
       if (isCoachOnly && (currentTab === 'dasbor' || currentTab === 'siswa' || currentTab === 'pelatih')) {
         setActiveAcademyTab('kelas');
@@ -249,20 +260,35 @@ export default function AcademyPage({ userProfile }) {
     } else if (!currentTab) {
       setActiveAcademyTab(isCoachOnly ? 'kelas' : 'dasbor');
     }
+    if (currentSubTab) {
+      setAttendanceSubTab(resolveDesktopSubTab(currentSubTab));
+    }
   }, [searchParams, isCoachOnly]);
 
   const handleTabChange = (tab) => {
     if (isCoachOnly && (tab === 'dasbor' || tab === 'siswa' || tab === 'pelatih')) return;
     setActiveAcademyTab(tab);
-    setSearchParams({ tab });
+    const nextParams = { tab };
+    if (tab === 'presensi' && attendanceSubTab) {
+      nextParams.subtab = attendanceSubTab;
+    }
+    if (searchParams.get('demo')) {
+      nextParams.demo = searchParams.get('demo');
+    }
+    setSearchParams(nextParams);
+  };
+
+  const handleDesktopSubTabChange = (subTab) => {
+    setAttendanceSubTab(subTab);
+    const nextParams = { tab: 'presensi', subtab: subTab };
+    if (searchParams.get('demo')) {
+      nextParams.demo = searchParams.get('demo');
+    }
+    setSearchParams(nextParams);
   };
 
   // Smart Collapsible Card State for Student List
   const [expandedStudentId, setExpandedStudentId] = useState(null);
-
-  // Attendance & Evaluation State
-  const [selectedClassId, setSelectedClassId] = useState('');
-  const [attendanceSubTab, setAttendanceSubTab] = useState('presensi'); // 'presensi' | 'evaluasi'
 
   // Real-Time States from Database
   const [students, setStudents] = useState([]);
@@ -2027,7 +2053,7 @@ export default function AcademyPage({ userProfile }) {
               <div className="grid grid-cols-3 gap-1 p-0.5 bg-slate-200/70 dark:bg-[#111C19] rounded-xl w-full">
                 <button
                   type="button"
-                  onClick={() => setAttendanceSubTab('presensi')}
+                  onClick={() => handleDesktopSubTabChange('presensi')}
                   className={`text-xs font-bold py-1.5 text-center rounded-lg transition-all cursor-pointer ${
                     attendanceSubTab === 'presensi'
                       ? 'bg-[#354944] text-white shadow-xs border-b-2 border-[#C89D32]'
@@ -2039,7 +2065,7 @@ export default function AcademyPage({ userProfile }) {
 
                 <button
                   type="button"
-                  onClick={() => setAttendanceSubTab('evaluasi')}
+                  onClick={() => handleDesktopSubTabChange('evaluasi')}
                   className={`text-xs font-bold py-1.5 text-center rounded-lg transition-all cursor-pointer ${
                     attendanceSubTab === 'evaluasi'
                       ? 'bg-[#354944] text-white shadow-xs border-b-2 border-[#C89D32]'
@@ -2051,7 +2077,7 @@ export default function AcademyPage({ userProfile }) {
 
                 <button
                   type="button"
-                  onClick={() => setAttendanceSubTab('antropometri')}
+                  onClick={() => handleDesktopSubTabChange('antropometri')}
                   className={`text-xs font-bold py-1.5 text-center rounded-lg transition-all cursor-pointer ${
                     attendanceSubTab === 'antropometri'
                       ? 'bg-[#354944] text-white shadow-xs border-b-2 border-[#C89D32]'

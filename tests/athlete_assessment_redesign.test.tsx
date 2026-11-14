@@ -47,9 +47,9 @@ test('ScoutingPolarAreaPanel: renders focused Opta Polar-Area Chart without dupl
     />
   );
 
-  // Assert container and Opta Polar-Area header
-  assert.ok(markup.includes('Scouting Polar-Area Chart'));
-  assert.ok(markup.includes('Opta Nightingale Rose'));
+  // Assert container and Polar-Area header without internal Opta Nightingale Rose subtitle
+  assert.ok(markup.includes('Profil Performa Polar Area'));
+  assert.strictEqual(markup.includes('Opta Nightingale Rose'), false, 'Internal Opta Nightingale Rose label should be removed');
 
   // Assert Overall score badge in header and center hub
   assert.ok(markup.includes('80 / 100'));
@@ -76,7 +76,7 @@ test('ScoutingPolarAreaPanel: renders focused Opta Polar-Area Chart without dupl
   assert.strictEqual(markup.includes('Nilai'), false, 'Duplicate Nilai buttons should be removed from chart panel');
 });
 
-test('AssessmentIndicatorsAccordion: renders collapsible category sections with stepper and presets', () => {
+test('AssessmentIndicatorsAccordion: renders collapsible domain sections and strips internal technical jargon', () => {
   const mockCategories = [
     { key: 'fisik', label: 'Kondisi Fisik', shortLabel: 'Fisik', count: 2, score: 80, indicators: ['Daya Tahan Aerobik', 'Kecepatan Sprint'] },
     { key: 'teknik', label: 'Kemampuan Teknik', shortLabel: 'Teknik', count: 2, score: 60, indicators: ['First Touch', 'Akurasi Passing'] }
@@ -97,32 +97,31 @@ test('AssessmentIndicatorsAccordion: renders collapsible category sections with 
       onSetCategoryPreset={() => {}}
       tierLabel="Fase 3: U-14 & U-16"
       isArchived={false}
+      lockedToMasterLibrary={true}
     />
   );
 
   // Header and title
-  assert.ok(markup.includes('Lembar Penilaian Indikator (7 Kategori)'));
+  assert.ok(markup.includes('Rincian Indikator Domain'));
   assert.ok(markup.includes('Fase 3: U-14 &amp; U-16') || markup.includes('Fase 3: U-14 & U-16'));
 
   // Category labels and indicator counts
   assert.ok(markup.includes('Kondisi Fisik'));
   assert.ok(markup.includes('Kemampuan Teknik'));
-  assert.ok(markup.includes('2 Indikator'));
-
-  // Preset buttons
-  assert.ok(markup.includes('Reset'));
-  assert.ok(markup.includes('50'));
-  assert.ok(markup.includes('75'));
-  assert.ok(markup.includes('90'));
 
   // Indicator titles and scores
   assert.ok(markup.includes('Daya Tahan Aerobik'));
   assert.ok(markup.includes('85'));
   assert.ok(markup.includes('Kecepatan Sprint'));
   assert.ok(markup.includes('75'));
+
+  // Verify internal implementation strings are removed from visible UI
+  assert.strictEqual(markup.includes('Terhubung ke Master Test Library'), false);
+  assert.strictEqual(markup.includes('Auto-Synced Test'), false);
+  assert.strictEqual(markup.includes('Input manual dikunci'), false);
 });
 
-test('ScoutingPolarAreaPanel: renders Edit Penilaian navigation button when onOpenEdit prop is passed', () => {
+test('ScoutingPolarAreaPanel: renders navigation action button when onOpenEdit or onOpenMasterLibrary prop is passed', () => {
   const mockCategories = [
     { key: 'fisik', label: '1. Kondisi Fisik', shortLabel: 'Fisik', count: 2, score: 85, indicators: ['Sprint', 'Stamina'] }
   ];
@@ -139,8 +138,7 @@ test('ScoutingPolarAreaPanel: renders Edit Penilaian navigation button when onOp
     />
   );
 
-  assert.ok(markup.includes('Edit Penilaian'), 'Should render Edit Penilaian button when onOpenEdit is provided');
-  assert.ok(markup.includes('Ketuk untuk edit lembar penilaian indikator') || markup.includes('Ketuk untuk edit penilaian'));
+  assert.ok(markup.includes('Rincian'), 'Should render Rincian action button in Polar Area header');
 });
 
 test('AthleteAssessmentEditView: renders dedicated assessment edit view with back button, preview score, and actions', () => {
@@ -171,7 +169,7 @@ test('AthleteAssessmentEditView: renders dedicated assessment edit view with bac
   assert.ok(markup.includes('Stamina'));
 });
 
-test('AthleteAssessmentEditView: consolidates Position & Tactical Role Configuration and Global Presets', () => {
+test('AthleteAssessmentEditView: consolidates Position & Tactical Role Configuration', () => {
   const mockCategories = [
     { key: 'fisik', label: '1. Kondisi Fisik', shortLabel: 'Fisik', count: 2, score: 80, indicators: ['Sprint', 'Stamina'] },
     { key: 'posisi', label: '7. Khusus Posisi (ST)', shortLabel: 'Khusus Posisi', count: 1, score: 85, indicators: ['Finishing'], isSpecial: true }
@@ -214,13 +212,7 @@ test('AthleteAssessmentEditView: consolidates Position & Tactical Role Configura
   assert.ok(markup.includes('2. Posisi Alternatif'));
   assert.ok(markup.includes('3. Spesialisasi Peran'));
   assert.ok(markup.includes('4. Profil Gaya Bermain Taktis (STY)'));
-
-  // Verify Global Presets are rendered inside Edit View
-  assert.ok(markup.includes('Preset Penilaian Cepat'));
-  assert.ok(markup.includes('Reset'));
-  assert.ok(markup.includes('Standard'));
-  assert.ok(markup.includes('Good'));
-  assert.ok(markup.includes('Elite'));
 });
+
 
 

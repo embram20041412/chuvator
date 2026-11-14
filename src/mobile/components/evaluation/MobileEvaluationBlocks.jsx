@@ -1,61 +1,61 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
-  Award,
-  Calendar,
-  User,
-  MessageSquare,
-  CheckCircle2,
-  AlertCircle,
-  Trash2,
-  Filter,
-  Loader2,
-  Target,
-  Sparkles,
   ChevronDown,
-  ChevronUp,
   ChevronLeft,
   ChevronRight,
-  GraduationCap,
-  Edit3,
-  Check,
+  Calendar,
   Search,
-  History
+  CheckCircle2,
+  Sparkles,
+  Trash2,
+  Eye,
+  X,
+  Users,
+  Award,
+  MessageSquare,
+  Loader2,
+  AlertCircle,
+  Edit3,
+  GraduationCap,
+  Layers,
+  ArrowRight
 } from 'lucide-react';
 import MobileBottomSheet from '../MobileBottomSheet';
-import { calculateAge } from '../../../utils/helpers';
+import { getCategoryTheme } from '../../../components/ScoutingPolarAreaPanel';
 
-function formatDateId(dateStr) {
+function formatShortDateIndo(dateStr) {
   if (!dateStr) return '-';
   try {
-    const parts = String(dateStr).split('-');
-    if (parts.length === 3) {
-      return `${parts[2]}/${parts[1]}/${parts[0]}`;
-    }
     const d = new Date(dateStr);
-    if (!isNaN(d.getTime())) {
-      const day = String(d.getDate()).padStart(2, '0');
-      const month = String(d.getMonth() + 1).padStart(2, '0');
-      const year = d.getFullYear();
-      return `${day}/${month}/${year}`;
-    }
-  } catch (e) {
-    // fallback
+    if (Number.isNaN(d.getTime())) return dateStr;
+    return d.toLocaleDateString('id-ID', {
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric'
+    });
+  } catch {
+    return dateStr;
   }
-  return dateStr;
 }
 
 function getInitials(name = '') {
-  const parts = String(name).trim().split(/\s+/).filter(Boolean);
+  const parts = String(name || 'Atlet')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
   if (parts.length === 0) return 'AT';
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
 }
 
 /**
- * A & B. Konteks Evaluasi + Pemilih Atlet Ringkas dengan Bottom Sheet Pencarian
+ * 1. MobileEvaluationContextBar
+ * Header & Konteks Atlet untuk Mobile (<= 767px)
+ * Dilengkapi Bottom Sheet pemilihan atlet, prev/next, tanggal evaluasi, dan fase usia.
  */
 export function MobileEvaluationContextBar({
   selectedClass,
+  activeAcademy,
   students = [],
   selectedStudent,
   onSelectStudentId,
@@ -68,218 +68,232 @@ export function MobileEvaluationContextBar({
   history = [],
   isArchived = false,
   positionBadge = '',
-  sportLabel = ''
+  sportLabel = '',
+  studentAge = null
 }) {
-  const [isAthleteSheetOpen, setIsAthleteSheetOpen] = useState(false);
+  const [showAthleteSheet, setShowAthleteSheet] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const currentIndex = useMemo(() => {
-    if (!selectedStudent || students.length === 0) return -1;
+  const currentIdx = useMemo(() => {
+    if (!selectedStudent?.id) return -1;
     return students.findIndex((s) => s.id === selectedStudent.id);
-  }, [students, selectedStudent]);
+  }, [students, selectedStudent?.id]);
 
-  const handlePrev = () => {
-    if (currentIndex > 0) {
-      onSelectStudentId(students[currentIndex - 1].id);
+  const handlePrevStudent = () => {
+    if (currentIdx > 0 && onSelectStudentId) {
+      onSelectStudentId(students[currentIdx - 1].id);
     }
   };
 
-  const handleNext = () => {
-    if (currentIndex >= 0 && currentIndex < students.length - 1) {
-      onSelectStudentId(students[currentIndex + 1].id);
+  const handleNextStudent = () => {
+    if (currentIdx >= 0 && currentIdx < students.length - 1 && onSelectStudentId) {
+      onSelectStudentId(students[currentIdx + 1].id);
     }
   };
-
-  const evaluatedStudentIdsAny = useMemo(() => {
-    return new Set((history || []).map((h) => h.studentId));
-  }, [history]);
 
   const filteredStudents = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return students;
     return students.filter((st) => {
-      const name = String(st.studentName || st.name || '').toLowerCase();
-      const pos = String(st.playerRole || st.position || '').toLowerCase();
-      return name.includes(q) || pos.includes(q);
+      const name = (st.studentName || st.name || '').toLowerCase();
+      const role = (st.playerRole || st.position || '').toLowerCase();
+      return name.includes(q) || role.includes(q);
     });
   }, [students, searchQuery]);
 
-  const studentAge = useMemo(() => {
-    if (!selectedStudent) return null;
-    if (selectedStudent.birthDate) {
-      const calc = calculateAge(selectedStudent.birthDate);
-      if (calc && calc !== '-') return `${calc}`.replace(/\D/g, '') || null;
-    }
-    return selectedStudent.age || selectedStudent.umur || null;
-  }, [selectedStudent]);
+  const latestScoreByStudentId = useMemo(() => {
+    const map = {};
+    (history || []).forEach((h) => {
+      if (!h.studentId) return;
+      if (!map[h.studentId]) {
+        map[h.studentId] = h;
+      }
+    });
+    return map;
+  }, [history]);
+
+  const academyName = activeAcademy?.name || sportLabel || 'Akademi';
+  const className = selectedClass?.className || 'Kelas Latihan';
 
   return (
     <div className="chua-m-eval-card space-y-2.5">
-      {/* Row 1: Compact Context Meta (Active Class, Sport, Position/Role) */}
-      <div className="flex items-center justify-between gap-2 text-[11px]">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className="font-bold text-[#17233D] truncate">
-            {selectedClass?.className || selectedClass?.name || 'Kelas Aktif'}
-          </span>
-          {sportLabel && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#F5F7FC] text-[#2455E8] border border-[#E7EBF2] shrink-0">
-              {sportLabel}
+      {/* Top Row: Title, Academy & Class Context */}
+      <div className="flex items-center justify-between gap-2 pb-2 border-b border-[#E7EBF2]">
+        <div className="min-w-0">
+          <h2 className="text-[15px] font-extrabold text-[#17233D] tracking-tight my-0">
+            Evaluasi Atlet
+          </h2>
+          <p className="text-[11px] font-medium text-[#68758B] truncate my-0 mt-0.5">
+            {academyName} &bull; {className}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0">
+          {positionBadge && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#2455E8]/10 text-[#2455E8]">
+              {positionBadge}
+            </span>
+          )}
+          {isArchived && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+              Arsip
             </span>
           )}
         </div>
-        {students.length > 0 && (
-          <span className="font-mono text-[11px] font-bold text-[#68758B] shrink-0">
-            Atlet {currentIndex >= 0 ? currentIndex + 1 : 1}/{students.length}
-          </span>
-        )}
       </div>
 
-      {/* Row 2: Compact Searchable Athlete Selector + Quick Prev/Next */}
+      {/* Athlete Selector Row: Prev + BottomSheet Trigger + Next */}
       <div className="flex items-center gap-1.5">
         <button
           type="button"
-          onClick={handlePrev}
-          disabled={currentIndex <= 0}
+          onClick={handlePrevStudent}
+          disabled={currentIdx <= 0}
+          aria-label="Atlet Sebelumnya"
           className="chua-m-eval-nav-icon-btn"
-          aria-label="Atlet sebelumnya"
-          title="Atlet sebelumnya"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
 
         <button
           type="button"
-          onClick={() => {
-            setSearchQuery('');
-            setIsAthleteSheetOpen(true);
-          }}
+          onClick={() => setShowAthleteSheet(true)}
           className="chua-m-eval-athlete-trigger flex-1 min-w-0"
-          aria-label="Pilih atlet evaluasi"
         >
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-[10px] bg-[#101D38] text-white font-bold text-[12px] flex items-center justify-center shrink-0">
+            <div className="w-9 h-9 rounded-full bg-[#101D38] text-white flex items-center justify-center font-bold text-xs shrink-0">
               {getInitials(selectedStudent?.studentName || selectedStudent?.name)}
             </div>
-            <div className="min-w-0">
-              <div className="font-bold text-[13px] text-[#17233D] truncate leading-tight">
-                {selectedStudent?.studentName || selectedStudent?.name || 'Pilih Atlet'}
-              </div>
-              <div className="flex items-center gap-1.5 text-[11px] text-[#68758B] font-medium truncate mt-0.5">
-                {studentAge && <span>{studentAge} Thn</span>}
-                {studentAge && positionBadge && <span>&bull;</span>}
-                {positionBadge && (
-                  <span className="font-bold text-[#2455E8] truncate">{positionBadge}</span>
+            <div className="min-w-0 flex-1 text-left">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-[#2455E8]">
+                  Atlet {currentIdx >= 0 ? `${currentIdx + 1}/${students.length}` : ''}
+                </span>
+                {studentAge ? (
+                  <span className="text-[10px] font-semibold text-[#68758B]">
+                    &bull; {studentAge} Thn
+                  </span>
+                ) : null}
+                {selectedStudent && evaluatedStudentIdsToday.has(selectedStudent.id) && (
+                  <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-50 text-[#16A779] border border-emerald-200 shrink-0">
+                    Terisi
+                  </span>
                 )}
               </div>
+              <p className="text-[13px] font-bold text-[#17233D] truncate my-0">
+                {selectedStudent?.studentName || selectedStudent?.name || 'Pilih Atlet'}
+              </p>
             </div>
           </div>
-
-          <div className="flex items-center gap-1 text-[11px] font-bold text-[#2455E8] shrink-0">
-            <span>Ganti</span>
-            <ChevronDown className="w-4 h-4" />
-          </div>
+          <ChevronDown className="w-4 h-4 text-[#68758B] shrink-0" />
         </button>
 
         <button
           type="button"
-          onClick={handleNext}
-          disabled={currentIndex < 0 || currentIndex >= students.length - 1}
+          onClick={handleNextStudent}
+          disabled={currentIdx < 0 || currentIdx >= students.length - 1}
+          aria-label="Atlet Berikutnya"
           className="chua-m-eval-nav-icon-btn"
-          aria-label="Atlet berikutnya"
-          title="Atlet berikutnya"
         >
           <ChevronRight className="w-4 h-4" />
         </button>
       </div>
 
-      {/* Row 3: Evaluation Date & Curriculum Tier Selector */}
-      <div className={`grid ${tierOptions.length > 0 ? 'grid-cols-2' : 'grid-cols-1'} gap-2`}>
-        <div className="chua-m-eval-control-pill">
+      {/* Controls Row: Date & Development Phase */}
+      <div
+        className={`grid gap-2 ${
+          tierOptions && tierOptions.length > 0 ? 'grid-cols-2' : 'grid-cols-1'
+        }`}
+      >
+        <div className="chua-m-eval-control-pill min-h-[48px]">
           <div className="flex items-center gap-1.5 min-w-0 flex-1">
             <Calendar className="w-3.5 h-3.5 text-[#2455E8] shrink-0" />
             <input
               type="date"
-              aria-label="Tanggal evaluasi"
+              aria-label="Tanggal Evaluasi"
               disabled={isArchived}
-              value={evaluationDate}
-              onChange={(e) => onChangeDate(e.target.value)}
-              className="w-full bg-transparent text-[12px] font-bold text-[#17233D] focus:outline-none cursor-pointer disabled:opacity-60 min-w-0"
+              value={evaluationDate || ''}
+              onChange={(e) => onChangeDate && onChangeDate(e.target.value)}
+              className="w-full bg-transparent text-[12px] font-bold text-[#17233D] focus:outline-none cursor-pointer disabled:opacity-60"
             />
           </div>
         </div>
 
-        {tierOptions.length > 0 && (
-          <div className="chua-m-eval-control-pill">
-            <GraduationCap className="w-3.5 h-3.5 text-[#2455E8] shrink-0" />
-            <select
-              aria-label="Jenjang evaluasi"
-              disabled={isArchived}
-              value={tierValue}
-              onChange={(e) => onChangeTier(e.target.value)}
-              className="w-full bg-transparent text-[12px] font-bold text-[#17233D] focus:outline-none truncate cursor-pointer disabled:opacity-60 min-w-0"
-            >
-              {tierOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
+        {tierOptions && tierOptions.length > 0 && (
+          <div className="chua-m-eval-control-pill min-h-[48px]">
+            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+              <GraduationCap className="w-3.5 h-3.5 text-[#16A779] shrink-0" />
+              <select
+                aria-label="Fase Usia Evaluasi"
+                disabled={isArchived}
+                value={tierValue || 'AUTO'}
+                onChange={(e) => onChangeTier && onChangeTier(e.target.value)}
+                className="w-full bg-transparent text-[12px] font-bold text-[#17233D] focus:outline-none truncate cursor-pointer disabled:opacity-60"
+              >
+                {tierOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         )}
       </div>
 
-      {/* Bottom Sheet: Searchable Athlete Selector */}
+      {/* Bottom Sheet: Pilih Atlet */}
       <MobileBottomSheet
-        isOpen={isAthleteSheetOpen}
-        onClose={() => setIsAthleteSheetOpen(false)}
-        title={`Pilih Atlet (${students.length})`}
-        subtitle={selectedClass?.className || selectedClass?.name || 'Daftar atlet kelas aktif'}
+        isOpen={showAthleteSheet}
+        onClose={() => {
+          setShowAthleteSheet(false);
+          setSearchQuery('');
+        }}
+        title="Pilih Atlet Evaluasi"
+        subtitle={`${students.length} atlet terdaftar di ${className}`}
       >
         <div className="space-y-3">
-          {/* Search Input */}
-          <div className="relative">
-            <Search className="w-4 h-4 text-[#68758B] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari nama atlet atau posisi..."
-              aria-label="Cari nama atlet"
-              className="w-full min-h-[44px] pl-9 pr-3 py-2 bg-[#F5F7FC] border border-[#E7EBF2] rounded-[12px] text-[13px] font-medium text-[#17233D] focus:bg-white focus:border-[#2455E8] focus:outline-none"
-            />
-          </div>
+          {students.length > 4 && (
+            <div className="chua-mobile-search-bar !mb-2">
+              <Search className="w-4 h-4 chua-mobile-search-icon" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Cari nama atau posisi atlet..."
+                className="chua-mobile-input-field chua-mobile-search-input !h-[48px] !text-[13px]"
+              />
+            </div>
+          )}
 
-          {/* Athlete List */}
-          <div className="space-y-1.5 max-h-[52vh] overflow-y-auto pr-0.5">
+          <div className="space-y-1.5 max-h-[55vh] overflow-y-auto pr-0.5">
             {filteredStudents.length === 0 ? (
-              <div className="py-6 text-center text-[12px] text-[#68758B] font-medium">
+              <div className="py-6 text-center text-xs text-[#68758B] font-medium">
                 Atlet tidak ditemukan.
               </div>
             ) : (
               filteredStudents.map((st) => {
                 const isSelected = st.id === selectedStudent?.id;
                 const isEvaluatedToday = evaluatedStudentIdsToday.has(st.id);
-                const hasAnyEval = evaluatedStudentIdsAny.has(st.id);
+                const latestDoc = latestScoreByStudentId[st.id];
                 const pos = st.playerRole || st.position || '';
-                const ageVal = st.birthDate ? calculateAge(st.birthDate) : (st.age || st.umur || '');
 
                 return (
                   <button
                     key={st.id}
                     type="button"
                     onClick={() => {
-                      onSelectStudentId(st.id);
-                      setIsAthleteSheetOpen(false);
+                      if (onSelectStudentId) onSelectStudentId(st.id);
+                      setShowAthleteSheet(false);
+                      setSearchQuery('');
                     }}
-                    className={`w-full min-h-[52px] p-2.5 rounded-[12px] border text-left flex items-center justify-between gap-2.5 transition-all cursor-pointer ${
+                    className={`w-full min-h-[54px] p-2.5 rounded-xl border text-left flex items-center justify-between gap-2.5 transition-all cursor-pointer ${
                       isSelected
                         ? 'bg-[#2455E8]/8 border-[#2455E8]'
-                        : 'bg-white border-[#E7EBF2]'
+                        : 'bg-[#FFFFFF] border-[#E7EBF2] active:bg-[#F5F7FC]'
                     }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div
-                        className={`w-9 h-9 rounded-[10px] font-bold text-[12px] flex items-center justify-center shrink-0 ${
+                        className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
                           isSelected
                             ? 'bg-[#2455E8] text-white'
                             : 'bg-[#F5F7FC] text-[#17233D] border border-[#E7EBF2]'
@@ -288,31 +302,31 @@ export function MobileEvaluationContextBar({
                         {getInitials(st.studentName || st.name)}
                       </div>
                       <div className="min-w-0">
-                        <div className="font-bold text-[13px] text-[#17233D] truncate">
+                        <p className="text-[13px] font-bold text-[#17233D] truncate my-0">
                           {st.studentName || st.name}
-                        </div>
-                        <div className="flex items-center gap-1.5 text-[11px] text-[#68758B] font-medium truncate">
-                          {ageVal && ageVal !== '-' && <span>{String(ageVal).replace(/\D/g, '')} Thn</span>}
-                          {pos && <span>• {pos}</span>}
+                        </p>
+                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                          {pos && (
+                            <span className="text-[10px] font-semibold text-[#68758B]">
+                              Posisi: {pos}
+                            </span>
+                          )}
+                          {latestDoc?.overallScore !== undefined && (
+                            <span className="text-[10px] font-bold text-[#2455E8] font-mono">
+                              &bull; Skor: {latestDoc.overallScore}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-1.5 shrink-0">
-                      {isEvaluatedToday ? (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#16A779]/15 text-[#16A779]">
-                          Hari Ini
-                        </span>
-                      ) : hasAnyEval ? (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#F5F7FC] text-[#17233D] border border-[#E7EBF2]">
+                      {isEvaluatedToday && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-[#16A779] border border-emerald-200">
                           Terisi
                         </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-medium text-[#68758B]">
-                          Baru
-                        </span>
                       )}
-                      {isSelected && <Check className="w-4 h-4 text-[#2455E8]" />}
+                      {isSelected && <CheckCircle2 className="w-4 h-4 text-[#2455E8]" />}
                     </div>
                   </button>
                 );
@@ -326,115 +340,221 @@ export function MobileEvaluationContextBar({
 }
 
 /**
- * C. Ringkasan Skor Utama (Chuvator Score 0-100, Grade Aktual, Identitas & Konteks Taktis)
+ * 2. MobileScoreHeroCard
+ * Ringkasan Performa Atlet (Skor Keseluruhan, Grade, Cakupan Indikator, Evaluasi Terakhir)
  */
 export function MobileScoreHeroCard({
-  studentName = '',
+  studentName,
   overallScore = 0,
-  gradeText = 'B (Baik)',
+  gradeText = 'B',
   positionLabel = '',
   tacticalRoleLabel = '',
   tierShortLabel = '',
   latestEvalDate = null,
-  evaluationDate = '',
+  evaluationDate = null,
+  measuredCount = 0,
+  totalIndicators = 0,
   onOpenEdit,
   isArchived = false
 }) {
-  const gradeLetter = String(gradeText).split(' ')[0] || 'B';
+  const cleanGradeCode = String(gradeText || 'B').split(' ')[0];
+  const hasScore = overallScore > 0 || measuredCount > 0;
 
   return (
     <div className="chua-m-eval-score-hero space-y-3">
+      {/* Top Row: Athlete Name, Role & Score */}
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1 space-y-1">
           <div className="flex items-center gap-1.5 flex-wrap">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-[#93B4FF]">
-              Chuvator Score
-            </span>
-            {latestEvalDate ? (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#16A779]/20 text-[#6EE7B7] border border-[#16A779]/40">
-                <CheckCircle2 className="w-3 h-3 shrink-0" />
-                <span>Riwayat {formatDateId(latestEvalDate)}</span>
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-white/10 text-slate-300">
-                <span>Sesi {formatDateId(evaluationDate)}</span>
-              </span>
-            )}
-          </div>
-
-          <h3 className="font-extrabold text-[16px] text-white leading-snug truncate my-0">
-            {studentName}
-          </h3>
-
-          <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
             {positionLabel && (
-              <span className="px-2 py-0.5 rounded-[8px] text-[11px] font-bold bg-[#2455E8] text-white">
+              <span className="chua-m-eval-score-badge-pill bg-[#2455E8] text-white">
                 {positionLabel}
               </span>
             )}
-            {tacticalRoleLabel && (
-              <span className="px-2 py-0.5 rounded-[8px] text-[11px] font-semibold bg-white/10 text-slate-200 truncate max-w-[180px]">
-                {tacticalRoleLabel}
-              </span>
-            )}
             {tierShortLabel && (
-              <span className="px-2 py-0.5 rounded-[8px] text-[11px] font-medium bg-white/10 text-slate-300">
+              <span className="chua-m-eval-score-badge-pill bg-white/12 text-slate-200">
                 {tierShortLabel}
               </span>
             )}
           </div>
+
+          <h3 className="text-[16px] font-extrabold text-white tracking-tight truncate my-0">
+            {studentName || 'Atlet'}
+          </h3>
+
+          {tacticalRoleLabel && (
+            <p className="text-[11px] text-slate-300 font-medium truncate my-0">
+              {tacticalRoleLabel}
+            </p>
+          )}
         </div>
 
-        {/* Focal Score & Grade */}
-        <div className="text-right shrink-0 bg-white/8 border border-white/15 rounded-[14px] px-3 py-2">
-          <div className="flex items-baseline justify-end gap-0.5">
-            <span className="font-mono text-[28px] font-black leading-none text-white tabular-nums">
-              {overallScore}
+        {/* Big Numeric Score Pill */}
+        <div className="bg-white/10 border border-white/15 rounded-2xl px-3.5 py-2 text-right shrink-0">
+          <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-300">
+            Skor Rapor
+          </span>
+          <div className="flex items-baseline justify-end gap-0.5 mt-0.5">
+            <span className="font-mono text-2xl font-black text-white leading-none tabular-nums">
+              {hasScore ? overallScore : '—'}
             </span>
-            <span className="text-[11px] font-bold text-slate-300">/100</span>
+            {hasScore && <span className="text-[10px] font-bold text-slate-300">/100</span>}
           </div>
-          <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#16A779] text-white text-[10px] font-extrabold">
-            <span>Grade {gradeLetter}</span>
-          </div>
+          <span className="inline-block mt-1 px-1.5 py-0.2 rounded text-[10px] font-extrabold bg-[#16A779]/25 text-emerald-300 border border-[#16A779]/40">
+            {hasScore ? `Grade ${cleanGradeCode}` : 'Belum Diukur'}
+          </span>
         </div>
       </div>
 
-      {/* Subtle Progress Bar + Quick Edit Trigger */}
-      <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-3">
-        <div className="flex-1 min-w-0 space-y-1">
-          <div className="flex items-center justify-between text-[11px]">
-            <span className="text-slate-300 font-medium truncate">{gradeText}</span>
-            <span className="font-mono font-bold text-white">{overallScore}%</span>
-          </div>
-          <div className="w-full h-1.5 bg-white/15 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-[#16A779] rounded-full transition-all duration-300"
-              style={{ width: `${Math.min(100, Math.max(0, overallScore))}%` }}
-            />
-          </div>
+      {/* Metadata Strip: Indikator Terukur & Evaluasi Terakhir */}
+      <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/12">
+        <div className="bg-white/8 rounded-xl px-2.5 py-1.5 border border-white/10">
+          <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-300">
+            Cakupan Indikator
+          </span>
+          <span className="font-mono text-[12px] font-extrabold text-white tabular-nums">
+            {totalIndicators > 0 ? `${measuredCount} / ${totalIndicators} Terukur` : `${measuredCount} Terukur`}
+          </span>
         </div>
+        <div className="bg-white/8 rounded-xl px-2.5 py-1.5 border border-white/10">
+          <span className="block text-[9px] font-bold uppercase tracking-wider text-slate-300">
+            Evaluasi Terakhir
+          </span>
+          <span className="text-[11px] font-bold text-white truncate block">
+            {latestEvalDate ? formatShortDateIndo(latestEvalDate) : 'Belum Ada'}
+          </span>
+        </div>
+      </div>
 
-        {onOpenEdit && !isArchived && (
+      {/* Optional Quick Edit Action */}
+      {onOpenEdit && !isArchived && (
+        <div className="flex justify-end pt-1">
           <button
             type="button"
-            onClick={() => onOpenEdit()}
-            className="min-h-[44px] px-3 py-2 rounded-[10px] bg-white text-[#101D38] text-[12px] font-bold flex items-center gap-1.5 shrink-0 cursor-pointer shadow-xs"
+            onClick={onOpenEdit}
+            className="min-h-[38px] px-3 py-1.5 rounded-xl bg-white/12 hover:bg-white/20 text-white text-[11px] font-bold flex items-center gap-1.5 border border-white/15 transition-colors cursor-pointer"
           >
-            <Edit3 className="w-3.5 h-3.5 text-[#2455E8]" />
-            <span>Posisi &amp; Preset</span>
+            <Edit3 className="w-3.5 h-3.5 text-emerald-300" />
+            <span>Konfigurasi Posisi & Peran</span>
           </button>
-        )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 3. MobileDomainPerformanceSummary
+ * Ringkasan 7 Domain Performa untuk Mobile (<= 767px)
+ */
+export function MobileDomainPerformanceSummary({
+  categoryList = [],
+  measuredIndicatorMap = {},
+  scores = {},
+  activeCategoryKey,
+  onSelectDomain
+}) {
+  return (
+    <div className="chua-m-eval-card space-y-2.5">
+      <div className="flex items-center justify-between gap-2 pb-2 border-b border-[#E7EBF2]">
+        <div className="flex items-center gap-2">
+          <Layers className="w-4 h-4 text-[#2455E8]" />
+          <h3 className="text-[14px] font-bold text-[#17233D] my-0">
+            Ringkasan Domain Performa
+          </h3>
+        </div>
+        <span className="text-[11px] font-semibold text-[#68758B]">
+          {categoryList.length} Domain
+        </span>
+      </div>
+
+      <div className="space-y-2">
+        {categoryList.map((cat) => {
+          const theme = getCategoryTheme(cat.key);
+          const indicators = cat.indicators || [];
+          const measuredInDomain = indicators.filter((ind) => {
+            const rec = measuredIndicatorMap?.[ind];
+            const scoreVal = scores?.[ind];
+            return (
+              (rec && Number(rec.score) > 0 && rec.hasAttendanceData !== false) ||
+              (scoreVal !== undefined && scoreVal !== null && Number(scoreVal) > 0)
+            );
+          }).length;
+
+          const isSelected = activeCategoryKey === cat.key;
+          const catScore = Math.max(0, Math.min(100, Math.round(Number(cat.score) || 0)));
+
+          return (
+            <div
+              key={`m-domain-summary-${cat.key}`}
+              className={`p-3 rounded-xl border transition-all ${
+                isSelected
+                  ? 'bg-[#F5F7FC] border-[#2455E8]'
+                  : 'bg-[#FFFFFF] border-[#E7EBF2]'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <span
+                    className="w-3 h-3 rounded-full shrink-0"
+                    style={{ backgroundColor: theme.color }}
+                  />
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-bold text-[#17233D] truncate my-0">
+                      {cat.shortLabel || cat.label}
+                    </p>
+                    <p className="text-[11px] text-[#68758B] font-medium my-0">
+                      {measuredInDomain}/{indicators.length} indikator terukur
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 shrink-0">
+                  <span
+                    className="font-mono text-[15px] font-extrabold tabular-nums"
+                    style={{ color: catScore > 0 ? theme.color : '#68758B' }}
+                  >
+                    {catScore > 0 ? catScore : '—'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onSelectDomain) onSelectDomain(cat.key);
+                      const el = document.getElementById(`domain-accordion-${cat.key}`);
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                    className="min-h-[36px] px-2.5 py-1 rounded-lg bg-[#F5F7FC] hover:bg-[#2455E8] text-[#2455E8] hover:text-white border border-[#E7EBF2] text-[11px] font-bold inline-flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <span>Detail</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="w-full h-1.5 bg-[#E7EBF2] rounded-full overflow-hidden mt-2">
+                <div
+                  className="h-full rounded-full transition-all duration-300"
+                  style={{
+                    width: `${catScore}%`,
+                    backgroundColor: theme.color
+                  }}
+                />
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
 /**
- * F & G. Catatan Pelatih dan AI Insight (Terpisah Jelas) + Simpan Evaluasi dengan Status
+ * 4. MobileAiAndCoachNotesSection
+ * Catatan Pelatih, Draf Analisis, dan CTA Simpan Evaluasi
  */
 export function MobileAiAndCoachNotesSection({
-  studentId,
-  studentName = 'Atlet',
+  studentId = '',
+  studentName = '',
   coachNote = '',
   onChangeCoachNote,
   onGenerateAiDraft,
@@ -446,146 +566,107 @@ export function MobileAiAndCoachNotesSection({
   successMsg = null,
   saveButtonLabel = 'Simpan Evaluasi Atlet'
 }) {
-  const [aiInsight, setAiInsight] = useState('');
-
-  // Reset AI Insight box when switching athletes so previous athlete's draft never leaks
-  useEffect(() => {
-    setAiInsight('');
-  }, [studentId]);
-
-  const handleTriggerAiDraft = () => {
-    if (onGenerateAiDraft) {
-      const generated = onGenerateAiDraft();
-      if (typeof generated === 'string' && generated.trim()) {
-        setAiInsight(generated);
-      }
-    }
-  };
-
   return (
     <div className="space-y-3">
-      {/* 1. AI INSIGHT & REKOMENDASI CARD (TERPISAH DARI CATATAN MANUAL) */}
+      {/* Coach Notes Card */}
       <div className="chua-m-eval-card space-y-2.5">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-8 h-8 rounded-[10px] bg-[#2455E8]/10 text-[#2455E8] flex items-center justify-center shrink-0">
-              <Sparkles className="w-4 h-4" />
+              <MessageSquare className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <h3 className="font-bold text-[13px] text-[#17233D] leading-tight truncate my-0">
-                AI Scouting Insight
-              </h3>
-              <p className="text-[11px] text-[#68758B] font-medium truncate my-0 mt-0.5">
-                Analisis otomatis kekuatan &amp; area fokus latihan
+              <h4 className="font-bold text-[13px] text-[#17233D] leading-tight my-0">
+                Catatan Evaluasi Pelatih
+              </h4>
+              <p className="text-[11px] text-[#68758B] font-medium leading-tight my-0 mt-0.5 truncate">
+                Umpan balik teknis & perkembangan untuk {studentName || 'atlet'}
               </p>
             </div>
           </div>
 
-          {!isArchived && (
+          {!isArchived && onGenerateAiDraft && (
             <button
               type="button"
-              onClick={handleTriggerAiDraft}
-              className="chua-m-eval-secondary-btn shrink-0 !border-[#2455E8]/30 !text-[#2455E8]"
+              onClick={() => onGenerateAiDraft()}
+              className="chua-m-eval-secondary-btn shrink-0 !px-2.5 !min-h-[38px]"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              <span>{aiInsight ? 'Perbarui AI' : 'Buat Draf AI'}</span>
+              <Sparkles className="w-3.5 h-3.5 text-[#2455E8]" />
+              <span>Buat Draf</span>
             </button>
           )}
         </div>
 
-        {aiInsight ? (
-          <div className="p-3 rounded-[12px] bg-[#F5F7FC] border border-[#E7EBF2] space-y-2">
-            <p className="text-[12px] text-[#17233D] font-medium leading-relaxed whitespace-pre-line my-0">
-              {aiInsight}
-            </p>
-          </div>
-        ) : (
-          <div className="px-3 py-2.5 rounded-[12px] bg-[#F5F7FC] border border-dashed border-[#E7EBF2] text-[11px] text-[#68758B] font-medium">
-            Ketuk <strong>Buat Draf AI</strong> untuk menyusun ringkasan analisis berdasarkan skor indikator {studentName}.
-          </div>
-        )}
-      </div>
-
-      {/* 2. CATATAN PELATIH & PENYIMPANAN EVALUASI */}
-      <div className="chua-m-eval-card space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <label
-            htmlFor="mobile-evaluation-coach-note"
-            className="text-[13px] font-bold text-[#17233D] flex items-center gap-2"
-          >
-            <MessageSquare className="w-4 h-4 text-[#2455E8] shrink-0" />
-            <span>Catatan Pelatih</span>
-          </label>
-
-          {/* Saved / Unsaved Status Pill */}
-          {hasUnsavedChanges ? (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-              Belum Disimpan
-            </span>
-          ) : latestEvalDate ? (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-[#16A779] border border-emerald-200">
-              <CheckCircle2 className="w-3 h-3 shrink-0" />
-              <span>Tersimpan ({formatDateId(latestEvalDate)})</span>
-            </span>
-          ) : (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-[#F5F7FC] text-[#68758B] border border-[#E7EBF2]">
-              Belum Ada Riwayat
-            </span>
-          )}
-        </div>
-
         <textarea
-          id="mobile-evaluation-coach-note"
-          name="coachNote"
-          aria-label="Catatan pelatih"
+          aria-label="Catatan Evaluasi Pelatih"
           disabled={isArchived}
           rows={3}
           value={coachNote}
-          onChange={(e) => onChangeCoachNote(e.target.value)}
-          placeholder={`Tulis evaluasi dan rekomendasi latihan untuk ${studentName}...`}
-          className="w-full p-3 text-[13px] bg-[#F5F7FC] border border-[#E7EBF2] rounded-[12px] focus:bg-white focus:border-[#2455E8] focus:outline-none font-medium text-[#17233D] leading-relaxed disabled:opacity-60"
+          onChange={(e) => onChangeCoachNote && onChangeCoachNote(e.target.value)}
+          placeholder={`Tuliskan evaluasi dan saran latihan untuk ${studentName || 'atlet'}...`}
+          className="w-full p-3 text-[13px] bg-[#F5F7FC] border border-[#E7EBF2] rounded-xl focus:bg-white focus:outline-none focus:border-[#2455E8] font-medium text-[#17233D] leading-relaxed disabled:opacity-60"
         />
 
+        {/* Inline Feedback Messages */}
         {errorMsg && (
-          <div className="p-2.5 bg-rose-50 border border-rose-200 text-rose-800 text-[12px] rounded-[12px] font-bold flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+          <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-[#DC4545] text-[12px] font-bold flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{errorMsg}</span>
           </div>
         )}
-
         {successMsg && (
-          <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 text-[12px] rounded-[12px] font-bold flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 text-[#16A779] shrink-0" />
+          <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-[#16A779] text-[12px] font-bold flex items-center gap-2">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
             <span>{successMsg}</span>
           </div>
         )}
 
-        <button
-          type="submit"
-          disabled={isSaving || isArchived}
-          className="chua-m-eval-primary-btn"
-        >
-          {isSaving ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin text-white" />
-              <span>Menyimpan Evaluasi...</span>
-            </>
-          ) : isArchived ? (
-            <span>Evaluasi Terkunci (Baca-Saja)</span>
-          ) : (
-            <>
-              <Award className="w-4 h-4 text-white" />
-              <span>{saveButtonLabel}</span>
-            </>
-          )}
-        </button>
+        {/* Primary Save Action */}
+        <div className="pt-1 space-y-1.5">
+          <div className="flex items-center justify-between text-[11px] px-0.5">
+            <span
+              className={`font-bold ${
+                hasUnsavedChanges ? 'text-amber-600' : 'text-[#68758B]'
+              }`}
+            >
+              {isArchived
+                ? 'Mode baca-saja (Kelas diarsipkan)'
+                : hasUnsavedChanges
+                ? 'Ada perubahan penilaian siap disimpan'
+                : latestEvalDate
+                ? `Tersimpan terakhir: ${formatShortDateIndo(latestEvalDate)}`
+                : 'Siap menyimpan rapor evaluasi'}
+            </span>
+          </div>
+
+          <button
+            type="submit"
+            disabled={isSaving || isArchived}
+            className="chua-m-eval-primary-btn"
+          >
+            {isSaving ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                <span>Menyimpan...</span>
+              </>
+            ) : isArchived ? (
+              <span>Evaluasi Terkunci</span>
+            ) : (
+              <>
+                <Award className="w-4 h-4" />
+                <span>{saveButtonLabel}</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
 /**
- * G. Riwayat Evaluasi dengan Progressive Disclosure (Tidak Memenuhi Halaman Utama)
+ * 5. MobileEvaluationHistorySection
+ * Riwayat Evaluasi Atlet untuk Mobile (<= 767px)
  */
 export function MobileEvaluationHistorySection({
   history = [],
@@ -597,8 +678,8 @@ export function MobileEvaluationHistorySection({
   isArchived = false,
   getScoreGradeFn
 }) {
-  const [isSectionOpen, setIsSectionOpen] = useState(false);
   const [expandedIds, setExpandedIds] = useState({});
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
   const toggleDetail = (id) => {
     setExpandedIds((prev) => ({
@@ -607,198 +688,186 @@ export function MobileEvaluationHistorySection({
     }));
   };
 
-  const filteredHistory = useMemo(() => {
-    return filterStudentId === 'ALL'
-      ? history
-      : history.filter((h) => h.studentId === filterStudentId);
-  }, [history, filterStudentId]);
-
   return (
-    <div className="chua-m-eval-card !p-0 overflow-hidden">
-      {/* Collapsible Header */}
-      <button
-        type="button"
-        onClick={() => setIsSectionOpen(!isSectionOpen)}
-        className="w-full min-h-[54px] px-3.5 py-3 flex items-center justify-between gap-2 text-left bg-white cursor-pointer"
-        aria-expanded={isSectionOpen}
-      >
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-[10px] bg-[#F5F7FC] border border-[#E7EBF2] text-[#101D38] flex items-center justify-center shrink-0">
-            <History className="w-4 h-4 text-[#2455E8]" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <span className="font-bold text-[13px] text-[#17233D] truncate">
-                Riwayat Evaluasi
-              </span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#F5F7FC] text-[#2455E8] border border-[#E7EBF2]">
-                {filteredHistory.length}
-              </span>
-            </div>
-            <p className="text-[11px] text-[#68758B] font-medium truncate my-0 mt-0.5">
-              {isSectionOpen ? 'Ketuk untuk menutup daftar riwayat' : 'Ketuk untuk melihat riwayat penilaian kelas'}
-            </p>
-          </div>
+    <div className="chua-m-eval-card space-y-3">
+      {/* Header & Athlete Filter */}
+      <div className="flex items-center justify-between gap-2 pb-2.5 border-b border-[#E7EBF2]">
+        <div className="min-w-0">
+          <h3 className="font-bold text-[14px] text-[#17233D] leading-tight my-0">
+            Riwayat Evaluasi Atlet
+          </h3>
+          <p className="text-[11px] text-[#68758B] font-medium my-0 mt-0.5">
+            {history.length} catatan evaluasi tersimpan
+          </p>
         </div>
 
-        <div className="flex items-center gap-1 text-[11px] font-bold text-[#2455E8] shrink-0">
-          <span>{isSectionOpen ? 'Tutup' : 'Buka'}</span>
-          {isSectionOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        <div className="flex items-center gap-1.5 bg-[#F5F7FC] border border-[#E7EBF2] rounded-xl px-2.5 py-1.5 min-h-[40px] max-w-[165px]">
+          <Users className="w-3.5 h-3.5 text-[#68758B] shrink-0" />
+          <select
+            aria-label="Filter Riwayat Atlet"
+            value={filterStudentId}
+            onChange={(e) => setFilterStudentId && setFilterStudentId(e.target.value)}
+            className="w-full bg-transparent text-[11px] font-bold text-[#17233D] focus:outline-none truncate cursor-pointer"
+          >
+            <option value="ALL">Semua Atlet ({students.length})</option>
+            {students.map((st) => (
+              <option key={st.id} value={st.id}>
+                {st.studentName || st.name}
+              </option>
+            ))}
+          </select>
         </div>
-      </button>
+      </div>
 
-      {isSectionOpen && (
-        <div className="p-3.5 pt-3 border-t border-[#E7EBF2] bg-[#F5F7FC]/50 space-y-3">
-          {/* Athlete Filter */}
-          <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-[12px] border border-[#E7EBF2] min-h-[44px]">
-            <Filter className="w-3.5 h-3.5 text-[#68758B] shrink-0" />
-            <select
-              aria-label="Filter riwayat atlet"
-              value={filterStudentId}
-              onChange={(e) => setFilterStudentId && setFilterStudentId(e.target.value)}
-              className="w-full bg-transparent text-[12px] font-bold text-[#17233D] focus:outline-none cursor-pointer"
-            >
-              <option value="ALL">Semua Atlet ({history.length})</option>
-              {students.map((st) => (
-                <option key={st.id} value={st.id}>
-                  {st.studentName || st.name}
-                </option>
-              ))}
-            </select>
-          </div>
+      {/* History List */}
+      {loadingHistory ? (
+        <div className="py-6 flex items-center justify-center gap-2 text-xs text-[#68758B] font-semibold">
+          <Loader2 className="w-4 h-4 animate-spin text-[#2455E8]" />
+          <span>Memuat riwayat evaluasi...</span>
+        </div>
+      ) : history.length === 0 ? (
+        <div className="py-6 text-center bg-[#F5F7FC] rounded-xl border border-dashed border-[#E7EBF2] p-4">
+          <p className="text-xs font-semibold text-[#68758B] my-0">
+            Belum ada riwayat evaluasi untuk filter ini.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {history.map((item) => {
+            const isExpanded = !!expandedIds[item.id];
+            const scoreEntries = Object.entries(item.scores || {});
+            const overallScore =
+              item.overallScore ??
+              (scoreEntries.length > 0
+                ? Math.round(
+                    scoreEntries.reduce((a, b) => a + Number(b[1] || 0), 0) /
+                      scoreEntries.length
+                  )
+                : 0);
+            const gradeObj = getScoreGradeFn
+              ? getScoreGradeFn(overallScore)
+              : { grade: 'B' };
+            const cleanGrade = String(gradeObj.grade || 'B').split(' ')[0];
 
-          {loadingHistory ? (
-            <div className="py-5 text-center text-[12px] text-[#68758B] font-medium">
-              Memuat riwayat evaluasi...
-            </div>
-          ) : filteredHistory.length === 0 ? (
-            <div className="py-5 text-center text-[12px] text-[#68758B] bg-white border border-dashed border-[#E7EBF2] rounded-[12px] p-3">
-              Belum ada riwayat evaluasi tersimpan.
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {filteredHistory.map((item) => {
-                const ps = item.pillarScores || {};
-                const gradeInfo = getScoreGradeFn
-                  ? getScoreGradeFn(item.overallScore || 0)
-                  : { grade: 'B', badge: 'bg-emerald-100 text-emerald-800' };
-                const isExpanded = Boolean(expandedIds[item.id]);
-
-                return (
-                  <div
-                    key={item.id}
-                    className="p-3 rounded-[14px] border border-[#E7EBF2] bg-white space-y-2"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <h4 className="font-bold text-[13px] text-[#17233D] truncate my-0">
-                            {item.studentName}
-                          </h4>
-                          {item.playerRole && (
-                            <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-[#F5F7FC] text-[#2455E8] border border-[#E7EBF2]">
-                              {item.playerRole}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-[11px] text-[#68758B] flex items-center gap-1 mt-0.5 truncate my-0">
-                          <Calendar className="w-3 h-3 text-[#2455E8] shrink-0" />
-                          <span>{formatDateId(item.date)}</span>
+            return (
+              <div
+                key={item.id}
+                className="rounded-xl border border-[#E7EBF2] bg-[#FFFFFF] overflow-hidden"
+              >
+                <div className="p-3 flex items-center justify-between gap-2.5">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-[13px] font-bold text-[#17233D] truncate">
+                        {item.studentName}
+                      </span>
+                      {item.playerRole && (
+                        <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-[#2455E8]/10 text-[#2455E8]">
+                          {item.playerRole}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-[#68758B] font-medium">
+                      <span>{formatShortDateIndo(item.date)}</span>
+                      {item.tierLabel && (
+                        <>
                           <span>&bull;</span>
-                          <span className="truncate">{item.evaluator || 'Pelatih'}</span>
-                        </p>
-                      </div>
+                          <span className="truncate">{item.tierLabel}</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
 
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <div className="text-right mr-1">
-                          <span className="font-mono text-[13px] font-extrabold text-[#17233D] block">
-                            {item.overallScore || 0}/100
-                          </span>
-                          <span className="text-[10px] font-bold text-[#16A779]">
-                            Grade {String(gradeInfo.grade).split(' ')[0]}
-                          </span>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => toggleDetail(item.id)}
-                          className="min-h-[44px] px-2.5 py-1.5 text-[11px] font-bold text-[#17233D] bg-[#F5F7FC] border border-[#E7EBF2] rounded-[10px] flex items-center gap-1 cursor-pointer"
-                        >
-                          <span>{isExpanded ? 'Tutup' : 'Detail'}</span>
-                          <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                        </button>
-
-                        {!isArchived && onDeleteEvaluation && (
-                          <button
-                            type="button"
-                            onClick={() => onDeleteEvaluation(item.id, item.studentName)}
-                            aria-label={`Hapus evaluasi ${item.studentName}`}
-                            className="w-11 h-11 min-w-[44px] min-h-[44px] flex items-center justify-center text-[#68758B] hover:text-rose-600 bg-[#F5F7FC] rounded-[10px] border border-[#E7EBF2] cursor-pointer"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <div className="px-2.5 py-1 rounded-lg bg-[#101D38] text-white text-right">
+                      <span className="font-mono text-xs font-black tabular-nums">
+                        {overallScore}
+                      </span>
+                      <span className="text-[9px] text-emerald-300 font-bold ml-1">
+                        {cleanGrade}
+                      </span>
                     </div>
 
-                    {isExpanded && (
-                      <div className="pt-2 border-t border-[#E7EBF2] space-y-2">
-                        {ps.fisik !== undefined && ps.komunikasi !== undefined ? (
-                          <div className="grid grid-cols-4 gap-1 text-[10px] text-center font-bold">
-                            <div className="p-1.5 bg-[#F5F7FC] text-[#17233D] rounded-[8px] border border-[#E7EBF2]">
-                              <span className="block text-[9px] text-[#68758B]">Fisik</span>
-                              <span>{ps.fisik}</span>
-                            </div>
-                            <div className="p-1.5 bg-[#F5F7FC] text-[#17233D] rounded-[8px] border border-[#E7EBF2]">
-                              <span className="block text-[9px] text-[#68758B]">Teknik</span>
-                              <span>{ps.teknik}</span>
-                            </div>
-                            <div className="p-1.5 bg-[#F5F7FC] text-[#17233D] rounded-[8px] border border-[#E7EBF2]">
-                              <span className="block text-[9px] text-[#68758B]">Taktik</span>
-                              <span>{ps.taktik}</span>
-                            </div>
-                            <div className="p-1.5 bg-[#F5F7FC] text-[#17233D] rounded-[8px] border border-[#E7EBF2]">
-                              <span className="block text-[9px] text-[#68758B]">Mental</span>
-                              <span>{ps.mental}</span>
-                            </div>
-                            <div className="p-1.5 bg-[#F5F7FC] text-[#17233D] rounded-[8px] border border-[#E7EBF2]">
-                              <span className="block text-[9px] text-[#68758B]">Dev</span>
-                              <span>{ps.perkembangan}</span>
-                            </div>
-                            <div className="p-1.5 bg-[#F5F7FC] text-[#17233D] rounded-[8px] border border-[#E7EBF2]">
-                              <span className="block text-[9px] text-[#68758B]">Kom</span>
-                              <span>{ps.komunikasi}</span>
-                            </div>
-                            <div className="p-1.5 bg-[#F5F7FC] text-[#17233D] rounded-[8px] border border-[#E7EBF2] col-span-2">
-                              <span className="block text-[9px] text-[#68758B]">Posisi</span>
-                              <span>{ps.khususPosisi || ps.position || 0}</span>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="grid grid-cols-3 gap-1 text-[10px] text-center font-bold">
-                            <div className="p-1.5 bg-[#F5F7FC] rounded-[8px]">Fisik: {ps.fisik || 0}</div>
-                            <div className="p-1.5 bg-[#F5F7FC] rounded-[8px]">Teknik: {ps.teknik || 0}</div>
-                            <div className="p-1.5 bg-[#F5F7FC] rounded-[8px]">Taktik: {ps.taktik || 0}</div>
-                            <div className="p-1.5 bg-[#F5F7FC] rounded-[8px]">Mental: {ps.mental || 0}</div>
-                            <div className="p-1.5 bg-[#F5F7FC] rounded-[8px] col-span-2">Posisi: {ps.position || ps.khususPosisi || 0}</div>
-                          </div>
-                        )}
+                    <button
+                      type="button"
+                      onClick={() => toggleDetail(item.id)}
+                      className="w-9 h-9 rounded-lg border border-[#E7EBF2] bg-[#F5F7FC] text-[#17233D] flex items-center justify-center cursor-pointer"
+                      aria-label="Lihat Detail Riwayat"
+                    >
+                      {isExpanded ? (
+                        <X className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4 text-[#2455E8]" />
+                      )}
+                    </button>
 
-                        {item.coachNote && (
-                          <div className="p-2.5 bg-[#F5F7FC] border border-[#E7EBF2] rounded-[10px] text-[11px] text-[#17233D] leading-relaxed whitespace-pre-line">
-                            <strong className="block text-[10px] uppercase font-bold text-[#68758B] mb-0.5">
-                              Catatan Pelatih:
-                            </strong>
-                            {item.coachNote}
+                    {!isArchived &&
+                      onDeleteEvaluation &&
+                      (confirmDeleteId === item.id ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onDeleteEvaluation(item.id);
+                              setConfirmDeleteId(null);
+                            }}
+                            className="h-9 px-2.5 rounded-lg bg-[#DC4545] text-white text-[10px] font-bold cursor-pointer"
+                          >
+                            Hapus
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDeleteId(null)}
+                            className="h-9 px-2 rounded-lg bg-[#F5F7FC] border border-[#E7EBF2] text-[#68758B] text-[10px] font-bold cursor-pointer"
+                          >
+                            Batal
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setConfirmDeleteId(item.id)}
+                          className="w-9 h-9 rounded-lg border border-rose-200 bg-rose-50 text-[#DC4545] flex items-center justify-center cursor-pointer"
+                          aria-label="Hapus Evaluasi"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      ))}
+                  </div>
+                </div>
+
+                {isExpanded && (
+                  <div className="p-3 bg-[#F5F7FC] border-t border-[#E7EBF2] space-y-2.5">
+                    {item.coachNote && (
+                      <div className="p-2.5 rounded-lg bg-white border border-[#E7EBF2] text-[12px] text-[#17233D] leading-relaxed">
+                        <span className="block text-[10px] font-bold uppercase tracking-wider text-[#68758B] mb-0.5">
+                          Catatan Pelatih:
+                        </span>
+                        {item.coachNote}
+                      </div>
+                    )}
+
+                    {scoreEntries.length > 0 && (
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {scoreEntries.map(([ind, val]) => (
+                          <div
+                            key={ind}
+                            className="px-2.5 py-1.5 rounded-lg bg-white border border-[#E7EBF2] flex items-center justify-between gap-1.5"
+                          >
+                            <span className="text-[11px] font-semibold text-[#17233D] truncate">
+                              {ind}
+                            </span>
+                            <span className="font-mono text-[11px] font-extrabold text-[#2455E8] shrink-0 tabular-nums">
+                              {val}
+                            </span>
                           </div>
-                        )}
+                        ))}
                       </div>
                     )}
                   </div>
-                );
-              })}
-            </div>
-          )}
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
