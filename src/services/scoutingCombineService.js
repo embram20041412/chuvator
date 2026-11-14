@@ -363,6 +363,19 @@ export async function getAthleteTestSessions(tenantId, athleteId, limitCount = 6
   return data || [];
 }
 
+function formatTestingDateYmd(value) {
+  const raw = toDateOrNull(value);
+  if (raw) {
+    const ymdMatch = raw.match(/^(\d{4}-\d{2}-\d{2})/);
+    if (ymdMatch) return ymdMatch[1];
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toISOString().split('T')[0];
+    }
+  }
+  return new Date().toISOString().split('T')[0];
+}
+
 /**
  * Persist Master Test Library session entries to `public.athlete_test_sessions`
  * and atomically aggregate + upsert `public.athlete_indicator_scores` (source = 'battery_test')
@@ -383,7 +396,7 @@ export async function saveMasterAssessmentSessionAndSync({
     throw new Error('Minimal satu hasil tes pada Master Test Library harus diisi sebelum sinkronisasi.');
   }
 
-  const finalDate = toDateOrNull(testingDate) || new Date().toISOString().split('T')[0];
+  const finalDate = formatTestingDateYmd(testingDate);
   const nowIso = new Date().toISOString();
 
   const normalizedSessions = sessionEntries.map((item) => {
@@ -414,11 +427,9 @@ export async function saveMasterAssessmentSessionAndSync({
         ? Number(item.raw_value_2)
         : null;
     const errs = Math.max(0, parseInt(item.errors_count ?? 0, 10) || 0);
-
-    const existingSessionId = item.id || item.session_id || item.sessionId || null;
+    const formattedTestingDate = formatTestingDateYmd(item.testing_date || item.testingDate || finalDate);
 
     return {
-      ...(existingSessionId ? { id: existingSessionId } : {}),
       test_code: testMeta?.test_code || code,
       test_name: testMeta?.test_name || code,
       indicator_key: indicatorKey,
@@ -432,7 +443,7 @@ export async function saveMasterAssessmentSessionAndSync({
       raw_value_2: raw2 !== null && Number.isFinite(raw2) ? raw2 : null,
       errors_count: errs,
       calculated_score: calculated,
-      testing_date: finalDate
+      testing_date: formattedTestingDate
     };
   });
 
@@ -440,29 +451,35 @@ export async function saveMasterAssessmentSessionAndSync({
   const aggregatedIndicatorsMap = aggregateIndicatorScores(normalizedSessions);
   const aggregatedList = Object.values(aggregatedIndicatorsMap);
 
-  // Demo mode persistence
+  // Demo mode persistence (deduplicated by daily constraint: tenant_id, athlete_id, test_code, testing_date)
   if (isDemoAssessmentContext(tenantId, athleteId)) {
     const sessionsKey = `${DEMO_SESSIONS_STORAGE_PREFIX}${tenantId}_${athleteId}`;
     const indicatorsKey = `${DEMO_INDICATOR_STORAGE_PREFIX}${tenantId}_${athleteId}`;
 
     const existingSessions = readLocalJson(sessionsKey, []);
-    const newSessionRows = normalizedSessions.map((entry, idx) => ({
-      id: entry.id || `demo-sess-${Date.now()}-${idx}`,
-      tenant_id: tenantId,
-      athlete_id: athleteId,
-      evaluator_id: evaluatorId || 'demo-coach',
-      test_code: entry.test_code,
-      raw_value_1: entry.raw_value_1,
-      raw_value_2: entry.raw_value_2,
-      errors_count: entry.errors_count,
-      calculated_score: entry.calculated_score,
-      testing_date: entry.testing_date,
-      created_at: nowIso
-    }));
-    const upsertedIds = new Set(newSessionRows.map((r) => r.id));
-    const remainingOld = (Array.isArray(existingSessions) ? existingSessions : []).filter(
-      (old) => !upsertedIds.has(old?.id)
-    );
+    const dailySessionMap = new Map();
+    normalizedSessions.forEach((entry, idx) => {
+      const dailyKey = `${tenantId}|${athleteId}|${entry.test_code}|${entry.testing_date}`;
+      dailySessionMap.set(dailyKey, {
+        id: `demo-sess-${Date.now()}-${idx}`,
+        tenant_id: tenantId,
+        athlete_id: athleteId,
+        evaluator_id: evaluatorId || 'demo-coach',
+        test_code: entry.test_code,
+        raw_value_1: entry.raw_value_1,
+        raw_value_2: entry.raw_value_2,
+        errors_count: entry.errors_count,
+        calculated_score: entry.calculated_score,
+        testing_date: entry.testing_date,
+        created_at: nowIso
+      });
+    });
+    const newSessionRows = Array.from(dailySessionMap.values());
+    const upsertedDailyKeys = new Set(dailySessionMap.keys());
+    const remainingOld = (Array.isArray(existingSessions) ? existingSessions : []).filter((old) => {
+      const oldKey = `${old?.tenant_id || tenantId}|${old?.athlete_id || athleteId}|${old?.test_code}|${formatTestingDateYmd(old?.testing_date)}`;
+      return !upsertedDailyKeys.has(oldKey);
+    });
     writeLocalJson(sessionsKey, [...newSessionRows, ...remainingOld].slice(0, 150));
 
     const existingIndicators = await getAthleteIndicatorScores(tenantId, athleteId, { tier });
@@ -490,13 +507,12 @@ export async function saveMasterAssessmentSessionAndSync({
     };
   }
 
-  // Real Supabase persistence (upsert onConflict: 'id' so resumed draft IDs update cleanly without 409 Conflict)
+  // Real Supabase persistence using uq_athlete_test_daily (tenant_id, athlete_id, test_code, testing_date)
   const safeEvaluatorId = toUuidOrNull(evaluatorId);
-  const rowsWithId = [];
-  const rowsWithoutId = [];
+  const dedupedPayloadMap = new Map();
 
   normalizedSessions.forEach((entry) => {
-    const validUuid = toUuidOrNull(entry.id);
+    const testingDateYmd = formatTestingDateYmd(entry.testing_date || finalDate);
     const payloadRow = {
       tenant_id: tenantId,
       athlete_id: athleteId,
@@ -506,37 +522,29 @@ export async function saveMasterAssessmentSessionAndSync({
       raw_value_2: entry.raw_value_2,
       errors_count: entry.errors_count,
       calculated_score: entry.calculated_score,
-      testing_date: entry.testing_date
+      testing_date: testingDateYmd
     };
-    if (validUuid) {
-      rowsWithId.push({ id: validUuid, ...payloadRow });
-    } else {
-      rowsWithoutId.push(payloadRow);
-    }
+    delete payloadRow.id;
+    const dailyKey = `${tenantId}|${athleteId}|${payloadRow.test_code}|${payloadRow.testing_date}`;
+    dedupedPayloadMap.set(dailyKey, payloadRow);
   });
 
-  const insertedSessions = [];
-  if (rowsWithId.length > 0) {
-    const { data: upsertedExisting, error: upsertExistingError } = await supabase
-      .from('athlete_test_sessions')
-      .upsert(rowsWithId, { onConflict: 'id' })
-      .select();
-    if (upsertExistingError) {
-      console.error('[scoutingCombineService] athlete_test_sessions upsert(withId) error:', upsertExistingError);
-      throw upsertExistingError;
-    }
-    if (Array.isArray(upsertedExisting)) insertedSessions.push(...upsertedExisting);
-  }
-  if (rowsWithoutId.length > 0) {
-    const { data: upsertedNew, error: upsertNewError } = await supabase
-      .from('athlete_test_sessions')
-      .upsert(rowsWithoutId, { onConflict: 'id' })
-      .select();
-    if (upsertNewError) {
-      console.error('[scoutingCombineService] athlete_test_sessions upsert(new) error:', upsertNewError);
-      throw upsertNewError;
-    }
-    if (Array.isArray(upsertedNew)) insertedSessions.push(...upsertedNew);
+  const sessionPayload = Array.from(dedupedPayloadMap.values()).map((item) => {
+    const cleanItem = { ...item };
+    delete cleanItem.id;
+    return cleanItem;
+  });
+
+  const { data: insertedSessions, error: upsertSessionsError } = await supabase
+    .from('athlete_test_sessions')
+    .upsert(sessionPayload, {
+      onConflict: 'tenant_id,athlete_id,test_code,testing_date'
+    })
+    .select();
+
+  if (upsertSessionsError) {
+    console.error('[scoutingCombineService] athlete_test_sessions upsert error:', upsertSessionsError);
+    throw upsertSessionsError;
   }
 
   const indicatorPayload = aggregatedList.map((agg) => ({
