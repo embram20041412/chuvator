@@ -3674,6 +3674,7 @@ function FootballAssessmentView({
               positionBadge={positionText}
               sportLabel={detectedSport || 'Sepakbola'}
               studentAge={studentAge}
+              compactMode={footballMode === 'master'}
             />
 
             {selectedStudent && (
@@ -3717,6 +3718,7 @@ function FootballAssessmentView({
                       name: s.studentName || s.name
                     }))}
                     selectedAthleteId={selectedStudent.id}
+                    onSelectAthlete={setSelectedStudentId}
                     selectedTier={activeTier}
                     onSelectTier={handleSelectTierFromCombine}
                     selectedPosition={selectedPosition}
@@ -3725,6 +3727,8 @@ function FootballAssessmentView({
                       handleCombineOrRubricSynced(map);
                     }}
                     isArchived={isArchived}
+                    classNameLabel={selectedClass?.className || ''}
+                    academyNameLabel={activeAcademy?.name || ''}
                   />
                 ) : (
                   <form onSubmit={handleSaveEvaluation} className="space-y-3">
@@ -4060,6 +4064,7 @@ function FootballAssessmentView({
             name: s.studentName || s.name
           }))}
           selectedAthleteId={selectedStudent.id}
+          onSelectAthlete={setSelectedStudentId}
           selectedTier={activeTier}
           onSelectTier={handleSelectTierFromCombine}
           selectedPosition={selectedPosition}
@@ -4068,6 +4073,8 @@ function FootballAssessmentView({
             handleCombineOrRubricSynced(map);
           }}
           isArchived={isArchived}
+          classNameLabel={selectedClass?.className || ''}
+          academyNameLabel={activeAcademy?.name || ''}
         />
       )}
 

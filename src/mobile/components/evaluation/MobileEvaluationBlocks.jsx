@@ -69,7 +69,8 @@ export function MobileEvaluationContextBar({
   isArchived = false,
   positionBadge = '',
   sportLabel = '',
-  studentAge = null
+  studentAge = null,
+  compactMode = false
 }) {
   const [showAthleteSheet, setShowAthleteSheet] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -116,31 +117,33 @@ export function MobileEvaluationContextBar({
   const className = selectedClass?.className || 'Kelas Latihan';
 
   return (
-    <div className="chua-m-eval-card space-y-2.5">
-      {/* Top Row: Title, Academy & Class Context */}
-      <div className="flex items-center justify-between gap-2 pb-2 border-b border-[#E7EBF2]">
-        <div className="min-w-0">
-          <h2 className="text-[15px] font-extrabold text-[#17233D] tracking-tight my-0">
-            Evaluasi Atlet
-          </h2>
-          <p className="text-[11px] font-medium text-[#68758B] truncate my-0 mt-0.5">
-            {academyName} &bull; {className}
-          </p>
-        </div>
+    <div className="chua-m-eval-card space-y-2">
+      {/* Top Row: Title, Academy & Class Context (Hidden in compactMode to avoid duplicate header height) */}
+      {!compactMode && (
+        <div className="flex items-center justify-between gap-2 pb-2 border-b border-[#E7EBF2]">
+          <div className="min-w-0">
+            <h2 className="text-[15px] font-extrabold text-[#17233D] tracking-tight my-0">
+              Evaluasi Atlet
+            </h2>
+            <p className="text-[11px] font-medium text-[#68758B] truncate my-0 mt-0.5">
+              {academyName} &bull; {className}
+            </p>
+          </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
-          {positionBadge && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#2455E8]/10 text-[#2455E8]">
-              {positionBadge}
-            </span>
-          )}
-          {isArchived && (
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-              Arsip
-            </span>
-          )}
+          <div className="flex items-center gap-1.5 shrink-0">
+            {positionBadge && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#2455E8]/10 text-[#2455E8]">
+                {positionBadge}
+              </span>
+            )}
+            {isArchived && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                Arsip
+              </span>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Athlete Selector Row: Prev + BottomSheet Trigger + Next */}
       <div className="flex items-center gap-1.5">
@@ -160,7 +163,7 @@ export function MobileEvaluationContextBar({
           className="chua-m-eval-athlete-trigger flex-1 min-w-0"
         >
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-full bg-[#101D38] text-white flex items-center justify-center font-bold text-xs shrink-0">
+            <div className="w-8 h-8 rounded-full bg-[#101D38] text-white flex items-center justify-center font-bold text-xs shrink-0">
               {getInitials(selectedStudent?.studentName || selectedStudent?.name)}
             </div>
             <div className="min-w-0 flex-1 text-left">
@@ -198,47 +201,49 @@ export function MobileEvaluationContextBar({
         </button>
       </div>
 
-      {/* Controls Row: Date & Development Phase */}
-      <div
-        className={`grid gap-2 ${
-          tierOptions && tierOptions.length > 0 ? 'grid-cols-2' : 'grid-cols-1'
-        }`}
-      >
-        <div className="chua-m-eval-control-pill min-h-[48px]">
-          <div className="flex items-center gap-1.5 min-w-0 flex-1">
-            <Calendar className="w-3.5 h-3.5 text-[#2455E8] shrink-0" />
-            <input
-              type="date"
-              aria-label="Tanggal Evaluasi"
-              disabled={isArchived}
-              value={evaluationDate || ''}
-              onChange={(e) => onChangeDate && onChangeDate(e.target.value)}
-              className="w-full bg-transparent text-[12px] font-bold text-[#17233D] focus:outline-none cursor-pointer disabled:opacity-60"
-            />
-          </div>
-        </div>
-
-        {tierOptions && tierOptions.length > 0 && (
-          <div className="chua-m-eval-control-pill min-h-[48px]">
+      {/* Controls Row: Date & Development Phase (Only shown in full report mode) */}
+      {!compactMode && (
+        <div
+          className={`grid gap-2 ${
+            tierOptions && tierOptions.length > 0 ? 'grid-cols-2' : 'grid-cols-1'
+          }`}
+        >
+          <div className="chua-m-eval-control-pill min-h-[44px]">
             <div className="flex items-center gap-1.5 min-w-0 flex-1">
-              <GraduationCap className="w-3.5 h-3.5 text-[#16A779] shrink-0" />
-              <select
-                aria-label="Fase Usia Evaluasi"
+              <Calendar className="w-3.5 h-3.5 text-[#2455E8] shrink-0" />
+              <input
+                type="date"
+                aria-label="Tanggal Evaluasi"
                 disabled={isArchived}
-                value={tierValue || 'AUTO'}
-                onChange={(e) => onChangeTier && onChangeTier(e.target.value)}
-                className="w-full bg-transparent text-[12px] font-bold text-[#17233D] focus:outline-none truncate cursor-pointer disabled:opacity-60"
-              >
-                {tierOptions.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+                value={evaluationDate || ''}
+                onChange={(e) => onChangeDate && onChangeDate(e.target.value)}
+                className="w-full bg-transparent text-[12px] font-bold text-[#17233D] focus:outline-none cursor-pointer disabled:opacity-60"
+              />
             </div>
           </div>
-        )}
-      </div>
+
+          {tierOptions && tierOptions.length > 0 && (
+            <div className="chua-m-eval-control-pill min-h-[44px]">
+              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                <GraduationCap className="w-3.5 h-3.5 text-[#16A779] shrink-0" />
+                <select
+                  aria-label="Fase Usia Evaluasi"
+                  disabled={isArchived}
+                  value={tierValue || 'AUTO'}
+                  onChange={(e) => onChangeTier && onChangeTier(e.target.value)}
+                  className="w-full bg-transparent text-[12px] font-bold text-[#17233D] focus:outline-none truncate cursor-pointer disabled:opacity-60"
+                >
+                  {tierOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Bottom Sheet: Pilih Atlet */}
       <MobileBottomSheet
@@ -720,6 +725,11 @@ export function MobileEvaluationHistorySection({
   const [expandedIds, setExpandedIds] = useState({});
   const [confirmDeleteId, setConfirmDeleteId] = useState(null);
 
+  const filteredHistory = useMemo(() => {
+    if (!filterStudentId || filterStudentId === 'ALL') return history;
+    return history.filter((h) => h.studentId === filterStudentId);
+  }, [history, filterStudentId]);
+
   const toggleDetail = (id) => {
     setExpandedIds((prev) => ({
       ...prev,
@@ -736,11 +746,11 @@ export function MobileEvaluationHistorySection({
             Riwayat Evaluasi Atlet
           </h3>
           <p className="text-[11px] text-[#68758B] font-medium my-0 mt-0.5">
-            {history.length} catatan evaluasi tersimpan
+            {filteredHistory.length} catatan evaluasi tersimpan
           </p>
         </div>
 
-        <div className="flex items-center gap-1.5 bg-[#F5F7FC] border border-[#E7EBF2] rounded-xl px-2.5 py-1.5 min-h-[40px] max-w-[165px]">
+        <div className="flex items-center gap-1.5 bg-[#F5F7FC] border border-[#E7EBF2] rounded-xl px-2.5 py-1.5 min-h-[44px] max-w-[170px]">
           <Users className="w-3.5 h-3.5 text-[#68758B] shrink-0" />
           <select
             aria-label="Filter Riwayat Atlet"
@@ -764,7 +774,7 @@ export function MobileEvaluationHistorySection({
           <Loader2 className="w-4 h-4 animate-spin text-[#2455E8]" />
           <span>Memuat riwayat evaluasi...</span>
         </div>
-      ) : history.length === 0 ? (
+      ) : filteredHistory.length === 0 ? (
         <div className="py-6 text-center bg-[#F5F7FC] rounded-xl border border-dashed border-[#E7EBF2] p-4">
           <p className="text-xs font-semibold text-[#68758B] my-0">
             Belum ada riwayat evaluasi untuk filter ini.
@@ -772,7 +782,7 @@ export function MobileEvaluationHistorySection({
         </div>
       ) : (
         <div className="space-y-2.5">
-          {history.map((item) => {
+          {filteredHistory.map((item) => {
             const isExpanded = !!expandedIds[item.id];
             const scoreEntries = Object.entries(item.scores || {});
             const overallScore =
@@ -791,7 +801,7 @@ export function MobileEvaluationHistorySection({
             return (
               <div
                 key={item.id}
-                className="rounded-xl border border-[#E7EBF2] bg-[#FFFFFF] overflow-hidden"
+                className="rounded-[14px] border border-[#E7EBF2] bg-[#FFFFFF] overflow-hidden"
               >
                 <div className="p-3 flex items-center justify-between gap-2.5">
                   <div className="min-w-0 flex-1">
@@ -817,7 +827,7 @@ export function MobileEvaluationHistorySection({
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <div className="px-2.5 py-1 rounded-lg bg-[#101D38] text-white text-right">
+                    <div className="px-2.5 py-1.5 rounded-lg bg-[#101D38] text-white text-right">
                       <span className="font-mono text-xs font-black tabular-nums">
                         {overallScore}
                       </span>
@@ -829,7 +839,7 @@ export function MobileEvaluationHistorySection({
                     <button
                       type="button"
                       onClick={() => toggleDetail(item.id)}
-                      className="w-9 h-9 rounded-lg border border-[#E7EBF2] bg-[#F5F7FC] text-[#17233D] flex items-center justify-center cursor-pointer"
+                      className="min-w-[44px] min-h-[44px] rounded-xl border border-[#E7EBF2] bg-[#F5F7FC] text-[#17233D] flex items-center justify-center cursor-pointer"
                       aria-label="Lihat Detail Riwayat"
                     >
                       {isExpanded ? (
@@ -846,17 +856,17 @@ export function MobileEvaluationHistorySection({
                           <button
                             type="button"
                             onClick={() => {
-                              onDeleteEvaluation(item.id);
+                              onDeleteEvaluation(item.id, item.studentName);
                               setConfirmDeleteId(null);
                             }}
-                            className="h-9 px-2.5 rounded-lg bg-[#DC4545] text-white text-[10px] font-bold cursor-pointer"
+                            className="min-h-[44px] px-2.5 rounded-xl bg-[#DC4545] text-white text-[11px] font-bold cursor-pointer"
                           >
                             Hapus
                           </button>
                           <button
                             type="button"
                             onClick={() => setConfirmDeleteId(null)}
-                            className="h-9 px-2 rounded-lg bg-[#F5F7FC] border border-[#E7EBF2] text-[#68758B] text-[10px] font-bold cursor-pointer"
+                            className="min-h-[44px] px-2.5 rounded-xl bg-[#F5F7FC] border border-[#E7EBF2] text-[#68758B] text-[11px] font-bold cursor-pointer"
                           >
                             Batal
                           </button>
@@ -865,7 +875,7 @@ export function MobileEvaluationHistorySection({
                         <button
                           type="button"
                           onClick={() => setConfirmDeleteId(item.id)}
-                          className="w-9 h-9 rounded-lg border border-rose-200 bg-rose-50 text-[#DC4545] flex items-center justify-center cursor-pointer"
+                          className="min-w-[44px] min-h-[44px] rounded-xl border border-rose-200 bg-rose-50 text-[#DC4545] flex items-center justify-center cursor-pointer"
                           aria-label="Hapus Evaluasi"
                         >
                           <Trash2 className="w-4 h-4" />

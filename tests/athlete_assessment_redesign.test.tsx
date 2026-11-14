@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import ScoutingPolarAreaPanel, { OPTA_CATEGORY_CONFIG, getCategoryTheme } from '../src/components/ScoutingPolarAreaPanel';
 import AssessmentIndicatorsAccordion from '../src/components/AssessmentIndicatorsAccordion';
 import AthleteAssessmentEditView from '../src/components/AthleteAssessmentEditView';
+import FootballAssessmentHub from '../src/components/FootballAssessmentHub';
 
 test('Opta Category Theme Mapping: accurately maps all 7 sports performance pillars', () => {
   const categories = ['fisik', 'teknik', 'taktik', 'mental', 'komunikasi', 'perkembangan', 'posisi'];
@@ -272,4 +273,55 @@ test('AssessmentIndicatorsAccordion singleDomainMode: remains hidden when closed
   assert.ok(teknikMarkup.includes('rincian-indikator-domain-teknik'));
   assert.ok(teknikMarkup.includes('First Touch'));
   assert.strictEqual(teknikMarkup.includes('Daya Tahan Aerobik'), false, 'Should not render Fisik indicators when Teknik is selected');
+});
+
+test('FootballAssessmentHub: renders mobile-first Master Test Library with unified progress, domain groups, and sync bar', () => {
+  const markup = renderToStaticMarkup(
+    <FootballAssessmentHub
+      tenantId="demo-tenant-1"
+      evaluatorId="coach-1"
+      athletes={[{ id: 'ath-1', name: 'Rafa Pratama' }]}
+      selectedAthleteId="ath-1"
+      selectedTier={3}
+      selectedPosition="ST"
+      existingIndicatorScores={{}}
+      classNameLabel="U-15 Elite"
+      academyNameLabel="Kediri Sport Academy"
+    />
+  );
+
+  // A. Session Header
+  assert.ok(markup.includes('Master Test Library'));
+  assert.ok(markup.includes('Rafa Pratama'));
+  assert.ok(markup.includes('ST'));
+
+  // B. Unified Session Progress Component
+  assert.ok(markup.includes('session-progress-card'));
+  assert.ok(markup.includes('Progres Sesi Pengukuran'));
+  assert.ok(markup.includes('Total Tes'));
+  assert.ok(markup.includes('Selesai'));
+  assert.ok(markup.includes('Belum Diukur'));
+  assert.ok(markup.includes('Rata-rata Sesi:'));
+
+  // C. Primary Action ("Mulai Wizard Tes")
+  assert.ok(markup.includes('Mulai Wizard Tes'));
+
+  // D. Search & Filter
+  assert.ok(markup.includes('mobile-filter-trigger-btn'));
+  assert.ok(markup.includes('combine-filter-Fisik'));
+  assert.ok(markup.includes('combine-filter-Teknik'));
+
+  // E. Domain-Grouped Collapsible Test List
+  assert.ok(markup.includes('domain-group-header-Fisik'));
+  assert.ok(markup.includes('domain-group-header-Teknik'));
+  assert.ok(markup.includes('domain-group-header-Taktik'));
+  assert.ok(markup.includes('domain-group-header-Mental'));
+  assert.ok(markup.includes('domain-group-header-Komunikasi'));
+  assert.ok(markup.includes('domain-group-header-Perkembangan'));
+  assert.ok(markup.includes('domain-group-header-Spesifik Posisi'));
+
+  // H. Compact Session Synchronization Bar
+  assert.ok(markup.includes('session-sync-card'));
+  assert.ok(markup.includes('Sinkronisasi Hasil Sesi ke Rapor Atlet'));
+  assert.ok(markup.includes('Simpan Hasil Sesi'));
 });

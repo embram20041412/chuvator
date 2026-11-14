@@ -6,9 +6,7 @@ import {
   CheckCircle2,
   Save,
   RotateCcw,
-  Sparkles,
   Calendar,
-  Award,
   Layers,
   MessageSquare,
   TrendingUp,
@@ -17,7 +15,6 @@ import {
   Brain,
   Shield,
   SlidersHorizontal,
-  Info,
   HelpCircle,
   ChevronDown,
   ChevronUp,
@@ -29,7 +26,8 @@ import {
   X,
   MoreVertical,
   AlertTriangle,
-  Edit3
+  Edit3,
+  User
 } from 'lucide-react';
 import {
   FOOTBALL_ASSESSMENT_TIERS,
@@ -51,8 +49,63 @@ const CATEGORY_PILLS = [
   { id: 'Mental', label: 'Mental', shortLabel: 'Mental', icon: Shield },
   { id: 'Komunikasi', label: 'Komunikasi', shortLabel: 'Komunikasi', icon: MessageSquare },
   { id: 'Perkembangan', label: 'Perkembangan', shortLabel: 'Perkembangan', icon: TrendingUp },
-  { id: 'Spesifik Posisi', label: 'Khusus Posisi', shortLabel: 'Posisi', icon: Crosshair }
+  { id: 'Spesifik Posisi', label: 'Khusus Posisi', shortLabel: 'Khusus Posisi', icon: Crosshair }
 ];
+
+const DOMAIN_ORDER = [
+  'Fisik',
+  'Teknik',
+  'Taktik',
+  'Mental',
+  'Komunikasi',
+  'Perkembangan',
+  'Spesifik Posisi'
+];
+
+const DOMAIN_THEME_MAP = {
+  Fisik: {
+    label: 'Fisik',
+    color: '#10B981',
+    badgeClass: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/25',
+    icon: Activity
+  },
+  Teknik: {
+    label: 'Teknik',
+    color: '#2455E8',
+    badgeClass: 'bg-[#2455E8]/10 text-[#2455E8] border-[#2455E8]/25',
+    icon: Target
+  },
+  Taktik: {
+    label: 'Taktik',
+    color: '#8B5CF6',
+    badgeClass: 'bg-purple-500/10 text-purple-700 border-purple-500/25',
+    icon: Brain
+  },
+  Mental: {
+    label: 'Mental',
+    color: '#F59E0B',
+    badgeClass: 'bg-amber-500/10 text-amber-700 border-amber-500/25',
+    icon: Shield
+  },
+  Komunikasi: {
+    label: 'Komunikasi',
+    color: '#0EA5E9',
+    badgeClass: 'bg-sky-500/10 text-sky-700 border-sky-500/25',
+    icon: MessageSquare
+  },
+  Perkembangan: {
+    label: 'Perkembangan',
+    color: '#EC4899',
+    badgeClass: 'bg-pink-500/10 text-pink-700 border-pink-500/25',
+    icon: TrendingUp
+  },
+  'Spesifik Posisi': {
+    label: 'Khusus Posisi',
+    color: '#6366F1',
+    badgeClass: 'bg-indigo-500/10 text-indigo-700 border-indigo-500/25',
+    icon: Crosshair
+  }
+};
 
 const DOMAIN_BADGE_STYLE = {
   Fisik: 'bg-emerald-500/10 text-emerald-700 border-emerald-500/25',
@@ -77,7 +130,8 @@ const DOMAIN_LABEL_MAP = {
 const FOOTBALL_AGE_GROUP_OPTIONS = Object.values(FOOTBALL_ASSESSMENT_TIERS).map((t) => ({
   id: t.code,
   tier: t.tier,
-  label: t.label
+  label: t.label,
+  shortLabel: t.shortLabel || `Fase ${t.tier}`
 }));
 
 const RUBRIC_LEVEL_TITLES = {
@@ -130,12 +184,32 @@ function resolveRubricAnchorsList(test) {
   }));
 }
 
+function formatCompactDateIndo(dateStr) {
+  if (!dateStr) return '-';
+  try {
+    const parts = String(dateStr).split('-');
+    if (parts.length === 3) {
+      const d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+      if (!Number.isNaN(d.getTime())) {
+        return d.toLocaleDateString('id-ID', {
+          day: '2-digit',
+          month: 'short',
+          year: 'numeric'
+        });
+      }
+    }
+    return dateStr;
+  } catch {
+    return dateStr;
+  }
+}
+
 const WIZARD_DRAFT_STORAGE_PREFIX = 'chuvator_master_test_draft_v1';
 
 /**
  * FootballAssessmentHub — Master Test Library
  * Antarmuka Pengujian Lapangan & Observasi Rubrik Terstandar (Skala 1–100)
- * Desain Desktop & Mobile-First sesuai sistem desain CHUVATOR.
+ * Desain Mobile-First & Desktop Profesional sesuai sistem desain CHUVATOR.
  * @param {any} props
  */
 export default function FootballAssessmentHub({
@@ -143,12 +217,15 @@ export default function FootballAssessmentHub({
   evaluatorId,
   athletes = [],
   selectedAthleteId = '',
+  onSelectAthlete,
   selectedTier = 3,
   onSelectTier,
   selectedPosition = 'CM',
   existingIndicatorScores = {},
   onSyncedToReport,
-  isArchived = false
+  isArchived = false,
+  classNameLabel = '',
+  academyNameLabel = ''
 }) {
   const [activeAthleteId, setActiveAthleteId] = useState(
     selectedAthleteId || athletes[0]?.id || ''
@@ -167,9 +244,23 @@ export default function FootballAssessmentHub({
   const [wizardPillarFilter, setWizardPillarFilter] = useState('ALL');
   const [hasSavedDraft, setHasSavedDraft] = useState(false);
 
-  // Expanded inline input cards on catalog view
+  // Domain Accordion Groups: Mobile opens first domain ('Fisik') by default; Desktop can expand/collapse any domain
+  const [openDomains, setOpenDomains] = useState(() => ({
+    Fisik: true,
+    Teknik: false,
+    Taktik: false,
+    Mental: false,
+    Komunikasi: false,
+    Perkembangan: false,
+    'Spesifik Posisi': false
+  }));
+
+  // Expanded inline input cards on desktop catalog view
   const [expandedTestCodes, setExpandedTestCodes] = useState({});
   const [openGuideCodes, setOpenGuideCodes] = useState({});
+
+  // Mobile Test Detail & Edit Bottom Sheet
+  const [detailSheetTestCode, setDetailSheetTestCode] = useState(null);
 
   // Mobile Filter Bottom Sheet & Session Menu / Reset Confirmation Modal
   const [showMobileFilterSheet, setShowMobileFilterSheet] = useState(false);
@@ -184,6 +275,8 @@ export default function FootballAssessmentHub({
   useEffect(() => {
     if (selectedAthleteId && selectedAthleteId !== activeAthleteId) {
       setActiveAthleteId(selectedAthleteId);
+      setDetailSheetTestCode(null);
+      setExpandedTestCodes({});
     }
   }, [selectedAthleteId, activeAthleteId]);
 
@@ -192,6 +285,16 @@ export default function FootballAssessmentHub({
       setActiveTier(Number(selectedTier));
     }
   }, [selectedTier, activeTier]);
+
+  // Automatically open matching domain group when user selects a specific domain chip
+  useEffect(() => {
+    if (activeCategory !== 'ALL') {
+      setOpenDomains((prev) => ({
+        ...prev,
+        [activeCategory]: true
+      }));
+    }
+  }, [activeCategory]);
 
   const draftStorageKey = useMemo(() => {
     if (!activeAthleteId) return null;
@@ -312,6 +415,13 @@ export default function FootballAssessmentHub({
     setExpandedTestCodes((prev) => ({
       ...prev,
       [testCode]: !prev[testCode]
+    }));
+  };
+
+  const toggleDomainSection = (domainKey) => {
+    setOpenDomains((prev) => ({
+      ...prev,
+      [domainKey]: !prev[domainKey]
     }));
   };
 
@@ -498,6 +608,98 @@ export default function FootballAssessmentHub({
     searchQuery
   ]);
 
+  // Group filteredTests by the 7 canonical domains
+  const groupedDomainTests = useMemo(() => {
+    const isUnfilteredCatalog =
+      activeCategory === 'ALL' &&
+      statusFilter === 'ALL' &&
+      searchQuery.trim() === '';
+
+    const devIndicators = [
+      {
+        code: 'DEV01',
+        key: 'kehadiran_latihan',
+        label: 'Kehadiran Latihan',
+        description: 'Persentase kehadiran latihan reguler dari modul Presensi Akademi.'
+      },
+      {
+        code: 'DEV02',
+        key: 'kepatuhan_program',
+        label: 'Kepatuhan Program',
+        description: 'Tingkat kepatuhan mengikuti jadwal dan program latihan akademi.'
+      },
+      {
+        code: 'DEV03',
+        key: 'konsistensi_kehadiran',
+        label: 'Konsistensi Kehadiran',
+        description: 'Rasio disiplin latihan tanpa ketidakhadiran tanpa keterangan (alpa).'
+      }
+    ].map((ind) => {
+      const savedObj = existingIndicatorScores?.[ind.key];
+      const numericScore =
+        savedObj && typeof savedObj === 'object'
+          ? Number(savedObj.score)
+          : Number(savedObj);
+      const validScore =
+        Number.isFinite(numericScore) && numericScore > 0 ? numericScore : null;
+      return {
+        ...ind,
+        score: validScore
+      };
+    });
+
+    return DOMAIN_ORDER.map((domainKey) => {
+      if (domainKey === 'Perkembangan') {
+        const completedDev = devIndicators.filter((d) => d.score !== null).length;
+        return {
+          domainKey,
+          label: DOMAIN_LABEL_MAP[domainKey] || domainKey,
+          theme: DOMAIN_THEME_MAP[domainKey] || DOMAIN_THEME_MAP.Perkembangan,
+          items: [],
+          devIndicators,
+          isAttendanceSyncedDomain: true,
+          totalCount: devIndicators.length,
+          completedCount: completedDev
+        };
+      }
+
+      const items = filteredTests.filter((t) => t.category === domainKey);
+      const completedInGroup = items.filter(
+        (t) =>
+          t.hasValidInput ||
+          (t.previousSavedScore !== null && t.previousSavedScore > 0)
+      ).length;
+      return {
+        domainKey,
+        label: DOMAIN_LABEL_MAP[domainKey] || domainKey,
+        theme: DOMAIN_THEME_MAP[domainKey] || DOMAIN_THEME_MAP.Fisik,
+        items,
+        devIndicators: [],
+        isAttendanceSyncedDomain: false,
+        totalCount: items.length,
+        completedCount: completedInGroup
+      };
+    }).filter(
+      (group) =>
+        (group.totalCount > 0 && !group.isAttendanceSyncedDomain) ||
+        isUnfilteredCatalog ||
+        activeCategory === group.domainKey
+    );
+  }, [filteredTests, activeCategory, statusFilter, searchQuery, existingIndicatorScores]);
+
+  // Count per domain across applicable catalog (for domain filter chips)
+  const domainCountsMap = useMemo(() => {
+    const relevant = catalogWithLiveScores.filter((t) => t.applicableForTier);
+    const map = { ALL: relevant.length };
+    DOMAIN_ORDER.forEach((d) => {
+      map[d] =
+        d === 'Perkembangan'
+          ? 3
+          : relevant.filter((t) => t.category === d).length;
+    });
+    return map;
+  }, [catalogWithLiveScores]);
+
   // Wizard sequence list
   const wizardTests = useMemo(() => {
     return catalogWithLiveScores.filter((item) => {
@@ -519,7 +721,16 @@ export default function FootballAssessmentHub({
 
   const currentWizardTest = wizardTests[safeWizardIndex] || null;
 
-  // Dynamic Session Summary Stats (Total Available, Completed, Pending, Progress %)
+  // Currently selected test for the Mobile Detail / Edit Bottom Sheet
+  const activeDetailTest = useMemo(() => {
+    if (!detailSheetTestCode) return null;
+    return (
+      catalogWithLiveScores.find((t) => t.test_code === detailSheetTestCode) ||
+      null
+    );
+  }, [catalogWithLiveScores, detailSheetTestCode]);
+
+  // Dynamic Session Summary Stats (Total Available, Completed, Pending, Progress %, Avg Score)
   const sessionStats = useMemo(() => {
     const relevantCatalog = catalogWithLiveScores.filter(
       (item) => item.applicableForTier
@@ -540,13 +751,17 @@ export default function FootballAssessmentHub({
         ? Math.round((completedCount / totalAvailable) * 100)
         : 0;
 
+    const scoredItems = completedAll
+      .map((item) =>
+        item.hasValidInput ? item.calcResult.finalScore : item.previousSavedScore
+      )
+      .filter((v) => Number(v) > 0);
+
     const avgScore =
-      measuredNow.length > 0
+      scoredItems.length > 0
         ? Math.round(
-            measuredNow.reduce(
-              (acc, item) => acc + item.calcResult.finalScore,
-              0
-            ) / measuredNow.length
+            scoredItems.reduce((acc, val) => acc + Number(val), 0) /
+              scoredItems.length
           )
         : 0;
 
@@ -584,6 +799,15 @@ export default function FootballAssessmentHub({
       const idx = wizardTests.findIndex((t) => t.test_code === targetTestCode);
       if (idx >= 0) {
         setWizardIndex(idx);
+      } else {
+        setWizardPillarFilter('ALL');
+        const allApplicable = catalogWithLiveScores.filter(
+          (item) => item.applicableForTier
+        );
+        const allIdx = allApplicable.findIndex(
+          (t) => t.test_code === targetTestCode
+        );
+        if (allIdx >= 0) setWizardIndex(allIdx);
       }
     } else if (!hasSavedDraft) {
       const firstUnmeasuredIdx = wizardTests.findIndex(
@@ -591,6 +815,7 @@ export default function FootballAssessmentHub({
       );
       setWizardIndex(firstUnmeasuredIdx >= 0 ? firstUnmeasuredIdx : 0);
     }
+    setDetailSheetTestCode(null);
     setIsWizardMode(true);
   };
 
@@ -705,7 +930,26 @@ export default function FootballAssessmentHub({
   const athleteDisplayName =
     activeAthleteObj?.name || activeAthleteObj?.studentName || 'Atlet Akademi';
 
-  // Helper function to render the measurement input controls (used in both Catalog Card & Wizard)
+  const hasActiveFilters =
+    activeCategory !== 'ALL' ||
+    statusFilter !== 'ALL' ||
+    searchQuery.trim() !== '';
+
+  const allVisibleDomainsOpen = useMemo(() => {
+    if (groupedDomainTests.length === 0) return false;
+    return groupedDomainTests.every((g) => Boolean(openDomains[g.domainKey]));
+  }, [groupedDomainTests, openDomains]);
+
+  const handleToggleAllDomains = () => {
+    const nextState = !allVisibleDomainsOpen;
+    const nextMap = { ...openDomains };
+    groupedDomainTests.forEach((g) => {
+      nextMap[g.domainKey] = nextState;
+    });
+    setOpenDomains(nextMap);
+  };
+
+  // Helper function to render the measurement input controls (used in Detail Bottom Sheet, Desktop Inline, & Wizard)
   const renderTestInputForm = (item, isLargeWizard = false) => {
     const gradeInfo = getScoreGradeInfo(item.calcResult.finalScore);
     const inputHeightClass = isLargeWizard ? 'min-h-[52px] text-base' : 'min-h-[48px] text-sm';
@@ -714,7 +958,7 @@ export default function FootballAssessmentHub({
       <div className="space-y-3.5">
         {/* Benchmark Norms Bar */}
         {item.input_schema !== 'RUBRIC' && item.benchmark && (
-          <div className="grid grid-cols-3 gap-2 p-2.5 rounded-xl bg-[#F5F7FC] border border-[#E7EBF2] text-center">
+          <div className="grid grid-cols-3 gap-2 p-2.5 rounded-[14px] bg-[#F5F7FC] border border-[#E7EBF2] text-center">
             <div>
               <span className="block text-[10px] font-bold uppercase tracking-wider text-[#16A779]">
                 Target Elit (96+)
@@ -768,7 +1012,7 @@ export default function FootballAssessmentHub({
                     updateTestInput(item.test_code, { rawValue: e.target.value })
                   }
                   placeholder={`Masukkan ${item.measurement_unit}...`}
-                  className={`w-full ${inputHeightClass} pl-3.5 pr-16 py-2 rounded-xl bg-[#FFFFFF] border border-[#E7EBF2] font-mono font-bold text-[#17233D] focus:outline-none focus:border-[#2455E8] tabular-nums`}
+                  className={`w-full ${inputHeightClass} pl-3.5 pr-16 py-2 rounded-[14px] bg-[#FFFFFF] border border-[#E7EBF2] font-mono font-bold text-[#17233D] focus:outline-none focus:border-[#2455E8] tabular-nums`}
                 />
                 <span className="absolute right-3.5 top-1/2 -translate-y-1/2 text-xs font-semibold text-[#68758B] pointer-events-none">
                   {item.measurement_unit}
@@ -779,7 +1023,7 @@ export default function FootballAssessmentHub({
                 <button
                   type="button"
                   onClick={() => updateTestInput(item.test_code, { rawValue: '' })}
-                  className="min-h-[48px] px-3 rounded-xl bg-[#F5F7FC] hover:bg-rose-50 text-[#68758B] hover:text-[#DC4545] border border-[#E7EBF2] text-xs font-bold transition-colors cursor-pointer shrink-0"
+                  className="min-h-[48px] px-3.5 rounded-[14px] bg-[#F5F7FC] hover:bg-rose-50 text-[#68758B] hover:text-[#DC4545] border border-[#E7EBF2] text-xs font-bold transition-colors cursor-pointer shrink-0"
                   title="Hapus nilai tes ini"
                 >
                   Reset
@@ -809,7 +1053,7 @@ export default function FootballAssessmentHub({
                     updateTestInput(item.test_code, { successes: e.target.value })
                   }
                   placeholder="Contoh: 8"
-                  className={`w-full ${inputHeightClass} px-3.5 py-2 rounded-xl bg-[#FFFFFF] border border-[#E7EBF2] font-mono font-bold text-[#17233D] focus:outline-none focus:border-[#2455E8] tabular-nums`}
+                  className={`w-full ${inputHeightClass} px-3.5 py-2 rounded-[14px] bg-[#FFFFFF] border border-[#E7EBF2] font-mono font-bold text-[#17233D] focus:outline-none focus:border-[#2455E8] tabular-nums`}
                 />
               </div>
 
@@ -831,7 +1075,7 @@ export default function FootballAssessmentHub({
                   onChange={(e) =>
                     updateTestInput(item.test_code, { attempts: e.target.value })
                   }
-                  className={`w-full ${inputHeightClass} px-3.5 py-2 rounded-xl bg-[#FFFFFF] border border-[#E7EBF2] font-mono font-bold text-[#17233D] focus:outline-none focus:border-[#2455E8] tabular-nums`}
+                  className={`w-full ${inputHeightClass} px-3.5 py-2 rounded-[14px] bg-[#FFFFFF] border border-[#E7EBF2] font-mono font-bold text-[#17233D] focus:outline-none focus:border-[#2455E8] tabular-nums`}
                 />
               </div>
             </div>
@@ -869,7 +1113,7 @@ export default function FootballAssessmentHub({
                     onClick={() =>
                       updateTestInput(item.test_code, { rubricScore: anchor.level })
                     }
-                    className={`w-full min-h-[52px] text-left p-3 rounded-xl border transition-all flex items-start gap-3 cursor-pointer ${
+                    className={`w-full min-h-[52px] text-left p-3 rounded-[14px] border transition-all flex items-start gap-3 cursor-pointer ${
                       selected
                         ? 'bg-[#2455E8]/8 border-[#2455E8] shadow-[0_2px_8px_rgba(36,85,232,0.08)]'
                         : 'bg-[#FFFFFF] border-[#E7EBF2] hover:bg-[#F5F7FC]'
@@ -905,7 +1149,7 @@ export default function FootballAssessmentHub({
         )}
 
         {/* Live Converted Score Preview Bar */}
-        <div className="p-3 rounded-xl bg-[#F5F7FC] border border-[#E7EBF2] flex items-center justify-between gap-3">
+        <div className="p-3 rounded-[14px] bg-[#F5F7FC] border border-[#E7EBF2] flex items-center justify-between gap-3">
           <div className="min-w-0">
             <span className="block text-[10px] font-bold uppercase tracking-wider text-[#68758B]">
               Skor Konversi Indikator (1–100)
@@ -914,7 +1158,7 @@ export default function FootballAssessmentHub({
               {item.hasValidInput
                 ? `Hasil: ${item.rawDisplay}`
                 : item.previousSavedScore
-                ? `Skor tersimpan sebelumnya: ${item.previousSavedScore}/100`
+                ? `Tersimpan sebelumnya: ${item.previousSavedScore}/100`
                 : 'Masukkan nilai pengukuran untuk melihat skor konversi'}
             </p>
           </div>
@@ -951,50 +1195,79 @@ export default function FootballAssessmentHub({
   return (
     <div
       data-testid="master-test-library-hub"
-      className="space-y-5 text-left"
+      className="space-y-3.5 md:space-y-5 text-left pb-4"
     >
-      {/* 1. HEADER MASTER TEST LIBRARY */}
-      <div className="bg-[#FFFFFF] rounded-2xl p-4 sm:p-5 border border-[#E7EBF2] shadow-[0_2px_10px_rgba(16,29,56,0.04)] space-y-4">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="flex items-start sm:items-center gap-3.5 min-w-0">
-            <div className="w-11 h-11 rounded-xl bg-[#101D38] text-white flex items-center justify-center shrink-0">
-              <Timer className="w-5 h-5 text-[#16A779]" />
+      {/* ===================================================================== */}
+      {/* A, B, C. SESSION HEADER, UNIFIED PROGRESS & PRIMARY WIZARD ACTION      */}
+      {/* ===================================================================== */}
+      <div className="bg-[#FFFFFF] rounded-[16px] md:rounded-2xl p-3.5 sm:p-5 border border-[#E7EBF2] shadow-[0_2px_10px_rgba(16,29,56,0.04)] space-y-3.5">
+        {/* A. COMPACT SESSION HEADER */}
+        <div className="flex items-start sm:items-center justify-between gap-2.5">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
+            <div className="w-9 h-9 sm:w-11 sm:h-11 rounded-[12px] bg-[#101D38] text-white flex items-center justify-center shrink-0">
+              <Timer className="w-4 h-4 sm:w-5 sm:h-5 text-[#16A779]" />
             </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-base sm:text-lg font-extrabold text-[#17233D] tracking-tight">
+
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h2 className="text-[15px] sm:text-lg font-extrabold text-[#17233D] tracking-tight truncate">
                   Master Test Library
                 </h2>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#2455E8]/10 text-[#2455E8]">
+                {selectedPosition && (
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#2455E8]/10 text-[#2455E8] shrink-0">
+                    {selectedPosition}
+                  </span>
+                )}
+              </div>
+
+              {/* Compact Metadata Line: Athlete Name · Age Tier · Session Date */}
+              <div className="flex items-center gap-1.5 flex-wrap text-[11px] sm:text-xs text-[#68758B] font-medium mt-0.5">
+                <span className="font-bold text-[#17233D] truncate max-w-[150px] sm:max-w-none">
                   {athleteDisplayName}
                 </span>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#F5F7FC] text-[#17233D] border border-[#E7EBF2]">
-                  {tierObj?.label}
+                <span aria-hidden="true">&bull;</span>
+                <span className="text-[#2455E8] font-semibold">
+                  {tierObj?.shortLabel || `Fase ${activeTier}`}
                 </span>
+                <span aria-hidden="true" className="hidden xs:inline">
+                  &bull;
+                </span>
+                <span className="hidden xs:inline">
+                  {formatCompactDateIndo(testingDate)}
+                </span>
+                {classNameLabel && (
+                  <>
+                    <span aria-hidden="true" className="hidden sm:inline">
+                      &bull;
+                    </span>
+                    <span className="hidden sm:inline truncate">
+                      {academyNameLabel ? `${academyNameLabel} — ` : ''}
+                      {classNameLabel}
+                    </span>
+                  </>
+                )}
               </div>
-              <p className="text-xs text-[#68758B] font-medium mt-0.5">
-                Pengujian performa fisik, teknik, taktik, mental, komunikasi, dan posisi atlet
-              </p>
             </div>
           </div>
 
-          {/* Right Controls: Session Date, Primary Wizard CTA, Action Menu (Reset Sesi) */}
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            <div className="flex items-center gap-2 bg-[#F5F7FC] border border-[#E7EBF2] rounded-xl px-3 min-h-[48px]">
-              <Calendar className="w-4 h-4 text-[#2455E8] shrink-0" />
+          {/* Right Controls: Desktop Date + Desktop Primary CTA + Session Menu */}
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Compact Session Date Input */}
+            <div className="hidden sm:flex items-center gap-2 bg-[#F5F7FC] border border-[#E7EBF2] rounded-[12px] px-3 min-h-[44px]">
+              <Calendar className="w-3.5 h-3.5 text-[#2455E8] shrink-0" />
               <input
                 type="date"
                 aria-label="Tanggal Sesi Tes"
                 value={testingDate}
                 disabled={isArchived}
                 onChange={(e) => setTestingDate(e.target.value)}
-                className="bg-transparent text-xs sm:text-sm font-bold text-[#17233D] focus:outline-none cursor-pointer"
+                className="bg-transparent text-xs font-bold text-[#17233D] focus:outline-none cursor-pointer"
               />
             </div>
 
+            {/* Desktop Primary Action Button (>= 768px) */}
             <button
               type="button"
-              data-testid="wizard-mode-toggle"
               onClick={() => {
                 if (isWizardMode) {
                   setIsWizardMode(false);
@@ -1002,7 +1275,7 @@ export default function FootballAssessmentHub({
                   handleStartOrResumeWizard();
                 }
               }}
-              className={`min-h-[48px] px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold inline-flex items-center gap-2 transition-all cursor-pointer ${
+              className={`hidden md:inline-flex min-h-[44px] px-4 py-2 rounded-[14px] text-xs sm:text-sm font-bold items-center gap-2 transition-all cursor-pointer ${
                 isWizardMode
                   ? 'bg-[#101D38] text-white'
                   : 'bg-[#2455E8] hover:bg-[#1D46C7] text-white shadow-[0_4px_12px_rgba(36,85,232,0.2)]'
@@ -1018,7 +1291,7 @@ export default function FootballAssessmentHub({
               </span>
             </button>
 
-            {/* Action Menu (Contains Reset Sesi) */}
+            {/* Session Menu (Reset Sesi) */}
             {!isArchived && (
               <div className="relative">
                 <button
@@ -1026,13 +1299,27 @@ export default function FootballAssessmentHub({
                   data-testid="session-action-menu-btn"
                   onClick={() => setShowActionMenu((prev) => !prev)}
                   aria-label="Menu Sesi"
-                  className="min-w-[48px] min-h-[48px] rounded-xl bg-[#F5F7FC] hover:bg-[#E7EBF2]/70 border border-[#E7EBF2] text-[#17233D] flex items-center justify-center transition-colors cursor-pointer"
+                  className="min-w-[44px] min-h-[44px] rounded-[12px] bg-[#F5F7FC] hover:bg-[#E7EBF2]/70 border border-[#E7EBF2] text-[#17233D] flex items-center justify-center transition-colors cursor-pointer"
                 >
                   <MoreVertical className="w-4 h-4" />
                 </button>
 
                 {showActionMenu && (
-                  <div className="absolute right-0 mt-2 w-48 rounded-2xl bg-[#FFFFFF] border border-[#E7EBF2] shadow-[0_8px_24px_rgba(16,29,56,0.12)] py-1.5 z-30">
+                  <div className="absolute right-0 mt-2 w-52 rounded-2xl bg-[#FFFFFF] border border-[#E7EBF2] shadow-[0_8px_24px_rgba(16,29,56,0.12)] py-2 z-30">
+                    {/* Mobile Date Picker inside Menu for compact header */}
+                    <div className="px-3.5 py-2 border-b border-[#E7EBF2] sm:hidden">
+                      <label className="block text-[10px] font-bold uppercase tracking-wider text-[#68758B] mb-1">
+                        Tanggal Sesi
+                      </label>
+                      <input
+                        type="date"
+                        aria-label="Tanggal Sesi Tes Mobile"
+                        value={testingDate}
+                        disabled={isArchived}
+                        onChange={(e) => setTestingDate(e.target.value)}
+                        className="w-full min-h-[40px] px-2.5 py-1 rounded-lg bg-[#F5F7FC] border border-[#E7EBF2] text-xs font-bold text-[#17233D]"
+                      />
+                    </div>
                     <button
                       type="button"
                       data-testid="open-reset-session-modal-btn"
@@ -1052,81 +1339,114 @@ export default function FootballAssessmentHub({
           </div>
         </div>
 
-        {/* 2. SESSION SUMMARY (4 METRICS + PROGRESS BAR) */}
-        <div className="pt-3 border-t border-[#E7EBF2] space-y-3">
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-            <div className="p-3.5 rounded-xl bg-[#F5F7FC] border border-[#E7EBF2] flex items-center justify-between">
-              <div>
-                <span className="block text-[11px] font-semibold text-[#68758B]">
-                  Total Tes Tersedia
-                </span>
-                <span className="font-mono text-lg sm:text-xl font-extrabold text-[#17233D] tabular-nums">
-                  {sessionStats.totalAvailable}
-                </span>
-              </div>
-              <Layers className="w-5 h-5 text-[#2455E8]" />
+        {/* B. UNIFIED COMPACT SESSION PROGRESS COMPONENT */}
+        <div
+          data-testid="session-progress-card"
+          className="p-3 sm:p-3.5 rounded-[14px] bg-[#F5F7FC] border border-[#E7EBF2] space-y-2.5"
+        >
+          {/* Progress Header Row */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="text-xs font-bold text-[#17233D]">
+                Progres Sesi Pengukuran
+              </span>
+              <span className="px-2 py-0.5 rounded-md bg-[#101D38] text-white font-mono text-[11px] font-extrabold tabular-nums">
+                {sessionStats.progressPct}%
+              </span>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-[#F5F7FC] border border-[#E7EBF2] flex items-center justify-between">
-              <div>
-                <span className="block text-[11px] font-semibold text-[#68758B]">
-                  Tes Selesai
-                </span>
-                <span
-                  data-testid="session-completed-count"
-                  className="font-mono text-lg sm:text-xl font-extrabold text-[#16A779] tabular-nums"
-                >
-                  {sessionStats.completedCount}
-                </span>
-              </div>
-              <CheckCircle2 className="w-5 h-5 text-[#16A779]" />
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-[#F5F7FC] border border-[#E7EBF2] flex items-center justify-between">
-              <div>
-                <span className="block text-[11px] font-semibold text-[#68758B]">
-                  Belum Diukur
-                </span>
-                <span className="font-mono text-lg sm:text-xl font-extrabold text-[#17233D] tabular-nums">
-                  {sessionStats.pendingCount}
-                </span>
-              </div>
-              <Timer className="w-5 h-5 text-[#68758B]" />
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-[#101D38] text-white flex items-center justify-between">
-              <div>
-                <span className="block text-[11px] font-semibold text-slate-300">
-                  Progres Sesi
-                </span>
-                <span className="font-mono text-lg sm:text-xl font-extrabold text-white tabular-nums">
-                  {sessionStats.progressPct}%
-                </span>
-              </div>
-              <div className="text-right">
-                <span className="block text-[10px] text-slate-300">Rata-Rata Sesi</span>
-                <span className="font-mono text-sm font-bold text-[#16A779] tabular-nums">
-                  {sessionStats.measuredNowCount > 0
-                    ? `${sessionStats.avgScore}/100`
-                    : '—'}
-                </span>
-              </div>
+            <div className="text-right shrink-0 flex items-center gap-1.5">
+              <span className="text-[11px] font-medium text-[#68758B]">
+                Rata-rata Sesi:
+              </span>
+              <span className="font-mono text-xs font-extrabold text-[#16A779] tabular-nums">
+                {sessionStats.avgScore > 0 ? `${sessionStats.avgScore}/100` : '—'}
+              </span>
             </div>
           </div>
 
-          {/* Overall Session Progress Bar */}
-          <div className="w-full h-2 bg-[#F5F7FC] border border-[#E7EBF2] rounded-full overflow-hidden">
+          {/* Progress Bar */}
+          <div className="w-full h-2 bg-[#E7EBF2] rounded-full overflow-hidden">
             <div
               className="h-full bg-[#16A779] rounded-full transition-all duration-300"
               style={{ width: `${sessionStats.progressPct}%` }}
             />
           </div>
+
+          {/* Compact 3-Column Inline Metrics (Total Tes · Selesai · Belum Diukur) */}
+          <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+            <div className="bg-[#FFFFFF] rounded-[10px] py-1.5 px-2 border border-[#E7EBF2]">
+              <span className="block text-[10px] font-semibold text-[#68758B]">
+                Total Tes
+              </span>
+              <span className="font-mono text-sm sm:text-base font-extrabold text-[#17233D] tabular-nums">
+                {sessionStats.totalAvailable}
+              </span>
+            </div>
+
+            <div className="bg-[#FFFFFF] rounded-[10px] py-1.5 px-2 border border-[#E7EBF2]">
+              <span className="block text-[10px] font-semibold text-[#68758B]">
+                Selesai
+              </span>
+              <span
+                data-testid="session-completed-count"
+                className="font-mono text-sm sm:text-base font-extrabold text-[#16A779] tabular-nums"
+              >
+                {sessionStats.completedCount}
+              </span>
+            </div>
+
+            <div className="bg-[#FFFFFF] rounded-[10px] py-1.5 px-2 border border-[#E7EBF2]">
+              <span className="block text-[10px] font-semibold text-[#68758B]">
+                Belum Diukur
+              </span>
+              <span className="font-mono text-sm sm:text-base font-extrabold text-[#17233D] tabular-nums">
+                {sessionStats.pendingCount}
+              </span>
+            </div>
+          </div>
         </div>
+
+        {/* C. MOBILE PRIMARY ACTION ("Mulai Wizard Tes") */}
+        <button
+          type="button"
+          data-testid="wizard-mode-toggle"
+          onClick={() => {
+            if (isWizardMode) {
+              setIsWizardMode(false);
+            } else {
+              handleStartOrResumeWizard();
+            }
+          }}
+          className={`md:hidden w-full min-h-[48px] px-4 py-2.5 rounded-[14px] text-xs font-extrabold flex items-center justify-between gap-2 transition-all cursor-pointer ${
+            isWizardMode
+              ? 'bg-[#101D38] text-white'
+              : 'bg-[#2455E8] active:bg-[#1D46C7] text-white shadow-[0_4px_12px_rgba(36,85,232,0.22)]'
+          }`}
+        >
+          <div className="flex items-center gap-2.5">
+            <span className="w-7 h-7 rounded-lg bg-white/15 flex items-center justify-center shrink-0">
+              <Play className="w-3.5 h-3.5 text-white fill-white" />
+            </span>
+            <span className="text-[13px] font-extrabold tracking-tight">
+              {isWizardMode
+                ? 'Kembali ke Katalog Tes'
+                : hasSavedDraft
+                ? 'Lanjutkan Wizard Tes'
+                : 'Mulai Wizard Tes'}
+            </span>
+          </div>
+          <span className="text-[11px] font-semibold text-white/85 font-mono tabular-nums">
+            {isWizardMode
+              ? 'Tutup'
+              : `${sessionStats.completedCount}/${sessionStats.totalAvailable} Tes`}
+          </span>
+        </button>
 
         {/* Toast Feedback */}
         {toast && (
           <div
-            className={`p-3 rounded-xl text-xs font-bold flex items-center justify-between gap-2 ${
+            className={`p-3 rounded-[14px] text-xs font-bold flex items-center justify-between gap-2 ${
               toast.type === 'success'
                 ? 'bg-emerald-50 text-[#16A779] border border-emerald-200'
                 : toast.type === 'error'
@@ -1150,21 +1470,21 @@ export default function FootballAssessmentHub({
       </div>
 
       {/* ===================================================================== */}
-      {/* 6. ASSESSMENT WIZARD MODE (STEP-BY-STEP GUIDED TESTING)               */}
+      {/* G. ASSESSMENT WIZARD MODE (STEP-BY-STEP GUIDED TESTING)               */}
       {/* ===================================================================== */}
       {isWizardMode && currentWizardTest ? (
         <div
           data-testid="wizard-step-card"
-          className="bg-[#FFFFFF] rounded-2xl border border-[#E7EBF2] shadow-[0_4px_16px_rgba(16,29,56,0.06)] overflow-hidden"
+          className="bg-[#FFFFFF] rounded-[16px] md:rounded-2xl border border-[#E7EBF2] shadow-[0_4px_16px_rgba(16,29,56,0.06)] overflow-hidden"
         >
           {/* Wizard Header & Progress */}
-          <div className="bg-[#101D38] p-4 sm:p-5 text-white space-y-3.5">
-            <div className="flex flex-wrap items-center justify-between gap-2.5">
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 rounded-full bg-[#2455E8] text-white text-xs font-extrabold font-mono tabular-nums">
-                  Tes {safeWizardIndex + 1} dari {wizardTests.length}
+          <div className="bg-[#101D38] p-3.5 sm:p-5 text-white space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="px-2.5 py-1 rounded-lg bg-[#2455E8] text-white text-xs font-extrabold font-mono tabular-nums">
+                  Tes {safeWizardIndex + 1} / {wizardTests.length}
                 </span>
-                <span className="px-2.5 py-1 rounded-full bg-white/10 text-slate-200 text-xs font-semibold">
+                <span className="px-2.5 py-1 rounded-lg bg-white/10 text-slate-200 text-xs font-semibold">
                   {DOMAIN_LABEL_MAP[currentWizardTest.category] ||
                     currentWizardTest.category}
                 </span>
@@ -1173,10 +1493,10 @@ export default function FootballAssessmentHub({
               <button
                 type="button"
                 onClick={() => setIsWizardMode(false)}
-                className="min-h-[40px] px-3 py-1.5 rounded-xl bg-white/10 hover:bg-white/15 text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
+                className="min-h-[44px] px-3 py-1.5 rounded-[12px] bg-white/10 hover:bg-white/15 text-white text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
-                <span>Tutup Wizard</span>
+                <span>Tutup</span>
               </button>
             </div>
 
@@ -1192,7 +1512,7 @@ export default function FootballAssessmentHub({
                       setWizardPillarFilter(pill.id);
                       setWizardIndex(0);
                     }}
-                    className={`min-h-[36px] px-3 py-1 rounded-lg text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    className={`min-h-[38px] px-3 py-1 rounded-[10px] text-xs font-bold whitespace-nowrap transition-all cursor-pointer shrink-0 ${
                       isActive
                         ? 'bg-[#16A779] text-white'
                         : 'bg-white/10 text-slate-300 hover:bg-white/15'
@@ -1206,13 +1526,13 @@ export default function FootballAssessmentHub({
 
             {/* Step Progress Bar */}
             <div className="space-y-1">
-              <div className="flex items-center justify-between text-xs text-slate-300 font-semibold">
+              <div className="flex items-center justify-between text-[11px] text-slate-300 font-semibold">
                 <span>Progres Urutan Tes</span>
                 <span className="font-mono tabular-nums">
                   {Math.round(((safeWizardIndex + 1) / wizardTests.length) * 100)}%
                 </span>
               </div>
-              <div className="w-full h-2 bg-white/12 rounded-full overflow-hidden">
+              <div className="w-full h-1.5 bg-white/12 rounded-full overflow-hidden">
                 <div
                   className="h-full bg-[#16A779] rounded-full transition-all duration-300"
                   style={{
@@ -1224,7 +1544,7 @@ export default function FootballAssessmentHub({
               </div>
             </div>
 
-            {/* Horizontal Step Pills (Clean Number + Short Test Name, NO raw internal codes) */}
+            {/* Horizontal Step Pills */}
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
               {wizardTests.map((t, idx) => {
                 const isCurr = idx === safeWizardIndex;
@@ -1236,7 +1556,7 @@ export default function FootballAssessmentHub({
                     key={t.test_code}
                     type="button"
                     onClick={() => setWizardIndex(idx)}
-                    className={`min-h-[36px] px-2.5 py-1 rounded-lg text-[11px] font-bold whitespace-nowrap flex items-center gap-1.5 transition-all cursor-pointer shrink-0 ${
+                    className={`min-h-[36px] px-2.5 py-1 rounded-[10px] text-[11px] font-bold whitespace-nowrap flex items-center gap-1.5 transition-all cursor-pointer shrink-0 ${
                       isCurr
                         ? 'bg-white text-[#101D38]'
                         : isDone
@@ -1245,7 +1565,7 @@ export default function FootballAssessmentHub({
                     }`}
                   >
                     <span className="font-mono font-extrabold">{idx + 1}.</span>
-                    <span className="max-w-[120px] truncate">{t.test_name}</span>
+                    <span className="max-w-[115px] truncate">{t.test_name}</span>
                     {isDone && <Check className="w-3 h-3 shrink-0" />}
                   </button>
                 );
@@ -1253,12 +1573,12 @@ export default function FootballAssessmentHub({
             </div>
           </div>
 
-          {/* Wizard Test Body */}
-          <div className="p-4 sm:p-6 space-y-5">
+          {/* Wizard Single-Test Body */}
+          <div className="p-4 sm:p-6 space-y-4">
             <div className="space-y-2">
               <div className="flex items-center gap-2 flex-wrap">
                 <span
-                  className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
+                  className={`px-2.5 py-0.5 rounded-md text-xs font-bold border ${
                     DOMAIN_BADGE_STYLE[currentWizardTest.category] ||
                     'bg-slate-100 text-slate-700 border-slate-200'
                   }`}
@@ -1267,11 +1587,11 @@ export default function FootballAssessmentHub({
                     currentWizardTest.category}
                 </span>
                 <span className="text-xs font-semibold text-[#68758B]">
-                  Indikator: {currentWizardTest.sub_indicator_name}
+                  Subkategori: {currentWizardTest.sub_indicator_name}
                 </span>
               </div>
 
-              <h3 className="text-lg sm:text-xl font-extrabold text-[#17233D] tracking-tight">
+              <h3 className="text-base sm:text-xl font-extrabold text-[#17233D] tracking-tight">
                 {currentWizardTest.test_name}
               </h3>
 
@@ -1285,10 +1605,10 @@ export default function FootballAssessmentHub({
                   <button
                     type="button"
                     onClick={() => toggleProtocolGuide(currentWizardTest.test_code)}
-                    className="min-h-[38px] px-3 py-1.5 rounded-xl bg-[#F5F7FC] hover:bg-[#E7EBF2]/60 border border-[#E7EBF2] text-xs font-bold text-[#2455E8] inline-flex items-center gap-1.5 cursor-pointer"
+                    className="min-h-[44px] px-3 py-1.5 rounded-[12px] bg-[#F5F7FC] hover:bg-[#E7EBF2]/60 border border-[#E7EBF2] text-xs font-bold text-[#2455E8] inline-flex items-center gap-1.5 cursor-pointer"
                   >
                     <HelpCircle className="w-3.5 h-3.5" />
-                    <span>Panduan Pelaksanaan Lapangan</span>
+                    <span>Instruksi &amp; Panduan Lapangan</span>
                     {openGuideCodes[currentWizardTest.test_code] ? (
                       <ChevronUp className="w-3.5 h-3.5" />
                     ) : (
@@ -1297,7 +1617,7 @@ export default function FootballAssessmentHub({
                   </button>
 
                   {openGuideCodes[currentWizardTest.test_code] && (
-                    <div className="mt-2.5 p-3.5 rounded-xl bg-[#F5F7FC] border border-[#E7EBF2] text-xs text-[#17233D] space-y-2">
+                    <div className="mt-2 p-3.5 rounded-[14px] bg-[#F5F7FC] border border-[#E7EBF2] text-xs text-[#17233D] space-y-2">
                       <div>
                         <strong className="font-bold text-[#17233D]">
                           Alat &amp; Persiapan:
@@ -1323,28 +1643,28 @@ export default function FootballAssessmentHub({
             {renderTestInputForm(currentWizardTest, true)}
           </div>
 
-          {/* Sticky Bottom Wizard Navigation */}
-          <div className="px-4 py-3.5 sm:px-6 bg-[#F5F7FC] border-t border-[#E7EBF2] flex flex-wrap items-center justify-between gap-2.5">
+          {/* Thumb-Zone Wizard Navigation Footer */}
+          <div className="px-3 py-3.5 sm:px-6 bg-[#F5F7FC] border-t border-[#E7EBF2] flex items-center justify-between gap-2">
             <button
               type="button"
               data-testid="wizard-prev-btn"
               disabled={safeWizardIndex <= 0}
               onClick={handleWizardPrev}
-              className="min-h-[48px] px-4 py-2.5 rounded-xl bg-[#FFFFFF] hover:bg-[#E7EBF2]/50 text-[#17233D] border border-[#E7EBF2] text-xs sm:text-sm font-bold inline-flex items-center gap-1.5 disabled:opacity-40 cursor-pointer"
+              className="min-h-[48px] px-3 sm:px-4 py-2.5 rounded-[14px] bg-[#FFFFFF] hover:bg-[#E7EBF2]/50 text-[#17233D] border border-[#E7EBF2] text-xs sm:text-sm font-bold inline-flex items-center gap-1 disabled:opacity-40 cursor-pointer shrink-0 whitespace-nowrap"
             >
-              <ChevronLeft className="w-4 h-4" />
+              <ChevronLeft className="w-4 h-4 shrink-0" />
               <span>Sebelumnya</span>
             </button>
 
-            <div className="flex items-center gap-2 flex-1 sm:flex-initial justify-end">
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-1 justify-end min-w-0">
               <button
                 type="button"
                 data-testid="wizard-skip-btn"
                 onClick={handleWizardSkip}
-                className="min-h-[48px] px-4 py-2.5 rounded-xl bg-[#FFFFFF] hover:bg-[#E7EBF2]/50 text-[#68758B] border border-[#E7EBF2] text-xs sm:text-sm font-bold inline-flex items-center gap-1.5 cursor-pointer"
+                className="min-h-[48px] px-2.5 sm:px-4 py-2.5 rounded-[14px] bg-[#FFFFFF] hover:bg-[#E7EBF2]/50 text-[#68758B] border border-[#E7EBF2] text-xs sm:text-sm font-bold inline-flex items-center gap-1 cursor-pointer shrink-0 whitespace-nowrap"
               >
                 <span>Lewati</span>
-                <SkipForward className="w-3.5 h-3.5" />
+                <SkipForward className="w-3.5 h-3.5 shrink-0" />
               </button>
 
               <button
@@ -1352,17 +1672,17 @@ export default function FootballAssessmentHub({
                 data-testid="wizard-next-btn"
                 disabled={saving}
                 onClick={handleWizardSaveAndNext}
-                className="min-h-[48px] px-5 py-2.5 rounded-xl bg-[#2455E8] hover:bg-[#1D46C7] text-white text-xs sm:text-sm font-bold inline-flex items-center gap-2 shadow-[0_4px_12px_rgba(36,85,232,0.2)] cursor-pointer"
+                className="min-h-[48px] px-3.5 sm:px-5 py-2.5 rounded-[14px] bg-[#2455E8] hover:bg-[#1D46C7] text-white text-xs sm:text-sm font-bold inline-flex items-center justify-center gap-1.5 shadow-[0_4px_12px_rgba(36,85,232,0.2)] cursor-pointer flex-1 sm:flex-initial whitespace-nowrap"
               >
                 {safeWizardIndex < wizardTests.length - 1 ? (
                   <>
                     <span>Simpan &amp; Lanjut</span>
-                    <ChevronRight className="w-4 h-4" />
+                    <ChevronRight className="w-4 h-4 shrink-0" />
                   </>
                 ) : (
                   <>
-                    <Save className="w-4 h-4" />
-                    <span>Simpan Sesi Evaluasi</span>
+                    <Save className="w-4 h-4 shrink-0" />
+                    <span>Simpan Sesi</span>
                   </>
                 )}
               </button>
@@ -1371,33 +1691,51 @@ export default function FootballAssessmentHub({
         </div>
       ) : (
         /* =================================================================== */
-        /* 3, 4, 5. CATALOG MODE: FILTER & SEARCH + TEST CARDS                 */
+        /* D, E, F. CATALOG MODE: SEARCH & FILTER + DOMAIN-GROUPED TEST LIST   */
         /* =================================================================== */
         <>
-          {/* 3. FILTER & SEARCH BAR */}
-          <div className="bg-[#FFFFFF] rounded-2xl p-4 border border-[#E7EBF2] shadow-[0_2px_10px_rgba(16,29,56,0.04)] space-y-3.5">
-            {/* Top Row: Search Input + Desktop Filters + Mobile Filter Sheet Trigger */}
-            <div className="flex flex-col md:flex-row items-stretch md:items-center gap-3">
-              {/* Search Bar */}
-              <div className="relative flex-1">
+          {/* D. SEARCH & FILTER BAR */}
+          <div className="bg-[#FFFFFF] rounded-[16px] md:rounded-2xl p-3.5 sm:p-4 border border-[#E7EBF2] shadow-[0_2px_10px_rgba(16,29,56,0.04)] space-y-3">
+            {/* Row 1: Full-width Search Input + Single Mobile Filter Button / Desktop Toolbar */}
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1 min-w-0">
                 <Search className="w-4 h-4 text-[#68758B] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Cari nama tes atau indikator performa..."
-                  className="w-full min-h-[48px] pl-10 pr-9 py-2 rounded-xl bg-[#F5F7FC] border border-[#E7EBF2] text-xs sm:text-sm font-medium text-[#17233D] focus:bg-[#FFFFFF] focus:outline-none focus:border-[#2455E8]"
+                  placeholder="Cari nama tes atau subkategori..."
+                  className="w-full min-h-[44px] sm:min-h-[46px] pl-10 pr-9 py-2 rounded-[14px] bg-[#F5F7FC] border border-[#E7EBF2] text-xs sm:text-sm font-medium text-[#17233D] focus:bg-[#FFFFFF] focus:outline-none focus:border-[#2455E8]"
                 />
                 {searchQuery && (
                   <button
                     type="button"
+                    aria-label="Hapus pencarian"
                     onClick={() => setSearchQuery('')}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-[#68758B] hover:text-[#17233D] cursor-pointer"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center text-[#68758B] hover:text-[#17233D] cursor-pointer"
                   >
                     <X className="w-4 h-4" />
                   </button>
                 )}
               </div>
+
+              {/* Mobile Single Filter Button (< 768px) */}
+              <button
+                type="button"
+                data-testid="mobile-filter-trigger-btn"
+                onClick={() => setShowMobileFilterSheet(true)}
+                className={`md:hidden min-h-[44px] px-3.5 py-2 rounded-[14px] border text-xs font-bold inline-flex items-center gap-2 shrink-0 transition-colors cursor-pointer ${
+                  statusFilter !== 'ALL'
+                    ? 'bg-[#2455E8]/10 text-[#2455E8] border-[#2455E8]/30'
+                    : 'bg-[#F5F7FC] text-[#17233D] border-[#E7EBF2]'
+                }`}
+              >
+                <SlidersHorizontal className="w-4 h-4 text-[#2455E8] shrink-0" />
+                <span>Filter</span>
+                {statusFilter !== 'ALL' && (
+                  <span className="w-2 h-2 rounded-full bg-[#2455E8]" />
+                )}
+              </button>
 
               {/* Desktop Filter Controls (>= 768px) */}
               <div className="hidden md:flex items-center gap-2.5 shrink-0">
@@ -1405,7 +1743,7 @@ export default function FootballAssessmentHub({
                   aria-label="Filter Status Tes"
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
-                  className="min-h-[48px] px-3.5 py-2 rounded-xl bg-[#F5F7FC] border border-[#E7EBF2] text-xs font-bold text-[#17233D] focus:bg-[#FFFFFF] focus:outline-none focus:border-[#2455E8] cursor-pointer"
+                  className="min-h-[46px] px-3.5 py-2 rounded-[14px] bg-[#F5F7FC] border border-[#E7EBF2] text-xs font-bold text-[#17233D] focus:bg-[#FFFFFF] focus:outline-none focus:border-[#2455E8] cursor-pointer"
                 >
                   <option value="ALL">Semua Status</option>
                   <option value="COMPLETED">Sudah Diukur</option>
@@ -1421,7 +1759,7 @@ export default function FootballAssessmentHub({
                     setActiveTier(nextTier);
                     if (onSelectTier) onSelectTier(nextTier);
                   }}
-                  className="min-h-[48px] px-3.5 py-2 rounded-xl bg-[#F5F7FC] border border-[#E7EBF2] text-xs font-bold text-[#17233D] focus:bg-[#FFFFFF] focus:outline-none focus:border-[#2455E8] cursor-pointer"
+                  className="min-h-[46px] px-3.5 py-2 rounded-[14px] bg-[#F5F7FC] border border-[#E7EBF2] text-xs font-bold text-[#17233D] focus:bg-[#FFFFFF] focus:outline-none focus:border-[#2455E8] cursor-pointer"
                 >
                   {FOOTBALL_AGE_GROUP_OPTIONS.map((opt) => (
                     <option key={opt.id} value={opt.tier}>
@@ -1430,56 +1768,119 @@ export default function FootballAssessmentHub({
                   ))}
                 </select>
               </div>
-
-              {/* Mobile Additional Filter Trigger (< 768px) */}
-              <button
-                type="button"
-                onClick={() => setShowMobileFilterSheet(true)}
-                className="md:hidden min-h-[48px] px-4 py-2 rounded-xl bg-[#F5F7FC] border border-[#E7EBF2] text-xs font-bold text-[#17233D] flex items-center justify-between gap-2 cursor-pointer"
-              >
-                <div className="flex items-center gap-2">
-                  <SlidersHorizontal className="w-4 h-4 text-[#2455E8]" />
-                  <span>Filter Status &amp; Fase Usia</span>
-                </div>
-                <span className="px-2 py-0.5 rounded-full bg-[#2455E8]/10 text-[#2455E8] text-[11px] font-bold">
-                  {statusFilter === 'ALL'
-                    ? 'Semua'
-                    : statusFilter === 'COMPLETED'
-                    ? 'Selesai'
-                    : 'Belum'}{' '}
-                  &bull; F{activeTier}
-                </span>
-              </button>
             </div>
 
-            {/* Horizontal Domain Category Selector */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+            {/* Row 2: Horizontal Scrollable Domain Chips */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 no-scrollbar">
               {CATEGORY_PILLS.map((pill) => {
                 const Icon = pill.icon;
                 const isActive = activeCategory === pill.id;
+                const count = domainCountsMap[pill.id] ?? 0;
                 return (
                   <button
                     key={pill.id}
                     type="button"
                     data-testid={`combine-filter-${pill.id}`}
                     onClick={() => setActiveCategory(pill.id)}
-                    className={`min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 whitespace-nowrap transition-all cursor-pointer shrink-0 ${
+                    className={`min-h-[44px] px-3.5 py-2 rounded-[14px] text-xs font-bold flex items-center gap-1.5 whitespace-nowrap transition-all cursor-pointer shrink-0 ${
                       isActive
                         ? 'bg-[#101D38] text-white shadow-xs'
                         : 'bg-[#F5F7FC] text-[#68758B] hover:text-[#17233D] border border-[#E7EBF2]'
                     }`}
                   >
                     <Icon className="w-3.5 h-3.5 shrink-0" />
-                    <span>{pill.label}</span>
+                    <span>{pill.shortLabel}</span>
+                    <span
+                      className={`text-[10px] font-mono font-extrabold px-1.5 py-0.2 rounded-md tabular-nums ${
+                        isActive
+                          ? 'bg-white/15 text-white'
+                          : 'bg-[#FFFFFF] text-[#68758B]'
+                      }`}
+                    >
+                      {count}
+                    </span>
                   </button>
                 );
               })}
             </div>
+
+            {/* Row 3: Removable Active Filter Chips + Expand/Collapse All */}
+            <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#E7EBF2] flex-wrap">
+              {hasActiveFilters ? (
+                <div
+                  data-testid="active-filter-chips"
+                  className="flex items-center gap-1.5 flex-wrap"
+                >
+                  <span className="text-[11px] font-semibold text-[#68758B]">
+                    Filter aktif:
+                  </span>
+                  {activeCategory !== 'ALL' && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveCategory('ALL')}
+                      className="min-h-[30px] px-2.5 py-1 rounded-lg bg-[#2455E8]/10 text-[#2455E8] text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>{DOMAIN_LABEL_MAP[activeCategory] || activeCategory}</span>
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                  {statusFilter !== 'ALL' && (
+                    <button
+                      type="button"
+                      onClick={() => setStatusFilter('ALL')}
+                      className="min-h-[30px] px-2.5 py-1 rounded-lg bg-[#2455E8]/10 text-[#2455E8] text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>
+                        {statusFilter === 'COMPLETED'
+                          ? 'Sudah Diukur'
+                          : 'Belum Diukur'}
+                      </span>
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                  {searchQuery.trim() !== '' && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="min-h-[30px] px-2.5 py-1 rounded-lg bg-[#2455E8]/10 text-[#2455E8] text-[11px] font-bold inline-flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>&ldquo;{searchQuery.trim()}&rdquo;</span>
+                      <X className="w-3 h-3" />
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setActiveCategory('ALL');
+                      setStatusFilter('ALL');
+                      setSearchQuery('');
+                    }}
+                    className="text-[11px] font-bold text-[#DC4545] hover:underline px-1.5 py-0.5 cursor-pointer"
+                  >
+                    Hapus Semua
+                  </button>
+                </div>
+              ) : (
+                <span className="text-[11px] font-medium text-[#68758B]">
+                  Menampilkan {filteredTests.length} tes pada {groupedDomainTests.length} domain
+                </span>
+              )}
+
+              {groupedDomainTests.length > 1 && (
+                <button
+                  type="button"
+                  onClick={handleToggleAllDomains}
+                  className="text-[11px] font-bold text-[#2455E8] hover:underline py-1 cursor-pointer ml-auto"
+                >
+                  {allVisibleDomainsOpen ? 'Tutup Semua Domain' : 'Buka Semua Domain'}
+                </button>
+              )}
+            </div>
           </div>
 
-          {/* 4 & 5. TEST CARDS GRID */}
-          {filteredTests.length === 0 ? (
-            <div className="bg-[#FFFFFF] rounded-2xl border border-dashed border-[#E7EBF2] p-8 text-center space-y-2">
+          {/* E. TEST LIBRARY LIST — GROUPED BY DOMAIN */}
+          {groupedDomainTests.length === 0 ? (
+            <div className="bg-[#FFFFFF] rounded-[16px] border border-dashed border-[#E7EBF2] p-8 text-center space-y-2">
               <p className="text-sm font-bold text-[#17233D]">
                 Tidak ada tes yang cocok dengan filter saat ini.
               </p>
@@ -1488,189 +1889,321 @@ export default function FootballAssessmentHub({
               </p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {filteredTests.map((item) => {
-                const isCompleted =
-                  item.hasValidInput ||
-                  (item.previousSavedScore !== null &&
-                    item.previousSavedScore > 0);
-                const displayScore = item.hasValidInput
-                  ? item.calcResult.finalScore
-                  : item.previousSavedScore;
-                const gradeInfo = displayScore
-                  ? getScoreGradeInfo(displayScore)
-                  : null;
-                const isExpanded = Boolean(expandedTestCodes[item.test_code]);
-                const isGuideOpen = Boolean(openGuideCodes[item.test_code]);
+            <div className="space-y-3">
+              {groupedDomainTests.map((group) => {
+                const DomainIcon = group.theme.icon || Activity;
+                const isForceExpanded =
+                  activeCategory !== 'ALL' || searchQuery.trim() !== '';
+                const isDomainOpen =
+                  isForceExpanded || Boolean(openDomains[group.domainKey]);
 
                 return (
                   <div
-                    key={item.test_code}
-                    data-testid={`test-card-${item.test_code}`}
-                    className={`bg-[#FFFFFF] rounded-2xl border transition-all p-4 sm:p-5 flex flex-col justify-between gap-4 shadow-[0_2px_10px_rgba(16,29,56,0.04)] ${
-                      isExpanded
-                        ? 'border-[#2455E8]'
-                        : isCompleted
-                        ? 'border-[#16A779]/40'
-                        : 'border-[#E7EBF2]'
-                    }`}
+                    key={group.domainKey}
+                    data-testid={`domain-group-${group.domainKey}`}
+                    className="bg-[#FFFFFF] rounded-[16px] md:rounded-2xl border border-[#E7EBF2] shadow-[0_2px_8px_rgba(16,29,56,0.03)] overflow-hidden"
                   >
-                    {/* Card Top Section */}
-                    <div className="space-y-2.5">
-                      {/* Domain & Status Row */}
-                      <div className="flex items-center justify-between gap-2 flex-wrap">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span
-                            className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${
-                              DOMAIN_BADGE_STYLE[item.category] ||
-                              'bg-slate-100 text-slate-700 border-slate-200'
-                            }`}
-                          >
-                            {DOMAIN_LABEL_MAP[item.category] || item.category}
-                          </span>
-                          <span className="text-xs font-semibold text-[#68758B]">
-                            {item.sub_indicator_name}
-                          </span>
-                        </div>
-
-                        {/* Status Badge */}
-                        {isCompleted ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#16A779]/10 text-[#16A779] text-[11px] font-bold">
-                            <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                            <span>Selesai</span>
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#F5F7FC] border border-[#E7EBF2] text-[#68758B] text-[11px] font-semibold">
-                            <span>Belum Diukur</span>
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Test Name & Short Description */}
-                      <div>
-                        <h3 className="text-base font-extrabold text-[#17233D] leading-snug">
-                          {item.test_name}
-                        </h3>
-                        <p className="text-xs text-[#68758B] leading-relaxed mt-1 line-clamp-2">
-                          {item.protocol_description}
-                        </p>
-                      </div>
-
-                      {/* Measurement Result & Converted Score Strip */}
-                      <div className="p-3 rounded-xl bg-[#F5F7FC] border border-[#E7EBF2] flex items-center justify-between gap-3">
+                    {/* Collapsible Domain Group Header */}
+                    <button
+                      type="button"
+                      data-testid={`domain-group-header-${group.domainKey}`}
+                      aria-expanded={isDomainOpen}
+                      onClick={() => toggleDomainSection(group.domainKey)}
+                      className="w-full min-h-[54px] px-4 py-3 flex items-center justify-between gap-3 text-left hover:bg-[#F5F7FC]/70 transition-colors cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3 min-w-0">
+                        <span
+                          className="w-8 h-8 rounded-[10px] flex items-center justify-center shrink-0"
+                          style={{
+                            backgroundColor: `${group.theme.color}15`,
+                            color: group.theme.color
+                          }}
+                        >
+                          <DomainIcon className="w-4 h-4" />
+                        </span>
                         <div className="min-w-0">
-                          <span className="block text-[10px] font-bold uppercase tracking-wider text-[#68758B]">
-                            Hasil Pengukuran &amp; Unit
-                          </span>
-                          <span className="text-xs sm:text-sm font-bold text-[#17233D] truncate block mt-0.5">
-                            {item.hasValidInput
-                              ? item.rawDisplay
-                              : item.previousSavedScore
-                              ? `Tersimpan di Rapor (${item.measurement_unit})`
-                              : `Satuan: ${item.measurement_unit}`}
-                          </span>
-                        </div>
-
-                        <div className="text-right shrink-0">
-                          <span className="block text-[10px] font-bold uppercase tracking-wider text-[#68758B]">
-                            Skor Konversi
-                          </span>
-                          <div className="flex items-center justify-end gap-1.5 mt-0.5">
-                            {gradeInfo && (
-                              <span
-                                className={`px-1.5 py-0.5 rounded text-[10px] font-bold border ${gradeInfo.badgeClass}`}
-                              >
-                                {gradeInfo.grade}
-                              </span>
-                            )}
-                            <span
-                              className={`font-mono text-base font-extrabold tabular-nums ${
-                                displayScore
-                                  ? 'text-[#16A779]'
-                                  : 'text-[#68758B]'
-                              }`}
-                            >
-                              {displayScore ? `${displayScore} / 100` : '—'}
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-[14px] sm:text-base font-extrabold text-[#17233D] truncate">
+                              {group.label}
+                            </h3>
+                            <span className="hidden sm:inline text-xs font-semibold text-[#68758B] shrink-0">
+                              &bull; {group.totalCount}{' '}
+                              {group.isAttendanceSyncedDomain ? 'Indikator' : 'Tes'}
                             </span>
                           </div>
+                          <p className="text-[11px] font-medium text-[#68758B] mt-0.5 truncate">
+                            {group.isAttendanceSyncedDomain
+                              ? '3 indikator otomatis dari Presensi Akademi'
+                              : `${group.completedCount} dari ${group.totalCount} tes selesai diukur`}
+                          </p>
                         </div>
                       </div>
-                    </div>
 
-                    {/* Action Bar: Toggle Inline Input, Field Guide, or Open in Wizard */}
-                    <div className="space-y-3 pt-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <button
-                          type="button"
-                          onClick={() => toggleExpandTestCard(item.test_code)}
-                          className={`flex-1 min-h-[44px] px-3.5 py-2 rounded-xl text-xs font-bold inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
-                            isExpanded
-                              ? 'bg-[#101D38] text-white'
-                              : isCompleted
-                              ? 'bg-[#F5F7FC] hover:bg-[#2455E8] text-[#17233D] hover:text-white border border-[#E7EBF2]'
-                              : 'bg-[#2455E8] hover:bg-[#1D46C7] text-white'
+                      <div className="flex items-center gap-2.5 shrink-0">
+                        <span
+                          className={`px-2.5 py-1 rounded-lg font-mono text-xs font-extrabold tabular-nums ${
+                            group.completedCount === group.totalCount &&
+                            group.totalCount > 0
+                              ? 'bg-[#16A779]/10 text-[#16A779]'
+                              : group.completedCount > 0
+                              ? 'bg-[#2455E8]/10 text-[#2455E8]'
+                              : 'bg-[#F5F7FC] text-[#68758B]'
                           }`}
                         >
-                          <Edit3 className="w-3.5 h-3.5 shrink-0" />
-                          <span>
-                            {isExpanded
-                              ? 'Tutup Form Input'
-                              : isCompleted
-                              ? 'Edit Hasil Tes'
-                              : 'Input Hasil Tes'}
-                          </span>
-                        </button>
+                          {group.completedCount}/{group.totalCount}
+                        </span>
+                        <span className="w-8 h-8 rounded-lg bg-[#F5F7FC] border border-[#E7EBF2] flex items-center justify-center text-[#17233D]">
+                          <ChevronDown
+                            className={`w-4 h-4 transition-transform duration-200 ${
+                              isDomainOpen ? 'rotate-180 text-[#2455E8]' : ''
+                            }`}
+                          />
+                        </span>
+                      </div>
+                    </button>
 
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleStartOrResumeWizard(item.test_code)
-                          }
-                          className="min-h-[44px] px-3 py-2 rounded-xl bg-[#F5F7FC] hover:bg-[#E7EBF2]/70 text-[#17233D] border border-[#E7EBF2] text-xs font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer shrink-0"
-                          title="Buka tes ini di mode Wizard"
-                        >
-                          <Play className="w-3.5 h-3.5 text-[#2455E8]" />
-                          <span>Wizard</span>
-                        </button>
+                    {/* Domain Tests Container */}
+                    {isDomainOpen && (
+                      <div className="p-3 sm:p-4 pt-2 border-t border-[#E7EBF2] bg-[#F5F7FC]/50">
+                        {group.isAttendanceSyncedDomain ? (
+                          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+                            {group.devIndicators.map((devInd) => (
+                              <div
+                                key={devInd.code}
+                                className="rounded-[14px] border border-[#E7EBF2] bg-[#FFFFFF] p-3.5 flex flex-col justify-between gap-2.5"
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="min-w-0">
+                                    <span className="text-[11px] font-semibold text-[#68758B] block">
+                                      Perkembangan &bull; {devInd.code}
+                                    </span>
+                                    <h4 className="text-sm font-extrabold text-[#17233D] mt-0.5">
+                                      {devInd.label}
+                                    </h4>
+                                  </div>
+                                  <span className="px-2 py-1 rounded-lg bg-[#16A779]/10 text-[#16A779] text-[10px] font-bold shrink-0">
+                                    Otomatis Presensi
+                                  </span>
+                                </div>
+                                <p className="text-xs text-[#68758B] leading-relaxed">
+                                  {devInd.description}
+                                </p>
+                                <div className="pt-2 border-t border-[#E7EBF2] flex items-center justify-between">
+                                  <span className="text-[11px] font-semibold text-[#68758B]">
+                                    Skor Sinkronisasi
+                                  </span>
+                                  <span className="font-mono text-sm font-black text-[#17233D] tabular-nums">
+                                    {devInd.score !== null ? `${devInd.score}/100` : 'Belum Ada Presensi'}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                          {group.items.map((item) => {
+                            const isCompleted =
+                              item.hasValidInput ||
+                              (item.previousSavedScore !== null &&
+                                item.previousSavedScore > 0);
+                            const displayScore = item.hasValidInput
+                              ? item.calcResult.finalScore
+                              : item.previousSavedScore;
+                            const gradeInfo = displayScore
+                              ? getScoreGradeInfo(displayScore)
+                              : null;
+                            const isExpanded = Boolean(
+                              expandedTestCodes[item.test_code]
+                            );
+                            const isGuideOpen = Boolean(
+                              openGuideCodes[item.test_code]
+                            );
 
-                        {item.field_guide && (
-                          <button
-                            type="button"
-                            onClick={() => toggleProtocolGuide(item.test_code)}
-                            className="min-w-[44px] min-h-[44px] rounded-xl bg-[#F5F7FC] hover:bg-[#E7EBF2]/70 text-[#68758B] hover:text-[#17233D] border border-[#E7EBF2] flex items-center justify-center transition-colors cursor-pointer shrink-0"
-                            title="Panduan pelaksanaan tes"
-                          >
-                            <HelpCircle className="w-4 h-4" />
-                          </button>
+                            return (
+                              <div
+                                key={item.test_code}
+                                data-testid={`test-card-${item.test_code}`}
+                                className={`bg-[#FFFFFF] rounded-[14px] border transition-all p-3.5 sm:p-4 flex flex-col justify-between gap-3 ${
+                                  isExpanded
+                                    ? 'border-[#2455E8] shadow-[0_2px_10px_rgba(36,85,232,0.08)]'
+                                    : isCompleted
+                                    ? 'border-[#16A779]/40'
+                                    : 'border-[#E7EBF2]'
+                                }`}
+                              >
+                                {/* Compact Card Top Info */}
+                                <div className="space-y-2">
+                                  <div className="flex items-start justify-between gap-2.5">
+                                    <div className="min-w-0 flex-1">
+                                      <h4 className="text-[14px] sm:text-[15px] font-extrabold text-[#17233D] leading-snug">
+                                        {item.test_name}
+                                      </h4>
+                                      <p className="text-[11px] sm:text-xs font-semibold text-[#68758B] mt-0.5 truncate">
+                                        Subkategori: {item.sub_indicator_name}
+                                      </p>
+                                    </div>
+
+                                    {/* Status Measurement Indicator */}
+                                    {isCompleted ? (
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-[#16A779]/10 text-[#16A779] text-[11px] font-bold shrink-0">
+                                        <CheckCircle2 className="w-3 h-3 shrink-0" />
+                                        <span>Selesai</span>
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-[#F5F7FC] border border-[#E7EBF2] text-[#68758B] text-[11px] font-semibold shrink-0">
+                                        Belum Diukur
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Desktop-only short description (hidden on compact mobile card by default) */}
+                                  <p className="hidden md:block text-xs text-[#68758B] leading-relaxed line-clamp-2">
+                                    {item.protocol_description}
+                                  </p>
+                                </div>
+
+                                {/* Compact Bottom Row: Measurement Result + Converted Score + Single Contextual Action */}
+                                <div className="pt-2 border-t border-[#E7EBF2] flex items-center justify-between gap-2">
+                                  <div className="min-w-0 flex-1">
+                                    {isCompleted ? (
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="font-mono text-sm sm:text-base font-extrabold text-[#16A779] tabular-nums">
+                                          {displayScore}/100
+                                        </span>
+                                        {gradeInfo && (
+                                          <span
+                                            className={`px-1.5 py-0.2 rounded text-[10px] font-bold border ${gradeInfo.badgeClass}`}
+                                          >
+                                            Grade {gradeInfo.grade}
+                                          </span>
+                                        )}
+                                        <span className="text-[11px] font-semibold text-[#17233D] truncate">
+                                          &bull;{' '}
+                                          {item.hasValidInput
+                                            ? item.rawDisplay
+                                            : `Tersimpan (${item.measurement_unit})`}
+                                        </span>
+                                      </div>
+                                    ) : (
+                                      <span className="text-[11px] font-medium text-[#68758B]">
+                                        Satuan ukur: <strong className="text-[#17233D]">{item.measurement_unit}</strong>
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* MOBILE Single Contextual Button: Opens Bottom Sheet Detail/Edit */}
+                                  <button
+                                    type="button"
+                                    data-testid={`mobile-test-detail-btn-${item.test_code}`}
+                                    onClick={() => setDetailSheetTestCode(item.test_code)}
+                                    className={`md:hidden min-h-[44px] px-3.5 py-2 rounded-[12px] text-xs font-bold inline-flex items-center gap-1.5 shrink-0 transition-all cursor-pointer ${
+                                      isCompleted
+                                        ? 'bg-[#F5F7FC] text-[#17233D] border border-[#E7EBF2]'
+                                        : 'bg-[#2455E8] text-white'
+                                    }`}
+                                  >
+                                    <Edit3 className="w-3.5 h-3.5 shrink-0" />
+                                    <span>{isCompleted ? 'Detail / Edit' : 'Detail / Input'}</span>
+                                  </button>
+
+                                  {/* DESKTOP Contextual Action Buttons (>= 768px) */}
+                                  <div className="hidden md:flex items-center gap-1.5 shrink-0">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleExpandTestCard(item.test_code)}
+                                      className={`min-h-[40px] px-3.5 py-1.5 rounded-[12px] text-xs font-bold inline-flex items-center gap-1.5 transition-all cursor-pointer ${
+                                        isExpanded
+                                          ? 'bg-[#101D38] text-white'
+                                          : isCompleted
+                                          ? 'bg-[#F5F7FC] hover:bg-[#2455E8] text-[#17233D] hover:text-white border border-[#E7EBF2]'
+                                          : 'bg-[#2455E8] hover:bg-[#1D46C7] text-white'
+                                      }`}
+                                    >
+                                      <Edit3 className="w-3.5 h-3.5 shrink-0" />
+                                      <span>
+                                        {isExpanded
+                                          ? 'Tutup'
+                                          : isCompleted
+                                          ? 'Detail / Edit'
+                                          : 'Input Hasil'}
+                                      </span>
+                                    </button>
+
+                                    <button
+                                      type="button"
+                                      onClick={() => setDetailSheetTestCode(item.test_code)}
+                                      className="min-w-[40px] min-h-[40px] rounded-[12px] bg-[#F5F7FC] hover:bg-[#E7EBF2]/70 text-[#68758B] hover:text-[#17233D] border border-[#E7EBF2] flex items-center justify-center transition-colors cursor-pointer"
+                                      title="Lihat instruksi & detail lengkap"
+                                      aria-label={`Instruksi ${item.test_name}`}
+                                    >
+                                      <HelpCircle className="w-4 h-4" />
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* Desktop Inline Expanded Editor */}
+                                {isExpanded && (
+                                  <div className="hidden md:block pt-3 border-t border-[#E7EBF2] space-y-3">
+                                    {item.field_guide && (
+                                      <div className="flex items-center justify-between">
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            toggleProtocolGuide(item.test_code)
+                                          }
+                                          className="text-xs font-bold text-[#2455E8] hover:underline inline-flex items-center gap-1 cursor-pointer"
+                                        >
+                                          <HelpCircle className="w-3.5 h-3.5" />
+                                          <span>
+                                            {isGuideOpen
+                                              ? 'Sembunyikan Panduan Lapangan'
+                                              : 'Tampilkan Panduan Lapangan'}
+                                          </span>
+                                        </button>
+
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            handleStartOrResumeWizard(item.test_code)
+                                          }
+                                          className="text-xs font-bold text-[#68758B] hover:text-[#17233D] inline-flex items-center gap-1 cursor-pointer"
+                                        >
+                                          <Play className="w-3 h-3 text-[#2455E8]" />
+                                          <span>Buka di Wizard</span>
+                                        </button>
+                                      </div>
+                                    )}
+
+                                    {isGuideOpen && item.field_guide && (
+                                      <div className="p-3 rounded-[12px] bg-[#F5F7FC] border border-[#E7EBF2] text-xs text-[#17233D] space-y-1.5">
+                                        <div>
+                                          <strong className="font-bold">
+                                            Alat &amp; Persiapan:
+                                          </strong>{' '}
+                                          <span className="text-[#68758B]">
+                                            {item.field_guide.equipment}
+                                          </span>
+                                        </div>
+                                        {Array.isArray(item.field_guide.steps) && (
+                                          <ol className="list-decimal list-inside space-y-1 text-[#68758B]">
+                                            {item.field_guide.steps.map((st, i) => (
+                                              <li key={i}>{st}</li>
+                                            ))}
+                                          </ol>
+                                        )}
+                                      </div>
+                                    )}
+
+                                    {renderTestInputForm(item, false)}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                         )}
                       </div>
-
-                      {/* Collapsible Field Guide */}
-                      {isGuideOpen && item.field_guide && (
-                        <div className="p-3.5 rounded-xl bg-[#F5F7FC] border border-[#E7EBF2] text-xs text-[#17233D] space-y-2">
-                          <div>
-                            <strong className="font-bold">Alat &amp; Persiapan:</strong>{' '}
-                            <span className="text-[#68758B]">
-                              {item.field_guide.equipment}
-                            </span>
-                          </div>
-                          {Array.isArray(item.field_guide.steps) && (
-                            <ol className="list-decimal list-inside space-y-1 text-[#68758B]">
-                              {item.field_guide.steps.map((st, i) => (
-                                <li key={i}>{st}</li>
-                              ))}
-                            </ol>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Collapsible Input Form */}
-                      {isExpanded && (
-                        <div className="pt-3 border-t border-[#E7EBF2]">
-                          {renderTestInputForm(item, false)}
-                        </div>
-                      )}
-                    </div>
+                    )}
                   </div>
                 );
               })}
@@ -1679,17 +2212,22 @@ export default function FootballAssessmentHub({
         </>
       )}
 
-      {/* 7. STICKY / BOTTOM SESSION SAVE BAR */}
+      {/* ===================================================================== */}
+      {/* H. COMPACT SESSION SYNCHRONIZATION BAR                                */}
+      {/* ===================================================================== */}
       {!isArchived && (
-        <div className="bg-[#FFFFFF] rounded-2xl p-4 sm:p-5 border border-[#E7EBF2] shadow-[0_4px_16px_rgba(16,29,56,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-3.5">
-          <div>
-            <h4 className="text-sm font-bold text-[#17233D]">
+        <div
+          data-testid="session-sync-card"
+          className="bg-[#FFFFFF] rounded-[16px] md:rounded-2xl p-3.5 sm:p-4 border border-[#E7EBF2] shadow-[0_4px_16px_rgba(16,29,56,0.06)] flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+        >
+          <div className="min-w-0">
+            <h4 className="text-xs sm:text-sm font-extrabold text-[#17233D]">
               Sinkronisasi Hasil Sesi ke Rapor Atlet
             </h4>
-            <p className="text-xs text-[#68758B] font-medium mt-0.5">
+            <p className="text-[11px] sm:text-xs text-[#68758B] font-medium mt-0.5">
               {sessionStats.measuredNowCount > 0
-                ? `${sessionStats.measuredNowCount} hasil tes baru siap disimpan dan diperbarui ke Rapor & Polar Area.`
-                : 'Masukkan hasil pengukuran pada kartu tes atau gunakan Wizard Tes untuk memperbarui rapor atlet.'}
+                ? `${sessionStats.measuredNowCount} hasil tes siap disimpan dan akan otomatis memperbarui Rapor & Polar Area.`
+                : 'Hasil pengukuran yang disimpan akan langsung memperbarui skor Rapor & Polar Area.'}
             </p>
           </div>
 
@@ -1698,7 +2236,7 @@ export default function FootballAssessmentHub({
             data-testid="save-master-session-btn"
             disabled={saving || sessionStats.measuredNowCount === 0}
             onClick={handleSaveAllAndSync}
-            className="w-full sm:w-auto min-h-[48px] px-6 py-2.5 rounded-xl bg-[#16A779] hover:bg-[#128B64] disabled:bg-[#E7EBF2] disabled:text-[#68758B] text-white text-xs sm:text-sm font-bold inline-flex items-center justify-center gap-2 transition-all cursor-pointer shrink-0"
+            className="w-full sm:w-auto min-h-[48px] px-5 py-2.5 rounded-[14px] bg-[#16A779] hover:bg-[#128B64] disabled:bg-[#E7EBF2] disabled:text-[#68758B] text-white text-xs sm:text-sm font-extrabold inline-flex items-center justify-center gap-2 transition-all cursor-pointer shrink-0"
           >
             <Save className="w-4 h-4 shrink-0" />
             <span>
@@ -1710,12 +2248,101 @@ export default function FootballAssessmentHub({
         </div>
       )}
 
-      {/* MOBILE ADDITIONAL FILTER BOTTOM SHEET */}
+      {/* ===================================================================== */}
+      {/* F. TEST DETAIL & EDIT BOTTOM SHEET                                    */}
+      {/* ===================================================================== */}
+      <MobileBottomSheet
+        isOpen={Boolean(activeDetailTest)}
+        onClose={() => setDetailSheetTestCode(null)}
+        title={activeDetailTest?.test_name || 'Detail Tes'}
+        subtitle={
+          activeDetailTest
+            ? `${
+                DOMAIN_LABEL_MAP[activeDetailTest.category] ||
+                activeDetailTest.category
+              } • Subkategori: ${activeDetailTest.sub_indicator_name}`
+            : ''
+        }
+      >
+        {activeDetailTest && (
+          <div
+            data-testid="test-detail-bottom-sheet"
+            className="space-y-4 text-left"
+          >
+            {/* Protocol Description & Field Instructions */}
+            <div className="p-3.5 rounded-[14px] bg-[#F5F7FC] border border-[#E7EBF2] space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-[#2455E8]">
+                  Instruksi Pengukuran
+                </span>
+                <span className="px-2 py-0.5 rounded-md bg-[#FFFFFF] border border-[#E7EBF2] text-[11px] font-bold text-[#17233D]">
+                  Satuan: {activeDetailTest.measurement_unit}
+                </span>
+              </div>
+
+              <p className="text-xs text-[#17233D] leading-relaxed font-medium my-0">
+                {activeDetailTest.protocol_description}
+              </p>
+
+              {activeDetailTest.field_guide && (
+                <div className="pt-2 border-t border-[#E7EBF2] space-y-1.5 text-xs">
+                  <div>
+                    <strong className="font-bold text-[#17233D]">
+                      Alat &amp; Persiapan:
+                    </strong>{' '}
+                    <span className="text-[#68758B]">
+                      {activeDetailTest.field_guide.equipment}
+                    </span>
+                  </div>
+                  {Array.isArray(activeDetailTest.field_guide.steps) && (
+                    <ol className="list-decimal list-inside space-y-1 text-[#68758B]">
+                      {activeDetailTest.field_guide.steps.map((st, idx) => (
+                        <li key={idx}>{st}</li>
+                      ))}
+                    </ol>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Measurement Input & Live Conversion Score */}
+            {renderTestInputForm(activeDetailTest, false)}
+
+            {/* Sheet Footer Actions */}
+            <div className="pt-2 flex flex-col gap-2">
+              <button
+                type="button"
+                data-testid="detail-sheet-done-btn"
+                onClick={() => setDetailSheetTestCode(null)}
+                className="w-full min-h-[48px] rounded-[14px] bg-[#2455E8] text-white text-xs font-extrabold flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Check className="w-4 h-4" />
+                <span>Selesai &amp; Tutup Detail</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  handleStartOrResumeWizard(activeDetailTest.test_code)
+                }
+                className="w-full min-h-[44px] rounded-[14px] bg-[#F5F7FC] border border-[#E7EBF2] text-[#17233D] text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Play className="w-3.5 h-3.5 text-[#2455E8]" />
+                <span>Buka Tes Ini di Wizard Fokus</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </MobileBottomSheet>
+
+      {/* ===================================================================== */}
+      {/* D. MOBILE ADVANCED FILTER BOTTOM SHEET                                */}
+      {/* ===================================================================== */}
       <MobileBottomSheet
         isOpen={showMobileFilterSheet}
         onClose={() => setShowMobileFilterSheet(false)}
         title="Filter Master Test Library"
-        subtitle="Sesuaikan status pengujian dan fase usia kurikulum"
+        subtitle="Sesuaikan status pengukuran dan fase usia kurikulum"
       >
         <div className="space-y-4">
           <div className="space-y-2">
@@ -1732,7 +2359,7 @@ export default function FootballAssessmentHub({
                   key={st.id}
                   type="button"
                   onClick={() => setStatusFilter(st.id)}
-                  className={`min-h-[44px] px-3 py-2 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                  className={`min-h-[44px] px-3 py-2 rounded-[12px] text-xs font-bold border transition-all cursor-pointer ${
                     statusFilter === st.id
                       ? 'bg-[#2455E8] text-white border-[#2455E8]'
                       : 'bg-[#F5F7FC] text-[#17233D] border-[#E7EBF2]'
@@ -1757,7 +2384,7 @@ export default function FootballAssessmentHub({
                     setActiveTier(opt.tier);
                     if (onSelectTier) onSelectTier(opt.tier);
                   }}
-                  className={`w-full min-h-[48px] px-3.5 py-2.5 rounded-xl border text-left text-xs font-bold flex items-center justify-between transition-all cursor-pointer ${
+                  className={`w-full min-h-[48px] px-3.5 py-2.5 rounded-[12px] border text-left text-xs font-bold flex items-center justify-between transition-all cursor-pointer ${
                     activeTier === opt.tier
                       ? 'bg-[#2455E8]/10 text-[#2455E8] border-[#2455E8]'
                       : 'bg-[#FFFFFF] text-[#17233D] border-[#E7EBF2]'
@@ -1770,13 +2397,26 @@ export default function FootballAssessmentHub({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={() => setShowMobileFilterSheet(false)}
-            className="w-full min-h-[48px] rounded-xl bg-[#101D38] text-white text-xs font-bold cursor-pointer"
-          >
-            Terapkan Filter
-          </button>
+          <div className="grid grid-cols-2 gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => {
+                setStatusFilter('ALL');
+                setActiveCategory('ALL');
+                setShowMobileFilterSheet(false);
+              }}
+              className="w-full min-h-[48px] rounded-[14px] bg-[#F5F7FC] border border-[#E7EBF2] text-[#17233D] text-xs font-bold cursor-pointer"
+            >
+              Reset Filter
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowMobileFilterSheet(false)}
+              className="w-full min-h-[48px] rounded-[14px] bg-[#101D38] text-white text-xs font-bold cursor-pointer"
+            >
+              Terapkan Filter
+            </button>
+          </div>
         </div>
       </MobileBottomSheet>
 
