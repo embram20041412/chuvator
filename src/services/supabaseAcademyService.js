@@ -1440,16 +1440,46 @@ export async function deleteEvaluation(evaluationId) {
 // 6. PRESENSI ATLET (academy_attendance)
 // -------------------------------------------------------------------------
 
-export async function getAttendance(tenantId, classId, date = null) {
+export async function getAttendance(tenantId, classId, dateOrOptions = null) {
   if (!tenantId) return [];
+
+  const isNumberDays =
+    typeof dateOrOptions === 'number' && Number.isFinite(dateOrOptions) && dateOrOptions > 0;
+  const isOptionsObj = Boolean(dateOrOptions && typeof dateOrOptions === 'object');
+  const lookbackDays = isNumberDays
+    ? Math.floor(dateOrOptions)
+    : isOptionsObj && Number(dateOrOptions.days) > 0
+      ? Math.floor(Number(dateOrOptions.days))
+      : null;
+  const rowLimit =
+    isOptionsObj && Number(dateOrOptions.limit) > 0
+      ? Math.floor(Number(dateOrOptions.limit))
+      : isNumberDays
+        ? Math.floor(dateOrOptions)
+        : null;
+  const exactDate =
+    !isNumberDays && !isOptionsObj && typeof dateOrOptions === 'string'
+      ? toDateOrNull(dateOrOptions)
+      : isOptionsObj && dateOrOptions.date
+        ? toDateOrNull(dateOrOptions.date)
+        : null;
+
+  let minDateStr = null;
+  if (lookbackDays) {
+    const pastDate = new Date();
+    pastDate.setDate(pastDate.getDate() - lookbackDays);
+    minDateStr = pastDate.toISOString().split('T')[0];
+  }
 
   if (isDemoTenant(tenantId)) {
     const allDemo = readDemoAttendance();
-    return allDemo.filter((row) => {
+    const filtered = allDemo.filter((row) => {
       const classOk = !classId || row.class_id === classId || row.classId === classId;
-      const dateOk = !date || row.date === date;
-      return classOk && dateOk;
+      const dateOk = !exactDate || row.date === exactDate;
+      const rangeOk = !minDateStr || !row.date || row.date >= minDateStr;
+      return classOk && dateOk && rangeOk;
     });
+    return rowLimit ? filtered.slice(0, rowLimit) : filtered;
   }
 
   let query = supabase
@@ -1459,9 +1489,11 @@ export async function getAttendance(tenantId, classId, date = null) {
 
   const safeClassId = toUuidOrNull(classId) || classId;
   if (safeClassId) query = query.eq('class_id', safeClassId);
-  if (date) query = query.eq('date', date);
+  if (exactDate) query = query.eq('date', exactDate);
+  if (minDateStr) query = query.gte('date', minDateStr);
 
   query = query.order('created_at', { ascending: false });
+  if (rowLimit) query = query.limit(rowLimit);
 
   const { data, error } = await query;
   if (error) {

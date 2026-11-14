@@ -131,7 +131,7 @@ export async function syncAthleteAttendanceToDevelopmentIndicators({
 
   let attendanceRows = [];
   try {
-    attendanceRows = await getAttendance(tenantId, classId, 120);
+    attendanceRows = await getAttendance(tenantId, classId, { days: 120, limit: 120 });
   } catch (err) {
     console.warn('[scoutingCombineService] getAttendance fallback:', err);
   }
@@ -213,7 +213,7 @@ export async function getAthleteIndicatorScores(tenantId, athleteId, options = {
 
   let attendanceRows = [];
   try {
-    attendanceRows = await getAttendance(tenantId, classId, 120);
+    attendanceRows = await getAttendance(tenantId, classId, { days: 120, limit: 120 });
   } catch {
     attendanceRows = [];
   }
@@ -415,7 +415,10 @@ export async function saveMasterAssessmentSessionAndSync({
         : null;
     const errs = Math.max(0, parseInt(item.errors_count ?? 0, 10) || 0);
 
+    const existingSessionId = item.id || item.session_id || item.sessionId || null;
+
     return {
+      ...(existingSessionId ? { id: existingSessionId } : {}),
       test_code: testMeta?.test_code || code,
       test_name: testMeta?.test_name || code,
       indicator_key: indicatorKey,
@@ -444,7 +447,7 @@ export async function saveMasterAssessmentSessionAndSync({
 
     const existingSessions = readLocalJson(sessionsKey, []);
     const newSessionRows = normalizedSessions.map((entry, idx) => ({
-      id: `demo-sess-${Date.now()}-${idx}`,
+      id: entry.id || `demo-sess-${Date.now()}-${idx}`,
       tenant_id: tenantId,
       athlete_id: athleteId,
       evaluator_id: evaluatorId || 'demo-coach',
@@ -456,7 +459,11 @@ export async function saveMasterAssessmentSessionAndSync({
       testing_date: entry.testing_date,
       created_at: nowIso
     }));
-    writeLocalJson(sessionsKey, [...newSessionRows, ...existingSessions].slice(0, 150));
+    const upsertedIds = new Set(newSessionRows.map((r) => r.id));
+    const remainingOld = (Array.isArray(existingSessions) ? existingSessions : []).filter(
+      (old) => !upsertedIds.has(old?.id)
+    );
+    writeLocalJson(sessionsKey, [...newSessionRows, ...remainingOld].slice(0, 150));
 
     const existingIndicators = await getAthleteIndicatorScores(tenantId, athleteId, { tier });
     const updatedIndicators = { ...existingIndicators };
@@ -483,28 +490,53 @@ export async function saveMasterAssessmentSessionAndSync({
     };
   }
 
-  // Real Supabase persistence
+  // Real Supabase persistence (upsert onConflict: 'id' so resumed draft IDs update cleanly without 409 Conflict)
   const safeEvaluatorId = toUuidOrNull(evaluatorId);
-  const sessionPayload = normalizedSessions.map((entry) => ({
-    tenant_id: tenantId,
-    athlete_id: athleteId,
-    evaluator_id: safeEvaluatorId,
-    test_code: entry.test_code,
-    raw_value_1: entry.raw_value_1,
-    raw_value_2: entry.raw_value_2,
-    errors_count: entry.errors_count,
-    calculated_score: entry.calculated_score,
-    testing_date: entry.testing_date
-  }));
+  const rowsWithId = [];
+  const rowsWithoutId = [];
 
-  const { data: insertedSessions, error: insertError } = await supabase
-    .from('athlete_test_sessions')
-    .insert(sessionPayload)
-    .select();
+  normalizedSessions.forEach((entry) => {
+    const validUuid = toUuidOrNull(entry.id);
+    const payloadRow = {
+      tenant_id: tenantId,
+      athlete_id: athleteId,
+      evaluator_id: safeEvaluatorId,
+      test_code: entry.test_code,
+      raw_value_1: entry.raw_value_1,
+      raw_value_2: entry.raw_value_2,
+      errors_count: entry.errors_count,
+      calculated_score: entry.calculated_score,
+      testing_date: entry.testing_date
+    };
+    if (validUuid) {
+      rowsWithId.push({ id: validUuid, ...payloadRow });
+    } else {
+      rowsWithoutId.push(payloadRow);
+    }
+  });
 
-  if (insertError) {
-    console.error('[scoutingCombineService] athlete_test_sessions insert error:', insertError);
-    throw insertError;
+  const insertedSessions = [];
+  if (rowsWithId.length > 0) {
+    const { data: upsertedExisting, error: upsertExistingError } = await supabase
+      .from('athlete_test_sessions')
+      .upsert(rowsWithId, { onConflict: 'id' })
+      .select();
+    if (upsertExistingError) {
+      console.error('[scoutingCombineService] athlete_test_sessions upsert(withId) error:', upsertExistingError);
+      throw upsertExistingError;
+    }
+    if (Array.isArray(upsertedExisting)) insertedSessions.push(...upsertedExisting);
+  }
+  if (rowsWithoutId.length > 0) {
+    const { data: upsertedNew, error: upsertNewError } = await supabase
+      .from('athlete_test_sessions')
+      .upsert(rowsWithoutId, { onConflict: 'id' })
+      .select();
+    if (upsertNewError) {
+      console.error('[scoutingCombineService] athlete_test_sessions upsert(new) error:', upsertNewError);
+      throw upsertNewError;
+    }
+    if (Array.isArray(upsertedNew)) insertedSessions.push(...upsertedNew);
   }
 
   const indicatorPayload = aggregatedList.map((agg) => ({
