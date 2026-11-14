@@ -633,7 +633,7 @@ export async function clearAthleteAssessmentData(tenantId, athleteId) {
       console.warn('[scoutingCombineService] clearAthleteAssessmentData Supabase error:', err);
     }
   }
-  return {};
+  return getAthleteIndicatorScores(tenantId, athleteId);
 }
 
 const scoutingCombineService = {

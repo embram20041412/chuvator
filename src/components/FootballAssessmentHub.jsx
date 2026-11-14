@@ -47,7 +47,8 @@ import {
   saveMasterAssessmentSessionAndSync,
   loadWizardResumeState,
   saveWizardResumeState,
-  clearWizardResumeState
+  clearWizardResumeState,
+  clearAthleteAssessmentData
 } from '../services/scoutingCombineService';
 
 const CATEGORY_STYLES = {
@@ -285,9 +286,9 @@ export default function FootballAssessmentHub({
     setFeedback(null);
     setWizardFeedback(null);
     if (activeAthleteId) {
-      await scoutingCombineService.clearAthleteAssessmentData(tenantId, activeAthleteId);
+      const nextMap = await clearAthleteAssessmentData(tenantId, activeAthleteId);
       if (typeof onSyncedToReport === 'function') {
-        onSyncedToReport({});
+        onSyncedToReport(nextMap || {});
       }
     }
   };
